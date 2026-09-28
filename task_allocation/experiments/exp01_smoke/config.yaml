@@ -1,0 +1,28 @@
+experiment:
+  name: exp01_smoke
+  seed: 42
+  output_dir: results
+  plot_dir: plot
+
+data:
+  source: synthetic
+  path: null
+
+problem:
+  n_tasks: 10
+  n_uavs: 3
+  n_nests: 2
+
+method:
+  selection: marginal_gain
+  muas: dmde
+  rolling: false
+
+solver:
+  max_iter: 50
+  population: 20
+
+run:
+  save_results: true
+  make_plots: false
+  verbose: true

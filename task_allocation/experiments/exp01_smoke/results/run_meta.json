@@ -1,0 +1,5 @@
+{
+  "experiment": "exp01_smoke",
+  "seed": 42,
+  "note": "placeholder run_meta; regenerate via run.py"
+}

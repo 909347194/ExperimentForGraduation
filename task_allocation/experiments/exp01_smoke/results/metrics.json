@@ -1,0 +1,12 @@
+{
+  "status": "smoke_ok",
+  "n_tasks": 10,
+  "n_uavs": 3,
+  "n_nests": 2,
+  "method": {
+    "selection": "marginal_gain",
+    "muas": "dmde",
+    "rolling": false
+  },
+  "note": "placeholder metrics committed for structure check; regenerate via run.py after env is ready"
+}
