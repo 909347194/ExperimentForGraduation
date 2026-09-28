@@ -26,10 +26,11 @@
     number    = \chinese{chapter},   % 若学校要求"第1章"阿拉伯数字，改为 \arabic{chapter}
     format    = \centering\heiti\zihao{3},
     aftername = \quad,               % 序号与题名间空一个汉字符
-    beforeskip = {-40pt},            % 上空 40pt（≈2 行）；ctex/section 机制沿用 book 惯例：
-                                     % 负值表示"垂直空间"，绝对值即间距（标题另起新页时
-                                     % 该空间位于页面顶部）。若写正值会被当作水平缩进，
-                                     % 导致标题被推入正文、一页塞入多个章标题（Overfull \vbox）。
+    beforeskip = {40pt},             % 上空 40pt（≈2 行，与设计意图一致）。
+                                     % 注意：ctex 对 chapter 的 beforeskip 直接用于
+                                     % \vspace*{<值>}；负值时 \vspace*{-40pt} 会把章标题
+                                     % 上移进页眉带，与页眉（及 headrule）重叠。必须取
+                                     % 正值（标题落到页眉下方，正常间距）。
     afterskip  = {40pt},             % 下空 40pt（标题后为垂直空间）
     fixskip   = true,                % 固定间距（无弹性）
     % 章首页样式：此处保持 plain（前置部分：页脚居中罗马数字、无页眉）。
