@@ -41,6 +41,15 @@
     afterskip  = \baselineskip,
     fixskip   = true,
   },
+  % 三级节标题（如使用）：规范表3.8未单独规定，按 CY/T 35-2001 顺延为
+  % 黑体小四、顶格（序号与题名间不额外加空格），上下空约半行
+  subsubsection = {
+    format    = \raggedright\heiti\bfseries\zihao{-4},
+    aftername = {},
+    beforeskip = 0.5\baselineskip,
+    afterskip  = 0.5\baselineskip,
+    fixskip   = true,
+  },
 }
 
 % ---------- 2. 正文段落 ----------
@@ -48,8 +57,14 @@
 % 其余：两端对齐、首行缩进 2 汉字符、固定行距 20 磅、段前段后 0
 \setlength{\parindent}{2\ccwd}      % 首行左缩进 2 个汉字符
 \setlength{\parskip}{0pt}           % 段前段后 0（段与段之间不额外留空）
+% 固定值行距 20 磅：用 setspace 的精确模式实现（直接改 \baselineskip
+% 会被各字号命令如 \zihao{5} 重置而失效）。ctex 已加载 setspace，
+% exactlineskipmode 使 \baselineskip 取"当前字号自然基线 × \setstretch"，
+% 在 \AtBeginDocument 时正文仍为小四(12pt)基准，故倍率 = 20 / 13.15 ≈ 1.521。
+% 含数学表达式的段落可按需要临时调整行距（规范 3.8 允许）。
+\exactlineskipmode
 \AtBeginDocument{%
-  \setlength{\baselineskip}{20pt}   % 固定值行距 20 磅（含数学表达式的段落可临时调整）
+  \setstretch{1.521}%
 }
 
 % ---------- 3. 图 / 表序号与题名 ----------

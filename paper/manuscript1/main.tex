@@ -58,8 +58,10 @@
 \input{frontmatter/defense_committee}  % 8. 学位论文答辩委员会名单
 \input{frontmatter/abstract}           % 9. 中文摘要 / 10. Abstract
 \tableofcontents                       % 11. 目录
-\listoffigures                         % 12. 图清单（如有）
-\listoftables                          % 12. 表清单（如有）
+% 12. 图和表清单（规范：如有）。当前正文尚无图/表，若编译出空目录页则保持注释；
+% 插图/表后取消下面两行注释即可启用（并确认目录中不出现"图清单/表清单"以外的异常）。
+% \listoffigures
+% \listoftables
 
 % ============================================================
 % 正文部分（每章一个独立文件，便于维护）
