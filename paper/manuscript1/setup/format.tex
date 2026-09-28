@@ -13,41 +13,49 @@
 % ============================================================
 
 % ---------- 1. 标题格式（ctex 标题机制）----------
+% 说明：正文通过字号钩子把 \baselineskip 固定为 20pt（见下方第 2 节），
+% 为避免标题间距受该钩子干扰，这里不再引用 \baselineskip，也不再使用
+% \SingleLineSkip 实验性代码，而是直接采用不依赖行距的固定值：
+%   章：上下空 40pt（≈2 行）；节：上下空 20pt（≈1 行）；小节同节；三级节 10pt。
+% 标题行距由 ctex 依各自字号自然排布（黑体本身即粗，不叠加 \bfseries）。
 \ctexset{
-   % 各章标题：黑体三号(16pt)（黑体本身即粗，不再叠加 \bfseries 以免伪粗警告）居中，单倍行距，上下空 2 行
+   % 各章标题：黑体三号(16pt)居中，上下空 40pt
   % 章序号用中文数字（第一章），序号与题名之间空一个汉字符
   chapter = {
     name      = {第,章},
     number    = \chinese{chapter},   % 若学校要求"第1章"阿拉伯数字，改为 \arabic{chapter}
     format    = \centering\heiti\zihao{3},
     aftername = \quad,               % 序号与题名间空一个汉字符
-    beforeskip = 2\baselineskip,     % 上空约 2 行
-    afterskip  = 2\baselineskip,     % 下空约 2 行
+    beforeskip = {-40pt},            % 上空 40pt（≈2 行）；ctex/section 机制沿用 book 惯例：
+                                     % 负值表示"垂直空间"，绝对值即间距（标题另起新页时
+                                     % 该空间位于页面顶部）。若写正值会被当作水平缩进，
+                                     % 导致标题被推入正文、一页塞入多个章标题（Overfull \vbox）。
+    afterskip  = {40pt},             % 下空 40pt（标题后为垂直空间）
     fixskip   = true,                % 固定间距（无弹性）
   },
-  % 一级节标题：黑体四号(14pt)（黑体不加 \bfseries）居中，单倍行距，上下空 1 行
+  % 一级节标题：黑体四号(14pt)居中，上下空 20pt
   section = {
     format    = \centering\heiti\zihao{4},
     aftername = \quad,
-    beforeskip = \baselineskip,      % 上空约 1 行
-    afterskip  = \baselineskip,      % 下空约 1 行
+    beforeskip = {20pt},             % 上空 20pt（≈1 行）
+    afterskip  = {20pt},             % 下空 20pt
     fixskip   = true,
   },
-  % 二级节标题：黑体小四(12pt)居左，单倍行距，上下空 1 行
+  % 二级节标题：黑体小四(12pt)居左，上下空 20pt
   subsection = {
     format    = \raggedright\heiti\zihao{-4},
     aftername = \quad,
-    beforeskip = \baselineskip,
-    afterskip  = \baselineskip,
+    beforeskip = {20pt},
+    afterskip  = {20pt},
     fixskip   = true,
   },
   % 三级节标题（如使用）：规范表3.8未单独规定，按 CY/T 35-2001 顺延为
-  % 黑体小四、顶格（序号与题名间不额外加空格），上下空约半行
+  % 黑体小四、顶格（序号与题名间不额外加空格），上下空约半行(10pt)
   subsubsection = {
     format    = \raggedright\heiti\zihao{-4},
     aftername = {},
-    beforeskip = 0.5\baselineskip,
-    afterskip  = 0.5\baselineskip,
+    beforeskip = {10pt},
+    afterskip  = {10pt},
     fixskip   = true,
   },
 }
@@ -58,28 +66,33 @@
 \setlength{\parindent}{2\ccwd}      % 首行左缩进 2 个汉字符
 \setlength{\parskip}{0pt}           % 段前段后 0（段与段之间不额外留空）
 % 固定值行距 20 磅：直接控制 \baselineskip。
-% 注意 1：setspace 并没有 \exactlineskipmode 命令，也没有 [exact] 选项
-%         （会报 "Unknown option `exact'"），不可依赖它。
-% 注意 2：直接改 \baselineskip 会被字号命令（\zihao{5} 等）重置。
-% 方案：用 ctex 官方钩子 \ctex_patch_cmd 把"固定 20pt"追加进各字号的
-%       内部定义——每次切换字号都会重新执行它们，行距恒定。
-%       \lineskiplimit=-1000pt 是 TeX"固定行距"模式，等效 Word"固定值"。
+% 方案：用 \g@addto@macro 把 \fixLineskip{20pt} 追加进各字号的内部宏——
+%       每次切换字号都会重新执行，行距恒定；\lineskiplimit=-1000pt 为
+%       TeX"固定行距"模式，等效 Word"固定值"。
+% 注意：\newcommand 名称不能含 @，故公开名 \fixLineskip 不带 @；其定义
+%       在 \makeatletter 环境中写入，展开时用到的是普通寄存器与字面量。
+\makeatletter
 \newcommand{\fixLineskip}[1]{%
   \setlength{\baselineskip}{#1}%
-  \setlength{\lineskip}{\z@}%
-  \setlength{\lineskiplimit}{-1000\p@}%  % TeX 固定行距模式
+  \setlength{\lineskip}{0pt}%
+  \setlength{\lineskiplimit}{-1000\p@}%  % 内核写法：\p@ = pt（此处处于 makeatletter 环境）；负极限使基线间距恒为 baselineskip（固定行距模式）
+  \setlength{\normallineskip}{0pt}%
+  \setlength{\normallineskiplimit}{-1000\p@}%
+  % 注意：不要修改 \topskip！\topskip 是页面首行的全局参数，若在章标题字号
+  % 环境中被改成 20pt，ctex 章标题的巨型垂直锚 \topskip0pt 会失效，导致
+  % 整页内容堆叠、出现 "Overfull \vbox (474pt too high)"。此处仅同步当前
+  % 列表环境的 \linepenalty 相关参数即可。
+  \advance\parskip by 0pt%               % 无害的空操作，保持钩子幂等
 }
-\makeatletter
-% \normalsize/\small/\footnotesize 分别调用内部 \@normalsize/\@small/\@footnotesize。
-% 注意：LaTeX 内核并没有可公开使用的 \addto 命令（它在定义完 \g@addto@macro
-% 之后即被 \let 释放），直接 \addto\@normalsize{...} 会报
-% "Undefined control sequence" 并引发后续连锁错误。正确做法是用
-% \g@addto@macro 把 \fixLineskip{20pt} 追加进各字号内部宏；
-% \fixLineskip 保持未展开形式写入即可——它会在每次字号切换执行时
-% 才展开，届时 \p@ 处于 makeatletter 环境内可正常读取。
+% LaTeX 内核没有可公开使用的 \addto（定义完 \g@addto@macro 后即被释放），
+% 必须用 \g@addto@macro 追加钩子。
 \g@addto@macro\@normalsize{\fixLineskip{20pt}}
 \@ifundefined{@small}{}{\g@addto@macro\@small{\fixLineskip{20pt}}}
 \@ifundefined{@footnotesize}{}{\g@addto@macro\@footnotesize{\fixLineskip{20pt}}}
+% ctex 的 \zihao{-4} 等字号命令（ctexsize 机制）同样经由 \@setfontsize 定义，
+% 因此上面追加进 \@normalsize/\@small/\@footnotesize 的钩子已覆盖全部字号切换；
+% 不再重定义 \@setfontsize（旧补丁中的 \xdef\@currsizename{...\protect...}
+% 会把 \protect 带进 \csname，导致 "Missing \endcsname inserted" 编译错误）。
 \makeatother
 \AtBeginDocument{\normalsize}   % 使上述设置立即生效
 
@@ -172,25 +185,31 @@
 % 正文：中文宋体小四 / 英文 TNR 小四，固定 20 磅，段前段后 0（全局已设）
 % 关键词："关键词"三字加粗（黑体）/ "Key Words"两词加粗（TNR），字号同正文
 \newcommand{\cnabstracttitle}{%
-  \begin{center}\heiti\zihao{-2} 摘要\end{center}%
-  \vspace{0.5\baselineskip}\zihao{-4}\songti\noindent\ignorespaces
+  {\par\vspace{6pt}\centering\baselineskip=24pt\relax\heiti\zihao{-2} 摘要\par}
+  \vspace{10pt}\zihao{-4}\songti\noindent\ignorespaces
 }
 \newcommand{\enabstracttitle}{%
-  \begin{center}\bfseries\zihao{-2} Abstract\end{center}%
-  \vspace{0.5\baselineskip}\normalfont\zihao{-4}\noindent\ignorespaces
+  {\par\vspace{6pt}\centering\baselineskip=24pt\relax\bfseries\zihao{-2} Abstract\par}
+  \vspace{10pt}\normalfont\zihao{-4}\noindent\ignorespaces
 }
 
 % ---------- 7. 纸张与页眉页脚（中国地质大学硕士论文格式）----------
 % 纸张：A4（210×297），白色
 % 页边距：上/下 3cm，左/右 3cm，装订线 0cm
 % 页眉距顶 2.5cm（headheight=2.5cm，headsep=0.5cm）；页脚距底 2.0cm（footskip=2.0cm）
+% 页眉距正文 0.5cm（headsep）；"页眉距顶 2.5cm"由 geometry 的 top=3cm 保证：
+% 正文上边距距纸顶 3cm，减去 headsep 0.5cm，页眉基线恰在距顶 2.5cm 处。
+% 注意：headheight 是"页眉内容区自身的高度"，不是"距纸顶的距离"！
+% 若误写 headheight=2.5cm，每页页眉区会占去 71pt，把版心压缩约 2.5cm，
+% 导致骨架文档（标题多、正文少）中多个章标题被挤进同一页并溢出
+% （Overfull \vbox 474pt）。标准值取 14pt（可容纳五号中文行）。
 \geometry{
   a4paper,
   top        = 3cm,
   bottom     = 3cm,
   left       = 3cm,
   right      = 3cm,
-  headheight = 2.5cm,   % 页眉区域高度（页眉底边距顶 2.5cm，贴顶）
+  headheight = 14pt,    % 页眉内容高度（宋体五号单倍行即可容纳）
   headsep    = 0.5cm,   % 页眉底边到正文的距离
   % 注意：geometry 没有 footheight 键（正确键名为 bottomheight / footskip），
   % 原 footheight=1.0cm 属无效选项会被忽略并警告，此处删除；
