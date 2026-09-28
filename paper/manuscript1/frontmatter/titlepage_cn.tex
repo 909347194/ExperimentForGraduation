@@ -25,14 +25,18 @@
   {\heiti\zihao{2}\thesisTitle}
 
   \vspace{1.8cm}
-  % 标签列统一四字宽（\labelfour 拉伸补齐），冒号对齐；
-  % tabcolsep=0 + \zhqspace(1em) 使冒号与内容间隔为一个全角空格，与封面一致
+  % 附件1 式样（Word 中以表格实现对齐）：四个标签【等宽拉伸】使冒号对齐，
+  % 各行的"值"起点一致。实测 Word 版式：标签列终点均在版心 0.49 处，
+  % 值列（XXX）起点统一在 0.538 处——即"冒号对齐 + 值左对齐"。
+  % 实现：\labelfour 把 2 字标签（姓名）拉伸至与 4 字标签等宽（4em 盒居中），
+  % 四个标签统一经 \labelfour 处理，保证冒号落在同一列；
+  % tabcolsep=0 + \zhqspace(1em) 使冒号与内容间隔为一个全角空格。
   \setlength{\tabcolsep}{0pt}
   \begin{tabular}{rl}
     \zihao{3}\songti \labelfour{姓名}： & \zhqspace\zihao{3}\songti \thesisAuthor \\[0.5cm]
-    \zihao{3}\songti 学科专业： & \zhqspace\zihao{3}\songti \thesisMajor \\[0.5cm]
-    \zihao{3}\songti 指导教师： & \zhqspace\zihao{3}\songti \thesisAdvisor \\[0.5cm]
-    \zihao{3}\songti 培养单位： & \zhqspace\zihao{3}\songti \thesisOrg \\[0.5cm]
+    \zihao{3}\songti \labelfour{学科专业}： & \zhqspace\zihao{3}\songti \thesisMajor \\[0.5cm]
+    \zihao{3}\songti \labelfour{指导教师}： & \zhqspace\zihao{3}\songti \thesisAdvisor \\[0.5cm]
+    \zihao{3}\songti \labelfour{培养单位}： & \zhqspace\zihao{3}\songti \thesisOrg \\[0.5cm]
   \end{tabular}
 
   \vspace{2.4cm}

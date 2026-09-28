@@ -84,6 +84,10 @@
 % ============================================================
 \mainmatter
 \pagestyle{fancy}              % 正文起：启用页眉（中国地质大学格式）+ 外侧阿拉伯页码
+% 章首页同样使用 fancy（附件10：正文所有页、含各章首页均有页眉与页码）。
+% 放在 \mainmatter 之后而非 setup/format.tex 中，可避免前置部分的 \chapter* 页面
+% （声明、承诺书、授权书、作者简历、答辩名单、摘要、目录）被误套正文页眉。
+\ctexset{chapter/pagestyle=fancy}
 \input{chapters/ch01_introduction}
 \input{chapters/ch02_related_work}
 \input{chapters/ch03_task_allocation}

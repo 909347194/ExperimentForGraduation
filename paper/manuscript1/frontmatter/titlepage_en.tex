@@ -23,9 +23,14 @@
   {\zihao{2}\bfseries \thesisTitleEN}
 
   \vspace{1.4cm}
-  Master Candidate：\thesisAuthorEn \\[0.5cm]
-  Major：\thesisMajorEn \\[0.5cm]
-  Supervisor：\thesisAdvisorEn
+  % 附件2 式样：Candidate/Major/Supervisor 三行【右端对齐】（Word 中段落 jc=end，
+  % 实测三行右端均落在版心 0.443 处），块整体居中。
+  % 用 tabular 的 r 列实现右端对齐（Word 原稿靠表格/右对齐排版实现同样效果）。
+  \begin{tabular}{@{}r@{}}
+    Master Candidate：\thesisAuthorEn \\[0.5cm]
+    Major：\thesisMajorEn \\[0.5cm]
+    Supervisor：\thesisAdvisorEn
+  \end{tabular}
 
   \vspace{1.6cm}
   China University of Geosciences \\

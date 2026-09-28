@@ -19,7 +19,7 @@
 
 % ---------------- 英文摘要 ----------------
 \clearpage
-\pagestyle{abstracten}         % 英文摘要页眉：Times New Roman 五号（见 format.tex）
+\pagestyle{abstracten}\thispagestyle{abstracten}  % 英文摘要页眉（TNR 五号）；\thispagestyle 使页眉在本页即生效
 \enabstracttitle
 \addcontentsline{toc}{chapter}{Abstract}  % 如需目录中显示英文摘要，保留此行；否则删除
 

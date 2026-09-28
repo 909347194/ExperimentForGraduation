@@ -32,6 +32,13 @@
                                      % 导致标题被推入正文、一页塞入多个章标题（Overfull \vbox）。
     afterskip  = {40pt},             % 下空 40pt（标题后为垂直空间）
     fixskip   = true,                % 固定间距（无弹性）
+    % 章首页样式：此处保持 plain（前置部分：页脚居中罗马数字、无页眉）。
+    % 正文（\mainmatter 之后）由 main.tex 中的 \ctexset{chapter/pagestyle=fancy}
+    % 切换为 fancy，使章首页也有页眉+页码（附件10：正文所有页均有页眉）。
+    % 注意：ctex 的 chapter/pagestyle 对 \chapter 与 \chapter* 一视同仁，
+    % 若在此处直接写 fancy，前置部分的声明/承诺书/目录等 \chapter* 页面也会被
+    % 套上正文页眉（目录第一页会出现"中国地质大学 xvii"），故不能在此写 fancy。
+    pagestyle = plain,
   },
   % 一级节标题：黑体四号(14pt)居中，上下空 20pt
   section = {
@@ -209,7 +216,10 @@
   bottom     = 3cm,
   left       = 3cm,
   right      = 3cm,
-  headheight = 14pt,    % 页眉内容高度（宋体五号单倍行即可容纳）
+  headheight = 14pt,    % 页眉内容区高度：单行五号汉字足够（正文页眉与英文摘要页眉均为单行）。
+                        % 注意：headheight 只决定"页眉框"高度，不改变版心位置（版心由 top/bottom 固定）；
+                        % 取 14pt 时页眉基线恰在距纸顶约 2.5cm 处，符合规范"页眉距顶 2.5cm"。
+                        % 若日后页眉内容确实需要两行，再增大此值即可（不会挤压版心）。
   headsep    = 0.5cm,   % 页眉底边到正文的距离
   % 注意：geometry 没有 footheight 键（正确键名为 bottomheight / footskip），
   % 原 footheight=1.0cm 属无效选项会被忽略并警告，此处删除；
@@ -219,17 +229,29 @@
 }
 
 % 页眉页脚样式：正文（第一章起）使用 running header
-%   奇数页居中：中国地质大学（按附件10 页眉式样，不含学位类别）
-%   偶数页居中：作者姓名：论文题目
-%   页码外侧（奇→右、偶→左），宋体五号(10.5pt)
+% 按附件10 页眉式样（双面印制）：页码位于【页眉行内】外侧，页脚为空！
+%   奇数页：中国地质大学（居中）＋ 页码（行内右侧/外侧）
+%   偶数页：页码（行内左侧/外侧）＋ 姓名：题目（居中）
 %   页眉之下有下划线（headrule）
-\fancyhf{}                                     % 清空默认页眉页脚
-\renewcommand{\headrulewidth}{0.4pt}           % 页眉下划线
-\renewcommand{\footrulewidth}{0pt}             % 页脚无线
-\fancyhead[CO]{\songti\zihao{5} 中国地质大学}      % 奇数页：仅"中国地质大学"（按附件10 页眉式样，不含学位类别）
-\fancyhead[CE]{\songti\zihao{5} \thesisAuthor：\thesisTitle}      % 偶数页：作者：题目
-\fancyfoot[RO]{\songti\zihao{5} \thepage}      % 奇数页页码在右侧（外侧）
-\fancyfoot[LE]{\songti\zihao{5} \thepage}      % 偶数页页码在左侧（外侧）
+% 注意：章首页同样显示页眉（附件10 式样中的页码1即章首页），
+%   由上方 \ctexset chapter 的 pagestyle=fancy 实现。
+%
+% 【重要】必须用 \fancypagestyle{fancy}{...} 封装，不能直接在导言区裸写
+% \fancyhead/\fancyhf。原因：fancyhdr 的页眉页脚内容是"全局槽"，
+% \fancypagestyle{<样式>} 定义体中的 \fancyhf{} 会在**该样式被 \pagestyle 应用时**
+% 清空这些全局槽。英文摘要页用了 \pagestyle{abstracten}（其定义体含 \fancyhf{}），
+% 一旦执行就会把导言区设好的正文页眉全部抹掉，导致正文只有页码、页眉空白。
+% 封装成 \fancypagestyle{fancy} 后，每次 \pagestyle{fancy} 都会重新装载，不受污染。
+\fancypagestyle{fancy}{%
+  \fancyhf{}                                   % 清空默认页眉页脚
+  \renewcommand{\headrulewidth}{0.4pt}         % 页眉下划线
+  \renewcommand{\footrulewidth}{0pt}           % 页脚无线（页码已移入页眉行内）
+  \fancyhead[CO]{\songti\zihao{5} 中国地质大学}% 奇数页居中：仅"中国地质大学"（附件10，不含学位类别）
+  \fancyhead[RO]{\songti\zihao{5} \thepage}    % 奇数页页码：页眉行内右（外）侧
+  \fancyhead[CE]{\songti\zihao{5} \thesisAuthor：\thesisTitle}% 偶数页居中：作者：题目
+  \fancyhead[LE]{\songti\zihao{5} \thepage}    % 偶数页页码：页眉行内左（外）侧
+  \fancyfoot{}                                 % 页脚为空（附件10 无页脚页码）
+}
 
 % 英文摘要页眉：按规范"Abstract 部分用 Times New Roman 五号"，标题居中（TNR）
 \fancypagestyle{abstracten}{%
