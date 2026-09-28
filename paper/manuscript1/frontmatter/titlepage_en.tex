@@ -1,11 +1,13 @@
 % ============================================================
-% frontmatter/titlepage_en.tex —— 英文题名页（规范 3.5）
-% 英文排版要求（全文 Times New Roman）：
-%   A Dissertation Submitted to China University of Geosciences：16 磅(三号)
-%   Title（论文题目英文）：22 磅(二号) 加粗居中，单倍行距
-%   Master Candidate / Major / Supervisor：16 磅(三号) 居中
-%   China University of Geosciences, Wuhan 430074, P.R. China：16 磅(三号) 居中
-% 注：英文题名页不另写学位类型，由 "A Dissertation Submitted ..." 体现。
+% frontmatter/titlepage_en.tex —— 英文题名页（附件 2 / 规范 3.5）
+% 已按 2025.5 规范附件 2「适用于全部学术型硕士」式样逐行核校：
+%   A Dissertation Submitted to China University of Geosciences
+%   For the Master Degree of XX      ← 学位学科（本论文为 Geography）
+%   Title                            ← 论文英文题名（二号加粗居中）
+%   Master Candidate： / Major： / Supervisor：  ← 式样用全角冒号
+%   China University of Geosciences
+%   Wuhan 430074 P.R. China          ← 式样为两行，非逗号连排
+% 全文 Times New Roman；对应规范 3.5：英文题名页用三号，题名二号加粗。
 % ============================================================
 \clearpage
 \thispagestyle{empty}
@@ -14,14 +16,18 @@
   \zihao{3}
   A Dissertation Submitted to China University of Geosciences
 
+  \vspace{0.9cm}
+  For the Master Degree of \thesisMajorEn
+
   \vspace{1.2cm}
   {\zihao{2}\bfseries \thesisTitleEN}
 
   \vspace{1.4cm}
-  Master Candidate: \thesisAuthorEn \\[0.5cm]
-  Major: Geography \\[0.5cm]
-  Supervisor: \thesisAdvisorEn
+  Master Candidate：\thesisAuthorEn \\[0.5cm]
+  Major：\thesisMajorEn \\[0.5cm]
+  Supervisor：\thesisAdvisorEn
 
   \vspace{1.6cm}
-  China University of Geosciences, Wuhan 430074, P.R. China
+  China University of Geosciences \\
+  Wuhan 430074 P.R. China
 \end{center}
