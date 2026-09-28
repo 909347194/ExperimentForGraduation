@@ -1,7 +1,9 @@
 [project]
 name = "experimentforgraduation"
 version = "0.1.0"
-description = "Add your description here"
+description = "Multi-UAV task allocation and path planning experiments for graduation thesis"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "pyyaml>=6.0",
+]
