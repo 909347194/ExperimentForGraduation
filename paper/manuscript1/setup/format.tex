@@ -219,14 +219,14 @@
 }
 
 % 页眉页脚样式：正文（第一章起）使用 running header
-%   奇数页居中：中国地质大学<学位类别>
+%   奇数页居中：中国地质大学（按附件10 页眉式样，不含学位类别）
 %   偶数页居中：作者姓名：论文题目
 %   页码外侧（奇→右、偶→左），宋体五号(10.5pt)
 %   页眉之下有下划线（headrule）
 \fancyhf{}                                     % 清空默认页眉页脚
 \renewcommand{\headrulewidth}{0.4pt}           % 页眉下划线
 \renewcommand{\footrulewidth}{0pt}             % 页脚无线
-\fancyhead[CO]{\songti\zihao{5} 中国地质大学\thesisCategory}      % 奇数页：学位类别
+\fancyhead[CO]{\songti\zihao{5} 中国地质大学}      % 奇数页：仅"中国地质大学"（按附件10 页眉式样，不含学位类别）
 \fancyhead[CE]{\songti\zihao{5} \thesisAuthor：\thesisTitle}      % 偶数页：作者：题目
 \fancyfoot[RO]{\songti\zihao{5} \thepage}      % 奇数页页码在右侧（外侧）
 \fancyfoot[LE]{\songti\zihao{5} \thepage}      % 偶数页页码在左侧（外侧）

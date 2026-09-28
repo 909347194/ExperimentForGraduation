@@ -82,3 +82,19 @@
   \renewcommand{\headrulewidth}{0pt}%                 % 前置部分无页眉线
   \fancyfoot[C]{\songti\zihao{5}\thepage}%            % 页码：宋体五号，页脚居中
 }
+
+% ---------- 浮动体放置与页面底部溢出（Overfull \vbox）防护 ----------
+% 放宽浮动体可占用页面的比例，降低“图/表/算法过大被推迟、导致本页底部溢出”
+% 这类 Overfull \vbox 的出现概率。具体章节仍需按内容合理设置浮动体位置参数。
+\renewcommand{\topfraction}{0.85}
+\renewcommand{\bottomfraction}{0.70}
+\renewcommand{\textfraction}{0.08}
+\renewcommand{\floatpagefraction}{0.75}
+\renewcommand{\dbltopfraction}{0.85}
+\renewcommand{\dblfloatpagefraction}{0.75}
+% 章节级浮动体屏障：避免浮动体跨越 \section 大幅漂移，减少页面底部留白/溢出。
+% 若某章确需浮动体跨节，可在该处用 \FloatBarrier 手动控制。
+\usepackage[section]{placeins}
+% 段落容差与紧急伸缩：当某页内容确实难以排布时，优先微调字距/行距而非硬溢出。
+\setlength{\emergencystretch}{1.5em}
+\tolerance=3000
