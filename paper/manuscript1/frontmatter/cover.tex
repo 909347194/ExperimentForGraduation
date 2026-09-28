@@ -1,0 +1,38 @@
+% ============================================================
+% frontmatter/cover.tex —— 中文封面（规范 3.2）
+% 字体字号严格按《中国地质大学（武汉）研究生学位论文写作规范》：
+%   学校名 / 学位类型：宋体 26 磅(一号) 加粗
+%   论文题目：黑体 22 磅(二号) 加粗居中，单倍行距（可分两行）
+%   学号：Times New Roman 16 磅(三号) 加粗
+%   论文作者/学科专业/指导教师/培养单位：宋体 16 磅(三号) 加粗
+%   日期：宋体 16 磅(三号) 汉字居中，不用阿拉伯数字
+%   分类号/密级/UDC/学校代码：封面著录项（见规范 1.1）
+% ============================================================
+\begin{titlepage}
+  \centering
+
+  % ---- 著录信息（封面右上角小字）----
+  \vspace*{-1.2cm}
+  \begin{flushleft}
+    \zihao{5}\songti
+    分类号：\underline{\thesisCLC}\hfill 学校代码：\tnr{\thesisSchoolCode}\\[6pt]
+    密\hspace{1em}级：\underline{\thesisSecretLevel}\hfill UDC：\underline{\thesisUDC}
+  \end{flushleft}
+
+  \vspace{1.6cm}
+  {\songti\zihao{1}\textbf{\thesisSchool}}\\[0.4cm]
+  {\songti\zihao{1}\textbf{\thesisCategory}}\\[1.8cm]
+
+  {\heiti\zihao{2}\textbf{\thesisTitle}}\\[2cm]
+
+  \begin{tabular}{rl}
+    \zihao{3}\songti\bfseries 学\hspace{1em}号： & \zihao{3}\tnr{\textbf{\thesisStudentID}} \\[0.5cm]
+    \zihao{3}\songti\bfseries 论文作者： & \zihao{3}\songti\bfseries \thesisAuthor \\[0.5cm]
+    \zihao{3}\songti\bfseries 学科专业： & \zihao{3}\songti\bfseries \thesisMajor \\[0.5cm]
+    \zihao{3}\songti\bfseries 指导教师： & \zihao{3}\songti\bfseries \thesisAdvisor \\[0.5cm]
+    \zihao{3}\songti\bfseries 培养单位： & \zihao{3}\songti\bfseries \thesisOrg \\[0.5cm]
+  \end{tabular}
+
+  \vfill
+  {\zihao{3}\songti \thesisDate}
+\end{titlepage}

@@ -1,0 +1,175 @@
+% ============================================================
+% setup/format.tex —— 正文排版规范（按学位论文要求集中配置）
+%
+% 本文件由 main.tex 通过 \input 引入（放在 commands 之后）。
+% 覆盖内容：
+%   1) 章节/节/小节标题：字号、字体、对齐、上下间距、序号与题名间距
+%   2) 正文段落：宋体小四、英文 Times New Roman、两端对齐、
+%                首行缩进 2 汉字符、固定行距 20 磅、段前段后 0
+%   3) 图/表序号与题名：宋体五号、居中、单倍行距、序号与题名空 1 汉字符
+%   4) 表达式编号：右对齐、(n) 形式、Times New Roman 五号
+%
+% 字号对照：三号≈16pt / 四号≈14pt / 小四≈12pt / 五号≈10.5pt
+% ============================================================
+
+% ---------- 1. 标题格式（ctex 标题机制）----------
+\ctexset{
+  % 各章标题：黑体三号(16pt)加粗居中，单倍行距，上下空 2 行
+  % 章序号用中文数字（第一章），序号与题名之间空一个汉字符
+  chapter = {
+    name      = {第,章},
+    number    = \chinese{chapter},   % 若学校要求"第1章"阿拉伯数字，改为 \arabic{chapter}
+    format    = \centering\heiti\bfseries\zihao{3},
+    aftername = \quad,               % 序号与题名间空一个汉字符
+    beforeskip = 2\baselineskip,     % 上空约 2 行
+    afterskip  = 2\baselineskip,     % 下空约 2 行
+    fixskip   = true,                % 固定间距（无弹性）
+  },
+  % 一级节标题：黑体四号(14pt)加粗居中，单倍行距，上下空 1 行
+  section = {
+    format    = \centering\heiti\bfseries\zihao{4},
+    aftername = \quad,
+    beforeskip = \baselineskip,      % 上空约 1 行
+    afterskip  = \baselineskip,      % 下空约 1 行
+    fixskip   = true,
+  },
+  % 二级节标题：黑体小四(12pt)居左，单倍行距，上下空 1 行
+  subsection = {
+    format    = \raggedright\heiti\bfseries\zihao{-4},
+    aftername = \quad,
+    beforeskip = \baselineskip,
+    afterskip  = \baselineskip,
+    fixskip   = true,
+  },
+}
+
+% ---------- 2. 正文段落 ----------
+% 宋体小四由文档类 zihao=-4 统一控制；英文 Times New Roman 由 fonts.tex 控制
+% 其余：两端对齐、首行缩进 2 汉字符、固定行距 20 磅、段前段后 0
+\setlength{\parindent}{2\ccwd}      % 首行左缩进 2 个汉字符
+\setlength{\parskip}{0pt}           % 段前段后 0（段与段之间不额外留空）
+\AtBeginDocument{%
+  \setlength{\baselineskip}{20pt}   % 固定值行距 20 磅（含数学表达式的段落可临时调整）
+}
+
+% ---------- 3. 图 / 表序号与题名 ----------
+% 宋体五号(10.5pt)居中，单倍行距，序号与题名之间空一个汉字符
+% 图序置于图下方（默认），表序置于表上方
+\usepackage{caption}
+\captionsetup{
+  font         = {songti,\zihao{5}},  % 宋体五号（\zihao{5} 同时给出单倍行距）
+  justification = centering,          % 居中
+  labelsep     = quad,                % 序号与题名之间空一个汉字符
+  skip         = 6pt,                 % 图/表与题名的间距
+}
+\captionsetup[table]{position=above}   % 表序在表上方
+\captionsetup[figure]{position=below}  % 图序在图下方
+
+% ---------- 4. 表达式编号 ----------
+% 右对齐、(n) 形式、Times New Roman 五号（默认已带圆括号，仅改字体与字号）
+\makeatletter
+\def\maketag@@@#1{\hbox{\m@th\normalfont\zihao{5}#1}}
+\makeatother
+
+% ---------- 5. 目录排版 ----------
+% 标题"目录"：沿用 ctexset 的 chapter 样式（黑体三号加粗居中，单倍行距），无需额外设置。
+% 目录条目要求：
+%   各章目录  ：宋体四号(14pt)，固定行距 20 磅，两端对齐，页码右对齐，左缩进 0
+%   一级节    ：宋体小四(12pt)，固定行距 20 磅，两端对齐，页码右对齐，左缩进 1 汉字符
+%   二级节    ：宋体小四(12pt)，固定行距 20 磅，两端对齐，页码右对齐，左缩进 2 汉字符
+\usepackage{titletoc}
+\titlecontents{chapter}[0pt]{%                        % 左缩进 0
+    \zihao{4}\songti\baselineskip=20pt%               % 宋体四号 + 固定 20 磅行距
+  }{%
+    \thecontentslabel\quad%                           % 编号（第一章）+ 空一个汉字符
+  }{%                                                  % 无编号条目（如参考文献/致谢）
+    {}%
+  }{%
+    \hfill\contentspage%                               % 页码右对齐（无点线）
+  }
+\titlecontents{section}[1\ccwd]{%                      % 左缩进 1 汉字符
+    \zihao{-4}\songti\baselineskip=20pt%              % 宋体小四 + 固定 20 磅行距
+  }{%
+    \thecontentslabel\quad%
+  }{%
+    {}%
+  }{%
+    \hfill\contentspage%
+  }
+\titlecontents{subsection}[2\ccwd]{%                   % 左缩进 2 汉字符
+    \zihao{-4}\songti\baselineskip=20pt%
+  }{%
+    \thecontentslabel\quad%
+  }{%
+    {}%
+  }{%
+    \hfill\contentspage%
+  }
+
+% 图目录 / 表目录：标题沿用 chapter 样式（黑体三号加粗居中）；
+% 条目按一级节样式：宋体小四(12pt)、固定 20 磅、页码右对齐、左缩进 1 汉字符
+\titlecontents{figure}[1\ccwd]{%
+    \zihao{-4}\songti\baselineskip=20pt%
+  }{%
+    \thecontentslabel\quad%
+  }{}{%
+    \hfill\contentspage%
+  }
+\titlecontents{table}[1\ccwd]{%
+    \zihao{-4}\songti\baselineskip=20pt%
+  }{%
+    \thecontentslabel\quad%
+  }{}{%
+    \hfill\contentspage%
+  }
+
+% ---------- 6. 中英文摘要 ----------
+% 标题：中文"摘要"黑体小二(18pt)加粗居中；英文"Abstract" Times New Roman 小二(18pt)加粗居中；单倍行距
+% 正文：中文宋体小四 / 英文 TNR 小四，固定 20 磅，段前段后 0（全局已设）
+% 关键词："关键词"三字加粗（黑体）/ "Key Words"两词加粗（TNR），字号同正文
+\newcommand{\cnabstracttitle}{%
+  \begin{center}\heiti\bfseries\zihao{-2} 摘要\end{center}%
+  \vspace{0.5\baselineskip}\zihao{-4}\songti\noindent\ignorespaces
+}
+\newcommand{\enabstracttitle}{%
+  \begin{center}\bfseries\zihao{-2} Abstract\end{center}%
+  \vspace{0.5\baselineskip}\normalfont\zihao{-4}\noindent\ignorespaces
+}
+
+% ---------- 7. 纸张与页眉页脚（中国地质大学硕士论文格式）----------
+% 纸张：A4（210×297），白色
+% 页边距：上/下 3cm，左/右 3cm，装订线 0cm
+% 页眉距顶 2.5cm（headheight=2.5cm，headsep=0.5cm）；页脚距底 2.0cm（footskip=2.0cm）
+\geometry{
+  a4paper,
+  top        = 3cm,
+  bottom     = 3cm,
+  left       = 3cm,
+  right      = 3cm,
+  headheight = 2.5cm,   % 页眉区域高度（页眉底边距顶 2.5cm，贴顶）
+  headsep    = 0.5cm,   % 页眉底边到正文的距离
+  footheight = 1.0cm,   % 页脚区域高度
+  footskip   = 2.0cm,   % 正文底边到页脚基线的距离（页脚距底约 2.0cm，贴底）
+  bindingoffset = 0cm   % 装订线 0cm
+}
+
+% 页眉页脚样式：正文（第一章起）使用 running header
+%   奇数页居中：中国地质大学<学位类别>
+%   偶数页居中：作者姓名：论文题目
+%   页码外侧（奇→右、偶→左），宋体五号(10.5pt)
+%   页眉之下有下划线（headrule）
+\fancyhf{}                                     % 清空默认页眉页脚
+\renewcommand{\headrulewidth}{0.4pt}           % 页眉下划线
+\renewcommand{\footrulewidth}{0pt}             % 页脚无线
+\fancyhead[CO]{\songti\zihao{5} 中国地质大学\thesisCategory}      % 奇数页：学位类别
+\fancyhead[CE]{\songti\zihao{5} \thesisAuthor：\thesisTitle}      % 偶数页：作者：题目
+\fancyfoot[RO]{\songti\zihao{5} \thepage}      % 奇数页页码在右侧（外侧）
+\fancyfoot[LE]{\songti\zihao{5} \thepage}      % 偶数页页码在左侧（外侧）
+
+% 英文摘要页眉：按规范"Abstract 部分用 Times New Roman 五号"，标题居中（TNR）
+\fancypagestyle{abstracten}{%
+  \fancyhf{}%
+  \renewcommand{\headrulewidth}{0.4pt}%
+  \fancyhead[C]{\zihao{5} \thesisTitleEN}%      % 英文标题（TNR，主字体即 Times New Roman）
+  \fancyfoot[C]{\songti\zihao{5} \thepage}%     % 页码仍按规范用宋体五号
+}

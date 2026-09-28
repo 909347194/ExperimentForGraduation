@@ -1,0 +1,34 @@
+% ============================================================
+% frontmatter/titlepage_cn.tex —— 中文题名页（规范 3.4）
+% 字段与字号：学校代码 / 研究生学号 / 学号 / 论文作者 / 指导教师 /
+%   学科专业 / 培养单位 / 完成日期 均为 宋体 16 磅(三号)；
+%   学位授予单位名称、学位论文类型：宋体 26 磅(一号) 加粗；
+%   论文题目：黑体 22 磅(二号) 加粗居中，单倍行距。
+% 说明：题名页不含中图分类号/UDC/密级（那些在封面，见规范 1.1）。
+% ============================================================
+\clearpage
+\thispagestyle{empty}
+
+\begin{center}
+  \zihao{3}\songti
+  学校代码：\tnr{\thesisSchoolCode}\\[8pt]
+  研究生学号：\thesisStudentID
+
+  \vspace{1.4cm}
+  {\songti\zihao{1}\textbf{\thesisSchool}}\\[0.3cm]
+  {\songti\zihao{1}\textbf{\thesisCategory}}
+
+  \vspace{1.4cm}
+  {\heiti\zihao{2}\textbf{\thesisTitle}}
+
+  \vspace{1.8cm}
+  \begin{tabular}{rl}
+    \zihao{3}\songti 论文作者： & \zihao{3}\songti \thesisAuthor \\[0.5cm]
+    \zihao{3}\songti 指导教师： & \zihao{3}\songti \thesisAdvisor \\[0.5cm]
+    \zihao{3}\songti 学科专业： & \zihao{3}\songti \thesisMajor \\[0.5cm]
+    \zihao{3}\songti 培养单位： & \zihao{3}\songti \thesisOrg \\[0.5cm]
+  \end{tabular}
+
+  \vspace{1.4cm}
+  {\zihao{3}\songti 完成日期：\thesisDate}
+\end{center}

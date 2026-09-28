@@ -1,0 +1,40 @@
+% ============================================================
+% frontmatter/abstract.tex —— 中英文摘要
+% 标题/关键词格式见 setup/format.tex 第 6 节；
+% 正文为宋体小四(中文) / Times New Roman 小四(英文)，固定 20 磅行距。
+% ============================================================
+
+% ---------------- 中文摘要 ----------------
+\clearpage
+\cnabstracttitle
+\addcontentsline{toc}{chapter}{摘要}    % 如需目录中显示摘要，保留此行；否则删除
+
+% —— 中文摘要正文（示例，替换为真实内容）——
+针对广域输电网常态化动态运维巡检场景，研究多机巢起降条件下的多无人机动态协同任务规划问题。
+本文构建"动态任务选择 + 选择性多无人机协同任务分配（MUAS）"的两阶段分层求解框架，
+并嵌入滚动时域运行机制，兼顾求解实时性与资源利用效率。
+
+\vspace{12pt}
+\noindent\textbf{关键词：}多无人机；任务分配；航迹规划；滚动时域；差分进化
+
+% ---------------- 英文摘要 ----------------
+\clearpage
+\pagestyle{abstracten}         % 英文摘要页眉：Times New Roman 五号（见 format.tex）
+\enabstracttitle
+\addcontentsline{toc}{chapter}{Abstract}  % 如需目录中显示英文摘要，保留此行；否则删除
+
+% —— English abstract（与中文摘要对应）——
+\noindent\textbf{\thesisTitleEN}
+
+Aiming at the routine dynamic operation and maintenance inspection of wide-area
+power transmission networks, this thesis studies the dynamic cooperative mission
+planning of multiple unmanned aerial vehicles (UAVs) under multi-nest launch and
+recovery conditions. A two-stage hierarchical framework combining dynamic task
+selection and selective multi-UAV cooperative task allocation (MUAS) is proposed,
+embedded in a rolling-horizon mechanism to balance solution timeliness and resource
+utilization efficiency.
+
+\vspace{12pt}
+\noindent\textbf{Key Words:} multi-UAV; task allocation; path planning; rolling horizon; differential evolution
+
+\pagestyle{plain}              % 恢复前置部分页码样式（目录等无页眉）

@@ -1,0 +1,73 @@
+% ============================================================
+% setup/preamble.tex —— 宏包与全局设置
+% 本文件由 main.tex 通过 \input 引入，不要单独编译。
+% 原则：只放"依赖与全局开关"，不放具体格式与内容。
+% ============================================================
+
+% ---------- 数学与符号 ----------
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{mathtools}
+\usepackage{bm}                 % 粗体数学符号
+
+% ---------- 图表 ----------
+\usepackage{graphicx}           % 插图
+\graphicspath{{figures/}{tables/}}  % 图片/表格搜索路径
+\usepackage{subcaption}         % 子图（subfigure）
+\usepackage{booktabs}           % 三线表
+\usepackage{multirow}           % 表格跨行
+\usepackage{makecell}           % 单元格内换行
+\usepackage{longtable}          % 跨页长表
+\usepackage{diagbox}            % 斜线表头（按需）
+\usepackage{array}
+
+% ---------- 页面尺寸与页眉页脚 ----------
+\usepackage{geometry}           % 纸张与页边距
+\usepackage{fancyhdr}           % 页眉/页脚定制（中国地质大学格式）
+
+% ---------- 算法与代码 ----------
+\usepackage{algorithm}
+\usepackage{algorithmicx}
+\usepackage{algpseudocode}
+\usepackage{listings}           % 代码 listings
+\usepackage{xcolor}
+
+\lstset{
+  basicstyle   = \small\ttfamily,
+  breaklines   = true,
+  frame        = single,
+  numbers      = left,
+  numberstyle  = \tiny,
+  keywordstyle = \color{blue!70!black},
+  commentstyle = \color{green!50!black},
+  stringstyle  = \color{orange!80!black},
+  captionpos   = b
+}
+
+% ---------- 参考文献（GB/T 7714-2005 国标，见规范 2.6）----------
+% 顺序编码制：序号以方括号标注，置于引用处右上角（上标）。
+% 正文引用请用 \supercite{key}（上标）；gb7714-2005 同时支持 \cite（行内）。
+\usepackage[
+  backend  = biber,
+  style   = gb7714-2005,
+  gbalign = left,
+  sorting = none
+]{biblatex}
+\addbibresource{bib/references.bib}
+
+% ---------- 交叉引用与超链接 ----------
+\usepackage{hyperref}           % 建议最后加载此类宏包
+\hypersetup{
+  colorlinks = true,
+  linkcolor  = black,
+  citecolor  = black,
+  urlcolor   = black,
+  pdfborder  = {0 0 0}
+}
+\usepackage{cleveref}           % 智能引用（在 hyperref 之后）
+\usepackage{siunitx}            % 单位与数字排版（规范 2.7：GB 3100~3102）
+  \sisetup{
+    inter-unit-product = \ensuremath{{}\cdot{}},  % 单位间用点乘
+    per-mode = symbol,                             % 用 / 表示"每"
+    separate-uncertainty = true
+  }
+\usepackage{enumitem}           % 列表环境定制

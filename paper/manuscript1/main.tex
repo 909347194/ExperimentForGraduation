@@ -1,0 +1,85 @@
+%! TEX program = xelatex
+% ============================================================
+% 硕士学位论文主文档
+% 编译顺序：xelatex -> biber -> xelatex -> xelatex
+% 也可直接：latexmk（已提供 .latexmkrc）
+% ============================================================
+\documentclass[
+  degree   = master,   % 硕士论文（bachelor / master / doctor）
+  zihao    = -4,       % 小四号字（12pt，正文基准字号）
+  fontset  = auto,     % 按操作系统自动选择中文字体（win/mac/linux）
+  openright,           % 章节从奇数页开始
+  UTF8
+]{ctexbook}
+
+% 全局宏包与设置
+\input{setup/preamble}
+% 字体设置（英文字体：Times New Roman）
+\input{setup/fonts}
+% 自定义命令、定理环境、算法汉化
+\input{setup/commands}
+% 正文排版规范（标题/段落/图表题/公式编号，按学位论文要求）
+\input{setup/format}
+
+% ============================================================
+% 论文基本信息（按需修改）
+% ============================================================
+\newcommand{\thesisTitle}{多无人机智能调度中的任务分配与航迹规划方法研究}
+\newcommand{\thesisTitleEN}{Task Allocation and Path Planning Methods for Multi-UAV Intelligent Scheduling}
+\newcommand{\thesisAuthor}{张佳齐}
+\newcommand{\thesisAdvisor}{郑坤\ 教授}
+\newcommand{\thesisSchool}{中国地质大学（武汉）}
+\newcommand{\thesisCategory}{硕士学位论文}% 学位类别（页眉奇数页用，学术型硕士=硕士学位论文）：博士学位论文 / 同等学力博士学位论文 / 硕士学位论文 / 硕士专业学位论文(全日制) / 硕士专业学位论文(非全日制) / 同等学力硕士学位论文
+\newcommand{\thesisMajor}{地理学}              % 一级学科（按实际专业修改）
+\newcommand{\thesisResearchDir}{（按实际研究方向填写）}% 研究方向
+\newcommand{\thesisOrg}{地理与信息工程学院}      % 培养单位（所在学院全称）
+\newcommand{\thesisSchoolCode}{10491}          % 学校代码（教育部批准，中国地质大学(武汉)）
+\newcommand{\thesisStudentID}{1202510805}      % 学号
+\newcommand{\thesisCLC}{（填写）}              % 中图分类号（封面用，按《中国图书馆分类法》第4版）
+\newcommand{\thesisUDC}{（填写）}              % UDC（按《国际十进分类法》）
+\newcommand{\thesisSecretLevel}{公开}          % 密级（公开论文可标可不标）
+\newcommand{\thesisDate}{二〇二六年六月}        % 完成时间（汉字，不用阿拉伯数字，见规范 3.2/3.4）
+
+\begin{document}
+
+% ============================================================
+% 前置部分（按学位论文组成顺序：封面→题名页→声明/承诺书/授权书→作者简介→答辩名单→中英文摘要→目录→图表清单）
+% ============================================================
+\frontmatter
+\pagenumbering{roman}          % 前置部分用罗马数字（第一章起改为阿拉伯数字）
+\pagestyle{plain}              % 前置部分：页脚居中罗马页码、无页眉
+\input{frontmatter/cover}              % 1. 中文封面（titlepage 环境自动无页码）
+\input{frontmatter/titlepage_cn}       % 2. 中文题名页
+\input{frontmatter/titlepage_en}       % 3. 英文题名页
+\input{frontmatter/declaration}        % 4. 学位论文原创性声明
+\input{frontmatter/supervisor_commitment} % 5. 研究生学位论文导师承诺书
+\input{frontmatter/authorization}      % 6. 学位论文使用授权书
+\input{frontmatter/author_bio}         % 7. 作者简介
+\input{frontmatter/defense_committee}  % 8. 学位论文答辩委员会名单
+\input{frontmatter/abstract}           % 9. 中文摘要 / 10. Abstract
+\tableofcontents                       % 11. 目录
+\listoffigures                         % 12. 图清单（如有）
+\listoftables                          % 12. 表清单（如有）
+
+% ============================================================
+% 正文部分（每章一个独立文件，便于维护）
+% ============================================================
+\mainmatter
+\pagestyle{fancy}              % 正文起：启用页眉（中国地质大学格式）+ 外侧阿拉伯页码
+\input{chapters/ch01_introduction}
+\input{chapters/ch02_related_work}
+\input{chapters/ch03_task_allocation}
+\input{chapters/ch04_path_planning}
+\input{chapters/ch05_system_implementation}
+\input{chapters/ch06_conclusion}
+
+% ============================================================
+% 后置部分（按学位论文组成顺序：致谢→参考文献→附录→攻读学位期间成果）
+% ============================================================
+\backmatter
+\input{backmatter/acknowledgements}    % 14. 致谢
+\printbibliography[heading=bibintoc, title={参考文献}]  % 15. 参考文献
+\input{backmatter/appendices}          % 16. 附录
+\input{backmatter/publications}        % 攻读学位期间科研成果（可选）
+
+\end{document}

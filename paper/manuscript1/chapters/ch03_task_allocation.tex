@@ -1,0 +1,64 @@
+% ============================================================
+% chapters/ch03_allocation.tex —— 第 3 章 动态滚动的多机巢多无人机协同任务分配方法
+% 小节框架已按既有方法论（task_allocation/Chapter3_README.md）拆好，
+% 请逐节补充正文、公式与图示。
+% ============================================================
+\chapter{动态滚动的多机巢多无人机协同任务分配方法}
+
+\section{引言}
+% 本章面向广域输电网动态运维巡检，研究多机巢起降条件下的多无人机动态协同任务规划问题。
+
+\section{问题特征与核心挑战}
+\subsection{任务动态到达与任务持续滞留}
+\subsection{无人机可用状态动态变化}
+\subsection{多机巢起降与终点机巢选择}
+\subsection{任务数量与当前执行能力不匹配}
+\subsection{任务价值与空间执行代价并存}
+
+\section{总体求解框架}
+\subsection{第一阶段：动态任务选择}
+\subsection{第二阶段：选择性 MUAS}
+
+\section{第一阶段：动态任务选择机制}
+\subsection{任务选择的基本思想}
+\subsection{基础任务优先级}
+\subsection{候选任务预筛选}
+\subsection{边际收益增量选择}
+\subsection{快速可行性检查}
+
+\section{第二阶段：选择性多机巢 MUAS 优化}
+\subsection{问题定义}
+\subsection{决策变量}
+\subsection{多目标优化模型}
+
+\section{改进离散映射差分进化算法}
+\subsection{面向任务序列的统一编码}
+\subsection{多机巢终点选择}
+\subsection{选择性任务分配}
+\subsection{约束处理}
+\subsection{三维地理代价嵌入}
+
+\section{动态滚动与闭环运行}
+
+\section{本章研究内容与贡献定位}
+\subsection{构建动态任务选择机制}
+\subsection{构建选择性多机巢 MUAS 模型及改进求解方法}
+\subsection{形成动态任务选择与精细 MUAS 相结合的分层求解框架}
+
+\section{本章总体技术路线}
+
+\section{本章小结}
+
+% 提示：算法示例
+% \begin{algorithm}[htbp]
+%   \caption{选择性多机巢 MUAS 求解}\label{alg:muas}
+%   \begin{algorithmic}[1]
+%     \Require 候选任务集 $\mathcal{T}_t^{\mathrm{sel}}$，可用无人机集 $U_t^{\mathrm{avail}}$
+%     \Ensure 分配方案 $\mathcal{T}_t^{\mathrm{exec}}, U_t^{\mathrm{exec}}$
+%     \For{每个滚动周期 $t$}
+%       \State 动态任务选择 $\rightarrow \mathcal{T}_t^{\mathrm{sel}}$
+%       \State 改进离散映射差分进化求解 MUAS
+%     \EndFor
+%     \Return 最优分配与航次
+%   \end{algorithmic}
+% \end{algorithm}

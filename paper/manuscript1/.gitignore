@@ -1,0 +1,17 @@
+# LaTeX 编译中间产物与输出
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.lof
+*.lot
+*.toc
+*.out
+*.log
+*.synctex.gz
+*.run.xml
+*.nav
+*.snm
+*-blx.bib
+main.pdf
+build/

@@ -1,0 +1,34 @@
+% ============================================================
+% setup/commands.tex —— 自定义命令、缩写、定理环境、算法汉化
+% ============================================================
+
+% ---------- 常用英文缩写 ----------
+\newcommand{\ie}{\textit{i.e.}}
+\newcommand{\eg}{\textit{e.g.}}
+\newcommand{\etal}{\textit{et al.}}
+
+% ---------- 向量/矩阵粗体 ----------
+\newcommand{\vect}[1]{\bm{#1}}
+\newcommand{\mat}[1]{\bm{#1}}
+
+% ---------- 数学算子 ----------
+\DeclareMathOperator*{\argmin}{arg\,min}
+\DeclareMathOperator*{\argmax}{arg\,max}
+
+% ---------- 定理/定义/引理环境 ----------
+\newtheorem{theorem}{定理}[chapter]
+\newtheorem{lemma}{引理}[chapter]
+\newtheorem{definition}{定义}[chapter]
+\newtheorem{proposition}{命题}[chapter]
+\newtheorem{remark}{注}[chapter]
+
+% ---------- 算法环境关键词汉化（algpseudocode）----------
+\renewcommand{\algorithmicrequire}{\textbf{输入}}
+\renewcommand{\algorithmicensure}{\textbf{输出}}
+\renewcommand{\algorithmicfor}{\textbf{对于}}
+\renewcommand{\algorithmicdo}{\textbf{做}}
+\renewcommand{\algorithmicwhile}{\textbf{当}}
+\renewcommand{\algorithmicthen}{\textbf{则}}
+\renewcommand{\algorithmicif}{\textbf{如果}}
+\renewcommand{\algorithmicelse}{\textbf{否则}}
+\renewcommand{\algorithmicreturn}{\textbf{返回}}
