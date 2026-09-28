@@ -71,12 +71,15 @@
 }
 \makeatletter
 % \normalsize/\small/\footnotesize 分别调用内部 \@normalsize/\@small/\@footnotesize。
-% LaTeX 内核的 \addto 要求第二参数是"已展开的命令名"，因此先把
-% \fixLineskip{20pt} 展开到 \next（用 \dimexpr...\relax 隔离 \p@ 的 @），再追加。
-\expandafter\def\expandafter\next\expandafter{\expandafter\fixLineskip\expandafter{\dimexpr20\p@\relax}}
-\addto\@normalsize{\next}
-\@ifundefined{@small}{}{\addto\@small{\next}}
-\@ifundefined{@footnotesize}{}{\addto\@footnotesize{\next}}
+% 注意：LaTeX 内核并没有可公开使用的 \addto 命令（它在定义完 \g@addto@macro
+% 之后即被 \let 释放），直接 \addto\@normalsize{...} 会报
+% "Undefined control sequence" 并引发后续连锁错误。正确做法是用
+% \g@addto@macro 把 \fixLineskip{20pt} 追加进各字号内部宏；
+% \fixLineskip 保持未展开形式写入即可——它会在每次字号切换执行时
+% 才展开，届时 \p@ 处于 makeatletter 环境内可正常读取。
+\g@addto@macro\@normalsize{\fixLineskip{20pt}}
+\@ifundefined{@small}{}{\g@addto@macro\@small{\fixLineskip{20pt}}}
+\@ifundefined{@footnotesize}{}{\g@addto@macro\@footnotesize{\fixLineskip{20pt}}}
 \makeatother
 \AtBeginDocument{\normalsize}   % 使上述设置立即生效
 
