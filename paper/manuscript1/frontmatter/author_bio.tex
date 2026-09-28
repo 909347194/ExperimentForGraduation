@@ -1,44 +1,37 @@
 % ============================================================
-% frontmatter/author_bio.tex —— 作者简介
-% 含个人基本信息与简历。具体字段以学校要求为准。
+% frontmatter/author_bio.tex —— 作者简介（附件 6）
+% 版式严格按 2025.5 规范附件 6 官方式样：
+%   页标题"作者简历"；一、基本情况（姓名/性别/民族/出生年月/籍贯单行，
+%   下接学历行）；二、学术论文；三、获奖、专利情况；四、研究项目。
+% 注意：官方附件 6 无学号/学位类别/学科专业/研究方向/导师栏目
+%   （这些信息已在封面与题名页体现），请勿再加回表格。
 % ============================================================
-\chapter*{作者简介}
-\addcontentsline{toc}{chapter}{作者简介}
+\chapter*{作者简历}
+\addcontentsline{toc}{chapter}{作者简历}
 
-\begin{tabular}{rl}
-  \zihao{4}\songti 姓　　名： & \zihao{4}\songti \thesisAuthor \\[0.35cm]
-  \zihao{4}\songti 性　　别： & \zihao{4}\songti \underline{\hspace{3cm}} \\[0.35cm]
-  \zihao{4}\songti 出生年月： & \zihao{4}\songti \underline{\hspace{3cm}} \\[0.35cm]
-  \zihao{4}\songti 民　　族： & \zihao{4}\songti \underline{\hspace{3cm}} \\[0.35cm]
-  \zihao{4}\songti 籍　　贯： & \zihao{4}\songti \underline{\hspace{3cm}} \\[0.35cm]
-  \zihao{4}\songti 学　　号： & \zihao{4}\songti \thesisStudentID \\[0.35cm]
-  \zihao{4}\songti 学位类别： & \zihao{4}\songti 工学硕士 \\[0.35cm]
-  \zihao{4}\songti 学科专业： & \zihao{4}\songti \thesisMajor \\[0.35cm]
-  \zihao{4}\songti 研究方向： & \zihao{4}\songti \thesisResearchDir \\[0.35cm]
-  \zihao{4}\songti 导　　师： & \zihao{4}\songti \thesisAdvisor \\[0.35cm]
-\end{tabular}
-
-\vspace{0.6cm}
-\noindent\textbf{作者简历}
-
+\vspace{0.5em}
 \noindent 一、基本情况
 
-\noindent 20XX 年 9 月—20XX 年 6 月，\thesisOrg\ \thesisMajor\ 攻读硕士学位，师从\thesisAdvisor。
+\vspace{0.5em}
+\noindent 姓名：\thesisAuthor\hspace{1em}性别：\underline{\hspace{1.1cm}}\hspace{1em}民族：\underline{\hspace{1.1cm}}\hspace{1em}出生年月：\underline{\hspace{1.6cm}}\hspace{1em}籍贯：\underline{\hspace{1.8cm}}
 
+\vspace{0.5em}
+\noindent 20XX 年 9 月—20XX 年 6 月\quad \thesisOrg\ \thesisMajor\ 攻读硕士学位，师从\thesisAdvisor。
+
+\vspace{1.2em}
 \noindent 二、学术论文
 
-\begin{enumerate}
-  \item 作者. 题名[J]. 刊名，年，卷（期）：起-止页码.
-\end{enumerate}
+\vspace{0.5em}
+\noindent 1. 作者. 题名[J]. 刊名，年，卷（期）：起-止页码.
 
+\vspace{1.2em}
 \noindent 三、获奖、专利情况
 
-\begin{enumerate}
-  \item 获奖 / 专利名称（如有）.
-\end{enumerate}
+\vspace{0.5em}
+\noindent 1. 获奖 / 专利名称（如有），等级，排名.
 
+\vspace{1.2em}
 \noindent 四、研究项目
 
-\begin{enumerate}
-  \item 项目名称（基金 / 课题），时间，角色.
-\end{enumerate}
+\vspace{0.5em}
+\noindent 1. 项目名称（基金 / 课题），项目时间，项目编号，角色.
