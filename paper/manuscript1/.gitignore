@@ -16,6 +16,11 @@
 main.pdf
 build/
 
+# latexmk 产物
+*.fdb_latexmk
+*.fls
+*.xdv
+
 # 本地Linux验证用临时文件与产物
 main_linux_test.tex
 *.pdf
