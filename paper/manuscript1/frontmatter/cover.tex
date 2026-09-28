@@ -34,12 +34,14 @@
   \makebox[\textwidth][l]{%
     \hspace*{0.268\textwidth}%
     \begin{tabular}{rl}
-      % 规范表3.2：学号等阿拉伯数字用 Times New Roman 体
-      \zihao{3}\heiti \labelfour{学号}： & \zihao{3}\heiti\zhlabelsep\tnr{\thesisStudentID} \\[0.5cm]
-      \zihao{3}\heiti \labelfour{姓名}： & \zihao{3}\heiti\zhlabelsep\thesisAuthor \\[0.5cm]
-      \zihao{3}\heiti \labelfour{学科专业}： & \zihao{3}\heiti\zhlabelsep\thesisMajor \\[0.5cm]
-      \zihao{3}\heiti \labelfour{指导教师}： & \zihao{3}\heiti\zhlabelsep\thesisAdvisor \\[0.5cm]
-      \zihao{3}\heiti \labelfour{培养单位}： & \zihao{3}\heiti\zhlabelsep\thesisOrg \\[0.5cm]
+      % 规范表 3.2：封面字段一律【宋体三号加粗】；学号为 Times New Roman 三号加粗。
+      % 注意：规范写的是“宋体…加粗”，不是黑体——宋体加粗与黑体字形不同，
+      %      此前误用 \heiti（黑体）属偏差，此处按规范改为 \songti\bfseries。
+      \zihao{3}\songti\bfseries \labelfour{学号}： & \zihao{3}\songti\bfseries\zhlabelsep\tnr{\bfseries\thesisStudentID} \\[0.5cm]
+      \zihao{3}\songti\bfseries \labelfour{姓名}： & \zihao{3}\songti\bfseries\zhlabelsep\thesisAuthor \\[0.5cm]
+      \zihao{3}\songti\bfseries \labelfour{学科专业}： & \zihao{3}\songti\bfseries\zhlabelsep\thesisMajor \\[0.5cm]
+      \zihao{3}\songti\bfseries \labelfour{指导教师}： & \zihao{3}\songti\bfseries\zhlabelsep\thesisAdvisor \\[0.5cm]
+      \zihao{3}\songti\bfseries \labelfour{培养单位}： & \zihao{3}\songti\bfseries\zhlabelsep\thesisOrg \\[0.5cm]
     \end{tabular}}
 
   \vfill

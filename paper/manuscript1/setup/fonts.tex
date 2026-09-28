@@ -15,6 +15,16 @@
 \setsansfont{Arial}               % 西文无衬线（标题/图表标签可选）
 \setmonofont{Courier New}         % 西文等宽（代码、算法）
 
+% —— 宋体伪粗体（重要）——
+% 规范表 3.2 要求封面字段“宋体 16 磅(三号) 加粗”，但 SimSun 只有常规字形，
+% xeCJK 遇到 \bfseries 会降级为常规体并警告
+%   “LaTeX Font Warning: Font shape `TU/SimSun(1)/b/n' undefined”，
+% 结果加粗完全无效。AutoFakeBold 让 xeCJK 以描边方式合成粗体：
+% 常规文字不受影响，仅 \bfseries 时启用，视觉与 Word 里“宋体加粗”一致。
+% ctex 的 \songti 命令映射到 zhsong family，主字体亦为宋体，两处都要设置。
+\setCJKmainfont{SimSun}[AutoFakeBold=2.5]
+\setCJKfamilyfont{zhsong}{SimSun}[AutoFakeBold=2.5]
+
 % —— 辅助命令：在中文（宋体/黑体）环境中强制西文/数字用 Times New Roman ——
 % 例：\tnr{2020110101} 用于封面"学号"等需要 TNR 阿拉伯数字处。
 \newcommand{\tnr}[1]{{\fontspec{Times New Roman}#1}}

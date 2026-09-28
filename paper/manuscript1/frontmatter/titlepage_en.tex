@@ -23,14 +23,18 @@
   {\zihao{2}\bfseries \thesisTitleEN}
 
   \vspace{1.4cm}
-  % 附件2 式样：Candidate/Major/Supervisor 三行【右端对齐】（Word 中段落 jc=end，
-  % 实测三行右端均落在版心 0.443 处），块整体居中。
-  % 用 tabular 的 r 列实现右端对齐（Word 原稿靠表格/右对齐排版实现同样效果）。
-  \begin{tabular}{@{}r@{}}
-    Master Candidate：\thesisAuthorEn \\[0.5cm]
-    Major：\thesisMajorEn \\[0.5cm]
-    Supervisor：\thesisAdvisorEn
-  \end{tabular}
+  % 附件2 式样（学术硕士版，Word 实测）：Master Candidate：/ Major：/ Supervisor：
+  % 三行【整行右端对齐】于版心 0.446 处（三行 xMax=274.2~274.4pt，即 (274.4-85)/425≈0.446；
+  % Word 段落属性 jc=end + 右缩进，填入值后整行仍应右端贴齐该边界）。
+  % ⚠️ 此前实现把 tabular 放在 center 环境里，右端落在 0.741——与式样差 0.3 版心，已修正：
+  % 用宽 0.446\textwidth 的盒子把 tabular 右端精确锚定在版心 0.446 处。
+  \noindent\makebox[\textwidth][l]{%
+    \makebox[0.446\textwidth][r]{%
+      \begin{tabular}{@{}r@{}}
+        Master Candidate：\thesisAuthorEn \\[0.5cm]
+        Major：\thesisMajorEn \\[0.5cm]
+        Supervisor：\thesisAdvisorEn
+      \end{tabular}}}
 
   \vspace{1.6cm}
   China University of Geosciences \\

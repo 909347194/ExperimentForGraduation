@@ -69,6 +69,20 @@
 \makeatletter\@openrightfalse\makeatother
 \pagenumbering{roman}          % 前置部分用罗马数字（第一章起改为阿拉伯数字）
 \pagestyle{plain}              % 前置部分：页脚居中罗马页码、无页眉
+
+% ---- 目录收录范围（规范 1.10，式样见附件 8）----
+% 目录是“论文各章节标题的顺序列表”，附件 8 实测只含：
+%   图清单 / 表清单（如有） / 各章及其节 / 参考文献 / 致谢 / 附录。
+% 下列前置页面虽以 \chapter* 排版，但按附件 8 式样【不进目录】：
+%   封面、中文题名页、英文题名页、原创性声明、导师承诺书、使用授权书、
+%   作者简历、答辩委员会名单、中文摘要、Abstract。
+% 做法：临时吞掉 \addcontentsline（内核为 3 参数宏），待这些页面排版完成后再恢复。
+% 注意必须写成 \renewcommand{\addcontentsline}[3]{}，不能写 [0]（参数个数必须匹配）。
+\makeatletter
+\let\MSc@origaddcontentsline\addcontentsline
+\renewcommand{\addcontentsline}[3]{}%
+\makeatother
+
 \input{frontmatter/cover}              % 1. 中文封面（titlepage 环境自动无页码）
 \input{frontmatter/titlepage_cn}       % 2. 中文题名页
 \input{frontmatter/titlepage_en}       % 3. 英文题名页
@@ -78,6 +92,11 @@
 \input{frontmatter/author_bio}         % 7. 作者简介
 \input{frontmatter/defense_committee}  % 8. 学位论文答辩委员会名单
 \input{frontmatter/abstract}           % 9. 中文摘要 / 10. Abstract
+
+% ---- 恢复 \addcontentsline：目录及其后的章节正常入目 ----
+\makeatletter
+\let\addcontentsline\MSc@origaddcontentsline
+\makeatother
 \tableofcontents                       % 11. 目录
 % 12. 图和表清单（规范：如有）。当前正文尚无图/表，若编译出空目录页则保持注释；
 % 插图/表后取消下面两行注释即可启用（并确认目录中不出现"图清单/表清单"以外的异常）。
