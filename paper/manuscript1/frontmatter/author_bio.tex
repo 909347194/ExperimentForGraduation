@@ -18,6 +18,11 @@
 %   "姓名：X   性别：X   民族：X  出生年月：1976-07-23  籍贯：X省X市"
 % 用【表格】实现字段对齐（Word 原文即用表格排版）：tabular* 让五个字段在版心内均匀分布，
 % 既保证各字段左端对齐成列，又不会像 \hspace 硬排那样超宽；宽度减 2\ccwd 以实现首行缩进。
+% 五个字段填上真实内容后自然宽度偏大，加上 l 列默认 \tabcolsep(6pt×2×4=48pt)
+% 会超出「版心-2\ccwd」的目标宽度（实测 Overfull 27.7pt）。此处在分组内把列间距
+% 归零，改由 @{\extracolsep{\fill}} 均匀分配剩余空间，既不出界又保持字段成列。
+\begingroup
+\setlength{\tabcolsep}{0pt}
 \begin{tabular*}{\dimexpr\linewidth-2\ccwd\relax}{@{\extracolsep{\fill}}lllll@{}}
   姓名：\thesisAuthor &
   性别：男 &
@@ -25,6 +30,7 @@
   出生年月：2002年10月 &
   籍贯：安徽蚌埠
 \end{tabular*}
+\endgroup
 
 \vspace{0.5em}
 20XX 年 9 月—20XX 年 6 月\quad \thesisOrg\ \thesisMajor\ 攻读硕士学位，师从\thesisAdvisor。
