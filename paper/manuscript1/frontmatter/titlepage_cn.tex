@@ -12,8 +12,10 @@
 \begin{center}
   \zihao{3}\songti
   % 规范表3.4：学号等阿拉伯数字用 Times New Roman 三号
-  学校代码：\tnr{\thesisSchoolCode}\\[8pt]
-  研究生学号：\tnr{\thesisStudentID}
+  % 要求同一行、左右两侧排列（左：学校代码，右：研究生学号）
+  \begin{tabular*}{\textwidth}{@{}l@{\extracolsep{\fill}}r@{}}
+    学校代码：\tnr{\thesisSchoolCode} & 研究生学号：\tnr{\thesisStudentID}
+  \end{tabular*}
 
   \vspace{1.4cm}
   {\songti\zihao{1}\textbf{\thesisSchool}}\\[0.3cm]
