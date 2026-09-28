@@ -14,20 +14,20 @@
 
 % ---------- 1. 标题格式（ctex 标题机制）----------
 \ctexset{
-  % 各章标题：黑体三号(16pt)加粗居中，单倍行距，上下空 2 行
+   % 各章标题：黑体三号(16pt)（黑体本身即粗，不再叠加 \bfseries 以免伪粗警告）居中，单倍行距，上下空 2 行
   % 章序号用中文数字（第一章），序号与题名之间空一个汉字符
   chapter = {
     name      = {第,章},
     number    = \chinese{chapter},   % 若学校要求"第1章"阿拉伯数字，改为 \arabic{chapter}
-    format    = \centering\heiti\bfseries\zihao{3},
+    format    = \centering\heiti\zihao{3},
     aftername = \quad,               % 序号与题名间空一个汉字符
     beforeskip = 2\baselineskip,     % 上空约 2 行
     afterskip  = 2\baselineskip,     % 下空约 2 行
     fixskip   = true,                % 固定间距（无弹性）
   },
-  % 一级节标题：黑体四号(14pt)加粗居中，单倍行距，上下空 1 行
+  % 一级节标题：黑体四号(14pt)（黑体不加 \bfseries）居中，单倍行距，上下空 1 行
   section = {
-    format    = \centering\heiti\bfseries\zihao{4},
+    format    = \centering\heiti\zihao{4},
     aftername = \quad,
     beforeskip = \baselineskip,      % 上空约 1 行
     afterskip  = \baselineskip,      % 下空约 1 行
@@ -35,7 +35,7 @@
   },
   % 二级节标题：黑体小四(12pt)居左，单倍行距，上下空 1 行
   subsection = {
-    format    = \raggedright\heiti\bfseries\zihao{-4},
+    format    = \raggedright\heiti\zihao{-4},
     aftername = \quad,
     beforeskip = \baselineskip,
     afterskip  = \baselineskip,
@@ -44,7 +44,7 @@
   % 三级节标题（如使用）：规范表3.8未单独规定，按 CY/T 35-2001 顺延为
   % 黑体小四、顶格（序号与题名间不额外加空格），上下空约半行
   subsubsection = {
-    format    = \raggedright\heiti\bfseries\zihao{-4},
+    format    = \raggedright\heiti\zihao{-4},
     aftername = {},
     beforeskip = 0.5\baselineskip,
     afterskip  = 0.5\baselineskip,
@@ -57,22 +57,48 @@
 % 其余：两端对齐、首行缩进 2 汉字符、固定行距 20 磅、段前段后 0
 \setlength{\parindent}{2\ccwd}      % 首行左缩进 2 个汉字符
 \setlength{\parskip}{0pt}           % 段前段后 0（段与段之间不额外留空）
-% 固定值行距 20 磅：用 setspace 的精确模式实现（直接改 \baselineskip
-% 会被各字号命令如 \zihao{5} 重置而失效）。ctex 已加载 setspace，
-% exactlineskipmode 使 \baselineskip 取"当前字号自然基线 × \setstretch"，
-% 在 \AtBeginDocument 时正文仍为小四(12pt)基准，故倍率 = 20 / 13.15 ≈ 1.521。
-% 含数学表达式的段落可按需要临时调整行距（规范 3.8 允许）。
-\exactlineskipmode
-\AtBeginDocument{%
-  \setstretch{1.521}%
+% 固定值行距 20 磅：直接控制 \baselineskip。
+% 注意 1：setspace 并没有 \exactlineskipmode 命令，也没有 [exact] 选项
+%         （会报 "Unknown option `exact'"），不可依赖它。
+% 注意 2：直接改 \baselineskip 会被字号命令（\zihao{5} 等）重置。
+% 方案：用 ctex 官方钩子 \ctex_patch_cmd 把"固定 20pt"追加进各字号的
+%       内部定义——每次切换字号都会重新执行它们，行距恒定。
+%       \lineskiplimit=-1000pt 是 TeX"固定行距"模式，等效 Word"固定值"。
+\newcommand{\fixLineskip}[1]{%
+  \setlength{\baselineskip}{#1}%
+  \setlength{\lineskip}{\z@}%
+  \setlength{\lineskiplimit}{-1000\p@}%  % TeX 固定行距模式
 }
+\makeatletter
+% \normalsize/\small/\footnotesize 分别调用内部 \@normalsize/\@small/\@footnotesize。
+% LaTeX 内核的 \addto 要求第二参数是"已展开的命令名"，因此先把
+% \fixLineskip{20pt} 展开到 \next（用 \dimexpr...\relax 隔离 \p@ 的 @），再追加。
+\expandafter\def\expandafter\next\expandafter{\expandafter\fixLineskip\expandafter{\dimexpr20\p@\relax}}
+\addto\@normalsize{\next}
+\@ifundefined{@small}{}{\addto\@small{\next}}
+\@ifundefined{@footnotesize}{}{\addto\@footnotesize{\next}}
+\makeatother
+\AtBeginDocument{\normalsize}   % 使上述设置立即生效
 
 % ---------- 3. 图 / 表序号与题名 ----------
 % 宋体五号(10.5pt)居中，单倍行距，序号与题名之间空一个汉字符
 % 图序置于图下方（默认），表序置于表上方
 \usepackage{caption}
+% 注意：caption 的 font 键不接受 \songti、\zihao{5} 这类"声明式"命令，
+% 必须使用 caption 提供的受控字体/字号名（标准尺寸名或 \DeclareCaptionFont
+% 自定义注册名）。中文规范"题注宋体五号居中"实现如下：
+%   wuhao  = 严格五号（10.5pt/13pt 单倍行距）；
+%   zhsongcn = ctex 定义的宋体族控制序列 \songti。caption 的 font 键
+%            按名字展开字体命令，因此用 \csname songti\endcsname 间接
+%            引用；songti 由 ctex（scheme=chinese）定义。
+\DeclareCaptionFont{wuhao}{\fontsize{10.5pt}{13pt}\selectfont}
+% 宋体族名：统一使用 ctex 定义的 CJKfamily "zhsong"
+% ctex 定义的 CJKfamily "zhsong"（windows/mac/linux/fandol 均注册此名）。
+% caption 在正常文档阶段展开，此时 \songti 已由 ctex 定义。
+\DeclareCaptionFont{zhsongcn}{\csname songti\endcsname}  % 宋体（ctex 提供）
 \captionsetup{
-  font         = {songti,\zihao{5}},  % 宋体五号（\zihao{5} 同时给出单倍行距）
+  font         = {zhsongcn,wuhao},      % 宋体五号
+  labelfont    = {zhsongcn,wuhao},      % 图/表序号同样宋体五号
   justification = centering,          % 居中
   labelsep     = quad,                % 序号与题名之间空一个汉字符
   skip         = 6pt,                 % 图/表与题名的间距
@@ -143,7 +169,7 @@
 % 正文：中文宋体小四 / 英文 TNR 小四，固定 20 磅，段前段后 0（全局已设）
 % 关键词："关键词"三字加粗（黑体）/ "Key Words"两词加粗（TNR），字号同正文
 \newcommand{\cnabstracttitle}{%
-  \begin{center}\heiti\bfseries\zihao{-2} 摘要\end{center}%
+  \begin{center}\heiti\zihao{-2} 摘要\end{center}%
   \vspace{0.5\baselineskip}\zihao{-4}\songti\noindent\ignorespaces
 }
 \newcommand{\enabstracttitle}{%
@@ -163,7 +189,9 @@
   right      = 3cm,
   headheight = 2.5cm,   % 页眉区域高度（页眉底边距顶 2.5cm，贴顶）
   headsep    = 0.5cm,   % 页眉底边到正文的距离
-  footheight = 1.0cm,   % 页脚区域高度
+  % 注意：geometry 没有 footheight 键（正确键名为 bottomheight / footskip），
+  % 原 footheight=1.0cm 属无效选项会被忽略并警告，此处删除；
+  % 页脚位置由 footskip 控制。
   footskip   = 2.0cm,   % 正文底边到页脚基线的距离（页脚距底约 2.0cm，贴底）
   bindingoffset = 0cm   % 装订线 0cm
 }

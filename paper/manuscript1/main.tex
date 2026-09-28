@@ -5,12 +5,25 @@
 % 也可直接：latexmk（已提供 .latexmkrc）
 % ============================================================
 \documentclass[
-  degree   = master,   % 硕士论文（bachelor / master / doctor）
   zihao    = -4,       % 小四号字（12pt，正文基准字号）
-  fontset  = auto,     % 按操作系统自动选择中文字体（win/mac/linux）
+  fontset  = windows,  % 显式指定 Windows 字体集（宋体 SimSun/黑体 SimHei/楷体 KaiTi/仿宋 FangSong）
+                       % ——按学校要求锁定 Windows 系统字体；请在装有上述字体的
+                       %   电脑（Windows / Overleaf 需上传字体）上编译。
+                       % 注意：ctexbook 无 degree 选项（该选项属于学校模板类），已删除；
+                       %   学位类别由 \thesisCategory 宏控制。
   openright,           % 章节从奇数页开始
-  UTF8
+  scheme = chinese     % 中文主方案（定义 \songti/\heiti/\zihao 等命令；
+                       % 旧写法 \usepackage[...]{ctex} 会与文档类选项冲突，已移除）
+  % UTF8 是 xelatex+ctex 的默认编码，无需显式声明（旧 ctex 选项，已移除）
 ]{ctexbook}
+% Linux/macOS 无系统宋体时临时调试可用 fandol 开源字体（正式提交请保持 windows）：
+% \ctexset{fontset=fandol}
+
+% 说明：ctexbook 文档类已自动加载 ctex 宏包，切勿再写
+% \usepackage[UTF8, scheme=chinese, fontset=...]{ctex}——那会造成
+% "Option clash for package ctex"，并且使中文命令（\songti/\heiti/
+% \zihao 等）定义异常（此前封面报 Undefined control sequence 的根源）。
+% scheme=chinese、UTF8 均为 ctex 默认值，无需声明。
 
 % 全局宏包与设置
 \input{setup/preamble}

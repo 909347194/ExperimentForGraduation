@@ -15,3 +15,7 @@
 *-blx.bib
 main.pdf
 build/
+
+# 本地Linux验证用临时文件与产物
+main_linux_test.tex
+*.pdf
