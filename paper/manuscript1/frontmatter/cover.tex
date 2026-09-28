@@ -30,14 +30,17 @@
   % 与附录式样一致：Word 中"姓     名：""学 科 专 业："等标签为等宽分散对齐，
   % 冒号落在同一列、各行的值左端对齐（此处用表格 + \labelfour 实现同样的对齐效果）。
   \setlength{\tabcolsep}{0pt}
-  \begin{tabular}{rl}
-    % 规范表3.2：学号等阿拉伯数字用 Times New Roman 体
-    \zihao{3}\heiti \labelfour{学号}： & \zhqspace\zihao{3}\tnr{\thesisStudentID} \\[0.5cm]
-    \zihao{3}\heiti \labelfour{姓名}： & \zhqspace\zihao{3}\heiti \thesisAuthor \\[0.5cm]
-    \zihao{3}\heiti \labelfour{学科专业}： & \zhqspace\zihao{3}\heiti \thesisMajor \\[0.5cm]
-    \zihao{3}\heiti \labelfour{指导教师}： & \zhqspace\zihao{3}\heiti \thesisAdvisor \\[0.5cm]
-    \zihao{3}\heiti \labelfour{培养单位}： & \zhqspace\zihao{3}\heiti \thesisOrg \\[0.5cm]
-  \end{tabular}
+  % 与题名页一致：按 Word 实测【左锚定】于版心 0.268（外层 \makebox 抵消 \centering）。
+  \makebox[\textwidth][l]{%
+    \hspace*{0.268\textwidth}%
+    \begin{tabular}{rl}
+      % 规范表3.2：学号等阿拉伯数字用 Times New Roman 体
+      \zihao{3}\heiti \labelfour{学号}： & \zhqspace\zihao{3}\tnr{\thesisStudentID} \\[0.5cm]
+      \zihao{3}\heiti \labelfour{姓名}： & \zhqspace\zihao{3}\heiti \thesisAuthor \\[0.5cm]
+      \zihao{3}\heiti \labelfour{学科专业}： & \zhqspace\zihao{3}\heiti \thesisMajor \\[0.5cm]
+      \zihao{3}\heiti \labelfour{指导教师}： & \zhqspace\zihao{3}\heiti \thesisAdvisor \\[0.5cm]
+      \zihao{3}\heiti \labelfour{培养单位}： & \zhqspace\zihao{3}\heiti \thesisOrg \\[0.5cm]
+    \end{tabular}}
 
   \vfill
   % 规范表3.2：日期为宋体三号，不加粗（仅上方著录项加粗）

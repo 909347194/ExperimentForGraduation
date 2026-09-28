@@ -32,12 +32,17 @@
   % 四个标签统一经 \labelfour 处理，保证冒号落在同一列；
   % tabcolsep=0 + \zhqspace(1em) 使冒号与内容间隔为一个全角空格。
   \setlength{\tabcolsep}{0pt}
-  \begin{tabular}{rl}
-    \zihao{3}\songti \labelfour{姓名}： & \zhqspace\zihao{3}\songti \thesisAuthor \\[0.5cm]
-    \zihao{3}\songti \labelfour{学科专业}： & \zhqspace\zihao{3}\songti \thesisMajor \\[0.5cm]
-    \zihao{3}\songti \labelfour{指导教师}： & \zhqspace\zihao{3}\songti \thesisAdvisor \\[0.5cm]
-    \zihao{3}\songti \labelfour{培养单位}： & \zhqspace\zihao{3}\songti \thesisOrg \\[0.5cm]
-  \end{tabular}
+  % Word 实测：标签块是【左锚定】于版心 0.268 处（不是居中！），
+  % 冒号落在 0.49、值列起点 0.538；值长短不同时向右延伸，故不能用 center 居中。
+  % 做法：外层 \makebox[\textwidth][l] 抵消 center 环境的居中，再用 \hspace 左锚定。
+  \makebox[\textwidth][l]{%
+    \hspace*{0.268\textwidth}%
+    \begin{tabular}{rl}
+      \zihao{3}\songti \labelfour{姓名}： & \zhqspace\zihao{3}\songti \thesisAuthor \\[0.5cm]
+      \zihao{3}\songti \labelfour{学科专业}： & \zhqspace\zihao{3}\songti \thesisMajor \\[0.5cm]
+      \zihao{3}\songti \labelfour{指导教师}： & \zhqspace\zihao{3}\songti \thesisAdvisor \\[0.5cm]
+      \zihao{3}\songti \labelfour{培养单位}： & \zhqspace\zihao{3}\songti \thesisOrg \\[0.5cm]
+    \end{tabular}}
 
   \vspace{2.4cm}
   % 附件1 式样：题名页底部有完成日期（汉字，不用阿拉伯数字，见规范 3.4 表3.4）

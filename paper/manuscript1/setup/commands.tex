@@ -34,15 +34,22 @@
 \renewcommand{\algorithmicreturn}{\textbf{返回}}
 
 % ---------- 封面/题名页标签对齐 ----------
-% 将两字标签（如“学号”“姓名”）撑满四字宽，与“学科专业”等四字标签冒号对齐。
-% 原理：xeCJK 会在相邻汉字间插入弹性 glue，普通 \makebox[4em][s] 因此报
-% "Underfull \hbox (badness 10000)"。改用数学模式排版：\vcenter{\hbox to 4em}
-% 提供刚性水平盒（盒内无基线 glue），\hbox 承载文字并临时关闭 CJKspace，
-% \hss...\hss 两端居中撑满 4em。已在 TeX Live xelatex 实测零警告、零错误。
+% 还原 Word 式样：所有标签（学号/姓名/学科专业/指导教师/培养单位，无论 2 字或 4 字）
+% 都装进【同一固定宽度的分散对齐单元格】。Word 实测：4 字标签字距约 0.5em，
+% 2 字标签「姓名」被拉开成一大段空隙（约 3.5em），冒号因此对齐且带“空隙”。
+% 实现要点（关键！）：
+%   * 不能用 \ensuremath 数学模式——数学模式下 xeCJK 不插 CJKglue，字符无法拉伸；
+%   * 也不能用 \hss 两端收尾——\hss 会把空隙“吃掉”，只剩自然宽（之前就是这样）。
+%   * 正确做法：\hbox to 5.5em{#1} 强制撑满，并把 \CJKglue 设为可无限拉伸，
+%     让“字与字之间”的 glue 吸收空隙 → 2 字→大空隙、4 字→小字距，全部撑满 5.5em。
+%   * 5.5em ≈ Word 标签单元格宽 87pt（4 字 64pt + 3×8pt 字距）；冒号在盒后，落同一列。
+%   * 用 { } 分组，局部改写 \CJKglue，不影响全文其它排版。
+% ⚠️ 坑：\CJKglue 在 xeCJK 中是【宏】而不是 register，不能写 "\CJKglue=<glue>"，
+%   否则那个 = 会被当作普通字符排进版面（实测每个标签前多出一个 "≈9pt" 的 "="），
+%   既难看又挤掉字距。必须用 xeCJK 的键值接口：\xeCJKsetup{CJKglue=...}。
 \newcommand{\labelfour}[1]{%
-  \ensuremath{\vcenter{\hbox to 4em{\hss
-    \hbox{{\xeCJKsetup{CJKspace=false}#1}}
-    \hss}}}%
+  {\xeCJKsetup{CJKspace=false,CJKglue=\hskip 0pt plus 1fil\relax}%
+   \hbox to 5.5em{#1}}%
 }
 % ---------- 封面/题名页冒号与内容间隔 ----------
 % 学位论文模板中冒号后接内容的标准间隔为一个全角空格（约等于汉字宽）；
