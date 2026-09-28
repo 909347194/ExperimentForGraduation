@@ -25,10 +25,13 @@
   {\heiti\zihao{2}\textbf{\thesisTitle}}
 
   \vspace{1.8cm}
+  % 标签列统一四字宽（\labelfour 拉伸补齐），冒号对齐；
+  % tabcolsep=0 + \zhqspace(1em) 使冒号与内容间隔为一个全角空格，与封面一致
+  \setlength{\tabcolsep}{0pt}
   \begin{tabular}{rl}
-    \zihao{3}\songti 姓\hspace{2em}名： & \zihao{3}\songti \thesisAuthor \\[0.5cm]
-    \zihao{3}\songti 学科专业： & \zihao{3}\songti \thesisMajor \\[0.5cm]
-    \zihao{3}\songti 指导教师： & \zihao{3}\songti \thesisAdvisor \\[0.5cm]
-    \zihao{3}\songti 培养单位： & \zihao{3}\songti \thesisOrg \\[0.5cm]
+    \zihao{3}\songti \labelfour{姓名}： & \zhqspace\zihao{3}\songti \thesisAuthor \\[0.5cm]
+    \zihao{3}\songti 学科专业： & \zhqspace\zihao{3}\songti \thesisMajor \\[0.5cm]
+    \zihao{3}\songti 指导教师： & \zhqspace\zihao{3}\songti \thesisAdvisor \\[0.5cm]
+    \zihao{3}\songti 培养单位： & \zhqspace\zihao{3}\songti \thesisOrg \\[0.5cm]
   \end{tabular}
 \end{center}

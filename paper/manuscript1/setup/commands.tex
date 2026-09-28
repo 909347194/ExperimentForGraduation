@@ -32,3 +32,13 @@
 \renewcommand{\algorithmicif}{\textbf{如果}}
 \renewcommand{\algorithmicelse}{\textbf{否则}}
 \renewcommand{\algorithmicreturn}{\textbf{返回}}
+
+% ---------- 封面/题名页标签对齐 ----------
+% 将两字标签（如“姓名”）拉伸为四字宽，与“学科专业”等四字标签冒号对齐。
+% 使用 \makebox[4em][s]：两字之间均匀撑开，总宽恰为四个全角字符。
+\newcommand{\labelfour}[1]{\makebox[4em][s]{#1}}
+
+% ---------- 封面/题名页冒号与内容间隔 ----------
+% 学位论文模板中冒号后接内容的标准间隔为一个全角空格（约等于汉字宽）；
+% \zhqspace 定义为 1em，随字号自动缩放（三号=16磅、小四=12磅）。
+\newcommand{\zhqspace}{\hspace{1em}}
