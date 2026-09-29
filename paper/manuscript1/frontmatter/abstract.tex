@@ -19,13 +19,15 @@
 
 % ---------------- 英文摘要 ----------------
 \clearpage
-\pagestyle{abstracten}\thispagestyle{abstracten}  % 英文摘要页眉（TNR 五号）；\thispagestyle 使页眉在本页即生效
+% 【P2-9】去掉英文摘要页眉。依据：师兄论文 p9/p10（摘要/Abstract）实测 y>740 区域
+%   完全为空 —— 既无页眉也无页脚；规范 2.4「页眉从第一章开始」。
+%   规范 3.1 的"Abstract 部分用 Times New Roman"指正文用 TNR 字体，非要求加页眉。
+%   （\fancypagestyle{abstracten} 定义保留在 setup/format.tex，需要时可再启用。）
 \enabstracttitle
 \addcontentsline{toc}{chapter}{Abstract}  % 如需目录中显示英文摘要，保留此行；否则删除
 
 % —— English abstract（与中文摘要对应）——
-\noindent\textbf{\thesisTitleEN}
-
+% 【P2-10】师兄 p10 只有 Abstract + 正文，正文前不再重复排一遍英文题名（原与页眉重复）。
 Aiming at the routine dynamic operation and maintenance inspection of wide-area
 power transmission networks, this thesis studies the dynamic cooperative mission
 planning of multiple unmanned aerial vehicles (UAVs) under multi-nest launch and
@@ -37,4 +39,4 @@ utilization efficiency.
 \vspace{12pt}
 \noindent\textbf{Key Words:} multi-UAV; task allocation; path planning; rolling horizon; differential evolution
 
-\pagestyle{plain}              % 恢复前置部分页码样式（目录等无页眉）
+% 英文摘要页沿用前置默认 plain 样式（页脚居中罗马页码、无页眉），无需再显式切换。

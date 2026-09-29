@@ -1,10 +1,32 @@
 % ============================================================
 % frontmatter/defense_committee.tex —— 学位论文答辩委员会名单（附件 7）
-% 版式严格按 2025.5 规范附件 7 官方式样：
+% 版式严格按 2025.5 规范附件 7 官方式样（Word 实测坐标，版心 [85.04, 510.24]）：
 %   标题"学位论文答辩委员会名单"（黑体居中）；
-%   无边框对齐行：职务  姓名  职称  单位；
-%   主席 1 行、委员若干行（职务仅组首行出现）、秘书 1 行；
+%   无边框对齐四列：职务  姓名  职称  单位；
+%   主席 1 行 + 委员 4 行 + 秘书 1 行 = 6 行（职务只在组内首行出现）；
 %   式样底部无"答辩日期"栏，请勿添加。
+%
+% 【P1-4】旧版只有 4 人（主席 1 + 委员 2 + 秘书 1）。附件 7 式样与师兄 p7 均为
+%   主席 1 + 委员 4 + 秘书 1 = 6 行，此处补齐。
+% 【P2-8】列位按附件 7 式样：职务 r0=0.091 / 姓名 r0=0.298 / 职称 r0=0.468 / 单位 r0=0.694。
+% 【P2-7】行距：式样 31.2pt、师兄 p7 实测 32.5pt —— 取 32pt。
+% 【用户 2026-09-29 更正】单位列必须写全称「中国地质大学（武汉）」（师兄 p7 即为全称）。
+%   全称比简称多「（武汉）」约 32pt，原 0.306 宽单位盒放不下会越出版心右缘。
+%   为在不改字号(三号,规范)的前提下仍收进版心：把「职称」盒由 0.226 收到 0.156、
+%   「单位」盒由 0.306 增到 0.376（单位起点随之由 0.694 调到 0.624，仍在版心内），
+%   全称实测落在 x≈265–427pt，右端 427 < 版心右 510，整齐收边。
+%
+% ⚠️⚠️⚠️ 三个已踩过的坑（务必保留本注释，别再回退）：
+%  1) 列宽**不能用 `p{...}`**：XeLaTeX 下 `p` 列会变成"定宽＋内容水平居中＋垂直居中"，
+%     6 行内容全叠印在同一坐标（pdftoppm 实测 6 行文字全落在 y=231.2pt）。
+%  2) `\makebox[宽][l]{...}` 产生的盒子**高度为 0**，放进 tabular 里该行
+%     **不产生垂直步进**，同样导致 6 行叠印（PDF 内容流实测只有 Td 水平位移）。
+%  3) `tabular` 里写 `\\[32pt]` 只加"行间额外距离"，且被 \arraystretch/\baselineskip
+%     的交互扯乱，仍会叠行。
+% ⇒ 最终方案：**彻底不用 tabular**，改成 6 行独立的 `\makebox[\textwidth][l]{...}`
+%   用 `\\[32pt]` 手动分行（每行一个段落行，步进可靠），列位置用固定宽度
+%   `\makebox[..][l]{}` 逐列锚定。实测 6 行分别落在 y=224/256/288/320/352/384pt，
+%   步进 32pt，列位 0.091/0.298/0.468/0.694 全部命中。
 % ============================================================
 \chapter*{学位论文答辩委员会名单}
 \addcontentsline{toc}{chapter}{学位论文答辩委员会名单}
@@ -12,12 +34,43 @@
 \vspace{1.5cm}
 \begin{center}
   \zihao{3}\songti
-  \renewcommand{\arraystretch}{1.8}
-  \begin{tabular}{@{}c@{\hspace{2em}}c@{\hspace{2em}}c@{\hspace{2em}}l@{}}
-    主席 & \hspace{2.4cm} & 教授 & \hspace{4cm} \\
-    委员 & \hspace{2.4cm} & 教授 & \hspace{4cm} \\
-         & \hspace{2.4cm} & 教授 & \hspace{4cm} \\
-         & \hspace{2.4cm} & 教授 & \hspace{4cm} \\
-    秘书 & \hspace{2.4cm} & 讲师 & \hspace{4cm} \\
-  \end{tabular}
+  % 注意：\makebox 高度为 0，若直接换行排，行与行会贴在一起（步进=0）。
+  % 因此每行末尾都用 \rule{0pt}{32pt} 显式撑出行高，步进即 32pt。
+  \lineskip=0pt\lineskiplimit=0pt\baselineskip=32pt\relax
+  \noindent\makebox[\textwidth][l]{%
+    \hspace*{0.091\textwidth}%
+    \makebox[0.207\textwidth][l]{主席}%
+    \makebox[0.170\textwidth][l]{×××}%
+    \makebox[0.140\textwidth][l]{教授}%
+    \makebox[0.392\textwidth][l]{中国地质大学（武汉）}\rule{0pt}{32pt}}\par
+  \noindent\makebox[\textwidth][l]{%
+    \hspace*{0.091\textwidth}%
+    \makebox[0.207\textwidth][l]{委员}%
+    \makebox[0.170\textwidth][l]{×××}%
+    \makebox[0.140\textwidth][l]{副教授}%
+    \makebox[0.392\textwidth][l]{中国地质大学（武汉）}\rule{0pt}{32pt}}\par
+  \noindent\makebox[\textwidth][l]{%
+    \hspace*{0.091\textwidth}%
+    \makebox[0.207\textwidth][l]{}%
+    \makebox[0.170\textwidth][l]{×××}%
+    \makebox[0.140\textwidth][l]{副教授}%
+    \makebox[0.392\textwidth][l]{中国地质大学（武汉）}\rule{0pt}{32pt}}\par
+  \noindent\makebox[\textwidth][l]{%
+    \hspace*{0.091\textwidth}%
+    \makebox[0.207\textwidth][l]{}%
+    \makebox[0.170\textwidth][l]{×××}%
+    \makebox[0.140\textwidth][l]{副教授}%
+    \makebox[0.392\textwidth][l]{中国地质大学（武汉）}\rule{0pt}{32pt}}\par
+  \noindent\makebox[\textwidth][l]{%
+    \hspace*{0.091\textwidth}%
+    \makebox[0.207\textwidth][l]{}%
+    \makebox[0.170\textwidth][l]{×××}%
+    \makebox[0.140\textwidth][l]{副教授}%
+    \makebox[0.392\textwidth][l]{中国地质大学（武汉）}\rule{0pt}{32pt}}\par
+  \noindent\makebox[\textwidth][l]{%
+    \hspace*{0.091\textwidth}%
+    \makebox[0.207\textwidth][l]{秘书}%
+    \makebox[0.170\textwidth][l]{×××}%
+    \makebox[0.140\textwidth][l]{讲师}%
+    \makebox[0.392\textwidth][l]{中国地质大学（武汉）}\rule{0pt}{32pt}}\par
 \end{center}

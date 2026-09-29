@@ -23,18 +23,28 @@
   {\zihao{2}\bfseries \thesisTitleEN}
 
   \vspace{1.4cm}
-  % 附件2 式样（学术硕士版，Word 实测）：Master Candidate：/ Major：/ Supervisor：
-  % 三行【整行右端对齐】于版心 0.446 处（三行 xMax=274.2~274.4pt，即 (274.4-85)/425≈0.446；
-  % Word 段落属性 jc=end + 右缩进，填入值后整行仍应右端贴齐该边界）。
-  % ⚠️ 此前实现把 tabular 放在 center 环境里，右端落在 0.741——与式样差 0.3 版心，已修正：
-  % 用宽 0.446\textwidth 的盒子把 tabular 右端精确锚定在版心 0.446 处。
+  % 附件2 式样（学术硕士版，Word 实测）＋ 师兄论文第 2 页实测：
+  %   0.446 约束的是【冒号的右边缘】，不是整行的右端！
+  %   —— 式样里三行都是占位符 XXX，长度接近，所以整行右端都落在 274.2~274.4pt
+  %      （即 (274.4-85.04)/425.2 ≈ 0.446）；
+  %   —— 但师兄论文填入真实值后，三行右端分别是 391.9 / 475.3 / 443.3pt，
+  %      各不相同，说明"值"是【从冒号右侧继续向右延伸】的，并不回拉。
+  % 因此正确做法：标签（含全角冒号）右对齐于 0.446\textwidth，
+  %              值左对齐、与冒号相隔约 10.8pt（师兄实测间距）。
+  % ⚠️ 旧实现把"标签+值"整体右对齐到 0.446，值一长就往左溢出：
+  %    实测 Master Candidate 行 x0=70.3pt（版心左边界 85.04，溢 14.7pt）、
+  %    Supervisor 行 x0=81.4pt（溢 3.6pt）。此即 P0-2。
+  % ⚠️ 三行必须用【独立的 \makebox 行 + \par】分行，不能放进 tabular：
+  %   `\makebox[宽][r]{}` 产生的盒高度为 0，放进 tabular 里该行不产生垂直步进，
+  %   实测三行全部叠印在同一 y=300.5pt（PDF 内容流只有 Td 水平位移）。
+  %   现在每行末尾加 \rule{0pt}{<行高>} 撑出行高，再用 \par 分行 —— 与答辩名单页同一修法。
+  \lineskip=0pt\lineskiplimit=0pt
   \noindent\makebox[\textwidth][l]{%
-    \makebox[0.446\textwidth][r]{%
-      \begin{tabular}{@{}r@{}}
-        Master Candidate：\thesisAuthorEn \\[0.5cm]
-        Major：\thesisMajorEn \\[0.5cm]
-        Supervisor：\thesisAdvisorEn
-      \end{tabular}}}
+    \makebox[0.446\textwidth][r]{Master Candidate：}\hspace{10.8pt}\thesisAuthorEn\rule{0pt}{28pt}}\par
+  \noindent\makebox[\textwidth][l]{%
+    \makebox[0.446\textwidth][r]{Major：}\hspace{10.8pt}\thesisMajorEn\rule{0pt}{28pt}}\par
+  \noindent\makebox[\textwidth][l]{%
+    \makebox[0.446\textwidth][r]{Supervisor：}\hspace{10.8pt}\thesisAdvisorEn\rule{0pt}{28pt}}\par
 
   \vspace{1.6cm}
   China University of Geosciences \\

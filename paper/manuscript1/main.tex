@@ -41,7 +41,15 @@
 \newcommand{\thesisTitleEN}{Task Allocation and Path Planning Methods for Multi-UAV Intelligent Scheduling}
 \newcommand{\thesisAuthor}{张佳齐}
 \newcommand{\thesisAuthorEn}{Jiaqi Zhang}  % 英文姓名用拼音（姓在前可改为 Zhang Jiaqi，按学校要求）
-\newcommand{\thesisAdvisor}{郑坤\ 教授}
+% 【P2-6】导师姓名与职称之间要拉开距离。
+%   附件 1 式样实测：值起点 r0=0.538（313.9pt）、职称起点 r0=0.657（364.4pt），
+%   两者相距 0.119 版心 ≈ 50.6pt；师兄 p1 实测 293.2→333.2 = 40pt。
+%   这里按式样取 0.119\textwidth 的固定盒宽放置姓名，职称紧接其后，
+%   无论姓名 2 字还是 3 字，职称起点都稳定在 r0=0.657。
+%   旧写法 "郑坤\ 教授" 间距仅约 4pt，明显偏窄。
+\newcommand{\thesisAdvisorName}{郑坤}
+\newcommand{\thesisAdvisorTitle}{教授}
+\newcommand{\thesisAdvisor}{\makebox[0.119\textwidth][l]{\thesisAdvisorName}\thesisAdvisorTitle}
 \newcommand{\thesisAdvisorEn}{Prof.\ Kun Zheng}% 英文题名页导师：全英文（职称+名+姓），如需姓在前可改为 Prof.\ Zheng Kun
 \newcommand{\thesisSchool}{中国地质大学}
 \newcommand{\thesisCategory}{硕士学位论文}% 学位类别（页眉奇数页用，学术型硕士=硕士学位论文）：博士学位论文 / 同等学力博士学位论文 / 硕士学位论文 / 硕士专业学位论文(全日制) / 硕士专业学位论文(非全日制) / 同等学力硕士学位论文
@@ -126,6 +134,13 @@
 % ============================================================
 \backmatter
 \input{backmatter/acknowledgements}    % 14. 致谢
+% 【P1-5】正文尚未写入任何 \cite，biber 会报
+%   "The file 'main.bcf' does not contain any citations!" 并整节不输出，
+%   导致 main.pdf 没有"参考文献"页、目录里也没有该条目（附件 8 目录必备）。
+%   式样核验阶段先用 \nocite{*} 把 bib/references.bib 全部条目排出，
+%   以便检查规范 3.9（标题同各章标题、正文宋体小四、行距 20 磅）是否落地；
+%   正文补完真实引用后请删除本行。
+\nocite{*}
 \printbibliography[heading=bibintoc, title={参考文献}]  % 15. 参考文献
 \input{backmatter/appendices}          % 16. 附录
 \input{backmatter/publications}        % 攻读学位期间科研成果（可选）

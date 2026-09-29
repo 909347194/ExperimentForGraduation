@@ -7,8 +7,13 @@
 \chapter*{中国地质大学（武汉）研究生学位论文导师承诺书}
 \addcontentsline{toc}{chapter}{中国地质大学（武汉）研究生学位论文导师承诺书}
 
-% 同 declaration.tex：\hfil\break 让《标题》整体从行首开始，避免被断成两截或溢出。
-本人郑重承诺：本人所指导的硕士学位论文\hfil\break\mbox{《\thesisTitle{}》}，是在本人的指导下，研究生在中国地质大学（武汉）攻读硕士学位期间独立进行研究工作所取得的成果，论文由研究生独立完成。
+% ⚠️ 同 declaration.tex：不要用 \hfil\break（无限胶会把标题行首字推出版心，实测 −0.015）。
+%   标题前后都用 \par 另起段，标题单独成行，破折号内不断行、且无溢出。
+本人郑重承诺：本人所指导的硕士学位论文
+
+\mbox{《\thesisTitle{}》}
+
+是在本人的指导下，研究生在中国地质大学（武汉）攻读硕士学位期间独立进行研究工作所取得的成果，论文由研究生独立完成。
 
 研究生所呈交的硕士学位论文没有违反学术道德和学术规范，没有侵权行为，并愿意承担由此而产生的与导师相关的责任和后果。
 
@@ -18,5 +23,7 @@
 \noindent\hspace*{0.355\textwidth}%
 \begin{tabular}{@{}l@{}}
   指导教师（签字）：\underline{\hspace{2.5cm}}\\[0.8cm]
-  日\hspace{2em}期：\hspace{0.4em}\underline{\hspace{0.85cm}}年\hspace{0.4em}\underline{\hspace{0.85cm}}月\hspace{0.4em}\underline{\hspace{0.85cm}}日
+  % 【P2-2】附件 4 式样实测"日"→"期"起点间距 34.9pt，比附件 3/5 的 28pt 略宽
+  %   （空隙 = 34.9-16 = 18.9pt ≈ 1.18em），故此处单独取 1.18em。
+  日\hspace{1.18em}期：\hspace{0.4em}\underline{\hspace{0.85cm}}年\hspace{0.4em}\underline{\hspace{0.85cm}}月\hspace{0.4em}\underline{\hspace{0.85cm}}日
 \end{tabular}

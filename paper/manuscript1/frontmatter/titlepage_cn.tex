@@ -13,9 +13,14 @@
   \zihao{3}\songti
   % 规范表3.4：学号等阿拉伯数字用 Times New Roman 三号
   % 要求同一行、左右两侧排列（左：学校代码，右：研究生学号）
-  \begin{tabular*}{\textwidth}{@{}l@{\extracolsep{\fill}}r@{}}
-    学校代码：\tnr{\thesisSchoolCode} & 研究生学号：\tnr{\thesisStudentID}
-  \end{tabular*}
+  % 【P1-1】旧写法 tabular* + \extracolsep{\fill} 把两端顶死在版心边界：
+  %   学校代码 左端 r0=0.000（式样 0.042、师兄 0.019）、学号值右端 r1=1.000（师兄 0.973）。
+  % 改为按师兄（已归档实例）【左锚定】：学校代码块起于 r0=0.019，
+  %   研究生学号块起于 r0=0.533（=0.019+0.514），两块的"值"都向右自然延伸。
+  \makebox[\textwidth][l]{%
+    \hspace*{0.019\textwidth}%
+    \makebox[0.514\textwidth][l]{学校代码：\tnr{\thesisSchoolCode}}%
+    研究生学号：\tnr{\thesisStudentID}}
 
   \vspace{1.4cm}
   {\songti\zihao{1}\textbf{\thesisSchool}}\\[0.3cm]

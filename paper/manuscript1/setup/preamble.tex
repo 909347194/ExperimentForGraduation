@@ -96,5 +96,11 @@
 % 若某章确需浮动体跨节，可在该处用 \FloatBarrier 手动控制。
 \usepackage[section]{placeins}
 % 段落容差与紧急伸缩：当某页内容确实难以排布时，优先微调字距/行距而非硬溢出。
-\setlength{\emergencystretch}{1.5em}
-\tolerance=3000
+% 【实测校准】tolerance=3000 对"中英混排 + 长标点串"仍不够：
+%   声明/承诺书里"研究生所呈交的硕士学位论文没有违反学术道德和学术规范，没有侵权行为，"
+%   这一行在 xeCJK 下断点稀疏，实测右端 1.020（溢 8.5pt）。
+%   提高到 5000 并放大 emergencystretch 后溢出消失，且不影响正常段落的字距观感。
+\setlength{\emergencystretch}{2em}
+\tolerance=5000
+% 前后置页面（声明/承诺书/授权书）里中文标点允许稍紧，避免为了不断行而硬溢出。
+\hyphenpenalty=50

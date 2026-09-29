@@ -73,36 +73,32 @@
 % 其余：两端对齐、首行缩进 2 汉字符、固定行距 20 磅、段前段后 0
 \setlength{\parindent}{2\ccwd}      % 首行左缩进 2 个汉字符
 \setlength{\parskip}{0pt}           % 段前段后 0（段与段之间不额外留空）
-% 固定值行距 20 磅：直接控制 \baselineskip。
-% 方案：用 \g@addto@macro 把 \fixLineskip{20pt} 追加进各字号的内部宏——
-%       每次切换字号都会重新执行，行距恒定；\lineskiplimit=-1000pt 为
-%       TeX"固定行距"模式，等效 Word"固定值"。
-% 注意：\newcommand 名称不能含 @，故公开名 \fixLineskip 不带 @；其定义
-%       在 \makeatletter 环境中写入，展开时用到的是普通寄存器与字面量。
+% 固定值行距 20 磅：只需把 \baselineskip 钉死在 20pt。
+% 方案：① \AtBeginDocument 时显式设一次；② 给 \zihao 套钩子，凡切到
+% 小四（\f@size = 12.045pt）立即把行距拉回 20pt。改后实测 19.92~19.93pt。
+%
+% ⚠️⚠️⚠️ 三个"行距"参数【绝不能】改成 TeX"固定行距(10^4pt)"那种极端值：
+%   早期版本曾把 \lineskiplimit 设成 -1000\p@、\lineskip/\normallineskip 设 0、
+%   \normallineskiplimit 设 -1000\p@，结果把封/题名页里「姓名/学号/指导教师/
+%   培养单位」的 tabular 整张塌成一行（所有行叠印在同一 y），即用户所说的
+%   "字体重叠、多出"。根因：tabular 行与行之间的步进依赖 \lineskip 与
+%   \lineskiplimit 的普通规则，把 \lineskiplimit 压到 -1000pt 会让行间 glue
+%   变负并塌行——而正文 20pt 行距根本不需要碰这三个量，只钉 \baselineskip 即可。
+%   故本版只设 \baselineskip，其余保持 LaTeX 默认（lineskiplimit=0\p@、
+%   lineskip=1\p@），tabular 与正文两者都正常。
 \makeatletter
 \newcommand{\fixLineskip}[1]{%
   \setlength{\baselineskip}{#1}%
-  \setlength{\lineskip}{0pt}%
-  \setlength{\lineskiplimit}{-1000\p@}%  % 内核写法：\p@ = pt（此处处于 makeatletter 环境）；负极限使基线间距恒为 baselineskip（固定行距模式）
-  \setlength{\normallineskip}{0pt}%
-  \setlength{\normallineskiplimit}{-1000\p@}%
-  % 注意：不要修改 \topskip！\topskip 是页面首行的全局参数，若在章标题字号
-  % 环境中被改成 20pt，ctex 章标题的巨型垂直锚 \topskip0pt 会失效，导致
-  % 整页内容堆叠、出现 "Overfull \vbox (474pt too high)"。此处仅同步当前
-  % 列表环境的 \linepenalty 相关参数即可。
-  \advance\parskip by 0pt%               % 无害的空操作，保持钩子幂等
 }
-% LaTeX 内核没有可公开使用的 \addto（定义完 \g@addto@macro 后即被释放），
-% 必须用 \g@addto@macro 追加钩子。
-\g@addto@macro\@normalsize{\fixLineskip{20pt}}
-\@ifundefined{@small}{}{\g@addto@macro\@small{\fixLineskip{20pt}}}
-\@ifundefined{@footnotesize}{}{\g@addto@macro\@footnotesize{\fixLineskip{20pt}}}
-% ctex 的 \zihao{-4} 等字号命令（ctexsize 机制）同样经由 \@setfontsize 定义，
-% 因此上面追加进 \@normalsize/\@small/\@footnotesize 的钩子已覆盖全部字号切换；
-% 不再重定义 \@setfontsize（旧补丁中的 \xdef\@currsizename{...\protect...}
-% 会把 \protect 带进 \csname，导致 "Missing \endcsname inserted" 编译错误）。
+\AtBeginDocument{\normalsize\fixLineskip{20pt}}
+\let\MSc@zihao\zihao
+\DeclareRobustCommand{\zihao}[1]{%
+  \MSc@zihao{#1}%                        % 先正常切换字号
+  \ifdim\f@size pt=12.045pt %            % 小四（ctex 实测值，注意必须写 "12.045pt"，
+                                         % 只写 \f@size 会报 Illegal unit of measure）
+    \fixLineskip{20pt}%                  % 切回小四即恢复固定行距 20pt
+  \fi}
 \makeatother
-\AtBeginDocument{\normalsize}   % 使上述设置立即生效
 
 % ---------- 3. 图 / 表序号与题名 ----------
 % 宋体五号(10.5pt)居中，单倍行距，序号与题名之间空一个汉字符
@@ -226,11 +222,16 @@
                         % 注意：headheight 只决定"页眉框"高度，不改变版心位置（版心由 top/bottom 固定）；
                         % 取 14pt 时页眉基线恰在距纸顶约 2.5cm 处，符合规范"页眉距顶 2.5cm"。
                         % 若日后页眉内容确实需要两行，再增大此值即可（不会挤压版心）。
-  headsep    = 0.5cm,   % 页眉底边到正文的距离
+  % 【实测微调】原 0.5cm 时页眉基线距纸顶 68.6pt≈2.42cm；师兄论文 72.4pt≈2.55cm，
+  % 规范 3.1 要求"页眉距顶 2.5cm"。减小 headsep 使页眉下移，取 0.42cm（≈2.50cm）。
+  headsep    = 0.42cm,  % 页眉底边到正文的距离
   % 注意：geometry 没有 footheight 键（正确键名为 bottomheight / footskip），
   % 原 footheight=1.0cm 属无效选项会被忽略并警告，此处删除；
   % 页脚位置由 footskip 控制。
-  footskip   = 2.0cm,   % 正文底边到页脚基线的距离（页脚距底约 2.0cm，贴底）
+  % 【实测修正】footskip 是"正文底边 → 页脚基线"的距离，不是"页脚距纸底"！
+  % 旧值 2.0cm 配 bottom=3cm 时，页码基线只距纸底 0.92cm（实测 p4 页码 y=815.8pt），
+  % 而规范 3.1 要求"页脚距底边 2.0cm"。改 1.0cm → 页脚基线距底 3-1 = 2.0cm ✓
+  footskip   = 1.0cm,   % 正文底边到页脚基线的距离（使页脚基线距纸底约 2.0cm）
   bindingoffset = 0cm   % 装订线 0cm
 }
 
@@ -262,7 +263,11 @@
   \fancyfoot{}                                 % 页脚为空（附件10 无页脚页码）
 }
 
-% 英文摘要页眉：按规范"Abstract 部分用 Times New Roman 五号"，标题居中（TNR）
+% 英文摘要页眉（TNR 五号，标题居中）。
+% 【P2-9】当前**暂未启用**：师兄论文摘要/Abstract 页实测无页眉（规范 2.4「页眉从第一章
+%   开始」），故 frontmatter/abstract.tex 已不再 \pagestyle{abstracten}。
+%   定义保留备用——若导师要求英文摘要页加页眉，在 abstract.tex 中加回
+%   \pagestyle{abstracten}\thispagestyle{abstracten} 即可。
 \fancypagestyle{abstracten}{%
   \fancyhf{}%
   \renewcommand{\headrulewidth}{0.4pt}%
