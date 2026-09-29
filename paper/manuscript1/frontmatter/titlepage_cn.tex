@@ -1,50 +1,52 @@
 % ============================================================
 % frontmatter/titlepage_cn.tex —— 中文题名页（规范 3.4）
-% 【V3 校准】按师兄归档实例（已通过答辩）与附件1-11（学术型硕士式样）重建：
-%   ① 字段顺序“日期(上) → 培养单位 → 指导教师 → 学科专业 → 姓名 →
-%      论文题目 → 学位论文类别 → 校名 → 学校代码/学号(下)”，与师兄/附件一致
-%      （原顺序“代码在上、日期在下”与规范相反）；
-%   ② 各信息块垂直间距按师兄实测节奏校准（编译后 pdftotext 复核）；
-%   ③ 字体：校名/类别 宋体一号加粗；论文题目 黑体二号加粗；其余字段 宋体三号；
-%      学号等阿拉伯数字用 Times New Roman（\tnr）。
-%   ④ 标签经 \labelfour 等宽处理，冒号对齐于版心 0.49 处，值列统一左起。
-%   注：沿用 tabular（已验证在 fixLineskip 修复后正常分行、顺序正确），不塌行。
+% 【V4 校准】严格按“附件1-11 p.1（学术型硕士式样）”重建：
+%   顺序（顶→底）：
+%     学校代码/研究生学号 → 中国地质大学 → 硕士学位论文
+%     → 论文题目 → 姓名 → 学科专业 → 指导教师 → 培养单位 → 完成日期
+%   此前（V3）误用了师兄“硕士专业学位”题名页的顺序，与学术型附件相反，
+%   本次已纠正为附件学术型顺序。
+%   字体：校名/类别 宋体一号加粗；论文题目 黑体二号加粗；信息块 宋体三号；
+%        学号等阿拉伯数字用 Times New Roman（\tnr）。
+%   标签经 \labelfour 等宽分散（与附件式样一致：2 字大间距、4 字小间距）。
+%   注：沿用 tabular（fixLineskip 修复后正常分行、顺序正确），不塌行。
 % ============================================================
 \clearpage
 \thispagestyle{empty}
 
 \begin{center}
+  % —— 整体下移，使顶部“学校代码”落在距页顶约 5.8cm（对齐附件学术型式样）——
+  \vspace*{2.8cm}
+  % —— 顶部：学校代码 / 研究生学号（左锚 r0≈0.019）——
   \zihao{3}\songti
-  % 完成日期（汉字，见规范 3.4）——置于版心上方
-  \vspace*{2.4cm}
-  \thesisDate
-
-  % 培养单位 / 指导教师 / 学科专业 / 姓名：左锚定 r0=0.268，冒号对齐、值左起
-  \vspace*{2.6cm}
-  \makebox[\textwidth][l]{%
-    \hspace*{0.268\textwidth}%
-    \begin{tabular}{rl}
-      \labelfour{培养单位}： & \zhlabelsep\thesisOrg      \\[1.6cm]
-      \labelfour{指导教师}： & \zhlabelsep\thesisAdvisor \\[0.45cm]
-      \labelfour{学科专业}： & \zhlabelsep\thesisMajor   \\[0.40cm]
-      \labelfour{姓名}：     & \zhlabelsep\thesisAuthor
-    \end{tabular}}
-
-  % 论文题目（黑体二号加粗居中）
-  \vspace*{1.8cm}
-  {\heiti\zihao{2}\thesisTitle}
-
-  % 学位论文类别（宋体一号加粗居中）
-  \vspace*{0.7cm}
-  {\songti\zihao{1}\textbf{\thesisCategory}}
-
-  % 学位授予单位名称（宋体一号加粗居中）
-  \vspace*{0.5cm}
-  {\songti\zihao{1}\textbf{\thesisSchool}}
-
-  % 学校代码 / 研究生学号（左锚定 r0=0.019）
-  \vspace*{1.4cm}
   \makebox[\textwidth][l]{%
     \hspace*{0.019\textwidth}%
     学校代码：\tnr{\thesisSchoolCode}\quad 研究生学号：\tnr{\thesisStudentID}}
+
+  \vspace*{1.1cm}
+  % —— 学位授予单位名称（宋体一号加粗居中）——
+  {\songti\zihao{1}\textbf{\thesisSchool}}
+
+  \vspace*{1.1cm}
+  % —— 学位论文类别（宋体一号加粗居中）——
+  {\songti\zihao{1}\textbf{\thesisCategory}}
+
+  \vspace*{1.3cm}
+  % —— 论文题目（黑体二号加粗居中，超宽自动折行；块宽约 0.70 版心使两行均衡）——
+  \parbox{0.70\textwidth}{\centering\heiti\zihao{2}\thesisTitle}
+
+  \vspace*{1.7cm}
+  % —— 信息块（左锚 r0≈0.268；顺序按附件：姓名→学科专业→指导教师→培养单位）——
+  \makebox[\textwidth][l]{%
+    \hspace*{0.268\textwidth}%
+    \begin{tabular}{rl}
+      \labelfour{姓名}：     & \zhlabelsep\thesisAuthor   \\[0.42cm]
+      \labelfour{学科专业}： & \zhlabelsep\thesisMajor   \\[0.42cm]
+      \labelfour{指导教师}： & \zhlabelsep\thesisAdvisor \\[0.42cm]
+      \labelfour{培养单位}： & \zhlabelsep\thesisOrg
+    \end{tabular}}
+
+  \vspace*{3.2cm}
+  % —— 完成日期（汉字，居中）——
+  \thesisDate
 \end{center}
