@@ -1,55 +1,50 @@
 % ============================================================
 % frontmatter/titlepage_cn.tex —— 中文题名页（规范 3.4）
-% 字段与字号：学校代码 / 研究生学号 / 学号 / 姓名 /
-%   学科专业 / 指导教师 / 培养单位 均为 宋体 16 磅(三号)；
-%   学位授予单位名称、学位论文类型：宋体 26 磅(一号) 加粗；
-%   论文题目：黑体 22 磅(二号) 加粗居中，单倍行距。
-% 说明：题名页不含中图分类号/UDC/密级（那些在封面，见规范 1.1）。
+% 【V3 校准】按师兄归档实例（已通过答辩）与附件1-11（学术型硕士式样）重建：
+%   ① 字段顺序“日期(上) → 培养单位 → 指导教师 → 学科专业 → 姓名 →
+%      论文题目 → 学位论文类别 → 校名 → 学校代码/学号(下)”，与师兄/附件一致
+%      （原顺序“代码在上、日期在下”与规范相反）；
+%   ② 各信息块垂直间距按师兄实测节奏校准（编译后 pdftotext 复核）；
+%   ③ 字体：校名/类别 宋体一号加粗；论文题目 黑体二号加粗；其余字段 宋体三号；
+%      学号等阿拉伯数字用 Times New Roman（\tnr）。
+%   ④ 标签经 \labelfour 等宽处理，冒号对齐于版心 0.49 处，值列统一左起。
+%   注：沿用 tabular（已验证在 fixLineskip 修复后正常分行、顺序正确），不塌行。
 % ============================================================
 \clearpage
 \thispagestyle{empty}
 
 \begin{center}
   \zihao{3}\songti
-  % 规范表3.4：学号等阿拉伯数字用 Times New Roman 三号
-  % 要求同一行、左右两侧排列（左：学校代码，右：研究生学号）
-  % 【P1-1】旧写法 tabular* + \extracolsep{\fill} 把两端顶死在版心边界：
-  %   学校代码 左端 r0=0.000（式样 0.042、师兄 0.019）、学号值右端 r1=1.000（师兄 0.973）。
-  % 改为按师兄（已归档实例）【左锚定】：学校代码块起于 r0=0.019，
-  %   研究生学号块起于 r0=0.533（=0.019+0.514），两块的"值"都向右自然延伸。
-  \makebox[\textwidth][l]{%
-    \hspace*{0.019\textwidth}%
-    \makebox[0.514\textwidth][l]{学校代码：\tnr{\thesisSchoolCode}}%
-    研究生学号：\tnr{\thesisStudentID}}
+  % 完成日期（汉字，见规范 3.4）——置于版心上方
+  \vspace*{2.4cm}
+  \thesisDate
 
-  \vspace{1.4cm}
-  {\songti\zihao{1}\textbf{\thesisSchool}}\\[0.3cm]
-  {\songti\zihao{1}\textbf{\thesisCategory}}
-
-  \vspace{1.4cm}
-  {\heiti\zihao{2}\thesisTitle}
-
-  \vspace{1.8cm}
-  % 附件1 式样（Word 中以表格实现对齐）：四个标签【等宽拉伸】使冒号对齐，
-  % 各行的"值"起点一致。实测 Word 版式：标签列终点均在版心 0.49 处，
-  % 值列（XXX）起点统一在 0.538 处——即"冒号对齐 + 值左对齐"。
-  % 实现：\labelfour 把 2 字标签（姓名）拉伸至与 4 字标签等宽（4em 盒居中），
-  % 四个标签统一经 \labelfour 处理，保证冒号落在同一列；
-  % tabcolsep=0 + \zhqspace(1em) 使冒号与内容间隔为一个全角空格。
-  \setlength{\tabcolsep}{0pt}
-  % Word 实测：标签块是【左锚定】于版心 0.268 处（不是居中！），
-  % 冒号落在 0.49、值列起点 0.538；值长短不同时向右延伸，故不能用 center 居中。
-  % 做法：外层 \makebox[\textwidth][l] 抵消 center 环境的居中，再用 \hspace 左锚定。
+  % 培养单位 / 指导教师 / 学科专业 / 姓名：左锚定 r0=0.268，冒号对齐、值左起
+  \vspace*{2.6cm}
   \makebox[\textwidth][l]{%
     \hspace*{0.268\textwidth}%
     \begin{tabular}{rl}
-      \zihao{3}\songti \labelfour{姓名}： & \zihao{3}\songti\zhlabelsep\thesisAuthor \\[0.5cm]
-      \zihao{3}\songti \labelfour{学科专业}： & \zihao{3}\songti\zhlabelsep\thesisMajor \\[0.5cm]
-      \zihao{3}\songti \labelfour{指导教师}： & \zihao{3}\songti\zhlabelsep\thesisAdvisor \\[0.5cm]
-      \zihao{3}\songti \labelfour{培养单位}： & \zihao{3}\songti\zhlabelsep\thesisOrg \\[0.5cm]
+      \labelfour{培养单位}： & \zhlabelsep\thesisOrg      \\[1.6cm]
+      \labelfour{指导教师}： & \zhlabelsep\thesisAdvisor \\[0.45cm]
+      \labelfour{学科专业}： & \zhlabelsep\thesisMajor   \\[0.40cm]
+      \labelfour{姓名}：     & \zhlabelsep\thesisAuthor
     \end{tabular}}
 
-  \vspace{2.4cm}
-  % 附件1 式样：题名页底部有完成日期（汉字，不用阿拉伯数字，见规范 3.4 表3.4）
-  {\zihao{3}\songti \thesisDate}
+  % 论文题目（黑体二号加粗居中）
+  \vspace*{1.8cm}
+  {\heiti\zihao{2}\thesisTitle}
+
+  % 学位论文类别（宋体一号加粗居中）
+  \vspace*{0.7cm}
+  {\songti\zihao{1}\textbf{\thesisCategory}}
+
+  % 学位授予单位名称（宋体一号加粗居中）
+  \vspace*{0.5cm}
+  {\songti\zihao{1}\textbf{\thesisSchool}}
+
+  % 学校代码 / 研究生学号（左锚定 r0=0.019）
+  \vspace*{1.4cm}
+  \makebox[\textwidth][l]{%
+    \hspace*{0.019\textwidth}%
+    学校代码：\tnr{\thesisSchoolCode}\quad 研究生学号：\tnr{\thesisStudentID}}
 \end{center}
