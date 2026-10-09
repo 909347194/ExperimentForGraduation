@@ -1,5 +1,7 @@
 {
   "experiment": "exp01_smoke",
   "seed": 42,
-  "note": "placeholder run_meta; regenerate via run.py"
+  "timestamp_utc": "2026-10-09T13:53:19.825028+00:00",
+  "config_path": "task_allocation/experiments/exp01_smoke/config.yaml",
+  "repo_root": "/home/work/.openclaw/workspace/ExperimentForGraduation"
 }
