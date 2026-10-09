@@ -1,7 +1,7 @@
 {
   "experiment": "exp01_smoke",
   "seed": 42,
-  "timestamp_utc": "2026-10-09T14:02:11.422958+00:00",
+  "timestamp_utc": "2026-10-09T14:38:38.472529+00:00",
   "config_path": "task_allocation/experiments/exp01_smoke/config.yaml",
   "repo_root": "/home/work/.openclaw/workspace/ExperimentForGraduation"
 }
