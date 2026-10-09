@@ -60,20 +60,26 @@ def load_nest_latlon(
 
     CSV 首行为表头，默认在 ``column`` 列（如 ``Coordinate``）中放
     ``29.6472N 91.136532E`` 这类文本坐标，逐行一个机巢。
+
+    兼容 Excel 导出：按 ``utf-8-sig`` 读取以去掉 BOM，列名与字段值都会去空白；
+    因此带 BOM 或 CRLF 的 CSV 与纯 UTF-8 的结果一致。
     """
     path = Path(csv_path)
     if not path.is_file():
         raise FileNotFoundError(f"机巢位置文件不存在：{path}")
-    with path.open(newline="", encoding="utf-8") as fh:
+    with path.open(newline="", encoding="utf-8-sig") as fh:
         reader = csv_lib.DictReader(fh)
         if reader.fieldnames is None:
             raise ValueError(f"CSV 没有表头：{path}")
-        if column not in reader.fieldnames:
+        # Excel 导出可能带 BOM / 首尾空白，列名统一清洗后再匹配
+        field_map = {name.strip().lstrip("\ufeff"): name for name in reader.fieldnames}
+        if column not in field_map:
             raise ValueError(
-                f"CSV 缺少列 {column!r}，实际列：{reader.fieldnames}（{path}）"
+                f"CSV 缺少列 {column!r}，实际列：{list(field_map)}（{path}）"
             )
+        key = field_map[column]
         texts = [
-            (row.get(column) or "").strip()
+            (row.get(key) or "").strip()
             for row in reader
         ]
     texts = [t for t in texts if t]
