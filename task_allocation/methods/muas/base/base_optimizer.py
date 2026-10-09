@@ -37,7 +37,8 @@ class SolverResult:
         total_generations: 实际迭代代数（无迭代方法填 0）。
         elapsed_seconds:   求解耗时（秒）。
         solver_name:       求解器名称，须与 BaseOptimizer.name 一致。
-        extra:             附加信息（序列、终点机巢、约束违反量等），键名自行约定但需文档化。
+        extra:             附加信息。建议 extra["solution"] = AllocationSolution（见 common.types）；
+                           其它键（约束违反量等）自行约定并文档化。
     """
 
     best_assignment: list[tuple[int, int]]
