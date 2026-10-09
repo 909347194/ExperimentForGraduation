@@ -4,14 +4,19 @@ experiment:
   output_dir: results
   plot_dir: plot
 
+# data/ 下的实测与共享数据（跨实验复用，不随实验改）
 data:
-  source: synthetic
-  path: null
+  source: file
+  path: nest_location_data.csv        # 相对 task_allocation/data/
+  dem: ASTGTMV003_N29E091_dem.tif     # 同上；不需要高程时置 null
+  coordinate_column: Coordinate
 
+# 本实验的问题规模设定（改这里做规模/容量灵敏度，不动数据文件）
 problem:
   n_tasks: 10
-  n_uavs: 3
-  n_nests: 2
+  n_nests: 8                # 用前 8 个机巢（CSV 共 8 条）
+  nest_capacity: 4          # 单机巢容量（架）
+  n_uavs: 32                # = n_nests × nest_capacity
 
 method:
   selection: marginal_gain

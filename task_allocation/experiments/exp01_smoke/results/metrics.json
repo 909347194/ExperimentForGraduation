@@ -1,12 +1,91 @@
 {
   "status": "smoke_ok",
   "n_tasks": 10,
-  "n_uavs": 3,
-  "n_nests": 2,
+  "n_uavs": 32,
+  "n_nests": 8,
+  "nest_capacity": 4,
   "method": {
     "selection": "marginal_gain",
     "muas": "dmde",
     "rolling": false
   },
-  "note": "placeholder metrics committed for structure check; regenerate via run.py after env is ready"
+  "note": "placeholder metrics; methods not implemented yet",
+  "local_frame": {
+    "lat0": 29.5222025,
+    "lon0": 91.47933125
+  },
+  "nests": [
+    {
+      "id": 0,
+      "x": -33191.592,
+      "y": 13904.324,
+      "z": 3650.792,
+      "capacity": 4,
+      "lat": 29.6472,
+      "lon": 91.136532
+    },
+    {
+      "id": 1,
+      "x": -41347.962,
+      "y": 8052.905,
+      "z": 3664.076,
+      "capacity": 4,
+      "lat": 29.594168,
+      "lon": 91.052516
+    },
+    {
+      "id": 2,
+      "x": 27684.776,
+      "y": -29893.537,
+      "z": 3546.549,
+      "capacity": 4,
+      "lat": 29.252201,
+      "lon": 91.764151
+    },
+    {
+      "id": 3,
+      "x": 22020.696,
+      "y": -49149.428,
+      "z": 3685.872,
+      "capacity": 4,
+      "lat": 29.078581,
+      "lon": 91.705498
+    },
+    {
+      "id": 4,
+      "x": -14345.183,
+      "y": -31147.541,
+      "z": 3584.0,
+      "capacity": 4,
+      "lat": 29.241111,
+      "lon": 91.331765
+    },
+    {
+      "id": 5,
+      "x": 25534.372,
+      "y": 37533.915,
+      "z": 3815.0,
+      "capacity": 4,
+      "lat": 29.860552,
+      "lon": 91.743606
+    },
+    {
+      "id": 6,
+      "x": 23606.393,
+      "y": 34763.367,
+      "z": 3815.063,
+      "capacity": 4,
+      "lat": 29.835596,
+      "lon": 91.723591
+    },
+    {
+      "id": 7,
+      "x": -9907.106,
+      "y": 16188.749,
+      "z": 3711.872,
+      "capacity": 4,
+      "lat": 29.668211,
+      "lon": 91.376991
+    }
+  ]
 }
