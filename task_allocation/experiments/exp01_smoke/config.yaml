@@ -12,7 +12,7 @@ experiment:
     name: exp01_smoke
     seed: 42
     output_dir: results
-    plot_dir: plot
+    plot_dir: plot/figures # 图产物；绘图代码在 plot/ 包内
 
 # data/ 下的实测与共享数据（跨实验复用，不随实验改）
 data:
@@ -124,8 +124,13 @@ rolling:
     recharge_at_nest: true # 降落后机巢换电，剩余航程回满
     arrivals_per_cycle: [5, 5] # 第 2 周期起每周期的新到达任务数
     strict_capacity: false # true → 落地期超容直接抛异常（调试用）
+    # 事件驱动本期重规划（论文 §6）：命中 UAV 故障 / 突发高优先级任务 /
+    # 机巢不可用时，本周期内做反应式调整（强制纳入紧急任务、剔除不可用机巢）。
+    # false → 事件仅记录、不重规划，用于消融对比关停该机制。
+    event_replan: true
     faults: {} # 故障注入：{周期号: [uav_id, ...]}，验证 T_t^release 链路
     events:
+        enabled: true # 总开关：false 则完全不做事件检测
         on_uav_fault: true
         on_nest_unavailable: true
         on_urgent_task: true
@@ -134,5 +139,10 @@ rolling:
 
 run:
     save_results: true
-    make_plots: false
+    make_plots: true
     verbose: true
+
+# ── 可视化（代码在 plot/，产物落到 experiment.plot_dir）────────
+plot:
+    formats: [png, pdf] # png 预览 / pdf 矢量（直接进 LaTeX）
+    dpi: 200 # 位图分辨率；矢量格式忽略

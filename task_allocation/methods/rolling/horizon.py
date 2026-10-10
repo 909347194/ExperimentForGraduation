@@ -34,7 +34,13 @@ from typing import Any, Mapping, Sequence
 
 import numpy as np
 
-from task_allocation.common.types import AllocationSolution, Nest, Task, UAV
+from task_allocation.common.types import (
+    AllocationSolution,
+    Nest,
+    Task,
+    UAV,
+    UAVTour,
+)
 from task_allocation.methods.muas.constraints.nest_capacity import CapacityReport
 from task_allocation.methods.muas.cost.cost_matrix import (
     CostMatrixBuildResult,
@@ -67,6 +73,7 @@ __all__ = [
     "HorizonConfig",
     "CycleRecord",
     "RollingHorizon",
+    "tour_snapshot",
 ]
 
 
@@ -94,6 +101,29 @@ class HorizonConfig:
     event_replan: bool = True
 
 
+def tour_snapshot(tour: UAVTour) -> dict[str, Any]:
+    """航次的可机读切面（写入实验的 ``results/solution.json``）。
+
+    只保留画分配图与论文取数需要的字段；启发式内部量留在 ``tour.meta``。
+    """
+    return {
+        "uav_id": int(tour.uav_id),
+        "task_ids": [int(i) for i in tour.task_ids],
+        "start_nest_id": (
+            None if tour.start_nest_id is None else int(tour.start_nest_id)
+        ),
+        "end_nest_id": None if tour.end_nest_id is None else int(tour.end_nest_id),
+        "start": [
+            round(float(tour.start_x), 3),
+            round(float(tour.start_y), 3),
+            round(float(tour.start_z), 3),
+        ],
+        "est_cost": round(float(tour.est_cost), 3),
+        "est_reward": round(float(tour.est_reward), 4),
+        "feasible": bool(tour.feasible),
+    }
+
+
 @dataclass
 class CycleRecord:
     """单周期的可机读记录（直接并进 metrics.json）。"""
@@ -116,6 +146,10 @@ class CycleRecord:
     replan_context: dict[str, Any] = field(default_factory=dict)
     # 本周期因 UAV 故障释放回任务池的任务（供下一周期强制纳入选择）
     released_by_fault: list[int] = field(default_factory=list)
+    # 分配结构与求解轨迹：不进 as_dict()/metrics.json（数值指标保持精简），
+    # 由实验编排写入 results/solution.json，供分配图 / 收敛图取用。
+    tours: list[dict[str, Any]] = field(default_factory=list)
+    cost_history: list[float] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -364,6 +398,10 @@ class RollingHorizon:
         feas = solution.meta.get("feasibility", {}) or {}
         record.muas["violations"] = list(feas.get("violations", []))
         record.muas["penalty"] = float(feas.get("penalty", 0.0))
+
+        # 分配结构与 DMDE 收敛轨迹（只记有任务的航次）
+        record.tours = [tour_snapshot(t) for t in solution.tours if t.task_ids]
+        record.cost_history = [float(v) for v in stage.cost_history]
 
         # 8) 回写：任务池 + 机队（含终点机巢 z_ub）
         violations: list[CapacityReport] = []
