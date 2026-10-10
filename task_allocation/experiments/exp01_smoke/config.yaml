@@ -11,8 +11,8 @@
 experiment:
     name: exp01_smoke
     seed: 42
-    output_dir: results
-    plot_dir: plot/figures # 图产物；绘图代码在 plot/ 包内
+    output_dir: results # 数值产物（metrics / run_meta / solution）
+    figures_dir: results/figures # 图产物；绘图代码在 plot/ 包内，只负责绘制
 
 # data/ 下的实测与共享数据（跨实验复用，不随实验改）
 data:
@@ -142,7 +142,7 @@ run:
     make_plots: true
     verbose: true
 
-# ── 可视化（代码在 plot/，产物落到 experiment.plot_dir）────────
+# ── 可视化（代码在 plot/，产物落到 experiment.figures_dir）─────
 plot:
     formats: [png, pdf] # png 预览 / pdf 矢量（直接进 LaTeX）
     dpi: 200 # 位图分辨率；矢量格式忽略

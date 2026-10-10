@@ -64,9 +64,9 @@ def main() -> int:
     bundle = build_config_bundle(cfg)
 
     out_dir = EXP_DIR / str(bundle.experiment.get("output_dir", "results"))
-    plot_dir = EXP_DIR / str(bundle.experiment.get("plot_dir", "plot/figures"))
+    figures_dir = EXP_DIR / str(bundle.experiment.get("figures_dir", "results/figures"))
     out_dir.mkdir(parents=True, exist_ok=True)
-    plot_dir.mkdir(parents=True, exist_ok=True)
+    figures_dir.mkdir(parents=True, exist_ok=True)
 
     verbose = bundle.verbose
     t_wall = time.time()
@@ -141,7 +141,7 @@ def main() -> int:
     if verbose:
         print_summary(metrics, len(batch.all_tasks()), out_dir)
 
-    # ── 出图（读的仍是上面那份产物口径）──────────────────────────
+    # ── 出图（plot/ 只负责绘制，产物落 figures_dir）────────────
     if bundle.make_plots:
         from plot import make_plots  # 延迟导入：不出图时不引 matplotlib
 
@@ -150,7 +150,7 @@ def main() -> int:
         make_plots(
             metrics,
             solution,
-            plot_dir,
+            figures_dir,
             formats=formats,
             dpi=int(plot_cfg.get("dpi", 200)),
         )
