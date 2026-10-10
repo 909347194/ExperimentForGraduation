@@ -35,12 +35,12 @@ task_allocation/
     │   ├── config.py        # 可选拆分：yaml → 配置对象
     │   ├── build.py         # 可选拆分：场景 / 实体装配
     │   ├── metrics.py       # 可选拆分：指标汇总与产物组装
-    │   ├── plot/            # 可视化模块（代码）
+    │   ├── plot/            # 可视化模块（只负责绘制，纯代码）
     │   │   ├── __init__.py  #   make_plots() 调度入口
     │   │   ├── theme.py     #   全局样式与保存约定
-    │   │   ├── *.py         #   每张图一个模块
-    │   │   └── figures/     #   图产物（入库）
-    │   ├── results/         # 数值结果、日志、中间数据（入库）
+    │   │   └── *.py         #   每张图一个模块
+    │   ├── results/         # 数值结果、日志、中间数据、图（入库）
+    │   │   ├── figures/     #   图产物
     │   │   └── .gitkeep
     │   └── …                # 可选：本实验专用脚本（由 run.py 调用）
     └── exp02_xxx/
@@ -71,7 +71,7 @@ experiment:
   name: exp01_smoke
   seed: 42
   output_dir: results          # 相对本实验目录
-  plot_dir: plot
+  figures_dir: results/figures # 图产物（同属 results/）
 
 data:
   source: synthetic            # synthetic | file
@@ -108,17 +108,18 @@ run:
 3. 构建问题实例（合成或从 `data/` 加载）
 4. 调用 `methods` / `baselines`，得到解与指标
 5. 写入 `results/`（如 `metrics.json`、`solution.json`、`run_meta.json`）
-6. 若 `make_plots: true`，生成图到 `plot/figures/`
+6. 若 `make_plots: true`，生成图到 `results/figures/`
 
 **不要**在 `run.py` 中堆算法细节；算法放在 `methods/`。
 同目录可增加 `prepare.py`、`metrics.py`、`config.py`、`build.py` 等，由 `run.py` import 或调度，外部不直接作为入口。
 
-### `plot/`（可视化模块）
+### `plot/`（可视化模块，只负责绘制）
 
-- **放绘图代码**：`__init__.py` 提供 `make_plots(metrics, solution, out_dir)` 调度入口，
+- **只放绘图代码**：`__init__.py` 提供 `make_plots(metrics, solution, out_dir)` 调度入口，
   全局样式集中在 `theme.py`，**每张图一个模块**（如 `cycles.py` / `selection.py` /
-  `assignment.py` / `convergence.py`），避免单文件臃肿
-- **图产物**落在 `plot/figures/`（由 `experiment.plot_dir` 指定），只放 `png` / `pdf` / `svg`
+  `allocation.py` / `assignment.py` / `convergence.py`），避免单文件臃肿
+- **图产物不在这里**——落在 `results/figures/`（由 `experiment.figures_dir` 指定），
+  只放 `png` / `pdf` / `svg`；`plot/` 保持纯代码，便于审阅与跨实验复用
 - 不放原始数值表（表在 `results/`）；绘图只读已落盘的 `results/` 产物，**改图不必重跑实验**
 - 文件名建议可读：`assignment_map.pdf`、`convergence.png`；同一张图建议同时出
   `png`（预览）与 `pdf`（矢量，直接进 LaTeX）
@@ -145,7 +146,7 @@ run:
 | `config.py` | `config.yaml` → 各模块的配置对象（类型转换、缺省值） |
 | `build.py` | 场景 / 地形 / 机队 / 任务等实体装配 |
 | `metrics.py` | 指标计算与 `results/` 产物组装（若未放入 methods） |
-| `plot/` | 读 `results/`，写图到 `plot/figures/` |
+| `plot/` | 绘图（**只负责绘制**），图产物写到 `results/figures/` |
 | `prepare.py` | 本实验数据预处理 |
 | `ablate_xxx.py` | 消融子流程，仍由 `run.py` 按配置调度 |
 
@@ -172,7 +173,7 @@ experiments/expXX_*/  → 一次具体设定的编排、配置与产物
 2. 填写 `config.yaml`（改 `experiment.name` 与关键参数）
 3. 实现或调整 `run.py` 编排逻辑
 4. 写清 `notes.md`（目的与成功标准）
-5. 跑通后将 `results/`、`plot/figures/` 中需要复现的产物一并提交
+5. 跑通后将 `results/`（含 `results/figures/`）中需要复现的产物一并提交
 6. 提交信息示例：`exp(exp02_selection_scale): add scale study config and baseline metrics`
 
 ---

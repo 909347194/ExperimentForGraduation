@@ -32,9 +32,10 @@ exp01_smoke/
     └── solution.json   # 任务表 + 机巢表 + 各周期航次与收敛轨迹
 ```
 
-**拆分原则**:`run.py` 只做编排,不堆细节;任何文件都不超过 ~200 行。
+**拆分原则**:`run.py` 只做编排,不堆细节;任何文件都不超过 ~250 行。
 产物按「数值 vs 结构」分流:`metrics.json` 只留数值指标,
 `tours` / `cost_history` 这类结构性数据进 `solution.json`,供绘图与论文取数。
+`plot/` **只负责绘制**——图存哪由 `experiment.figures_dir` 决定(约定在 `results/figures/`)。
 
 ## 运行
 
@@ -67,13 +68,14 @@ from plot import render_from_results as r; r('task_allocation/experiments/exp01_
 - 机巢占用始终 ≤ capacity(4),无超容(见图 1(c) 热力图)
 - 8 周期长跑:完成率 84%–90%,池内剩余回落至 0(滞留任务被逐步消化)
 
-### 图产物(plot/figures/)
+### 图产物(results/figures/)
 
 | 文件 | 内容 |
 |---|---|
 | `cycle_metrics` | 2×2:任务池水位与流转 / 双目标值 / 机巢泊位热力图 / 求解开销 |
 | `selection_funnel` | 逐级筛选任务数 + 各级保留率(T_t → T_sel → T_exec) |
-| `assignment_map` | 每周期一张:机巢 + 任务 + UAV 航次(起点→任务→终点机巢) |
+| `allocation_gantt` | **分配甘特图**:谁做什么 · 什么顺序 · 降哪个巢(异巢终止标橙) |
+| `assignment_map` | **空间分配图**:每周期一行,有向箭头 + 任务按承运 UAV 着色 |
 | `convergence` | DMDE 每代最优适应度 + 归一化收敛 |
 
 每张图同时出 `png`(预览)与 `pdf`(矢量,直接进 LaTeX);中文字体 Noto Sans CJK SC。
@@ -101,7 +103,8 @@ from plot import render_from_results as r; r('task_allocation/experiments/exp01_
 3. `metrics.json` 中记录 8 个机巢的米制坐标 (x, y) 与 DEM 采样高程 z。✅
 4. 每个周期的 `check_feasible` 无 violation(当前满足)。✅
 5. `T_t^exec ⊆ T_t^sel ⊆ T_t`、`U_t^exec ⊆ U_t^avail` 恒成立。✅
-6. `make_plots: true` 时产出 4 张图 × 2 种格式,无缺字告警。✅
+6. `make_plots: true` 时产出 5 张图 × 2 种格式,无缺字告警。✅
+7. 图产物在 `results/figures/`,`plot/` 保持纯代码。✅
 
 ## 本次修订(2026-10-10)
 
@@ -130,6 +133,25 @@ from plot import render_from_results as r; r('task_allocation/experiments/exp01_
 
 `plot/` 从空目录变成绘图模块,`make_plots` 落地;图只读已落盘的 `results/` 产物,
 **改图不必重跑实验**(`plot.render_from_results`)。
+
+### 3.1 图产物归位 + 分配图重画(2026-10-10 二轮)
+
+- **图产物从 `plot/figures/` 迁到 `results/figures/`**:`plot/` 只负责绘制,
+  不再夹带产物;配置项 `experiment.plot_dir` → `experiment.figures_dir`。
+- **原 `assignment_map` 体现不出分配**:全场景 90 km × 87 km,航次只是巢附近
+  15–50 km 的短线且七成是单任务往返,三个周期横排各 4.6 英寸宽。重画方案:
+  - 新增 **`allocation_gantt`**(分配甘特图):行=UAV 航次、列=任务顺位、
+    右侧三列(起止机巢/航程/航次收益)。分配结构一眼可读。
+  - **`assignment_map` 重画**:改竖排三行(11 英寸宽)、有向箭头标出执行顺序、
+    任务按**承运 UAV** 着色(一眼看出分组)、终点机巢套同色圆环标异巢终止、
+    标签加白底衬底 + 按 id 轮转偏移避让、每周期独立小图例。
+- **修掉一处版式撞车**:甘特图右侧标注原放轴外 `x=1.02`,色条贴轴右缘,
+  导致部分行起始机巢被色条遮住(PDF 文本完整但视觉不可读)。
+  改为右侧三列画在**轴内留白区**、色条留轴外,彻底不重叠。
+
+**已知待打磨的空间图问题**(不影响分配语义):
+巢7 一带任务密集时圆点仍有部分重叠(需局部放大 inset 才能根治);
+极短航次的箭头方向辨识度仍偏低。
 
 ### 4. methods 侧的最小扩展
 
