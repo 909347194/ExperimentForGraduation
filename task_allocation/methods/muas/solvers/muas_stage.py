@@ -96,6 +96,10 @@ class MUASStageConfig:
     # 使后继代际的差分变异围绕**修复后的可行子空间**展开（默认开启）。
     # 关闭后退化为当前行为：进化搜索的是未修复空间。
     lamarckian: bool = True
+    # 事件驱动重规划：被标记不可用的机巢（论文 §6 的 NEST_UNAVAILABLE 事件）
+    # 一律不可选为终点机巢 z_ub，其归属 UAV 强制改降其它巢（多机巢异巢终止的
+    # 容错分支）。由滚动层每周期从事件上下文注入。
+    excluded_nest_ids: set[int] = field(default_factory=set)
     # 当前时刻，用于算等待补偿；由滚动层每周期传入
     current_time: float = 0.0
     # 适应度缓存（DMDE 会重复评估同一个体）
@@ -207,6 +211,7 @@ class MUASAssignmentEvaluator:
         self.nests = list(nests)
         self.fleet_uavs = list(fleet_uavs)
         self.config = config or MUASStageConfig()
+        self.excluded_nest_ids = set(self.config.excluded_nest_ids)
 
         self._task_ids = [t.id for t in self.tasks]
         self._uav_by_id = {u.id: u for u in self.problem.uavs}
@@ -309,23 +314,33 @@ class MUASAssignmentEvaluator:
         if not self.nests:
             return {uid: None for uid in routes}
 
-        # ① 优先采用编码给出的终点（仅当容量校验通过）
+        # 事件驱动：被标记不可用的机巢不可选为终点（多机巢异巢终止的容错分支）
+        excluded = self.excluded_nest_ids
+        cand_nests = [n for n in self.nests if n.id not in excluded]
+
+        # ① 优先采用编码给出的终点（仅当容量校验通过且非禁用机巢）
         if coded_ends:
             flying = [uid for uid, tids in routes.items() if tids]
             cand = {uid: coded_ends[uid] for uid in flying if uid in coded_ends}
             if flying and len(cand) == len(flying):
-                rep = check_nest_capacity(self.fleet_uavs, self.nests, cand)
-                if not rep.violations:
-                    return {**{uid: None for uid in routes}, **cand}
+                # 编码终点命中禁用机巢 → 视为冲突，走容量感知兜底改派
+                if any(eid in excluded for eid in cand.values()):
+                    pass
+                else:
+                    rep = check_nest_capacity(
+                        self.fleet_uavs, self.nests, cand
+                    )
+                    if not rep.violations:
+                        return {**{uid: None for uid in routes}, **cand}
 
-        # ② 编码终点缺失 / 超容 → 容量感知改派（兜底）
+        # ② 编码终点缺失 / 超容 / 命中禁用机巢 → 容量感知改派（兜底）
         last_cost: dict[int, dict[int, float]] = {}
         for uav_id, tids in routes.items():
             if not tids:
                 continue
             last_node = tids[-1]
             costs: dict[int, float] = {}
-            for nest in self.nests:
+            for nest in cand_nests:
                 if not nest.available or nest.capacity <= 0:
                     continue
                 costs[nest.id] = float(
@@ -340,7 +355,11 @@ class MUASAssignmentEvaluator:
             return {uid: None for uid in routes}
 
         chosen = choose_end_nests(
-            self.fleet_uavs, self.nests, last_cost, planning_uav_ids=list(last_cost)
+            self.fleet_uavs,
+            cand_nests,
+            last_cost,
+            planning_uav_ids=list(last_cost),
+            excluded_nest_ids=excluded,
         )
         return chosen
 

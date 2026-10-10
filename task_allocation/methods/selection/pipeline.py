@@ -32,6 +32,8 @@ class SelectionConfig:
     feasibility: FeasibilityConfig = field(default_factory=FeasibilityConfig)
     marginal: MarginalConfig = field(default_factory=MarginalConfig)
     current_time: float = 0.0
+    # 事件驱动强制纳入：紧急 / 故障释放的任务绕过 Top-αK 预筛（仍过可行性过滤）
+    forced_task_ids: set[int] = field(default_factory=set)
 
     def __post_init__(self) -> None:
         self.priority.current_time = self.current_time
@@ -56,6 +58,18 @@ def run(
 
     scored_all = compute_priorities(tasks, uavs, cfg.priority, cost_hint=cost_hint)
     preselected = top_alpha_preselect(scored_all, n_avail_uavs=n_avail, alpha=cfg.priority.alpha)
+
+    # 事件驱动重规划：强制纳入紧急 / 故障释放任务（绕过 Top-αK 预筛上限）
+    if cfg.forced_task_ids:
+        pre_ids = {s.task.id for s in preselected}
+        forced_in = 0
+        for s in scored_all:
+            if s.task.id in cfg.forced_task_ids and s.task.id not in pre_ids:
+                preselected.append(s)
+                pre_ids.add(s.task.id)
+                forced_in += 1
+        diagnostics["n_forced_in"] = forced_in
+
     diagnostics["n_after_priority"] = len(preselected)
 
     pre_ids = {s.task.id for s in preselected}

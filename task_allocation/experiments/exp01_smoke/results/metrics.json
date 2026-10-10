@@ -103,12 +103,17 @@
         "n_tasks_in": 10,
         "n_uav_avail": 24,
         "current_time": 600.0,
+        "n_forced_in": 0,
         "n_after_priority": 10,
         "n_after_prefilter": 10,
         "n_rejected_prefilter": 0,
         "n_after_marginal": 10,
         "n_selected": 10,
-        "n_dropped_postcheck": 0
+        "n_dropped_postcheck": 0,
+        "replan": true,
+        "forced_task_ids": [
+          6
+        ]
       },
       "muas": {
         "n_tasks": 10,
@@ -134,9 +139,11 @@
         "feasible": true,
         "best_fitness": -21.56141246192993,
         "model_type": "srp",
-        "solve_seconds": 1.2341,
+        "solve_seconds": 1.2625,
         "n_evals": 1017,
         "n_selected": 10,
+        "replan": true,
+        "excluded_nest_ids": [],
         "violations": [],
         "penalty": 0.0
       },
@@ -187,7 +194,17 @@
         "6": 4,
         "7": 2
       },
-      "capacity_violations": []
+      "capacity_violations": [],
+      "replan": true,
+      "replan_context": {
+        "replan": true,
+        "urgent_task_ids": [
+          6
+        ],
+        "unavailable_nest_ids": [],
+        "faulted_uav_ids": []
+      },
+      "released_by_fault": []
     },
     {
       "cycle": 2,
@@ -204,12 +221,17 @@
         "n_tasks_in": 8,
         "n_uav_avail": 24,
         "current_time": 1200.0,
+        "n_forced_in": 0,
         "n_after_priority": 8,
         "n_after_prefilter": 8,
         "n_rejected_prefilter": 0,
         "n_after_marginal": 8,
         "n_selected": 8,
-        "n_dropped_postcheck": 0
+        "n_dropped_postcheck": 0,
+        "replan": true,
+        "forced_task_ids": [
+          19
+        ]
       },
       "muas": {
         "n_tasks": 8,
@@ -233,9 +255,11 @@
         "feasible": true,
         "best_fitness": -13.326324503730063,
         "model_type": "srp",
-        "solve_seconds": 0.9475,
+        "solve_seconds": 0.9698,
         "n_evals": 944,
         "n_selected": 8,
+        "replan": true,
+        "excluded_nest_ids": [],
         "violations": [],
         "penalty": 0.0
       },
@@ -282,7 +306,17 @@
         "6": 4,
         "7": 3
       },
-      "capacity_violations": []
+      "capacity_violations": [],
+      "replan": true,
+      "replan_context": {
+        "replan": true,
+        "urgent_task_ids": [
+          19
+        ],
+        "unavailable_nest_ids": [],
+        "faulted_uav_ids": []
+      },
+      "released_by_fault": []
     },
     {
       "cycle": 3,
@@ -304,7 +338,8 @@
         "n_rejected_prefilter": 0,
         "n_after_marginal": 3,
         "n_selected": 3,
-        "n_dropped_postcheck": 0
+        "n_dropped_postcheck": 0,
+        "replan": false
       },
       "muas": {
         "n_tasks": 3,
@@ -323,9 +358,10 @@
         "feasible": true,
         "best_fitness": 0.4607379426554845,
         "model_type": "srp",
-        "solve_seconds": 0.1632,
+        "solve_seconds": 0.1658,
         "n_evals": 26,
         "n_selected": 3,
+        "replan": false,
         "violations": [],
         "penalty": 0.0
       },
@@ -356,7 +392,15 @@
         "6": 4,
         "7": 3
       },
-      "capacity_violations": []
+      "capacity_violations": [],
+      "replan": false,
+      "replan_context": {
+        "replan": false,
+        "urgent_task_ids": [],
+        "unavailable_nest_ids": [],
+        "faulted_uav_ids": []
+      },
+      "released_by_fault": []
     }
   ],
   "summary": {
@@ -365,11 +409,11 @@
     "avg_wait": 692.3076923076923,
     "total_reward": 66.7448,
     "total_cost": 323177.663,
-    "solve_time_ms": 2344.8,
+    "solve_time_ms": 2398.1,
     "K_avail_mean": 24.0,
     "n_deferred_last": 2,
     "n_remaining_pool": 2,
-    "wall_seconds": 3.568
+    "wall_seconds": 3.41
   },
   "fleet": {
     "current_time": 0.0,

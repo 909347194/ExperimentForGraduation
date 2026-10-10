@@ -209,7 +209,7 @@ K 会自然取满 `K_avail`,**不构成算法缺陷**。
 |---|---|---|
 | 3.1 | `rolling/horizon.py`:单周期编排 `begin_cycle → selection → muas → apply_solution → 反馈` | [x] |
 | 3.2 | 状态反馈串联:`fleet.mark_fault(uid)` → `pool.release(ids, reason="uav_fault")` | [x] 故障注入走 `HorizonConfig.faults` |
-| 3.3 | `rolling/event_trigger.py`:事件识别(UAV 故障 / 紧急任务 / 机巢不可用) | [x] 识别已实现;**局部重规划响应待做** |
+| 3.3 | `rolling/event_trigger.py`:事件识别(UAV 故障 / 紧急任务 / 机巢不可用)+ 本期重规划响应 | [x] 识别已实现,且已接入 `run_cycle` 触发本期重规划(强制纳入紧急/故障释放任务、剔除不可用机巢) |
 | 3.4 | 周期参数:规划周期长度、执行推进步长、重规划触发阈值 | [x] 全部进 `config.yaml` 的 `rolling:` |
 | 3.5 | 执行推进:按 `UAVTour` 推进位置与剩余航程 | [x] 含机巢换电回满 |
 
@@ -221,8 +221,38 @@ K 会自然取满 `K_avail`,**不构成算法缺陷**。
 - `U_t^exec ⊆ U_t^avail`、`T_t^exec ⊆ T_t^sel` 两个包含关系始终成立。
 - 满泊位(32 机 / 8 巢 × 容量 4)+ `strict_capacity=true` 下无 `CapacityViolation`。
 
-**待做**:3.3 的「局部重规划」目前只识别事件,尚未实现「仅对受影响 UAV 与相关
-任务做局部重选 + 重分配」,仍走全量重算。
+### 3.3 事件驱动「本期重规划」(审查闭环)
+
+审查发现 `should_replan` 为死代码:事件只被 `detect_events` 识别并记入
+`record.events`,但 `run_cycle` 从未据此改变计划(论文 §6 写法会被审稿人证伪)。
+现已在 `run_cycle` 接入并真正驱动反应式调整:
+
+**机制**(落点:`horizon.run_cycle` + `event_trigger.summarize_events` /
+`should_replan` + `selection.pipeline` 的 `forced_task_ids` + `muas_stage` 的
+`excluded_nest_ids`)
+
+- 周期内事件检测后,`summarize_events` 把事件解析为上下文
+  (`urgent_task_ids` / `unavailable_nest_ids` / `faulted_uav_ids`),
+  由 `should_replan`(受 `EventTriggerConfig.enabled` 与
+  `HorizonConfig.event_replan` 双重开关)决定本期是否触发重规划。
+- **UAV 故障 / 紧急任务** → 对应任务(含上一周期因故障释放回池的任务)经
+  `SelectionConfig.forced_task_ids` **强制纳入**第一阶段选择,绕过 Top-αK 预筛
+  (仍过可行性过滤)。
+- **机巢不可用** → 该机巢 id 经 `MUASStageConfig.excluded_nest_ids` 传入
+  `_choose_end_nests` / `choose_end_nests`,从终点候选集剔除,其归属 UAV
+  强制改降其它巢(多机巢异巢终止的容错分支)。
+- 每周期在 `CycleRecord` 记录 `replan` 与 `replan_context`,并在
+  `selection` / `muas` 诊断中将 `forced_task_ids` / `excluded_nest_ids` 一并落盘。
+
+**开关**:`HorizonConfig.event_replan`(默认 `true`,可由实验 yaml 覆盖)与
+`EventTriggerConfig.enabled`(默认 `true`)共同控制;`event_trigger` 模块仍只做
+"识别",状态改变由 `horizon` 显式执行(两相状态机互不 import 的边界不变)。
+
+**验收**:`tests/test_event_replan.py` 五项断言全过 ——
+(1) `summarize_events`/`should_replan` 解析正确;(2) 低收益任务被 Top-αK 排除、
+强制纳入后进入 `T_t^sel`;(3) 紧急任务(低收益、靠 slack 触发)本期触发重规划并被
+强制纳入;(4) `event_replan=False` 时事件仅记录、不触发;(5) 机巢不可用触发重规划,
+且运行后无 UAV 仍归属该巢(`occ_after=0`)。`exp01_smoke` 端到端无回归(323.2 km)。
 
 ### 3.6 反饥饿修正
 
