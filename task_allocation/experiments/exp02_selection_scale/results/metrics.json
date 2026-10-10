@@ -1,0 +1,102 @@
+{
+  "status": "ok",
+  "experiment": "exp02_selection_scale",
+  "K_avail": 8,
+  "alpha": 2.5,
+  "top_alpha_K": 20.0,
+  "scales": [
+    {
+      "n_tasks": 50,
+      "n_uav_avail": 8,
+      "t_cost_matrix_ms": 683.697483999822,
+      "n_pairs": 2900,
+      "t_selection_ms": 7.207296000160568,
+      "selection": {
+        "n_tasks_in": 50,
+        "n_uav_avail": 8,
+        "current_time": 0.0,
+        "n_after_priority": 20,
+        "n_after_prefilter": 19,
+        "n_rejected_prefilter": 1,
+        "n_after_marginal": 16,
+        "n_selected": 16,
+        "n_dropped_postcheck": 0
+      },
+      "n_selected": 16,
+      "compression_ratio": 3.125,
+      "t_muas_ms": 1285.2622600003087,
+      "muas": {
+        "model_type": null,
+        "n_executed": 16,
+        "n_deferred": 0,
+        "f1_reward": 129.955,
+        "f2_cost": 547771.0
+      },
+      "t_total_ms": 1976.1670400002913,
+      "t_muas_full_ms": 2027.3382739997032,
+      "muas_full": {
+        "n_executed": 50,
+        "f1_reward": 314.064,
+        "f2_cost": 1001416.8
+      }
+    },
+    {
+      "n_tasks": 100,
+      "n_uav_avail": 8,
+      "t_cost_matrix_ms": 2530.7469370000035,
+      "n_pairs": 10800,
+      "t_selection_ms": 13.597811999716214,
+      "selection": {
+        "n_tasks_in": 100,
+        "n_uav_avail": 8,
+        "current_time": 0.0,
+        "n_after_priority": 20,
+        "n_after_prefilter": 20,
+        "n_rejected_prefilter": 0,
+        "n_after_marginal": 16,
+        "n_selected": 16,
+        "n_dropped_postcheck": 0
+      },
+      "n_selected": 16,
+      "compression_ratio": 6.25,
+      "t_muas_ms": 1580.554060000395,
+      "muas": {
+        "model_type": null,
+        "n_executed": 16,
+        "n_deferred": 0,
+        "f1_reward": 134.125,
+        "f2_cost": 619628.4
+      },
+      "t_total_ms": 4124.898809000115
+    },
+    {
+      "n_tasks": 200,
+      "n_uav_avail": 8,
+      "t_cost_matrix_ms": 9752.32242400034,
+      "n_pairs": 41600,
+      "t_selection_ms": 18.131971000002522,
+      "selection": {
+        "n_tasks_in": 200,
+        "n_uav_avail": 8,
+        "current_time": 0.0,
+        "n_after_priority": 20,
+        "n_after_prefilter": 20,
+        "n_rejected_prefilter": 0,
+        "n_after_marginal": 16,
+        "n_selected": 16,
+        "n_dropped_postcheck": 0
+      },
+      "n_selected": 16,
+      "compression_ratio": 12.5,
+      "t_muas_ms": 1620.3142419999494,
+      "muas": {
+        "model_type": null,
+        "n_executed": 16,
+        "n_deferred": 0,
+        "f1_reward": 146.082,
+        "f2_cost": 708221.5
+      },
+      "t_total_ms": 11390.768637000292
+    }
+  ]
+}
