@@ -5,10 +5,14 @@
 
     T_t = remain ∪ new ∪ release
       → 当前可用 UAV 确定  U_t^avail / K_avail(t)
+      → 事件检测（UAV 故障 / 突发高优先级任务 / 机巢不可用）
+      → 若命中事件：事件驱动「本期重规划」
+          - 紧急 / 故障释放任务强制纳入第一阶段选择（绕过 Top-αK 预筛）
+          - 不可用机巢从终点候选集剔除（强制异巢终止）
       → 第一阶段 动态任务选择                → T_t^sel
       → 第二阶段 选择性多机巢 MUAS          → T_t^exec, U_t^exec
       → 回写状态（任务池 + 机队）
-      → 执行推进与完成反馈
+      → 执行推进与完成反馈（含执行中故障注入）
       → T_{t+1}
 
 本层是**唯一的串联点**：``task_pool`` 与 ``uav_state`` 两个状态机互不 import，
@@ -48,6 +52,8 @@ from task_allocation.methods.muas.solvers.muas_stage import (
 from task_allocation.methods.rolling.event_trigger import (
     EventTriggerConfig,
     detect_events,
+    should_replan,
+    summarize_events,
 )
 from task_allocation.methods.selection.pipeline import run as run_selection
 from task_allocation.methods.selection.feasibility import FeasibilityConfig
@@ -82,6 +88,10 @@ class HorizonConfig:
     faults: dict[int, list[int]] = field(default_factory=dict)
     # 落地期容量硬校验：True 时超容直接抛异常
     strict_capacity: bool = False
+    # 事件驱动重规划：检测到 UAV 故障 / 突发高优先级任务 / 机巢不可用时，
+    # 在本周期计划内做反应式调整（强制纳入紧急任务、剔除不可用机巢）。
+    # 置 False 则事件仅被记录、不触发本期重规划（供消融对比关停该机制）。
+    event_replan: bool = True
 
 
 @dataclass
@@ -101,6 +111,11 @@ class CycleRecord:
     events: list[dict[str, Any]] = field(default_factory=list)
     nest_occupancy: dict[str, int] = field(default_factory=dict)
     capacity_violations: list[dict[str, Any]] = field(default_factory=list)
+    # 事件驱动重规划：是否在本周期触发了反应式重规划
+    replan: bool = False
+    replan_context: dict[str, Any] = field(default_factory=dict)
+    # 本周期因 UAV 故障释放回任务池的任务（供下一周期强制纳入选择）
+    released_by_fault: list[int] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -121,6 +136,9 @@ class CycleRecord:
             "events": self.events,
             "nest_occupancy": self.nest_occupancy,
             "capacity_violations": self.capacity_violations,
+            "replan": self.replan,
+            "replan_context": self.replan_context,
+            "released_by_fault": self.released_by_fault,
         }
 
 
@@ -226,7 +244,7 @@ class RollingHorizon:
             expired_ids=list(snap.expired_ids),
         )
 
-        # 2) 事件检测（只识别，不自动改状态）
+        # 2) 事件检测 + 事件驱动重规划决策（论文 §6）
         events = detect_events(
             self.fleet.all(),
             self.pool.active_tasks(),
@@ -237,6 +255,14 @@ class RollingHorizon:
         )
         record.events = [e.as_dict() for e in events]
         self._known_unavailable = {n.id for n in self.nests if not n.available}
+
+        # 把事件解析为本期重规划上下文；replan 决定后续是否做反应式调整
+        replan_ctx = summarize_events(events, self.event_cfg)
+        replan = self.hcfg.event_replan and should_replan(events, self.event_cfg)
+        # 上下文里的 replan 标志需与本期真实决策一致（event_replan 关停时记为 False）
+        replan_ctx.replan = replan
+        record.replan = replan
+        record.replan_context = replan_ctx.as_dict()
 
         avail = self.fleet.available()
         record.selection = {
@@ -270,11 +296,14 @@ class RollingHorizon:
         )
 
         # 6) 第一阶段：动态任务选择 → T_t^sel
+        # 事件驱动：紧急任务 + 上一周期故障释放的任务强制纳入（绕过 Top-αK 预筛）
+        forced_ids = set(replan_ctx.urgent_task_ids) | set(self._prior_fault_released())
         sel_config = SelectionConfig(
             priority=self.sel_cfg.priority,
             feasibility=self.sel_cfg.feasibility,
             marginal=self.sel_cfg.marginal,
             current_time=self._time,
+            forced_task_ids=forced_ids,
         )
         cost_hint = self._cost_hint(tasks, avail, cb)
         sel = run_selection(
@@ -285,6 +314,9 @@ class RollingHorizon:
             pairwise_cost=cb.provider.pairwise,
         )
         record.selection = dict(sel.diagnostics)
+        record.selection["replan"] = replan
+        if replan:
+            record.selection["forced_task_ids"] = sorted(forced_ids)
 
         selected = sel.selected
         if not selected:
@@ -304,6 +336,10 @@ class RollingHorizon:
 
         # 7) 第二阶段：选择性多机巢 MUAS → T_t^exec
         cb_sel = _subset_cost_build(cb, tasks, selected)
+        # 事件驱动：不可用机巢（NEST_UNAVAILABLE）从终点候选集剔除
+        stage_cfg = replace(
+            self.stage_cfg, excluded_nest_ids=set(replan_ctx.unavailable_nest_ids)
+        )
         stage: MUASStageResult = run_selective_muas(
             selected,
             self.fleet.all(),
@@ -311,7 +347,7 @@ class RollingHorizon:
             cb_sel,
             fleet_uavs=self.fleet.all(),
             problem_config=replace(self.problem_cfg, current_time=self._time),
-            stage_config=self.stage_cfg,
+            stage_config=stage_cfg,
             solver_config=self.solver_cfg,
             nest_offset=self.nest_offset,
             current_time=self._time,
@@ -322,6 +358,9 @@ class RollingHorizon:
         record.muas["solve_seconds"] = round(stage.elapsed_seconds, 4)
         record.muas["n_evals"] = stage.n_evals
         record.muas["n_selected"] = len(selected)
+        record.muas["replan"] = replan
+        if replan:
+            record.muas["excluded_nest_ids"] = sorted(replan_ctx.unavailable_nest_ids)
         feas = solution.meta.get("feasibility", {}) or {}
         record.muas["violations"] = list(feas.get("violations", []))
         record.muas["penalty"] = float(feas.get("penalty", 0.0))
@@ -386,7 +425,8 @@ class RollingHorizon:
         """执行中注入 UAV 故障，把其未完成任务释放回任务池。
 
         ``fleet.mark_fault`` 与 ``pool.release`` 两个状态机互不 import，
-        由本层显式串联（论文 §6 的 T_t^release）。
+        由本层显式串联（论文 §6 的 T_t^release）。释放的任务记入
+        ``record.released_by_fault``，供下一周期事件驱动重规划时强制纳入选择。
         """
         for uav_id in self.hcfg.faults.get(cycle, []):
             if uav_id not in self.fleet:
@@ -396,6 +436,13 @@ class RollingHorizon:
                 continue
             self.pool.release(stranded, reason="uav_fault")
             record.released_ids.extend(int(t) for t in stranded)
+            record.released_by_fault.extend(int(t) for t in stranded)
+
+    def _prior_fault_released(self) -> list[int]:
+        """上一周期因 UAV 故障释放回任务池的任务 id（本周期强制纳入选择）。"""
+        if not self.records:
+            return []
+        return list(self.records[-1].released_by_fault)
 
     def _cost_hint(
         self,

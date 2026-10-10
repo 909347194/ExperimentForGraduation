@@ -192,6 +192,7 @@ def choose_end_nests(
     last_node_cost: Mapping[int, Mapping[int, float]],
     *,
     planning_uav_ids: Iterable[int] | None = None,
+    excluded_nest_ids: Iterable[int] | None = None,
 ) -> dict[int, int | None]:
     """为每架参与规划的 UAV 选终点机巢 ``z_ub``（容量感知的贪心）。
 
@@ -216,6 +217,11 @@ def choose_end_nests(
     nest_list = list(nests)
     if not nest_list:
         return {uid: None for uid in (planning_uav_ids or last_node_cost)}
+
+    # 事件驱动：被标记不可用的机巢（即便 available 偶发未翻转）一律不可选为终点
+    excluded = set(excluded_nest_ids) if excluded_nest_ids else set()
+    if excluded:
+        nest_list = [n for n in nest_list if n.id not in excluded]
 
     uav_by_id = {u.id: u for u in uavs}
     planning = list(planning_uav_ids) if planning_uav_ids is not None else list(last_node_cost)

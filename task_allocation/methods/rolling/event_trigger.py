@@ -24,7 +24,9 @@ __all__ = [
     "EventType",
     "ReplanEvent",
     "EventTriggerConfig",
+    "EventReplanContext",
     "detect_events",
+    "summarize_events",
     "should_replan",
 ]
 
@@ -58,6 +60,9 @@ class EventTriggerConfig:
     on_urgent_task: bool = True
     reward_threshold: float = 8.0
     slack_threshold: float = 900.0
+    # 是否启用事件驱动重规划；置 False 则 detect_events 仍识别事件（供记录），
+    # 但 should_replan 不再触发本期重规划（供消融对比关停该机制）
+    enabled: bool = True
 
 
 def detect_events(
@@ -118,9 +123,59 @@ def detect_events(
     return events
 
 
+@dataclass
+class EventReplanContext:
+    """把检测到的事件解析为触发「本期重规划」所需的上下文。
+
+    供 :mod:`methods.rolling.horizon` 在 ``run_cycle`` 内据此重塑本周期计划：
+    - ``urgent_task_ids``    → 强制纳入第一阶段选择（绕过 Top-αK 预筛）
+    - ``unavailable_nest_ids`` → 第二阶段终点机巢候选集剔除该机巢
+    - ``faulted_uav_ids``    → 该 UAV 上一周期释放的任务强制纳入选择
+    - ``replan``             → 是否触发本期重规划（任一事件命中且 enabled）
+    """
+
+    replan: bool = False
+    urgent_task_ids: set[int] = field(default_factory=set)
+    unavailable_nest_ids: set[int] = field(default_factory=set)
+    faulted_uav_ids: set[int] = field(default_factory=set)
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "replan": self.replan,
+            "urgent_task_ids": sorted(self.urgent_task_ids),
+            "unavailable_nest_ids": sorted(self.unavailable_nest_ids),
+            "faulted_uav_ids": sorted(self.faulted_uav_ids),
+        }
+
+
+def summarize_events(
+    events: Sequence[ReplanEvent],
+    config: EventTriggerConfig | None = None,
+) -> EventReplanContext:
+    """把事件列表解析为重规划上下文（供 ``horizon`` 触发本期重规划）。"""
+    cfg = config or EventTriggerConfig()
+    ctx = EventReplanContext()
+    for e in events:
+        if e.type is EventType.URGENT_TASK:
+            tid = e.detail.get("task_id")
+            if tid is not None:
+                ctx.urgent_task_ids.add(int(tid))
+        elif e.type is EventType.NEST_UNAVAILABLE:
+            nid = e.detail.get("nest_id")
+            if nid is not None:
+                ctx.unavailable_nest_ids.add(int(nid))
+        elif e.type is EventType.UAV_FAULT:
+            uid = e.detail.get("uav_id")
+            if uid is not None:
+                ctx.faulted_uav_ids.add(int(uid))
+    ctx.replan = bool(cfg.enabled and len(list(events)) > 0)
+    return ctx
+
+
 def should_replan(
     events: Sequence[ReplanEvent],
     config: EventTriggerConfig | None = None,
 ) -> bool:
-    """是否需要提前重规划（任一事件命中即触发）。"""
-    return len(list(events)) > 0
+    """是否需要提前重规划（任一事件命中且 enabled 即触发）。"""
+    cfg = config or EventTriggerConfig()
+    return bool(cfg.enabled and len(list(events)) > 0)
