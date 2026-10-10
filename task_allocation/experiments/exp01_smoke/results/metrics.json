@@ -5,6 +5,11 @@
   "problem": {
     "n_tasks_initial": 10,
     "n_arrived": 20,
+    "n_arrived_per_cycle": {
+      "1": 10,
+      "2": 5,
+      "3": 5
+    },
     "n_uavs": 24,
     "n_nests": 8,
     "nest_capacity": 4
@@ -135,11 +140,11 @@
         "n_executed": 7,
         "n_deferred": 3,
         "f1_reward": 41.668555503197,
-        "f2_cost": 201071.43041267068,
+        "f2_cost": 201071.43041267135,
         "feasible": true,
-        "best_fitness": -21.56141246192993,
+        "best_fitness": -21.561412461929862,
         "model_type": "srp",
-        "solve_seconds": 1.2625,
+        "solve_seconds": 0.9164,
         "n_evals": 1017,
         "n_selected": 10,
         "replan": true,
@@ -230,7 +235,7 @@
         "n_dropped_postcheck": 0,
         "replan": true,
         "forced_task_ids": [
-          19
+          14
         ]
       },
       "muas": {
@@ -251,11 +256,11 @@
         "n_executed": 5,
         "n_deferred": 3,
         "f1_reward": 24.03951034012634,
-        "f2_cost": 107131.85836396278,
+        "f2_cost": 107131.85836396276,
         "feasible": true,
-        "best_fitness": -13.326324503730063,
+        "best_fitness": -13.326324503730065,
         "model_type": "srp",
-        "solve_seconds": 0.9698,
+        "solve_seconds": 0.6788,
         "n_evals": 944,
         "n_selected": 8,
         "replan": true,
@@ -268,30 +273,30 @@
       "n_completed": 5,
       "n_released": 0,
       "executed_ids": [
-        15,
+        10,
         3,
-        19,
-        18,
-        16
+        14,
+        13,
+        11
       ],
       "deferred_ids": [
         2,
         8,
-        17
+        12
       ],
       "completed_ids": [
-        15,
+        10,
         3,
-        19,
-        18,
-        16
+        14,
+        13,
+        11
       ],
       "released_ids": [],
       "expired_ids": [],
       "events": [
         {
           "type": "urgent_task",
-          "task_id": 19,
+          "task_id": 14,
           "reward": 9.56578614817253,
           "slack": 9406.281224612969
         }
@@ -311,7 +316,7 @@
       "replan_context": {
         "replan": true,
         "urgent_task_ids": [
-          19
+          14
         ],
         "unavailable_nest_ids": [],
         "faulted_uav_ids": []
@@ -322,66 +327,105 @@
       "cycle": 3,
       "current_time": 1800.0,
       "pool_counts": {
-        "n_total": 3,
+        "n_total": 8,
         "n_remain": 3,
-        "n_new": 0,
+        "n_new": 5,
         "n_release": 0,
         "n_executing": 0,
         "n_expired": 0
       },
       "selection": {
-        "n_tasks_in": 3,
+        "n_tasks_in": 8,
         "n_uav_avail": 24,
         "current_time": 1800.0,
-        "n_after_priority": 3,
-        "n_after_prefilter": 3,
+        "n_forced_in": 0,
+        "n_after_priority": 8,
+        "n_after_prefilter": 8,
         "n_rejected_prefilter": 0,
-        "n_after_marginal": 3,
-        "n_selected": 3,
+        "n_after_marginal": 8,
+        "n_selected": 8,
         "n_dropped_postcheck": 0,
-        "replan": false
+        "replan": true,
+        "forced_task_ids": [
+          15,
+          18,
+          19
+        ]
       },
       "muas": {
-        "n_tasks": 3,
+        "n_tasks": 8,
         "n_uav_avail": 24,
-        "n_participating": 2,
+        "n_participating": 7,
         "n_nests": 8,
-        "n_end_nests_coded": 2,
+        "n_end_nests_coded": 7,
         "coded_end_nests": {
-          "0": 3,
-          "1": 3
+          "0": 7,
+          "1": 5,
+          "2": 3,
+          "3": 2,
+          "4": 6,
+          "5": 3,
+          "6": 3
         },
-        "n_executed": 1,
-        "n_deferred": 2,
-        "f1_reward": 1.0366995248738982,
-        "f2_cost": 14974.374675293826,
+        "n_executed": 4,
+        "n_deferred": 4,
+        "f1_reward": 34.064274308844716,
+        "f2_cost": 56642.52279251415,
         "feasible": true,
-        "best_fitness": 0.4607379426554845,
+        "best_fitness": -28.400022029593302,
         "model_type": "srp",
-        "solve_seconds": 0.1658,
-        "n_evals": 26,
-        "n_selected": 3,
-        "replan": false,
+        "solve_seconds": 0.682,
+        "n_evals": 804,
+        "n_selected": 8,
+        "replan": true,
+        "excluded_nest_ids": [],
         "violations": [],
         "penalty": 0.0
       },
-      "n_executed": 1,
-      "n_deferred": 2,
-      "n_completed": 1,
+      "n_executed": 4,
+      "n_deferred": 4,
+      "n_completed": 4,
       "n_released": 0,
       "executed_ids": [
-        17
+        15,
+        19,
+        16,
+        18
       ],
       "deferred_ids": [
         2,
-        8
+        8,
+        12,
+        17
       ],
       "completed_ids": [
-        17
+        15,
+        19,
+        16,
+        18
       ],
       "released_ids": [],
       "expired_ids": [],
-      "events": [],
+      "events": [
+        {
+          "type": "urgent_task",
+          "task_id": 15,
+          "reward": 9.340738234782041,
+          "slack": 8657.718453619273
+        },
+        {
+          "type": "urgent_task",
+          "task_id": 18,
+          "reward": 8.17659370049886,
+          "slack": 12130.267502555604
+        },
+        {
+          "type": "urgent_task",
+          "task_id": 19,
+          "reward": 9.106796696078023,
+          "slack": 3942.2038077962397
+        }
+      ],
       "nest_occupancy": {
         "0": 2,
         "1": 2,
@@ -393,10 +437,14 @@
         "7": 3
       },
       "capacity_violations": [],
-      "replan": false,
+      "replan": true,
       "replan_context": {
-        "replan": false,
-        "urgent_task_ids": [],
+        "replan": true,
+        "urgent_task_ids": [
+          15,
+          18,
+          19
+        ],
         "unavailable_nest_ids": [],
         "faulted_uav_ids": []
       },
@@ -404,16 +452,16 @@
     }
   ],
   "summary": {
-    "n_completed": 13,
-    "completion_rate": 0.65,
-    "avg_wait": 692.3076923076923,
-    "total_reward": 66.7448,
-    "total_cost": 323177.663,
-    "solve_time_ms": 2398.1,
+    "n_completed": 16,
+    "completion_rate": 0.8,
+    "avg_wait": 637.5,
+    "total_reward": 99.7723,
+    "total_cost": 364845.812,
+    "solve_time_ms": 2277.2,
     "K_avail_mean": 24.0,
-    "n_deferred_last": 2,
-    "n_remaining_pool": 2,
-    "wall_seconds": 3.41
+    "n_deferred_last": 4,
+    "n_remaining_pool": 4,
+    "wall_seconds": 3.079
   },
   "fleet": {
     "current_time": 0.0,
@@ -683,23 +731,28 @@
     "cycle": 3,
     "current_time": 1800.0,
     "counts": {
-      "n_total": 2,
-      "n_remain": 2,
-      "n_new": 0,
+      "n_total": 4,
+      "n_remain": 3,
+      "n_new": 1,
       "n_release": 0,
       "n_executing": 0,
       "n_expired": 0
     },
     "planning_ids": [
       2,
-      8
+      8,
+      12,
+      17
     ],
     "source": {
       "remain": [
         2,
-        8
+        8,
+        12
       ],
-      "new": [],
+      "new": [
+        17
+      ],
       "release": []
     },
     "executing": []

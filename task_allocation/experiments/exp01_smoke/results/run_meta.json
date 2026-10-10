@@ -1,9 +1,9 @@
 {
   "experiment": "exp01_smoke",
   "seed": 42,
-  "timestamp_utc": "2026-10-10T02:59:49.543188+00:00",
-  "config_path": "task_allocation\\experiments\\exp01_smoke\\config.yaml",
-  "repo_root": "D:\\SchoolAffairs\\groupmeeting\\thesis\\dissertation\\ExperimentForGraduation",
+  "timestamp_utc": "2026-10-10T03:39:23.209306+00:00",
+  "config_path": "task_allocation/experiments/exp01_smoke/config.yaml",
+  "repo_root": "/home/work/.openclaw/workspace/ExperimentForGraduation",
   "dem_terrain": {
     "width": 546,
     "height": 634,

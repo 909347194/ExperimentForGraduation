@@ -9,4 +9,6 @@ dependencies = [
     "numpy>=1.26",
     # DEM GeoTIFF 栅格解码（methods/utils/dem_geotiff.py 惰性导入）
     "pillow>=10.0",
+    # 实验可视化（experiments/expXX_*/plot/）
+    "matplotlib>=3.8",
 ]
