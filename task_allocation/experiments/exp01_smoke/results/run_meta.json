@@ -1,7 +1,18 @@
 {
   "experiment": "exp01_smoke",
   "seed": 42,
-  "timestamp_utc": "2026-10-09T14:38:38.472529+00:00",
-  "config_path": "task_allocation/experiments/exp01_smoke/config.yaml",
-  "repo_root": "/home/work/.openclaw/workspace/ExperimentForGraduation"
+  "timestamp_utc": "2026-10-10T01:24:19.987157+00:00",
+  "config_path": "task_allocation\\experiments\\exp01_smoke\\config.yaml",
+  "repo_root": "D:\\SchoolAffairs\\groupmeeting\\thesis\\dissertation\\ExperimentForGraduation",
+  "dem_terrain": {
+    "width": 546,
+    "height": 634,
+    "step_m": 200.0,
+    "bounds": [
+      -61348.0,
+      -69266.1,
+      47852.0,
+      57533.9
+    ]
+  }
 }

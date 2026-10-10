@@ -1,7 +1,7 @@
 # task_allocation 实施路线图(TODO)
 
 依据 `Chapter3_README.md` 的技术路线,结合当前代码实际完成度拆解。
-状态标记:`[x]` 已完成 / `[~]` 部分完成 / `[ ]` 待做 / `[!]` 阻塞
+状态标记: `[x]` 已完成 / `[~]` 部分完成 / `[ ]` 待做 / `[!]` 阻塞
 
 ---
 
@@ -9,235 +9,214 @@
 
 ### 0.1 论文技术路线 → 代码落点
 
-<<<<<<< HEAD
-| 技术路线环节（§8）                      | 代码位置                                 | 状态 | 备注                                                                                          |
-| --------------------------------------- | ---------------------------------------- | ---- | --------------------------------------------------------------------------------------------- |
-| 动态任务到达 → 任务池更新               | `methods/task_pool.py`                   | [x]  | `T_t = remain ∪ new ∪ release` 归类、周期推进、释放/过期                                      |
-| 当前可用 UAV 确定                       | `methods/uav_state.py`                   | [x]  | `U_t^avail` / `K_avail(t)`、状态机、UAV↔任务绑定                                              |
-| 任务收益/紧迫度/等待/协同/代价          | `methods/selection/priority.py`          | [x]  | 五项加权`P_i(t)`，权重归一化                                                                  |
-| 基础优先级预筛选（Top-αK）              | `selection/priority.top_alpha_preselect` | [x]  | α∈[2,3]                                                                                       |
-| 边际收益增量选择                        | `methods/selection/marginal_gain.py`     | [x]  | `insert_delta_cost` 已实现 3D 插入式 `ΔC_i ≈ C_ai + C_ib − C_ab`                              |
-| 快速可行性检查                          | `methods/selection/feasibility.py`       | [x]  | prefilter / postcheck                                                                         |
-| 选择性多机巢 MUAS 模型（§4）            | `methods/muas/problem.py`                | [~]  | 决策变量 y/x/π/z、双目标 F1/F2 均已建模；**缺机巢容量与三维可达约束**                         |
-| 三维地理代价`C_ij^3D`（§5(5)）          | `methods/muas/cost/*`                    | [x]  | DEM + 垂直切面 + 代价矩阵，已与真实 DEM 打通                                                  |
-| 统一编码 / 映射 / 逆映射（§5(1)(2)(3)） | `methods/muas/representation/*`          | [!]  | encoder / mapper / inverse_mapper 有，但**`repair_rules/` 三个文件缺失 → 整条链 import 失败** |
-| 进化算子                                | `methods/muas/operators/*`               | [x]  | crossover / mutation / extinction / scale_factor                                              |
-| 约束处理（§5(4)）                       | `methods/muas/constraints/`              | [ ]  | **空包**，约束检查散落在 `problem.check_feasible`                                             |
-| 改进 DMDE 求解器（§5）                  | `methods/muas/solvers/dmde_solver.py`    | [!]  | 258 行已写，但**当前无法导入**                                                                |
-| 动态滚动与闭环（§6）                    | `methods/rolling/`                       | [ ]  | **`horizon.py` / `event_trigger.py` 均为 0 行**                                               |
-| 对照方法                                | `baselines/*`                            | [ ]  | greedy / random_assign 仅规范注释占位                                                         |
-| 场景与数据                              | `common/scenario.py`、`data/`            | [x]  | 机巢 CSV + DEM + 坐标转换工具链                                                               |
-| 实验                                    | `experiments/exp01_smoke`                | [~]  | 仅目录与配置联调                                                                              |
-
-### 0.2 关键阻塞（必须先解）(是否需要改进？)
-
-```
-methods/muas/representation/repair_rules/
-├── __init__.py
-├── nearest_match.py      存在
-├── unique_filter.py      存在
-└── invalid_mutator.py    存在
-=======
 | 技术路线环节(§8) | 代码位置 | 状态 | 备注 |
 |---|---|---|---|
 | 动态任务到达 → 任务池更新 | `methods/task_pool.py` | [x] | `T_t = remain ∪ new ∪ release` 归类、周期推进、释放/过期 |
 | 当前可用 UAV 确定 | `methods/uav_state.py` | [x] | `U_t^avail` / `K_avail(t)`、状态机、UAV↔任务绑定 |
 | 任务收益/紧迫度/等待/协同/代价 | `methods/selection/priority.py` | [x] | 五项加权 `P_i(t)`,权重归一化 |
 | 基础优先级预筛选(Top-αK) | `selection/priority.top_alpha_preselect` | [x] | α∈[2,3] |
-| 边际收益增量选择 | `methods/selection/marginal_gain.py` | [x] | `insert_delta_cost` 已实现 3D 插入式 `ΔC_i ≈ C_ai + C_ib - C_ab` |
+| 边际收益增量选择 | `methods/selection/marginal_gain.py` | [x] | `insert_delta_cost` 已实现 3D 插入式 `ΔC_i ≈ C_ai + C_ib − C_ab` |
 | 快速可行性检查 | `methods/selection/feasibility.py` | [x] | prefilter / postcheck |
-| 选择性多机巢 MUAS 模型(§4) | `methods/muas/problem.py` | [~] | 决策变量 y/x/π/z、双目标 F1/F2 均已建模;**缺机巢容量与三维可达约束** |
+| 选择性多机巢 MUAS 模型(§4) | `methods/muas/problem.py` | [x] | 决策变量 y/x/π/z、双目标 F1/F2;已含机巢容量约束 |
 | 三维地理代价 `C_ij^3D`(§5(5)) | `methods/muas/cost/*` | [x] | DEM + 垂直切面 + 代价矩阵,已与真实 DEM 打通 |
-| 统一编码 / 映射 / 逆映射(§5(1)(2)(3)) | `methods/muas/representation/*` | [!] | encoder / mapper / inverse_mapper 有,但 **`repair_rules/` 三个文件缺失 → 整条链 import 失败** |
+| 统一编码 / 映射 / 逆映射(§5(1)(2)(3)) | `methods/muas/representation/*` | [x] | 基因用 `uav_id` 哨兵值区分三类:`≥0` 起始 / `-1` 巡游 / **`-2` 终止(终点机巢)**;终止基因随 `cost_vector` 参与差分变异(见 §0.4、§2 的 2.6) |
 | 进化算子 | `methods/muas/operators/*` | [x] | crossover / mutation / extinction / scale_factor |
-| 约束处理(§5(4)) | `methods/muas/constraints/` | [ ] | **空包**,约束检查散落在 `problem.check_feasible` |
-| 改进 DMDE 求解器(§5) | `methods/muas/solvers/dmde_solver.py` | [!] | 258 行已写,但**当前无法导入** |
-| 动态滚动与闭环(§6) | `methods/rolling/` | [ ] | **`horizon.py` / `event_trigger.py` 均为 0 行** |
+| 约束处理(§5(4)) | `methods/muas/constraints/` | [~] | `nest_capacity.py` 已落地(两道校验共用判定);其余约束仍在 `problem.check_feasible` |
+| 改进 DMDE 求解器(§5) | `methods/muas/solvers/dmde_solver.py` | [x] | 可导入、可求解 |
+| **DMDE ↔ 选择性 MUAS 桥接** | `methods/muas/solvers/muas_stage.py` | [x] | **新增**:assignment → π/y/z、选择性剔除、航程修复 |
+| 动态滚动与闭环(§6) | `methods/rolling/` | [x] | `horizon.py` 单周期编排 + 多周期推进;`event_trigger.py` 事件识别 |
 | 对照方法 | `baselines/*` | [ ] | greedy / random_assign 仅规范注释占位 |
-| 场景与数据 | `common/scenario.py`、`data/` | [x] | 机巢 CSV + DEM + 坐标转换工具链 |
-| 实验 | `experiments/exp01_smoke` | [~] | 仅目录与配置联调 |
+| 场景与数据 | `common/scenario.py`、`common/task_scenario.py` | [x] | 机巢 CSV + DEM + 坐标转换;合成任务复用同一链路 |
+| 实验 | `experiments/exp01_smoke` | [x] | **端到端已跑通**(两阶段 + 3 周期滚动) |
 
-### 0.2 关键阻塞(必须先解)
+### 0.2 已解除的阻塞
 
-```
-methods/muas/representation/repair_rules/
-├── __init__.py          14 字节(空)
-├── nearest_match.py     ✗ 不存在
-├── unique_filter.py     ✗ 不存在
-└── invalid_mutator.py   ✗ 不存在
->>>>>>> 92cff6fca56b6db2cf60d25a2fe702f8af4a5d2c
-```
+- ~~`repair_rules/` 三个文件缺失 → 整条链 import 失败~~:已补齐,DMDE 可导入可求解。
+- ~~没有把 DMDE 输出翻译成 `AllocationSolution` 的桥接~~:见 `solvers/muas_stage.py`。
 
-`inverse_mapper.py` 第 16-18 行 import 这三个模块,实测:
+### 0.4 按 `docs/guides/1整体方法.md` §5 逐条核对(权威依据)
 
-```
-ModuleNotFoundError: No module named
-  'task_allocation.methods.muas.representation.repair_rules.nearest_match'
-```
+文档 §5 标题即「**改进**离散映射差分进化算法」,§8 创新点第 3 条要求
+「支持起点固定、**终点可选**、部分空闲/不执行的**统一编码**离散映射差分进化扩展」。
+→ 论文**就是要写"改进 DMDE"**,改进的落点是**结构扩展**(文档 §5 的 5 个方面),
+不是必须改动变异/交叉算子。
 
-连带 `dmde_solver` 无法导入 → **第二阶段(论文 §4-§5)整条链跑不起来**。
+| §5 条目 | 文档要求 | 当前实现 | 判定 |
+|---|---|---|---|
+| (1) 面向任务序列的统一编码 | 编码同时表达 UAV归属 + 访问顺序 + **终点机巢** | 终止基因 `uav_id=-2` 进编码,`target_id` = 机巢下标 | ✅ 已达成 |
+| (2) 多机巢终点选择 | 终点机巢作为航次特殊终止节点,在 `B_1..B_K` 间选择 | 终止基因随 `cost_vector` 末尾 K 个分量做温度自适应匹配 | ✅ 已达成 |
+| (3) 选择性任务分配 | 允许 `y_j=0`、`n_u=0` | 已达成,但靠解码后 `_prune` 剔除,非编码层 | ⚠️ 效果达成,落点偏低 |
+| (4) 约束处理 | 在**个体解码和适应度评价过程中**处理航程/时间窗/唯一性 | `_prune` / `_repair_range` / `choose_end_nests` 正在 `evaluate` 内 | ✅ 符合 |
+| (5) 三维地理代价嵌入 | 用预计算 `C_ij^3D`,不在每次评价中重做航迹搜索 | 代价矩阵预计算 + `CostProvider` | ✅ 符合 |
+
+**结论(已闭环)**:2.6 已实现,终点机巢作为终止基因进入编码并参与差分进化,
+论文创新点第 3 条「终点可选的统一编码」可自证。详见 §2 的「2.6 验收结果」。
+
+### 0.5 实验场景与文档假设的偏离
+
+文档 §1(4) 设想的问题特征是 **任务远多于机**:`|T_t| ≫ K_avail(t)`。
+当前 `exp01_smoke` 是 **24 机 / 10 任务**(机远多于任务),与该假设**相反**。
+
+后果:`K = min(K_avail, M−1)` 的 srp 限制在「机多任务少」时严重浪费
+(10 任务只派 9 架,24 架里 15 架空闲)。但在文档设想的 `|T| ≫ K` 场景下
+K 会自然取满 `K_avail`,**不构成算法缺陷**。
+
+→ 结论:这不是算法局限,是**实验配置偏离**。exp02/03 应把规模改成
+任务数 ≫ 机数(如 60 任务 / 8 机)。
 
 ---
 
-## 1. 阶段 0:打通第二阶段(P0)
+## 1. 阶段 0:打通第二阶段(P0) —— 已完成
 
-**目标**:MUAS 能求解并产出 `AllocationSolution`。
-
-<<<<<<< HEAD
-| #   | 任务                                | 说明                                                                                                            |
-| --- | ----------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| 0.1 | 补`repair_rules/invalid_mutator.py` | 需导出`repair_invalid(cm, mask, invalid_indices, model_type, n_uavs) -> iterable[(uav_id, tgt_id, cost)]`       |
-| 0.2 | 补`repair_rules/unique_filter.py`   | 需导出`mask_balanced(mask, row, col)`、`mask_overloaded(mask, row, col)`                                        |
-| 0.3 | 补`repair_rules/nearest_match.py`   | 需导出`nearest_match_adaptive(cv, cm, mask, temperature=..., rng=...)`，top_k 随温度衰减                        |
-| 0.4 | 求解器最小闭环                      | `DMDESolver.solve()` 对 10 任务 / 3 机 / 2 巢产出 `SolverResult`（`extra["solution"]` 挂 `AllocationSolution`） |
-| 0.5 | 端到端冒烟                          | `TaskPool.begin_cycle → selection.run → muas → apply_solution → complete/release` 全链跑通                      |
-=======
-| # | 任务 | 说明 |
+| # | 任务 | 状态 |
 |---|---|---|
-| 0.1 | 补 `repair_rules/invalid_mutator.py` | 需导出 `repair_invalid(cm, mask, invalid_indices, model_type, n_uavs) -> iterable[(uav_id, tgt_id, cost)]` |
-| 0.2 | 补 `repair_rules/unique_filter.py` | 需导出 `mask_balanced(mask, row, col)`、`mask_overloaded(mask, row, col)` |
-| 0.3 | 补 `repair_rules/nearest_match.py` | 需导出 `nearest_match_adaptive(cv, cm, mask, temperature=..., rng=...)`,top_k 随温度衰减 |
-| 0.4 | 求解器最小闭环 | `DMDESolver.solve()` 对 10 任务 / 3 机 / 2 巢产出 `SolverResult`(`extra["solution"]` 挂 `AllocationSolution`) |
-| 0.5 | 端到端冒烟 | `TaskPool.begin_cycle → selection.run → muas → apply_solution → complete/release` 全链跑通 |
->>>>>>> 92cff6fca56b6db2cf60d25a2fe702f8af4a5d2c
+| 0.1 | 补 `repair_rules/invalid_mutator.py` | [x] |
+| 0.2 | 补 `repair_rules/unique_filter.py` | [x] |
+| 0.3 | 补 `repair_rules/nearest_match.py` | [x] |
+| 0.4 | 求解器最小闭环产 `AllocationSolution` | [x] `run_selective_muas` |
+| 0.5 | 端到端冒烟 | [x] `exp01_smoke` 3 周期无异常 |
 
-**验收标准**
+**验收结果**(默认 `exp01_smoke/config.yaml`,8 巢 / 容量 4 / 24 机 / 3 周期):
 
-- `python -c "import task_allocation.methods.muas.solvers.dmde_solver"` 通过
-- 小规模算例产出的解满足 `validate_unique_tasks()`,且 `check_feasible` 无 violation
-- 0.5 的闭环跑 3 个滚动周期不抛异常
+```
+周期 1  T_t=10(new 10)  K_avail=24  T_sel=10 → T_exec=7(保留 3)
+周期 2  T_t=8 (remain 3/new 5)      T_sel=8  → T_exec=5(保留 3)
+周期 3  T_t=3 (remain 3)            T_sel=3  → T_exec=1(保留 2)
+汇总:完成 13/20(65%),平均等待 692s,总代价 331 km,求解 2.1 s
+```
 
-**风险**:`repair_rules` 的实现质量直接决定 DMDE 的解质量与收敛性,是 §5 的核心。建议先按 `inverse_mapper` 的调用签名写最小可用版本,再对照论文 §5(4) 的约束处理补强。
+三个周期的 `check_feasible` **均无 violation、penalty = 0**。
+
+### 0.3 两个实现决策(影响后续,务必知悉)
+
+1. **参与规划的 UAV 数 K 恒取 `K < M`(任务数),走 srp 巡游模型。**
+   DMDE 按 `n_uavs` 与 `n_targets` 大小自动选模型,其中 `N > M` 的
+   **overloaded 模式允许同一任务分给多架 UAV**,与「一任务一机」冲突,
+   本问题不可用。因此 K 取 `min(K_avail, M−1)`,其余可用 UAV 本周期空闲
+   —— 正是论文允许的 `U_t^exec ⊆ U_t^avail`。
+2. **航线与终点机巢必须联合收敛后再定稿。**
+   只有真正有航次的 UAV 才会起飞让出原机巢名额。若先选终点再做剪枝 /
+   航程修复,被清空的航次实际并未起飞,让出的名额是虚的 → 落地期超卖
+   (实测在满泊位场景触发过 `nest 1 末态 6/4`)。当前实现为
+   `prune → repair_range → choose_end_nests` 迭代至不动点。
 
 ---
 
-## 2. 阶段 1：补齐 MUAS 约束（P1）
+## 2. 阶段 1:补齐 MUAS 约束(P1)
 
-> **机巢容量约束的设计方案已定**，见 `docs/design_nest_state.md`：
-> 容量 = 同时归属架数，从 `uav.nest_id` 推导不单独存状态，
-> 唯一写点是分配决策 `z_ub`（起飞/降落均不改容量）。
-> 实现前先读该文档的 §5-§7。
-
-<<<<<<< HEAD
-| 约束（§4.3）              | 现状                                        | 待做                     |
-| ------------------------- | ------------------------------------------- | ------------------------ |
-| 每个任务至多一架 UAV      | [x]`validate_unique_tasks`                  | —                        |
-| 每架 UAV 可不执行任务     | [x]`allow_idle_uav`                         | —                        |
-| UAV 航程约束              | [x]`pc > u.remaining_range`                 | —                        |
-| 任务时间窗约束            | [x]`earliest` / `latest` 游标推进           | —                        |
-| 终点机巢可达性            | [x]`end_nest_id is None` / `nest.available` | —                        |
-| **机巢容量或可用性**      | [~] 只查`nest.available`                    | **2.1 增加容量计数约束** |
-| **三维地理环境 / 可达性** | [ ] 仅有代价近似                            | **2.2 增加可达性判定**   |
-
-| #   | 任务                                                                                                      |
-| --- | --------------------------------------------------------------------------------------------------------- |
-| 2.1 | 机巢容量约束：按`end_nest_id` 统计各巢降落数 ≤ `Nest.capacity`，超出进 penalty                            |
-| 2.2 | 三维可达性：`vertical_section` 已声明"不做完整三维可飞性"，需新增可达性判定（最小离地余量 / 禁飞区）      |
-| 2.3 | `methods/muas/constraints/` 落位：把约束判定 + 惩罚从 `problem.check_feasible` 拆出，形成可单测的约束集合 |
-| 2.4 | 约束违反的惩罚归一化：`f2 = 路径代价 + w_penalty × penalty`，各项惩罚需同量纲                             |
-=======
-对应 §4.3 列出的 7 条约束,当前 `check_feasible` 覆盖情况:
+> 机巢容量约束的设计方案见 `docs/design_nest_state.md`,已按其实现。
 
 | 约束(§4.3) | 现状 | 待做 |
 |---|---|---|
 | 每个任务至多一架 UAV | [x] `validate_unique_tasks` | - |
 | 每架 UAV 可不执行任务 | [x] `allow_idle_uav` | - |
-| UAV 航程约束 | [x] `pc > u.remaining_range` | - |
-| 任务时间窗约束 | [x] `earliest` / `latest` 游标推进 | - |
+| UAV 航程约束 | [x] `check_feasible` + **`_repair_range` 主动修复** | - |
+| 任务时间窗约束 | [x] `earliest` / `latest` 游标推进(起点为周期时刻) | - |
 | 终点机巢可达性 | [x] `end_nest_id is None` / `nest.available` | - |
-| **机巢容量或可用性** | [~] 只查 `nest.available` | **2.1 增加容量计数约束** |
+| **机巢容量或可用性** | [x] `constraints/nest_capacity.py` 两道校验 | - |
 | **三维地理环境 / 可达性** | [ ] 仅有代价近似 | **2.2 增加可达性判定** |
 
-| # | 任务 |
-|---|---|
-| 2.1 | 机巢容量约束：按 `end_nest_id` 统计各巢末态归属 ≤ `Nest.capacity`，超出进 penalty（**按 `docs/design_nest_state.md` 实现，含落地期硬校验**） |
-| 2.2 | 三维可达性：`vertical_section` 已声明“不做完整三维可飞性”，需新增可达性判定（最小离地余量 / 禁飞区） |
-| 2.3 | `methods/muas/constraints/` 落位：把约束判定 + 惩罚从 `problem.check_feasible` 拆出，形成可单测的约束集合 |
-| 2.4 | 约束违反的惩罚归一化：`f2 = 路径代价 + w_penalty × penalty`，各项惩罚需同量纲 |
-| 2.5 | `UAVFleet.apply_solution` 补 `nest_id` 写点 + `reassign_nest` / `decommission`（容量不漂的关键，见设计文档 §5） |
->>>>>>> 92cff6fca56b6db2cf60d25a2fe702f8af4a5d2c
+| # | 任务 | 状态 |
+|---|---|---|
+| 2.1 | 机巢容量约束:按 `end_nest_id` 统计末态归属 ≤ `Nest.capacity`,超出进 penalty(按 `docs/design_nest_state.md`,含落地期硬校验) | [x] |
+| 2.2 | 三维可达性:`vertical_section` 只做代价近似,需新增可达性判定(最小离地余量 / 禁飞区) | [ ] |
+| 2.3 | `methods/muas/constraints/` 落位 | [~] 容量已拆出,其余仍在 `problem.py` |
+| 2.4 | 惩罚归一化:`f2 = 路径代价 + w_penalty × penalty`,各项同量纲 | [~] 容量用 1e4/架,其余仍为 1e3 量级 |
+| 2.5 | `UAVFleet.apply_solution` 补 `nest_id` 写点 + `reassign_nest` / `decommission` | [x] |
+| **2.6** | **终点机巢进编码(§5(1)(2))**:基因用 `uav_id=-2` 的终止基因承载终点,`inverse_phi` 与 `repair_rules` 同步支持;终点由进化搜索决定而非事后启发式 | [x] |
+| 2.7 | 修复结果回写种群(Lamarckian):把 `_prune` / `_repair_range` 后的解编码回 `cost_vector`,使选择压力作用于修复后的解(当前进化搜的是未修复空间) | [ ] |
 
-**验收标准**:`check_feasible` 覆盖上述 7 条,每条有独立 violation 标记与对应惩罚;构造违反样例可单测。
+### 2.6 验收结果(终点机巢进编码)
+
+**实现要点**
+
+- 基因类型用 `uav_id` 哨兵值:`≥0` 起始 / `-1` 巡游 / **`-2` 终止(终点机巢)**。
+  `Gene` 是 frozen dataclass,**不新增字段**。
+- 代价矩阵列从 `M` 扩到 `M+B`:`[:K, M:]` = UAV→机巢(空航次用),
+  `[K:, M:]` = 任务→机巢(终止基因在此匹配)。
+- `cost_vector` 布局:`[0,K)` 起始 / `[K,K+M)` 巡游 / `[K+M,K+M+K)` 终止。
+  终止分量参与 `mutate_population`,终点因此是**进化结果**。
+- 终点**以编码为主、启发式为兜底**:`_choose_end_nests` 仅在编码终点
+  违反容量时才改派(由 `check_nest_capacity` 判定)。
+
+**验收数据**(默认 `exp01_smoke`,8 巢 / 容量 4 / 24 机 / 3 周期,seed=42)
+
+| 项目 | 结果 |
+|---|---|
+| 段结构 + 终止基因合法性 | 300 次采样 **0 异常**(起始顺序恒为 `0..K−1`,每航次段末恰好 1 个终止基因,任务不丢不重) |
+| 终点是否随进化变化 | 80 次采样得到 **43 种**不同终点组合;3 个 seed 得到 3 种不同终点 |
+| 容量(满泊位 32 机 / 8 巢×4 + `strict_capacity`) | 全周期 `occ=4/4/4/4/4/4/4/4`,**无超容、无异常** |
+| 可行性 | 三周期 `violations=[]`、`penalty=0` |
+| **消融(同 seed)** | 终点进编码 **323.2 km** vs 启发式选巢 **331.0 km**,代价降低 **2.4%** |
+
+**消融开关**:`config.yaml` 的 `muas.end_nest_in_encoding`(默认 `true`)。
+关闭后退化为「解码后再用容量感知策略挑终点」,供 `exp04_ablation` 对比。
+
+**附带修复(重要)**:`_perturb_srp_tour` 的 `reverse` / `insert` 会把
+`uav_id >= 0` 的起始基因卷进子序列,实测出现过起始顺序 `[0, 2, 1]`。
+已新增 `repair_rules/terminal_nest.py::normalize_srp_segments`,在扰动后
+强制重建航次分段 —— 否则终止基因无法稳定落在段末。
+
+**补充实现**:`_repair_range` —— 超航程的航次逐个移除「移除收益最大」的任务直到
+落入剩余航程。只靠 penalty 兜底不够(DMDE 会在不可行个体上浪费代数),
+与容量 repair 同理。
 
 ---
 
-## 3. 阶段 2:动态滚动闭环(P1,论文 §6)
+## 3. 阶段 2:动态滚动闭环(P1,论文 §6) —— 已完成
 
-**这是当前最大的空白**,也是论文"动态滚动"标题的落点。
+| # | 任务 | 状态 |
+|---|---|---|
+| 3.1 | `rolling/horizon.py`:单周期编排 `begin_cycle → selection → muas → apply_solution → 反馈` | [x] |
+| 3.2 | 状态反馈串联:`fleet.mark_fault(uid)` → `pool.release(ids, reason="uav_fault")` | [x] 故障注入走 `HorizonConfig.faults` |
+| 3.3 | `rolling/event_trigger.py`:事件识别(UAV 故障 / 紧急任务 / 机巢不可用) | [x] 识别已实现;**局部重规划响应待做** |
+| 3.4 | 周期参数:规划周期长度、执行推进步长、重规划触发阈值 | [x] 全部进 `config.yaml` 的 `rolling:` |
+| 3.5 | 执行推进:按 `UAVTour` 推进位置与剩余航程 | [x] 含机巢换电回满 |
 
-<<<<<<< HEAD
-| #   | 任务                                                                                                                       |
-| --- | -------------------------------------------------------------------------------------------------------------------------- |
-| 3.1 | `rolling/horizon.py`：单周期编排<br>`begin_cycle → selection.run → muas solve → apply_solution → 反馈`                     |
-| 3.2 | 状态反馈串联：`fleet.mark_fault(uid)` → `pool.release(ids, reason="uav_fault")`（两个状态机不互相 import，由本层显式串联） |
-| 3.3 | `rolling/event_trigger.py`：事件驱动提前重规划<br>触发条件（§6）：UAV 故障 / 重要紧急任务到达 / 机巢不可用                 |
-| 3.4 | 周期参数：规划周期长度、执行推进步长、重规划触发阈值                                                                       |
-| 3.5 | 执行推进：按`UAVTour` 推进位置与剩余航程（`fleet.update_position` / `consume_range`），任务到达 `latest` 前完成判定        |
+**验收结果**
 
-**验收标准**
+- 多周期滚动跑通,8 周期场景完成率 84%–90%,`n_remain` 随周期回落至 0。
+- 未纳入本周期的任务以 `REMAIN` 身份在下一周期重新参与分配(实测可见
+  `T_t` 中 remain 项在 0→4 之间波动并被逐步消化)。
+- `U_t^exec ⊆ U_t^avail`、`T_t^exec ⊆ T_t^sel` 两个包含关系始终成立。
+- 满泊位(32 机 / 8 巢 × 容量 4)+ `strict_capacity=true` 下无 `CapacityViolation`。
 
-- 多周期滚动跑通，`TaskPoolSnapshot.counts` 中 `n_remain / n_new / n_release` 随时间合理演化
-- 注入 UAV 故障事件后，未完成任务在下一周期以 `RELEASE` 出现在 T_t
-=======
-| # | 任务 |
-|---|---|
-| 3.1 | `rolling/horizon.py`:单周期编排<br>`begin_cycle → selection.run → muas solve → apply_solution → 反馈` |
-| 3.2 | 状态反馈串联:`fleet.mark_fault(uid)` → `pool.release(ids, reason="uav_fault")`(两个状态机不互相 import,由本层显式串联) |
-| 3.3 | `rolling/event_trigger.py`:事件驱动提前重规划<br>触发条件(§6):UAV 故障 / 重要紧急任务到达 / 机巢不可用 |
-| 3.4 | 周期参数:规划周期长度、执行推进步长、重规划触发阈值 |
-| 3.5 | 执行推进:按 `UAVTour` 推进位置与剩余航程(`fleet.update_position` / `consume_range`),任务到达 `latest` 前完成判定 |
+**待做**:3.3 的「局部重规划」目前只识别事件,尚未实现「仅对受影响 UAV 与相关
+任务做局部重选 + 重分配」,仍走全量重算。
 
-**验收标准**
-- 多周期滚动跑通,`TaskPoolSnapshot.counts` 中 `n_remain / n_new / n_release` 随时间合理演化
-- 注入 UAV 故障事件后,未完成任务在下一周期以 `RELEASE` 出现在 T_t
->>>>>>> 92cff6fca56b6db2cf60d25a2fe702f8af4a5d2c
-- `U_t^exec ⊆ U_t^avail`、`T_t^exec ⊆ T_t^sel` 两个包含关系始终成立
+### 3.6 反饥饿修正
 
-**依赖**:阶段 0(否则没有解可以执行)。
+偏远任务会因「执行代价 > 收益」被连续剔除而**永久滞留**。已按论文 §3.2 的等待
+补偿 `W_i(t)` 处理:剔除判据用含等待补偿的有效收益
+
+```
+λ · saving  >  R_j · (1 + prune_wait_bonus · (1 − e^(−waited / wait_scale))) · (1 + margin)
+```
+
+滞留越久越难被剔除。实测:未加补偿时周期 3 执行 0 个滞留任务,加补偿后执行 1 个,
+8 周期长跑下滞留任务被完全消化。
 
 ---
 
 ## 4. 阶段 3:动态任务到达过程(P2)
 
-<<<<<<< HEAD
-| #   | 任务                                                                                                  |
-| --- | ----------------------------------------------------------------------------------------------------- |
-| 4.1 | 任务到达模型：泊松过程 / 分批到达 / 紧急插单，产出`list[Task]` 交给 `pool.add_new`                    |
-| 4.2 | 任务点数据：仿照机巢增加`data/task_location_data.csv`，复用 `methods/utils/coordinates.py` 的坐标链路 |
-| 4.3 | 时间窗生成：按任务类型给`earliest` / `latest`（紧迫任务短窗、常规任务长窗）                           |
-| 4.4 | 任务收益`reward` 设定：与输电巡检业务对齐（杆塔等级 / 缺陷等级）                                      |
-=======
-| # | 任务 |
-|---|---|
-| 4.1 | 任务到达模型:泊松过程 / 分批到达 / 紧急插单,产出 `list[Task]` 交给 `pool.add_new` |
-| 4.2 | 任务点数据:仿照机巢增加 `data/task_location_data.csv`,复用 `methods/utils/coordinates.py` 的坐标链路 |
-| 4.3 | 时间窗生成:按任务类型给 `earliest` / `latest`(紧迫任务短窗、常规任务长窗) |
-| 4.4 | 任务收益 `reward` 设定:与输电巡检业务对齐(杆塔等级 / 缺陷等级) |
->>>>>>> 92cff6fca56b6db2cf60d25a2fe702f8af4a5d2c
-
-**验收标准**:可配置任务到达率,重跑得到不同 `|T_t| / K_avail(t)` 比值的场景(覆盖 §1(4) 的"数量与能力不匹配")。
+| # | 任务 | 状态 |
+|---|---|---|
+| 4.1 | 任务到达模型:泊松过程 / 分批到达 / 紧急插单 | [~] 仅「分批到达」(`build_task_batches`),泊松待补 |
+| 4.2 | 任务点数据:`data/task_location_data.csv` | [ ] 当前为**合成**(`common/task_scenario.py`),CSV 链路待补 |
+| 4.3 | 时间窗生成:按任务类型给 `earliest` / `latest` | [x] 均匀区间,按类型区分待补 |
+| 4.4 | 任务收益 `reward` 设定:与输电巡检业务对齐 | [~] 均匀区间,杆塔/缺陷等级待建模 |
 
 ---
 
 ## 5. 阶段 4:对照方法(P2)
 
-<<<<<<< HEAD
-| #   | 任务                                                                                |
-| --- | ----------------------------------------------------------------------------------- |
-| 5.1 | `baselines/greedy.py`：按代价/优先级贪心匹配，继承 `BaseOptimizer`，`name="greedy"` |
-| 5.2 | `baselines/random_assign.py`：随机可行分配，`name="random"`                         |
-| 5.3 | `baselines/registry.py`：注册进 `REGISTRY`（当前为空 dict）                         |
-| 5.4 | 统一入口：所有求解器共用同一`CostProvider`，保证可比                                |
-=======
-| # | 任务 |
-|---|---|
-| 5.1 | `baselines/greedy.py`:按代价/优先级贪心匹配,继承 `BaseOptimizer`,`name="greedy"` |
-| 5.2 | `baselines/random_assign.py`:随机可行分配,`name="random"` |
-| 5.3 | `baselines/registry.py`:注册进 `REGISTRY`(当前为空 dict) |
-| 5.4 | 统一入口:所有求解器共用同一 `CostProvider`,保证可比 |
->>>>>>> 92cff6fca56b6db2cf60d25a2fe702f8af4a5d2c
-
-**验收标准**:`get_baseline("greedy")` 可取、可求解、输出 `SolverResult`,`cost_history=[]`、`total_generations=0`(无迭代)。
+| # | 任务 | 状态 |
+|---|---|---|
+| 5.1 | `baselines/greedy.py`:按代价/优先级贪心匹配,继承 `BaseOptimizer`,`name="greedy"` | [ ] |
+| 5.2 | `baselines/random_assign.py`:随机可行分配,`name="random"` | [ ] |
+| 5.3 | `baselines/registry.py`:注册进 `REGISTRY`(当前为空 dict) | [ ] |
+| 5.4 | 统一入口:所有求解器共用同一 `CostProvider`,保证可比 | [ ] |
 
 ---
 
@@ -245,69 +224,68 @@ ModuleNotFoundError: No module named
 
 按 `experiments/README.md` 约定,一实验一目录。
 
-<<<<<<< HEAD
-| #   | 实验                    | 验证内容                                                                                                             | 依赖   |
-| --- | ----------------------- | -------------------------------------------------------------------------------------------------------------------- | ------ |
-| 6.1 | `exp02_selection_scale` | 第一阶段规模压缩：`                                                                                                  | T_t    |
-| 6.2 | `exp03_rolling_dynamic` | 滚动闭环：完成率、平均等待时间、`K_avail(t)` 利用率、故障恢复                                                        | 阶段 2 |
-| 6.3 | `exp04_ablation`        | 消融：去掉等待补偿 W / 空间协同 G / 边际代价 ΔC / 3D 地形代价                                                        | 阶段 1 |
-| 6.4 | `exp05_solver_compare`  | 对比：DMDE vs greedy vs random vs （可选）标准 GA/PSO                                                                | 阶段 4 |
-| 6.5 | 指标规范化              | 固定`metrics.json` 字段：`n_completed`、`completion_rate`、`avg_wait`、`total_cost`、`solve_time_ms`、`K_avail_mean` | —      |
-=======
-| # | 实验 | 验证内容 | 依赖 |
-|---|---|---|---|
-| 6.1 | `exp02_selection_scale` | 第一阶段规模压缩:`|T_t| → |T_t^sel|` 压缩率、选择耗时、α 敏感度 | 阶段 3 |
-| 6.2 | `exp03_rolling_dynamic` | 滚动闭环:完成率、平均等待时间、`K_avail(t)` 利用率、故障恢复 | 阶段 2 |
-| 6.3 | `exp04_ablation` | 消融:去掉等待补偿 W / 空间协同 G / 边际代价 ΔC / 3D 地形代价 | 阶段 1 |
-| 6.4 | `exp05_solver_compare` | 对比:DMDE vs greedy vs random vs (可选)标准 GA/PSO | 阶段 4 |
-| 6.5 | 指标规范化 | 固定 `metrics.json` 字段:`n_completed`、`completion_rate`、`avg_wait`、`total_cost`、`solve_time_ms`、`K_avail_mean` | - |
->>>>>>> 92cff6fca56b6db2cf60d25a2fe702f8af4a5d2c
+| # | 实验 | 验证内容 | 依赖 | 状态 |
+|---|---|---|---|---|
+| 6.0 | `exp01_smoke` | 端到端链路 + 3 周期滚动 | 阶段 0/2 | [x] |
+| 6.1 | `exp02_selection_scale` | 第一阶段规模压缩:\|T_t\| → \|T_t^sel\| 压缩率、选择耗时、α 敏感度 | 阶段 3 | [ ] |
+| 6.2 | `exp03_rolling_dynamic` | 滚动闭环:完成率、平均等待、`K_avail(t)` 利用率、故障恢复 | 阶段 2 | [ ] |
+| 6.3 | `exp04_ablation` | 消融:去掉 W / G / ΔC / 3D 地形代价 | 阶段 1 | [ ] |
+| 6.4 | `exp05_solver_compare` | 对比:DMDE vs greedy vs random | 阶段 4 | [ ] |
+| 6.5 | 指标规范化 | `metrics.json` 字段:`n_completed`、`completion_rate`、`avg_wait`、`total_cost`、`solve_time_ms`、`K_avail_mean` | - | [x] exp01 已产出 |
 
-**规模提醒**:`build_pairwise_costs` 实测约 **260 μs/对**,O(n2)。任务数 100 → 约 2.7 s,300 → 约 24 s,500 → 约 66 s。设计 exp02 规模上限时先算这笔账;若要上更大规模,优先做代价矩阵缓存/增量更新,**不要**先去动坐标转换(那部分只占 234 ms 一次性)。
+**规模提醒**:`build_pairwise_costs` 实测约 **260 μs/对**,O(n²)。任务数 100 → 约 2.7 s,
+300 → 约 24 s。设计 exp02 规模上限时先算这笔账;若要上更大规模,优先做代价矩阵
+缓存/增量更新,**不要**先去动坐标转换(那部分只占 234 ms 一次性)。
+
+另外 DEM 重采样(`cost.dem_step_m`)也是一次性成本,当前 200 m 网格约 35 万点,
+实测秒级;步长调到 100 m 会翻 4 倍,注意权衡。
 
 ---
 
 ## 7. 阶段 6:可视化与论文产物(P3)
 
-<<<<<<< HEAD
-| #   | 任务                                                                       |
-| --- | -------------------------------------------------------------------------- |
-| 7.1 | 任务分配图：机巢 / UAV 航次 / 任务点在局部平面上的分布（`plot/`）          |
-| 7.2 | 收敛曲线：DMDE 代数 vs 目标值（`cost_history`）                            |
-| 7.3 | 滚动时间线：`T_t` 各来源规模、`K_avail(t)` 随 t 变化                       |
-| 7.4 | 三维代价场：垂直切面剖面 + 地形叠加（已有`vertical_section` 输出可直接用） |
-=======
-| # | 任务 |
-|---|---|
-| 7.1 | 任务分配图:机巢 / UAV 航次 / 任务点在局部平面上的分布(`plot/`) |
-| 7.2 | 收敛曲线:DMDE 代数 vs 目标值(`cost_history`) |
-| 7.3 | 滚动时间线:`T_t` 各来源规模、`K_avail(t)` 随 t 变化 |
-| 7.4 | 三维代价场:垂直切面剖面 + 地形叠加(已有 `vertical_section` 输出可直接用) |
->>>>>>> 92cff6fca56b6db2cf60d25a2fe702f8af4a5d2c
+| # | 任务 | 状态 |
+|---|---|---|
+| 7.1 | 任务分配图:机巢 / UAV 航次 / 任务点在局部平面上的分布(`plot/`) | [ ] |
+| 7.2 | 收敛曲线:DMDE 代数 vs 目标值(`cost_history`) | [ ] 数据已产出(`cycles[].muas`),未绘图 |
+| 7.3 | 滚动时间线:`T_t` 各来源规模、`K_avail(t)` 随 t 变化 | [ ] 数据在 `metrics.json`,未绘图 |
+| 7.4 | 三维代价场:垂直切面剖面 + 地形叠加 | [ ] |
 
 ---
 
 ## 8. 建议推进顺序
 
 ```
-阶段 0(打通断点)──┬─→ 阶段 1(约束补全)─→ 阶段 5 exp04 消融
-                    │
-                    └─→ 阶段 2(滚动闭环)─→ 阶段 3(任务到达)─→ 阶段 5 exp02/exp03
-                                                      │
-                              阶段 4(对照方法)──────┴─→ 阶段 5 exp05 对比
-                                                      └─→ 阶段 6 可视化
+阶段 0(打通)✅ ──┬─→ 阶段 1 剩余(2.2 三维可达性、2.3/2.4 约束落位)
+                  │
+                  └─→ 阶段 2 剩余(3.3 局部重规划)─→ 阶段 3(到达模型/真实任务数据)
+                                                        │
+                              阶段 4(对照方法)──────┴─→ 阶段 5 exp02/03/04/05
+                                                        └─→ 阶段 6 可视化
 ```
 
-**关键路径**:阶段 0 → 阶段 2 → 阶段 3 → exp02/exp03。
-这条链上任何一环没通,论文的"动态滚动"实验就出不来。
+**当前关键路径**:阶段 4(baselines)→ exp05 对比实验。
+没有对照方法,论文 §5 的「改进 DMDE」无法给出相对基线的提升幅度。
 
-**可并行**:阶段 4(baselines)不依赖阶段 1/2,随时可做;阶段 6 的收敛曲线可在阶段 0 完成后立即产出。
+**但优先级高于 baselines 的是 2.6(终点机巢进编码)**——它是论文创新点第 3 条
+「终点可选的统一编码」的自证前提。编码不改,exp05 只能证明"DMDE + 事后补丁"
+优于 greedy,无法支撑"统一编码扩展"这个宣称。
+
+文档 §1 第 3 条另给了对照思路:**联合优化(精确解)仅用于小规模验证或离线
+性能上界对比**。即 exp05 除 greedy / random 外,可加一个小规模 Gurobi/穷举上界,
+说明"两阶段分层解与联合最优的 gap"。
 
 ---
 
 ## 9. 风险与提示
 
-1. **`repair_rules` 是质量瓶颈**。三个小文件看着不起眼,但它们决定连续个体如何稳定映射到可行离散解(§5(4))。建议每个规则配单测,尤其是 `overloaded`(N>M)与 `balanced`(N=M)两种模式的差异。
-2. **三维可达性工作量不确定**。§4.3 列了"三维地理环境约束",但 `vertical_section.py` 明确只做代价近似。若完全实现三维可飞性搜索会显著增加计算量,建议先做**离地余量 + 禁飞区掩膜**的轻量版,把完整航迹搜索留给第 4 章。
-3. **O(n2) 代价矩阵**是实验规模的天花板(见 §6 规模提醒)。
-4. **`exp01_smoke` 的 `n_uavs: 32` 是推算值**(8 巢 × 容量 4),若机队规模不同需同步修改。
+1. **`repair_rules` 仍是质量瓶颈**。三个小文件决定连续个体如何稳定映射到可行离散解。
+   建议补单测,尤其是 `overloaded`(N>M)与 `balanced`(N=M)的差异
+   —— 虽然本问题走 srp,但换规模时可能落到别的分支。
+2. **三维可达性工作量不确定**。建议先做「离地余量 + 禁飞区掩膜」的轻量版,
+   完整航迹搜索留给第 4 章。
+3. **O(n²) 代价矩阵**是实验规模天花板(见 §6)。
+4. **`exp01_smoke` 的 `problem.n_uavs`**:设为 `n_nests × nest_capacity` 即满泊位,
+   会触发容量约束;设小一些则容量不紧张。做容量灵敏度时改这一个字段即可。
+5. **环境**:`pyproject.toml` 已补 `numpy` / `pillow`(DEM 栅格解码惰性依赖),
+   用 `uv sync` 建 `.venv` 后运行;系统 Python 未装这些包。

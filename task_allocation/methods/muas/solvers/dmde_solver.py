@@ -38,6 +38,19 @@ from ..operators.mutation import mutate_population
 from ..operators.extinction import should_extinct, apply_extinction
 
 
+class _EvalResult:
+    """最小化评估结果载体（供 Lamarckian 回写取用被评价的解）。
+
+    仅持有 ``fitness`` 与 ``solution`` 两个字段，避免与评估器自身的
+    ``EvalResult`` 强耦合。"""
+
+    __slots__ = ("fitness", "solution")
+
+    def __init__(self, fitness: float, solution: Any) -> None:
+        self.fitness = fitness
+        self.solution = solution
+
+
 # ---------------------------------------------------------------------------
 # 配置
 # ---------------------------------------------------------------------------
@@ -67,6 +80,11 @@ class DMDEConfig:
     seed: int | None = None
     verbose: bool = False
     log_interval: int = 100
+    # Lamarckian 回写（TODO §2.7）：获胜个体在评价中被修复（_prune /
+    # _repair_range / 终点机巢）后，把修复结果写回其基因，使后继代际的差分变异
+    # 围绕修复后的可行子空间展开，而非未修复空间。依赖评估器提供的
+    # ``lamarckian_reencode`` 方法；缺失或失败时静默回退到原行为。
+    lamarckian: bool = True
 
 
 # ---------------------------------------------------------------------------
@@ -113,12 +131,16 @@ class DMDESolver(BaseOptimizer):
                 fitness_evaluator: 适应度评估器（必须）。
                 uavs: UAV 列表（可选，用于评估器）。
                 targets: 目标列表（可选，用于评估器）。
+                n_nests: 机巢数量 B（可选）。``>0`` 时终点机巢作为航次终止节点
+                    进入编码，与任务一同参与差分进化（论文 §5(1)(2)）。
 
         Returns:
             SolverResult 实例。
         """
         cfg = self._cfg
         fitness_evaluator = kwargs.get("fitness_evaluator")
+        # 结构扩展参数：仅透传给编码 / 反映射，不改动任何进化算子
+        n_nests = int(kwargs.get("n_nests", 0) or 0)
 
         if fitness_evaluator is None:
             raise ValueError("fitness_evaluator must be provided.")
@@ -135,7 +157,7 @@ class DMDESolver(BaseOptimizer):
             model_type = "srp"
 
         # ---- Step 1: 初始化种群 (算法 3.1 行 01-06) ----
-        encoder = PopulationEncoder(cost_matrix, n_uavs, n_targets)
+        encoder = PopulationEncoder(cost_matrix, n_uavs, n_targets, n_nests=n_nests)
         population = encoder.generate(cfg.pop_size, seed=cfg.seed)
 
         # 评估初始种群
@@ -171,16 +193,40 @@ class DMDESolver(BaseOptimizer):
                 # 反映射 (公式 3-7, 规则 3.4/3.5/3.6)
                 child = inverse_phi(
                     trial_vectors[i], cost_matrix, n_uavs, n_targets, model_type,
-                    rng=rng, temperature=temperature,
+                    rng=rng, temperature=temperature, n_nests=n_nests,
                 )
 
-                # 评估适应度
-                child.fitness = self._evaluate(
+                # 评估适应度（保留完整 EvalResult，供 Lamarckian 回写使用）
+                eval_result = self._evaluate_result(
                     child, fitness_evaluator, cost_matrix, n_uavs=n_uavs
                 )
+                child.fitness = eval_result.fitness
 
                 # 贪婪选择 (算法 3.1 行 28-30)
                 if child.fitness < population[i].fitness:
+                    # Lamarckian 回写（TODO §2.7）：把修复后的解写回获胜个体基因，
+                    # 使下一代差分变异围绕修复后的可行子空间展开。
+                    if (
+                        cfg.lamarckian
+                        and hasattr(fitness_evaluator, "lamarckian_reencode")
+                        and eval_result.solution is not None
+                    ):
+                        try:
+                            re_encoded = fitness_evaluator.lamarckian_reencode(
+                                child,
+                                eval_result.solution,
+                                cost_matrix,
+                                n_uavs,
+                                n_targets,
+                                n_nests,
+                            )
+                            if re_encoded is not None:
+                                re_encoded.fitness = child.fitness
+                                child = re_encoded
+                        except Exception:
+                            # 任何异常（长度/键缺失等）都回退到原 child，保证 DE 矩阵安全
+                            pass
+
                     population[i] = child
                     if child.fitness < best_individual.fitness:
                         best_individual = child.copy()
@@ -198,6 +244,7 @@ class DMDESolver(BaseOptimizer):
                     n_targets,
                     model_type,
                     rng=rng,
+                    n_nests=n_nests,
                 )
                 # 用新代价值重建种群
                 for i in range(cfg.pop_size):
@@ -209,6 +256,7 @@ class DMDESolver(BaseOptimizer):
                             n_targets,
                             model_type,
                             rng=rng,
+                            n_nests=n_nests,
                         )
                         population[i].fitness = self._evaluate(
                             population[i], fitness_evaluator, cost_matrix, n_uavs=n_uavs
@@ -239,6 +287,9 @@ class DMDESolver(BaseOptimizer):
                 "pop_size": cfg.pop_size,
                 "zeta": cfg.zeta,
                 "delta": cfg.delta,
+                "n_nests": n_nests,
+                # 编码给出的终点机巢（论文 §5(2)），供下游从最优个体还原 z_ub
+                "best_end_nests": dict(best_individual.end_nests),
             },
         )
 
@@ -254,5 +305,35 @@ class DMDESolver(BaseOptimizer):
         if not assignment:
             return 1e12  # 空方案给极大惩罚
 
-        result = fitness_evaluator.evaluate(assignment, cost_matrix, n_uavs=n_uavs)
+        # 把个体一并交给评估器，使其能读取编码中的终点机巢（论文 §5(2)）。
+        # 兼容不接受 individual 的旧评估器。
+        try:
+            result = fitness_evaluator.evaluate(
+                assignment, cost_matrix, n_uavs=n_uavs, individual=individual
+            )
+        except TypeError:
+            result = fitness_evaluator.evaluate(assignment, cost_matrix, n_uavs=n_uavs)
         return result.fitness
+
+    @staticmethod
+    def _evaluate_result(
+        individual: Individual,
+        fitness_evaluator: Any,
+        cost_matrix: np.ndarray,
+        n_uavs: int | None = None,
+    ) -> "_EvalResult":
+        """同 :meth:`_evaluate`，但返回完整结果（含被评价的解），供 Lamarckian 回写。"""
+        assignment = individual.assignment
+        if not assignment:
+            return _EvalResult(fitness=1e12, solution=None)
+
+        try:
+            result = fitness_evaluator.evaluate(
+                assignment, cost_matrix, n_uavs=n_uavs, individual=individual
+            )
+        except TypeError:
+            result = fitness_evaluator.evaluate(assignment, cost_matrix, n_uavs=n_uavs)
+        return _EvalResult(
+            fitness=getattr(result, "fitness", 1e12),
+            solution=getattr(result, "solution", None),
+        )

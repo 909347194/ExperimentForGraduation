@@ -1,3 +1,13 @@
+# exp01_smoke —— 端到端冒烟：真实机巢/DEM 场景 + 两阶段选择 + 滚动闭环
+#
+# 参数放置原则（见 experiments/README.md 与 notes.md）：
+#   data/      实测事实（机巢经纬度、DEM 栅格），跨实验复用，不随实验改
+#   config.yaml 本次实验设定：规模、容量、算法与超参，做灵敏度时只改这里
+#   methods/   算法实现，不读配置、不关心数据从哪来
+#
+# 除 data 段外，以下每个数值都会被 run.py 显式读取并传给对应模块；
+# 新增可调项请同步在 notes.md 的「参数放哪里」表中登记。
+
 experiment:
     name: exp01_smoke
     seed: 42
@@ -13,19 +23,114 @@ data:
 
 # 本实验的问题规模设定（改这里做规模/容量灵敏度，不动数据文件）
 problem:
-    n_tasks: 10
     n_nests: 8 # 用前 8 个机巢（CSV 共 8 条）
     nest_capacity: 4 # 单机巢容量（架）
-    n_uavs: 24 # = n_nests × nest_capacity
+    n_uavs: 24 # 机队规模（<= n_nests × nest_capacity 才不初始超容）
+    uav_speed: 15.0 # m/s
+    uav_max_range: 120000.0 # 满电航程（m）；机巢跨度约 90 km，需留足余量
 
+# 合成任务点（暂无实测任务数据；后续换 data/task_location_data.csv 时
+# 只需替换生成函数，本节参数可平移）
+tasks:
+    source: synthetic
+    n_tasks: 10 # 第 1 周期到达的初始任务数
+    spread_m: 12000.0 # 相对锚点机巢的散布半径（m）
+    reward_min: 1.0
+    reward_max: 10.0
+    deadline_min: 3600.0 # latest - arrival 的下界（s）
+    deadline_max: 14400.0
+    anchor_to_nests: true
+
+# 算法开关（对齐 Chapter3_README §8 技术路线）
 method:
     selection: marginal_gain
     muas: dmde
-    rolling: false
+    rolling: true
 
+# ── 第一阶段：动态任务选择（论文 §3）──────────────────────────────
+selection:
+    alpha: 2.5 # 预筛选系数 α∈[2,3]：候选规模 Top-αK
+    weights: # 基础优先级 P_i(t) 的五项权重（会自动归一化）
+        w_r: 0.30 # 任务收益
+        w_u: 0.25 # 时间紧迫度
+        w_w: 0.15 # 等待补偿
+        w_s: 0.15 # 空间协同增益
+        w_c: 0.15 # 执行代价（负号项）
+    synergy_radius: 5000.0 # 空间协同的作用半径（m）
+    wait_scale: 3600.0 # 等待补偿的时间尺度（s）
+    feasibility:
+        range_margin: 0.95 # 航程安全裕度
+        check_time_window: true
+        budget_factor: 1.0 # 机群总航程预算系数
+    marginal:
+        eps: 1.0 # 边际代价地板，与距离同量纲（m）
+        max_selected: null # null → 由 max_ratio × K_avail 决定
+        max_ratio: 2.0
+        min_marginal_ratio: 0.0
+
+# ── 第二阶段：选择性多机巢 MUAS（论文 §4-§5）─────────────────────
+muas:
+    allow_unassigned: true # 允许 y_j = 0（任务保留至下一周期）
+    allow_idle_uav: true # 允许 n_u = 0（UAV 本周期空闲）
+    lambda_cost: 1.0e-4 # 标量化权重：-F1 + λ·F2（收益当量/米）
+    w_penalty: 1.0 # 约束违反惩罚总权重
+    w_nest_capacity: 1.0 # 机巢容量违反的惩罚权重
+    default_service_time: 60.0 # 单任务作业时长（s）
+    # 参与规划的 UAV 上限；null → 自动取 min(K_avail, M-1) 以走 srp 巡游模型
+    max_participating_uavs: null
+    participating_policy: cheapest # cheapest | first
+    prune_unprofitable: true # 剔除执行代价高于收益的任务（y_j = 0）
+    prune_margin: 0.0 # 剔除判据裕度：λ·节省 > R·(1+margin) 才剔除
+    prune_max_rounds: 8
+    # 等待补偿（论文 §3.2 的 W_i(t)）：滞留越久，有效收益越高，越难被剔除，
+    # 避免偏远任务连续多周期得不到执行而永久滞留
+    prune_wait_bonus: 1.0
+    wait_scale: 3600.0 # 等待补偿的时间尺度（s）
+    # 终点机巢是否进入编码、由差分进化搜索（论文 §5(1)(2)）。
+    # true  → 终止基因随 cost_vector 一同变异，终点是进化结果（本章方法）
+    # false → 退化为「解码后再用容量感知策略挑终点」，用于 exp04 消融对比
+    end_nest_in_encoding: true
+    # Lamarckian 回写（TODO §2.7）：把修复后的解（经 _prune / _repair_range /
+    # 终点机巢）的起始任务归属与终点机巢编码回获胜个体基因，使后继代际的
+    # 差分变异围绕修复后的可行子空间展开。关闭则退化为围绕未修复空间搜索。
+    lamarckian: false
+
+# ── DMDE 求解器超参（论文 §5 算法 3.1）────────────────────────────
 solver:
-    max_iter: 50
-    population: 20
+    population: 20 # pop_size
+    max_iter: 40 # max_generations
+    zeta: 3 # 动态交叉率曲率指数 ζ
+    delta: 0.3 # 灭绝临界值 δ
+    seed: 42
+    verbose: false
+    log_interval: 10
+
+# ── 三维地理代价（论文 §5(5)）─────────────────────────────────────
+cost:
+    dem_step_m: 200.0 # DEM 重采样网格间距（m），越小越精细越慢
+    dem_margin_m: 20000.0 # 网格范围相对机巢包围盒的外扩（m）
+    min_clearance: 50.0 # 最小离地余量（m）
+    max_clearance: 300.0 # 巡航离地高度上限（m）
+    climb_rate: 0.15 # 爬升/下降斜率（相对水平距离）
+    num_samples: 200 # 单条垂直切面采样点数
+    nest_offset: 1000000 # 机巢在代价键空间的偏移量
+
+# ── 动态滚动闭环（论文 §6）───────────────────────────────────────
+rolling:
+    enabled: true
+    n_cycles: 3 # 滚动周期数
+    cycle_length: 600.0 # 每周期推进的时间（s）
+    complete_after_cycle: true # 周期末把执行中的任务判为完成
+    recharge_at_nest: true # 降落后机巢换电，剩余航程回满
+    arrivals_per_cycle: [5, 5] # 第 2 周期起每周期的新到达任务数
+    strict_capacity: false # true → 落地期超容直接抛异常（调试用）
+    faults: {} # 故障注入：{周期号: [uav_id, ...]}，验证 T_t^release 链路
+    events:
+        on_uav_fault: true
+        on_nest_unavailable: true
+        on_urgent_task: true
+        reward_threshold: 8.0
+        slack_threshold: 900.0
 
 run:
     save_results: true

@@ -68,6 +68,7 @@ def apply_extinction(
     model_type: str,
     env_pressure_max: float = 0.3,
     rng=None,
+    n_nests: int = 0,
 ) -> tuple[np.ndarray, list[int]]:
     """执行灭绝操作。
 
@@ -87,6 +88,8 @@ def apply_extinction(
         model_type:         分配模型类型。
         env_pressure_max:   最大环境压力（0~0.3）。
         rng:                随机数生成器。
+        n_nests:            机巢数量。终点机巢进编码时，基因序列多出 K 个终止
+                            基因，重置个体必须按同一长度生成，否则无法广播。
 
     Returns:
         (new_cost_vectors, survived_indices) 更新后的代价值矩阵和存活索引。
@@ -119,7 +122,7 @@ def apply_extinction(
         if i not in survived:
             # 生成随机新个体的代价值向量
             new_cost_vectors[i] = _random_cost_vector(
-                cost_matrix, n_uavs, n_targets, model_type, rng
+                cost_matrix, n_uavs, n_targets, model_type, rng, n_nests=n_nests
             )
 
     return new_cost_vectors, survived
@@ -131,10 +134,15 @@ def _random_cost_vector(
     n_targets: int,
     model_type: str,
     rng,
+    n_nests: int = 0,
 ) -> np.ndarray:
-    """生成随机个体的代价值向量。"""
+    """生成随机个体的代价值向量。
+
+    长度必须与当前种群一致：终点机巢进编码后，SRP 个体的基因数由
+    ``M`` 变为 ``M + K``（多出 K 个终止基因）。
+    """
     from ..representation.encoder import PopulationEncoder
 
-    encoder = PopulationEncoder(cost_matrix, n_uavs, n_targets)
+    encoder = PopulationEncoder(cost_matrix, n_uavs, n_targets, n_nests=n_nests)
     ind = encoder.generate(1)[0]
     return ind.cost_vector
