@@ -34,6 +34,7 @@ from task_allocation.common.types import (
     UAV,
     UAVTour,
 )
+from task_allocation.methods.muas.constraints.nest_capacity import check_nest_capacity
 
 
 @dataclass
@@ -44,8 +45,13 @@ class MUASProblemConfig:
     allow_idle_uav: bool = True
     w_time: float = 0.0
     w_penalty: float = 1.0
+    # 机巢容量 / 可用性约束的惩罚权重（论文 §4.3）；判定见 constraints.nest_capacity
+    w_nest_capacity: float = 1.0
     lambda_cost: float = 1.0
     default_service_time: float = 0.0
+    # 本周期的规划时刻：时间窗游标从它起算，而不是从 0
+    # （滚动时域下任务 latest 是绝对时刻，游标起点必须跟着周期走）
+    current_time: float = 0.0
 
 
 def _euclid(
@@ -109,6 +115,9 @@ class SelectiveMUASProblem:
     uavs: list[UAV]
     nests: list[Nest]
     costs: CostProvider
+    # 全部无人机（含 BUSY / FAULT），仅用于推导机巢占用；
+    # 容量不落第二份状态，一律从 uav.nest_id 现算（design_nest_state.md §0）
+    fleet_uavs: list[UAV] | None = None
     config: MUASProblemConfig = field(default_factory=MUASProblemConfig)
     task_by_id: dict[int, Task] = field(init=False, repr=False)
     uav_by_id: dict[int, UAV] = field(init=False, repr=False)
@@ -337,11 +346,23 @@ class SelectiveMUASProblem:
                 details["violations"].append(f"nest_unavailable_{tour.end_nest_id}")
                 penalty += 100.0
 
+        # 机巢容量约束（论文 §4.3）：按「周期末归属」判定，不是按返回架数
+        if self.nests:
+            assignments = {t.uav_id: t.end_nest_id for t in solution.tours}
+            fleet = self.fleet_uavs if self.fleet_uavs is not None else self.uavs
+            cap_report = check_nest_capacity(fleet, self.nests, assignments)
+            details["nest_capacity"] = cap_report.as_dict()
+            for nest_id in cap_report.violations:
+                overflow = cap_report.per_nest[nest_id]["overflow"]
+                if overflow > 0:
+                    details["violations"].append(f"nest_capacity_{nest_id}")
+            penalty += self.config.w_nest_capacity * cap_report.penalty
+
         for tour in solution.tours:
             u = self.uav_by_id.get(tour.uav_id)
             if u is None or not tour.task_ids:
                 continue
-            t_cursor = 0.0
+            t_cursor = float(self.config.current_time)
             prev_pos = tour.start_position
             speed = max(u.speed, 1e-6)
             for tid in tour.task_ids:
@@ -370,7 +391,14 @@ class SelectiveMUASProblem:
         nests: Sequence[Nest] | None = None,
         pairwise_cost: Mapping[tuple[int, int], float] | None = None,
         config: MUASProblemConfig | None = None,
+        fleet_uavs: Sequence[UAV] | None = None,
     ) -> SelectiveMUASProblem:
+        """组装问题实例。
+
+        Args:
+            fleet_uavs: 全部无人机（含非空闲），用于推导机巢占用；
+                        省略时退化为 ``uavs`` 本身。
+        """
         avail = [u for u in uavs if u.is_available]
         nest_list = list(nests or [])
         costs = build_cost_provider(tasks, nest_list, avail, pairwise=pairwise_cost)
@@ -379,6 +407,7 @@ class SelectiveMUASProblem:
             uavs=avail,
             nests=nest_list,
             costs=costs,
+            fleet_uavs=list(fleet_uavs) if fleet_uavs is not None else list(uavs),
             config=config or MUASProblemConfig(),
         )
 

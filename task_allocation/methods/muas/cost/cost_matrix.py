@@ -26,6 +26,10 @@ class CostMatrixBuildResult:
     provider: CostProvider
     uav_target: np.ndarray  # (n_uavs, n_tasks)
     task_task: np.ndarray  # (n_tasks, n_tasks)
+    # 终点机巢代价（论文 §5(2)：终点作为航次终止节点进编码）
+    task_nest: np.ndarray = field(default_factory=lambda: np.zeros((0, 0)))  # (n_tasks, n_nests)
+    uav_nest: np.ndarray = field(default_factory=lambda: np.zeros((0, 0)))  # (n_uavs, n_nests)
+    n_nests: int = 0
     details: dict[tuple[int, int], CostEstimationResult] = field(default_factory=dict)
 
 
@@ -81,17 +85,24 @@ def build_pairwise_costs(
                 details[(ti.id, tj.id)] = res
 
     # Task -> Nest / UAV start -> Nest（返航）
-    for n in nests:
+    # 同时落成矩阵，供终止基因在「末任务 → 机巢」代价行上做匹配
+    n_b = len(nests)
+    task_nest = np.zeros((n_t, n_b))
+    uav_nest = np.zeros((n_u, n_b))
+
+    for jn, n in enumerate(nests):
         n_key = nest_offset + n.id
-        for t in tasks:
+        for i, t in enumerate(tasks):
             res = est.estimate(t.position, n.position, weight=1.0)
             pairwise[(t.id, n_key)] = res.cost
+            task_nest[i, jn] = res.cost
             if store_details:
                 details[(t.id, n_key)] = res
-        for u in avail:
+        for i, u in enumerate(avail):
             u_key = -(1 + u.id)
             res = est.estimate(u.position, n.position, weight=1.0)
             pairwise[(u_key, n_key)] = res.cost
+            uav_nest[i, jn] = res.cost
             if store_details:
                 details[(u_key, n_key)] = res
 
@@ -104,5 +115,8 @@ def build_pairwise_costs(
         provider=provider,
         uav_target=uav_target,
         task_task=task_task,
+        task_nest=task_nest,
+        uav_nest=uav_nest,
+        n_nests=n_b,
         details=details,
     )

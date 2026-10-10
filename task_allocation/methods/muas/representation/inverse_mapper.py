@@ -16,6 +16,12 @@ from .encoder import Gene, Individual
 from .repair_rules.nearest_match import nearest_match_adaptive
 from .repair_rules.unique_filter import mask_balanced, mask_overloaded
 from .repair_rules.invalid_mutator import repair_invalid
+from .repair_rules.terminal_nest import (
+    TERMINAL_UAV_ID,
+    TOUR_UAV_ID,
+    normalize_srp_segments,
+    split_segments,
+)
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -30,10 +36,14 @@ def inverse_phi(
     model_type: str,
     rng: np.random.Generator | None = None,
     temperature: float = 0.5,
+    n_nests: int = 0,
 ) -> Individual:
     """反映射：将连续代价值向量还原为离散个体。
 
     对应公式 (3-7) 和算法 3.1 的 17-26 行。
+
+    结构扩展（论文 §5(1)(2)）：``n_nests > 0`` 时，终点机巢作为航次的
+    **特殊终止节点**进入编码，由差分进化的代价值匹配决定，而非解码后启发式挑选。
 
     改进：引入温度参数 temperature (0.0~1.0)，
     控制反映射的随机程度：
@@ -48,6 +58,7 @@ def inverse_phi(
         model_type:    分配模型类型。
         rng:           随机数生成器。
         temperature:   温度值 (0.0 ~ 1.0)。
+        n_nests:       机巢数量 B；``>0`` 时终点机巢进入编码。
 
     Returns:
         可行的子代个体。
@@ -56,7 +67,9 @@ def inverse_phi(
         rng = np.random.default_rng()
 
     if model_type == "srp":
-        return _inverse_phi_srp(cost_vector, cost_matrix, n_uavs, n_targets, rng, temperature)
+        return _inverse_phi_srp(
+            cost_vector, cost_matrix, n_uavs, n_targets, rng, temperature, n_nests
+        )
     else:
         return _inverse_phi_standard(cost_vector, cost_matrix, n_uavs, n_targets, model_type, rng, temperature)
 
@@ -280,6 +293,7 @@ def _inverse_phi_srp(
     n_targets: int,
     rng: np.random.Generator,
     temperature: float = 0.5,
+    n_nests: int = 0,
 ) -> Individual:
     """SRP 反映射（N<M 巡游模型）。
 
@@ -287,6 +301,12 @@ def _inverse_phi_srp(
     1. UAV→Target 匹配使用温度自适应采样。
     2. 巡游顺序构建后执行扰动（swap/insert/reverse），
        打破贪心最近邻的确定性。
+
+    结构扩展（论文 §5(1)(2)）：
+    3. 终点机巢作为航次**终止节点**进入编码：用 ``cost_vector`` 末尾的
+       K 个分量在「末任务 → 机巢」代价行上做温度自适应匹配，
+       因此终点是**进化搜索的结果**。
+    4. 扰动后强制做段结构规范化（见 :func:`normalize_srp_segments`）。
     """
     cm_work = cost_matrix.copy().astype(float)
     mask = np.zeros_like(cm_work, dtype=bool)
@@ -364,7 +384,108 @@ def _inverse_phi_srp(
     if temperature > 0.1:
         _perturb_srp_tour(genes, cm_work, n_uavs, n_targets, temperature, rng)
 
+    # ── 第四阶段：段结构规范化 + 终点机巢入编码（论文 §5(1)(2)）──
+    # reverse / insert 扰动会把 uav_id >= 0 的起始基因卷进子序列
+    # （实测出现过起始顺序 [0, 2, 1]），必须先重建严格的航次分段，
+    # 终止基因才可能稳定落在段末。
+    ends = (
+        _select_end_nests(
+            genes,
+            cm_work,
+            cost_vector,
+            n_uavs,
+            n_targets,
+            n_nests,
+            temperature,
+            rng,
+        )
+        if n_nests > 0
+        else None
+    )
+    genes = normalize_srp_segments(
+        genes, cm_work, n_uavs, n_targets, n_nests, ends_override=ends
+    )
+
     return Individual(genes=genes, model_type="srp")
+
+
+def _select_end_nests(
+    genes: list[Gene],
+    cost_matrix: np.ndarray,
+    cost_vector: np.ndarray,
+    n_uavs: int,
+    n_targets: int,
+    n_nests: int,
+    temperature: float,
+    rng: np.random.Generator,
+) -> dict[int, int]:
+    """为每架 UAV 选定终点机巢（反映射阶段的终止基因取值）。
+
+    ``cost_vector`` 的布局约定（与 ``PopulationEncoder`` 的基因顺序对称）：
+
+        ``[0, K)``              起始基因的代价值（UAV → 首个任务）
+        ``[K, K+M)``            巡游段（srp 下巡游用贪心构建，此处未直接使用）
+        ``[K+M, K+M+K)``        终止基因的代价值（末任务 → 机巢）
+
+    Returns:
+        ``{uav_id: nest_idx}``。
+    """
+    routes, _ = split_segments(genes)
+    ends: dict[int, int] = {}
+
+    for i in range(n_uavs):
+        seg = routes.get(i, [])
+        # 有任务时从「末任务」行取机巢代价；空航次时从 UAV 起点行取
+        row = (n_uavs + seg[-1]) if seg else i
+
+        cv_idx = n_uavs + n_targets + i
+        cv = float(cost_vector[cv_idx]) if cv_idx < len(cost_vector) else float("nan")
+
+        ends[i] = _pick_nest_by_cost(
+            cv, cost_matrix, row, n_targets, n_nests, temperature, rng
+        )
+
+    return ends
+
+
+def _pick_nest_by_cost(
+    target_value: float,
+    cost_matrix: np.ndarray,
+    row: int,
+    n_targets: int,
+    n_nests: int,
+    temperature: float,
+    rng: np.random.Generator,
+) -> int:
+    """在机巢列上做温度自适应匹配，返回机巢下标。
+
+    与 :func:`nearest_match_adaptive` 同源：温度高时 softmax 采样（探索），
+    温度低时取最近（开发）。
+    """
+    if n_nests <= 0:
+        return 0
+
+    cols = [min(n_targets + b, cost_matrix.shape[1] - 1) for b in range(n_nests)]
+    if row >= cost_matrix.shape[0]:
+        return 0
+    costs = np.array([float(cost_matrix[row, c]) for c in cols], dtype=float)
+
+    if not np.isfinite(target_value):
+        return int(np.argmin(costs))
+
+    diffs = np.abs(costs - target_value)
+    if temperature < 0.1:
+        return int(np.argmin(diffs))
+
+    tau = max(0.01, temperature * 2.0)
+    spread = float(np.std(diffs))
+    if spread <= 1e-8:
+        return int(np.argmin(diffs))
+    logits = -diffs / spread / tau
+    logits -= logits.max()
+    probs = np.exp(logits)
+    probs /= probs.sum()
+    return int(rng.choice(n_nests, p=probs))
 
 
 def _perturb_srp_tour(
@@ -441,9 +562,13 @@ def _recalculate_srp_tour_costs(
             previous_target = gene.target_id
             continue
 
+        if gene.uav_id == TERMINAL_UAV_ID:
+            # 终止基因（终点机巢）不是巡游边，不参与巡游代价重算
+            continue
+
         if previous_target is not None:
             genes[index] = Gene(
-                uav_id=-1,
+                uav_id=TOUR_UAV_ID,
                 target_id=gene.target_id,
                 cost=float(cost_matrix[n_uavs + previous_target, gene.target_id]),
             )

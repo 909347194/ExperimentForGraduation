@@ -27,19 +27,45 @@
 
 from __future__ import annotations
 
-from typing import Iterable, Iterator, Sequence
+from typing import Callable, Iterable, Iterator, Sequence
 
 from task_allocation.common.types import (
     AllocationSolution,
+    Nest,
     UAV,
     UAVStatus,
+)
+from task_allocation.methods.muas.constraints.nest_capacity import (
+    CapacityReport,
+    check_nest_capacity,
+    fleet_occupancy,
 )
 
 __all__ = [
     "available_uavs",
     "count_available",
     "UAVFleet",
+    "CapacityViolation",
 ]
+
+
+class CapacityViolation(RuntimeError):
+    """落地期机巢容量硬约束被违反（design_nest_state.md §6.2）。
+
+    规划期的解在执行反馈后可能失效，落地期是最后一道防线：
+    超容时拒绝回写并告警，不得静默接受。
+    """
+
+    def __init__(self, report: CapacityReport) -> None:
+        self.report = report
+        super().__init__(
+            "机巢容量超容，拒绝回写解："
+            + ", ".join(
+                f"nest {nid} 末态 {r['occupied_after']}/{r['capacity']}"
+                for nid, r in report.per_nest.items()
+                if nid in report.violations
+            )
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -307,25 +333,96 @@ class UAVFleet:
     # 与 MUAS 解对接
     # ------------------------------------------------------------------
 
-    def apply_solution(self, solution: AllocationSolution) -> list[int]:
-        """把 MUAS 解回写到机队:按 tour 绑定任务并置 BUSY。
+    # ------------------------------------------------------------------
+    # 机巢归属（nest_id 的三个写点之二/三；占用一律从 nest_id 推导）
+    # ------------------------------------------------------------------
 
-        - ``tour.task_ids`` 非空 -> ``assign``(BUSY + 绑定)
-        - ``tour.task_ids`` 为空 -> 本周期空闲,回到 IDLE
-        - 未出现在 ``solution.tours`` 中的 UAV 不动(论文:允许部分 UAV 保持空闲)
+    def nest_occupancy(self, nests: Sequence[Nest] | None = None) -> dict[int, int]:
+        """各机巢当前归属架数（含飞行中、含未降落）。
 
-        返回本周期进入 BUSY 的 uav_id。
+        给出 ``nests`` 时为所有机巢补 0，便于直接并进 metrics。
+        """
+        occ = fleet_occupancy(self._uavs.values())
+        if nests is not None:
+            for n in nests:
+                occ.setdefault(n.id, 0)
+        return occ
+
+    def reassign_nest(self, uav_id: int, nest_id: int | None) -> UAV:
+        """显式改归属（分配决策 / 回收 / 转场）；触发容量变化。
+
+        这是 ``nest_id`` 的**唯一写点**之一（另一个是 :meth:`decommission`）：
+        起飞与降落一律不改归属（design_nest_state.md §5）。
+        """
+        uav = self.get(uav_id)
+        uav.nest_id = nest_id
+        return uav
+
+    def decommission(self, uav_id: int) -> UAV:
+        """退役：清空归属，释放名额。"""
+        uav = self.get(uav_id)
+        uav.nest_id = None
+        uav.status = UAVStatus.FAULT
+        self._bindings[uav_id] = []
+        return uav
+
+    # ------------------------------------------------------------------
+    # 解回写
+    # ------------------------------------------------------------------
+
+    def apply_solution(
+        self,
+        solution: AllocationSolution,
+        nests: Sequence[Nest] | None = None,
+        *,
+        strict_capacity: bool = True,
+        on_violation: Callable[[CapacityReport], None] | None = None,
+    ) -> list[int]:
+        """把 MUAS 解回写到机队：终点机巢 ``z_ub`` + 任务绑定 + 状态。
+
+        顺序严格为**先校验、后写入**（design_nest_state.md §9.3）：
+
+        1. 落地期硬校验：按周期末归属算容量，超容则拒绝并告警；
+        2. 写入 ``nest_id``（唯一写点）；
+        3. 绑定任务并置 BUSY（空航次回到 IDLE）。
+
+        Args:
+            solution:        MUAS 解。
+            nests:           机巢列表；给出则执行容量硬校验。
+            strict_capacity: True 时超容直接抛 :class:`CapacityViolation`；
+                             False 时仅通过 ``on_violation`` 告警并继续写入。
+            on_violation:    容量违反的回调（用于记日志 / metrics）。
+
+        Returns:
+            本周期进入 BUSY 的 uav_id。
         """
         if not solution.validate_unique_tasks():
             raise ValueError("解中存在重复分配的任务,无法回写机队状态")
 
+        # 1) 硬校验（与规划期共用同一份判定，避免口径漂移）
+        if nests:
+            assignments = {t.uav_id: t.end_nest_id for t in solution.tours}
+            report = check_nest_capacity(list(self._uavs.values()), nests, assignments)
+            if report.violations:
+                if on_violation is not None:
+                    on_violation(report)
+                if strict_capacity:
+                    raise CapacityViolation(report)
+
+        # 2) 写入终点机巢（唯一写点）
+        for tour in solution.tours:
+            if tour.end_nest_id is not None:
+                self.reassign_nest(tour.uav_id, tour.end_nest_id)
+
+        # 3) 状态与绑定
         busy_ids: list[int] = []
         for tour in solution.tours:
             if tour.task_ids:
                 self.assign(tour.uav_id, tour.task_ids)
                 busy_ids.append(tour.uav_id)
             else:
-                self.mark_idle(tour.uav_id)
+                if self.get(tour.uav_id).status == UAVStatus.IDLE:
+                    self.mark_idle(tour.uav_id)
         return busy_ids
 
     # ------------------------------------------------------------------
@@ -347,6 +444,9 @@ class UAVFleet:
         return {
             "current_time": self._current_time,
             "stats": self.stats(),
+            "nest_occupancy": {
+                str(k): v for k, v in sorted(self.nest_occupancy().items())
+            },
             "uavs": [
                 {
                     "id": u.id,

@@ -69,6 +69,7 @@ class Individual:
 
         对于 SRP 模型，巡游基因（uav_id=-1）会被归属到
         前一个 UAV→Target 基因对应的 UAV。
+        终止基因（uav_id=-2）携带终点机巢，不属于任务分配，跳过。
         """
         result = []
         current_uav = -1
@@ -76,9 +77,10 @@ class Individual:
             if g.uav_id >= 0:
                 current_uav = g.uav_id
                 result.append((g.uav_id, g.target_id))
-            else:
+            elif g.uav_id == -1:
                 # 巡游基因：归属到当前 UAV
                 result.append((current_uav, g.target_id))
+            # -2 终止基因：跳过
         return result
 
     @property
@@ -90,9 +92,23 @@ class Individual:
             if g.uav_id >= 0:
                 current_uav = g.uav_id
                 routes.setdefault(current_uav, []).append(g.target_id)
-            else:
+            elif g.uav_id == -1:
                 routes[current_uav].append(g.target_id)
+            # -2 终止基因：不计入路线
         return routes
+
+    @property
+    def end_nests(self) -> dict[int, int | None]:
+        """每架 UAV 的终点机巢（论文 §5(2) 的 z_ub）。
+
+        Returns:
+            ``{uav_id: nest_idx | None}``；键为 UAV 局部下标。
+            无终止基因时值为 ``None``（由下游按容量感知策略兜底）。
+        """
+        # 延迟导入避免与 repair_rules 形成顶层循环依赖
+        from .repair_rules.terminal_nest import extract_end_nests
+
+        return extract_end_nests(self.genes)
 
     @property
     def cost_vector(self) -> np.ndarray:
@@ -131,10 +147,18 @@ class PopulationEncoder:
         cost_matrix: np.ndarray,
         n_uavs: int,
         n_targets: int,
+        n_nests: int = 0,
     ) -> None:
+        """Args:
+            cost_matrix: ``(K+M, M+B)`` 扩展代价矩阵；``B=0`` 时退化为 ``(K+M, M)``。
+            n_uavs:     UAV 数 K。
+            n_targets:  任务数 M。
+            n_nests:    机巢数 B；``>0`` 时每个航次段末尾生成终止基因。
+        """
         self._cm = cost_matrix
         self._n = n_uavs
         self._m = n_targets
+        self._b = max(int(n_nests), 0)
 
     @property
     def model_type(self) -> str:
@@ -241,6 +265,12 @@ class PopulationEncoder:
                     prev_tgt = ordered[seq - 1]
                     cost = float(self._cm[self._n + prev_tgt, tgt_id])
                     genes.append(Gene(uav_id=-1, target_id=tgt_id, cost=cost))
+
+            # 终止基因：末任务 -> 机巢（论文 §5(2)，终点机巢作为航次特殊终止节点）
+            if self._b > 0:
+                b = random.randrange(self._b)
+                cost = float(self._cm[self._n + ordered[-1], self._m + b])
+                genes.append(Gene(uav_id=-2, target_id=b, cost=cost))
 
         return Individual(genes=genes, model_type="srp")
 
