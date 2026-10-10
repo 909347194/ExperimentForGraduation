@@ -93,7 +93,7 @@ muas:
     # Lamarckian 回写（TODO §2.7）：把修复后的解（经 _prune / _repair_range /
     # 终点机巢）的起始任务归属与终点机巢编码回获胜个体基因，使后继代际的
     # 差分变异围绕修复后的可行子空间展开。关闭则退化为围绕未修复空间搜索。
-    lamarckian: false
+    lamarckian: true
 
 # ── DMDE 求解器超参（论文 §5 算法 3.1）────────────────────────────
 solver:
