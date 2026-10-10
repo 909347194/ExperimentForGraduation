@@ -49,13 +49,18 @@ def repair_invalid(
     repaired = []
 
     for _ in invalid_indices:
-        # 在未匹配位置中随机选择一个
-        available = np.argwhere(~mask)
-        if len(available) == 0:
+        # 在未匹配位置中随机选择一个。
+        # balanced / overloaded 只产生 (uav, target) 分配，候选行必须是
+        # UAV 行（row < n_uavs）；目标行属于 SRP 巡游、机巢列属于终止基因，
+        # 都不是分配关系，否则会产出越界 uav_id / target_id。
+        candidates = np.argwhere(~mask)
+        if model_type != "srp":
+            candidates = candidates[candidates[:, 0] < n_uavs]
+        if len(candidates) == 0:
             break
 
-        idx = random.randint(0, len(available) - 1)
-        row, col = available[idx]
+        idx = random.randint(0, len(candidates) - 1)
+        row, col = candidates[idx]
         cost = float(cost_matrix[row, col])
 
         if model_type == "srp" and row >= n_uavs:

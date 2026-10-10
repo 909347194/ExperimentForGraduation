@@ -1,2 +1,9 @@
-(empty)__pycache__/
-*.pyc
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# 工具自身的内部笔记，不属于论文代码
+.workbuddy/
