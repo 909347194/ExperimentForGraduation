@@ -95,6 +95,15 @@ def _inverse_phi_standard(
     """
     cm_work = cost_matrix.copy().astype(float)
     mask = np.zeros_like(cm_work, dtype=bool)
+    # balanced / overloaded 只产生 (uav, target) 分配，因此只允许在
+    # 「UAV 行 × 任务列」子矩阵内匹配：
+    #   row >= n_uavs      是巡游关系的目标行（只属于 SRP 的 uav_id=-1）
+    #   col >= n_targets   是机巢列（只属于终止基因 uav_id=-2）
+    # 两者都不构成分配关系。若不预先屏蔽，nearest_match_adaptive 与
+    # repair_invalid 都会从全矩阵取位置，产出越界 uav_id / target_id
+    # （实测 balanced 下近半数分配携带不存在的 UAV）。
+    mask[n_uavs:, :] = True
+    mask[:, n_targets:] = True
 
     genes: list[Gene] = []
     invalid_indices: list[int] = []
