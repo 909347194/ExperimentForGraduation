@@ -27,7 +27,8 @@
 | 动态任务到达 → 任务池更新 | `methods/task_pool.py` | [x] | `T_t = remain ∪ new ∪ release` 归类、周期推进、释放/过期 |
 | 当前可用 UAV 确定 | `methods/uav_state.py` | [x] | `U_t^avail` / `K_avail(t)`、状态机、UAV↔任务绑定 |
 | 任务收益/紧迫度/等待/协同/代价 | `methods/selection/priority.py` | [x] | 五项加权 `P_i(t)`,权重归一化 |
-| 基础优先级预筛选(Top-αK) | `selection/priority.top_alpha_preselect` | [x] | α∈[2,3] |
+| 基础优先级预筛选(Top-αK) | `selection/priority.top_alpha_preselect` | [x] | 候选数 = min(⌈α·K_avail⌉, cap(t))，α∈[2,3] |
+| **能力驱动规模 cap(t)** | `methods/selection/capability.py` | [x] | **新增(能力解耦)**：cap = max(min_cap, ⌊B(t)/c̃⌋)，B = budget_scale·budget_factor·Σ剩余航程；候选数与边际选择数同受其约束，规模跟着机队能力走而非只跟机数；`capability.enabled=False` 退纯机数名额(消融) |
 | 边际收益增量选择 | `methods/selection/marginal_gain.py` | [x] | `insert_delta_cost` 已实现 3D 插入式 `ΔC_i ≈ C_ai + C_ib − C_ab` |
 | 快速可行性检查 | `methods/selection/feasibility.py` | [x] | prefilter / postcheck |
 | 选择性多机巢 MUAS 模型(§4) | `methods/muas/problem.py` | [x] | 决策变量 y/x/π/z、双目标 F1/F2;已含机巢容量约束 |

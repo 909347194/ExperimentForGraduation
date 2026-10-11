@@ -6,6 +6,7 @@
 
 from task_allocation.methods.selection.pipeline import SelectionConfig, run
 from task_allocation.methods.selection.priority import PriorityConfig, PriorityWeights
+from task_allocation.methods.selection.capability import CapabilityScaleConfig
 from task_allocation.methods.selection.feasibility import FeasibilityConfig
 from task_allocation.methods.selection.marginal_gain import MarginalConfig
 
@@ -14,6 +15,7 @@ __all__ = [
     "SelectionConfig",
     "PriorityConfig",
     "PriorityWeights",
+    "CapabilityScaleConfig",
     "FeasibilityConfig",
     "MarginalConfig",
 ]
