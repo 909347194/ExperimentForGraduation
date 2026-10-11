@@ -5,6 +5,19 @@
 
 ---
 
+> **技术决策（2026-10-11）——终点机巢采用方案 A 分层求解为主线**
+>
+> - **方案 A（默认）**：DMDE 只搜任务分配与访问顺序；终点机巢由内层子问题
+>   `constraints.solve_end_nest_assignment` 精确求解（容量约束下最优终点分配，
+>   最小费用流）；返航代价经完整成本评价间接影响进化搜索。`end_nest_in_encoding` 默认 `False`。
+> - **方案 B（增强/消融，见 `pro` 分支）**：终点机巢作为终止基因进入 DMDE 联合编码
+>   （论文 §5(1)(2)），`end_nest_in_encoding=True` 启用，编码优先、内层精确分配兜底。
+> - 阶段二对比实验：固定终点 / 最近合法巢 / 贪心改派（`choose_end_nests`）/ 最优分配
+>   （`solve_end_nest_assignment`），考察总飞行成本、返航成本、可行解比例、计算时间。
+> - 注意：若容量语义含时段占用（充电位/时间窗），内层子问题需引入预计到达时间与占用时段。
+
+---
+
 ## 0. 现状盘点
 
 ### 0.1 论文技术路线 → 代码落点
@@ -19,7 +32,7 @@
 | 快速可行性检查 | `methods/selection/feasibility.py` | [x] | prefilter / postcheck |
 | 选择性多机巢 MUAS 模型(§4) | `methods/muas/problem.py` | [x] | 决策变量 y/x/π/z、双目标 F1/F2;已含机巢容量约束 |
 | 三维地理代价 `C_ij^3D`(§5(5)) | `methods/muas/cost/*` | [x] | DEM + 垂直切面 + 代价矩阵,已与真实 DEM 打通 |
-| 统一编码 / 映射 / 逆映射(§5(1)(2)(3)) | `methods/muas/representation/*` | [x] | 基因用 `uav_id` 哨兵值区分三类:`≥0` 起始 / `-1` 巡游 / **`-2` 终止(终点机巢)**;终止基因随 `cost_vector` 参与差分变异(见 §0.4、§2 的 2.6) |
+| 统一编码 / 映射 / 逆映射(§5(1)(2)(3)) | `methods/muas/representation/*` | [x] | 基因用 `uav_id` 哨兵值区分三类:`≥0` 起始 / `-1` 巡游 / `-2` 终止(终点机巢);终止基因随 `cost_vector` 参与差分变异(方案 B,`end_nest_in_encoding=True` 启用;方案 A 默认关闭,见 §0 技术决策) |
 | 进化算子 | `methods/muas/operators/*` | [x] | crossover / mutation / extinction / scale_factor |
 | 约束处理(§5(4)) | `methods/muas/constraints/` | [~] | `nest_capacity.py` 已落地(两道校验共用判定);其余约束仍在 `problem.check_feasible` |
 | 改进 DMDE 求解器(§5) | `methods/muas/solvers/dmde_solver.py` | [x] | 可导入、可求解 |
