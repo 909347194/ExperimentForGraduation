@@ -38,6 +38,7 @@ from task_allocation.methods.selection.capability import (  # noqa: E402
     capability_task_cap,
     coarse_task_costs,
     fleet_range_budget,
+    merge_caps,
 )
 from task_allocation.methods.selection.pipeline import (  # noqa: E402
     SelectionConfig,
@@ -149,6 +150,97 @@ def test_marginal_limit_capped_by_capability():
     # 能力承载 2 → limit = min(4, 2) = 2
     got2 = select_by_marginal_gain(scored, uavs, MarginalConfig(), capability_cap=2)
     assert len(got2) == 2
+
+
+# ---------------------------------------------------------------------------
+# 记账口径：②③被动空闲的航程不得计入 B(t)
+# ---------------------------------------------------------------------------
+
+
+def test_budget_caps_by_sortie_budget():
+    """② 起降/充电吞吐上限 S_t：4 架可用但只能飞 2 架 → 只计 2 架航程。"""
+    uavs = [_uav(i, 1000.0) for i in range(4)]
+    assert fleet_range_budget(uavs, 1.0) == 4000.0  # 无上限：全量
+    assert fleet_range_budget(uavs, 1.0, sortie_budget=2) == 2000.0
+
+
+def test_budget_caps_by_max_participating():
+    """③ 参与机数硬上限：同效。"""
+    uavs = [_uav(i, 1000.0) for i in range(4)]
+    assert fleet_range_budget(uavs, 1.0, max_participating_uavs=1) == 1000.0
+
+
+def test_budget_takes_stricter_cap_and_merge_caps():
+    """②③ 取交；merge_caps 两侧配时以更严者为准。"""
+    uavs = [_uav(i, 1000.0) for i in range(4)]
+    assert (
+        fleet_range_budget(uavs, 1.0, sortie_budget=3, max_participating_uavs=2)
+        == 2000.0
+    )
+    assert merge_caps(None, None) is None
+    assert merge_caps(3, None) == 3 and merge_caps(None, 2) == 2
+    assert merge_caps(3, 2) == 2 and merge_caps(1, 5) == 1
+
+
+def test_budget_caps_pick_largest_range():
+    """乐观上界：被压地的是短航程机，预算按剩余航程降序取前 k_op。"""
+    uavs = [_uav(0, 100.0), _uav(1, 200.0), _uav(2, 300.0), _uav(3, 400.0)]
+    assert fleet_range_budget(uavs, 1.0, sortie_budget=2) == 700.0  # 400+300
+
+
+def test_pipeline_budget_respects_sortie_cap():
+    """流水线里 B(t) 与 cap(t) 随②自动收紧。"""
+    tasks, uavs = _pipeline_setup(rng_each=1000.0)  # 2 机 × 1000
+    cfg = SelectionConfig()
+    cfg.capability.sortie_budget = 1
+    result = run(tasks, uavs, cfg)
+    d = result.diagnostics
+    assert d["capability_budget"] == 1000.0  # 只计 1 架
+    assert d["capability_cap"] == 1  # ⌊1000/540⌋
+    assert d["n_after_priority"] == 1
+
+
+def test_horizon_syncs_stage_caps_into_budget():
+    """滚动层自动同步：打开二阶段②③旋钮，一阶段记账必须跟着收紧。
+
+    不同步的旧口径会把 2 架的航程（10000）都算进 B(t)，
+    即使 sortie_budget=1 明确只飞 1 架。
+    """
+    from task_allocation.common.types import Nest, UAVStatus
+    from task_allocation.methods.muas.solvers.dmde_solver import DMDEConfig
+    from task_allocation.methods.muas.solvers.muas_stage import MUASStageConfig
+    from task_allocation.methods.rolling.horizon import HorizonConfig, RollingHorizon
+    from task_allocation.methods.task_pool import TaskPool
+    from task_allocation.methods.uav_state import UAVFleet
+
+    def _run(sortie):
+        nest = Nest(id=0, x=0.0, y=0.0, z=0.0, capacity=4, available=True)
+        uavs = [
+            UAV(id=i, x=0.0, y=0.0, z=0.0, remaining_range=5000.0,
+                speed=10.0, nest_id=0, status=UAVStatus.IDLE)
+            for i in range(2)
+        ]
+        tasks = [
+            Task(id=i, x=float(200 * (i + 1)), y=0.0, z=0.0, reward=5.0,
+                 earliest=0.0, latest=1e6, arrival_time=0.0)
+            for i in range(4)
+        ]
+        horizon = RollingHorizon(
+            TaskPool(tasks, current_time=0.0), UAVFleet(uavs, current_time=0.0),
+            [nest], dem=None, estimator=None,
+            horizon_config=HorizonConfig(
+                n_cycles=1, cycle_length=60.0, uav_max_range=5000.0,
+                complete_after_cycle=False,
+            ),
+            stage_config=MUASStageConfig(sortie_budget=sortie),
+            solver_config=DMDEConfig(pop_size=8, max_generations=5, seed=1),
+        )
+        return horizon.run_cycle(new_tasks=None, advance=False)
+
+    # ② 打开：B(t) 只计 1 架 → 5000
+    assert _run(sortie=1).selection["capability_budget"] == 5000.0
+    # ② 关闭：全量 → 10000
+    assert _run(sortie=None).selection["capability_budget"] == 10000.0
 
 
 # ---------------------------------------------------------------------------

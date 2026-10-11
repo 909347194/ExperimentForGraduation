@@ -27,6 +27,20 @@
 成本口径与 ``priority.compute_priorities`` 的 C_i(t) 一致：
 ``cost_hint``（滚动层三维代价矩阵到最近可用 UAV 的代价）优先，
 否则最近可用 UAV 的欧氏距离，保证与基础优先级、postcheck 同一语义。
+
+**记账口径与派机约束对齐（被动空闲不计预算）**：``sortie_budget``（起降/
+充电吞吐上限）与 ``max_participating_uavs`` 会把可用机**强行压在地面**，
+其航程是本周期确定用不了的幻影容量，计入 B(t) 会让 cap(t) 对着一个
+不会兑现的容量校准候选规模。故 B(t) 只计**至多 S_t 架**的航程（按剩余
+航程降序取前 k_op，仍是乐观上界——二阶段 cheapest 优先派机实际可能
+更少，偏差由 ``budget_scale`` 吸收）。
+
+两处**故意不计入**：
+
+1. γ 出动经济性停机（``participating_policy="marginal"``）——那是二阶段的
+   主动裁量（"能飞但不值得飞"），属架构设计的自由度，不是记账误差；
+2. SRP 不变式 ``K ≤ M-1`` —— 依赖 M（待定的候选数）有循环性，且任务少时
+   cap 本就不受限，忽略无害。
 """
 
 from __future__ import annotations
@@ -43,12 +57,18 @@ __all__ = [
     "coarse_task_costs",
     "fleet_range_budget",
     "capability_task_cap",
+    "merge_caps",
 ]
 
 
 @dataclass
 class CapabilityScaleConfig:
-    """能力驱动规模的旋钮（yaml ``selection.capability:`` 段）。"""
+    """能力驱动规模的旋钮（yaml ``selection.capability:`` 段）。
+
+    ``sortie_budget`` / ``max_participating_uavs`` 与 ``MUASStageConfig`` 同名
+    旋钮对齐（即②③被动空闲的成因）；滚动层会取两侧的较小者自动同步，
+    保证二阶段打开吞吐上限时一阶段记账自动跟着收紧。
+    """
 
     # 关闭后退回纯机数名额（⌈αK⌉ / ⌈max_ratio·K⌉），供消融对比
     enabled: bool = True
@@ -59,6 +79,10 @@ class CapabilityScaleConfig:
     quantile: float = 0.5
     # cap 下限：至少保留的任务数（保持"总能评出一个候选"的退化行为）
     min_cap: int = 1
+    # ② 起降/充电吞吐上限 S_t：B(t) 只计前 S_t 架的航程（None=不限）
+    sortie_budget: int | None = None
+    # ③ 参与机数硬上限：同上，与②取交（None=不限）
+    max_participating_uavs: int | None = None
 
 
 def coarse_task_costs(
@@ -92,11 +116,42 @@ def coarse_task_costs(
     return out
 
 
-def fleet_range_budget(uavs: Sequence[UAV], budget_factor: float = 1.0) -> float:
-    """机群能力预算 B(t)：可用 UAV 剩余航程之和 × 预算系数。"""
-    return float(
-        budget_factor * sum(max(u.remaining_range, 0.0) for u in uavs if u.is_available)
-    )
+def fleet_range_budget(
+    uavs: Sequence[UAV],
+    budget_factor: float = 1.0,
+    *,
+    sortie_budget: int | None = None,
+    max_participating_uavs: int | None = None,
+) -> float:
+    """机群能力预算 B(t)：**可起飞子集**的剩余航程之和 × 预算系数。
+
+    Args:
+        sortie_budget:        ② 起降/充电吞吐上限 S_t；None 不限。
+        max_participating_uavs: ③ 参与机数硬上限；与 ② 取交。
+
+    至多 ``k_op = min(|U_avail|, S_t, max_participating)`` 架能起飞，
+    按剩余航程降序取前 k_op 求和（乐观上界：实际 cheapest 优先派机
+    可能更少，偏差由 budget_scale 吸收）。无上限时退化为全量求和。
+    """
+    avail = [u for u in uavs if u.is_available]
+    k_op = len(avail)
+    for cap_v in (sortie_budget, max_participating_uavs):
+        if cap_v is not None:
+            k_op = min(k_op, max(0, int(cap_v)))
+    if k_op <= 0:
+        return 0.0
+    ranges = sorted((max(u.remaining_range, 0.0) for u in avail), reverse=True)
+    return float(budget_factor * sum(ranges[:k_op]))
+
+
+def merge_caps(a: int | None, b: int | None) -> int | None:
+    """两个可选上限取交（非 None 的较小者；全 None 则 None）。
+
+    用于滚动层把 ``MUASStageConfig`` 的②③旋钮同步进能力预算：
+    两侧都配时以更严者为准。
+    """
+    vals = [v for v in (a, b) if v is not None]
+    return min(vals) if vals else None
 
 
 def capability_task_cap(

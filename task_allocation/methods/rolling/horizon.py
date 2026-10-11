@@ -62,7 +62,10 @@ from task_allocation.methods.rolling.event_trigger import (
     summarize_events,
 )
 from task_allocation.methods.selection.pipeline import run as run_selection
-from task_allocation.methods.selection.capability import CapabilityScaleConfig
+from task_allocation.methods.selection.capability import (
+    CapabilityScaleConfig,
+    merge_caps,
+)
 from task_allocation.methods.selection.feasibility import FeasibilityConfig
 from task_allocation.methods.selection.marginal_gain import MarginalConfig
 from task_allocation.methods.selection.priority import PriorityConfig, PriorityWeights
@@ -347,10 +350,24 @@ class RollingHorizon:
         # 6) 第一阶段：动态任务选择 → T_t^sel
         # 事件驱动：紧急任务 + 上一周期故障释放的任务强制纳入（绕过 Top-αK 预筛）
         forced_ids = set(replan_ctx.urgent_task_ids) | set(self._prior_fault_released())
+        # 记账同步：二阶段②③吞吐上限（sortie_budget / max_participating_uavs）
+        # 会把可用机强行压地，其航程不得计入一阶段能力预算；两侧旋钮取交，
+        # 保证打开②③时 cap(t) 自动跟着收紧（γ 经济性是二阶段裁量，不计入）
+        cap_cfg = replace(
+            self.sel_cfg.capability,
+            sortie_budget=merge_caps(
+                self.sel_cfg.capability.sortie_budget, self.stage_cfg.sortie_budget
+            ),
+            max_participating_uavs=merge_caps(
+                self.sel_cfg.capability.max_participating_uavs,
+                self.stage_cfg.max_participating_uavs,
+            ),
+        )
         sel_config = SelectionConfig(
             priority=self.sel_cfg.priority,
             feasibility=self.sel_cfg.feasibility,
             marginal=self.sel_cfg.marginal,
+            capability=cap_cfg,
             current_time=self._time,
             forced_task_ids=forced_ids,
         )
@@ -680,6 +697,14 @@ class RollingHorizon:
             budget_scale=float(cap_d.get("budget_scale", 1.0)),
             quantile=float(cap_d.get("quantile", 0.5)),
             min_cap=int(cap_d.get("min_cap", 1)),
+            sortie_budget=(
+                None if cap_d.get("sortie_budget") is None
+                else int(cap_d["sortie_budget"])
+            ),
+            max_participating_uavs=(
+                None if cap_d.get("max_participating_uavs") is None
+                else int(cap_d["max_participating_uavs"])
+            ),
         )
         return SelectionConfig(
             priority=priority, feasibility=feasibility, marginal=marginal,

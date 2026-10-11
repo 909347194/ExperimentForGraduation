@@ -75,7 +75,10 @@ def run(
     capability_cap: int | None = None
     if cfg.capability.enabled and n_avail > 0:
         budget = fleet_range_budget(
-            uavs, cfg.feasibility.budget_factor * cfg.capability.budget_scale
+            uavs,
+            cfg.feasibility.budget_factor * cfg.capability.budget_scale,
+            sortie_budget=cfg.capability.sortie_budget,
+            max_participating_uavs=cfg.capability.max_participating_uavs,
         )
         costs = coarse_task_costs(tasks, uavs, cost_hint)
         capability_cap = capability_task_cap(costs, budget, cfg.capability)
