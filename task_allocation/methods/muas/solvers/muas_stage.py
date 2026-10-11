@@ -12,7 +12,7 @@
 
     assignment ──► π_u  任务访问顺序（保留 DMDE 给出的基因顺序）
                 ──► y_j  任务是否执行（默认执行，可因代价过高置 0）
-                ──► z_ub 终点机巢（容量感知挑选，见 constraints.choose_end_nests）
+                ──► z_ub 终点机巢（内层精确分配，见 constraints.solve_end_nest_assignment）
                 ──► x_uj 由 π_u 与 y_j 导出（一任务一机，自动去重）
 
 关于模型类型（N/M 关系）：
@@ -44,7 +44,7 @@ from task_allocation.common.types import (
 )
 from task_allocation.methods.muas.constraints.nest_capacity import (
     check_nest_capacity,
-    choose_end_nests,
+    solve_end_nest_assignment,
 )
 from task_allocation.methods.muas.cost.cost_matrix import CostMatrixBuildResult
 from task_allocation.methods.muas.problem import (
@@ -88,9 +88,14 @@ class MUASStageConfig:
     # 避免偏远任务连续多周期得不到执行而永久滞留
     prune_wait_bonus: float = 1.0
     wait_scale: float = 3600.0
-    # 终点机巢是否**进入编码**由差分进化搜索（论文 §5(1)(2)）。
-    # 关闭后退化为「解码后再用容量感知策略挑终点」，供 exp04 消融对比。
-    end_nest_in_encoding: bool = True
+    # 终点机巢决策的求解方式（方案 A / 方案 B，阶段二实验对比）：
+    #   False（默认，方案 A）：DMDE 只搜任务分配与访问顺序，终点机巢由
+    #     内层子问题 solve_end_nest_assignment 精确求解（容量约束下最优），
+    #     返航代价经完整成本评价间接影响进化搜索（分层求解）。
+    #   True（方案 B，pro 分支主线）：终点机巢作为终止基因进入 DMDE 编码
+    #     联合进化（论文 §5(1)(2)），编码结果优先，超容/禁用/不可达时才
+    #     回退内层精确分配。
+    end_nest_in_encoding: bool = False
     # Lamarckian 回写（TODO §2.7）：把修复后的解（经 _prune / _repair_range /
     # _choose_end_nests）的「起始任务归属」与「终点机巢」编码回获胜个体的基因，
     # 使后继代际的差分变异围绕**修复后的可行子空间**展开（默认开启）。
@@ -307,9 +312,9 @@ class MUASAssignmentEvaluator:
     ) -> dict[int, int | None]:
         """为有航次的 UAV 选终点机巢（含飞行中也要占名额）。
 
-        论文 §5(2)：终点机巢由**编码**（差分进化搜索）给出。此处
-        **以编码结果为主**，仅当编码终点违反机巢容量时才回退到容量感知
-        改派，保证落地期可行 —— 编码为主、启发式为兜底。
+        论文 §5(2)：终点机巢可由**编码**（方案 B，差分进化搜索）给出。此处
+        **以编码结果为主**（仅当编码终点合法时），否则回退到内层子问题的
+        精确分配（方案 A，见 solve_end_nest_assignment）；编码为主、精确分配为兜底。
         """
         if not self.nests:
             return {uid: None for uid in routes}
@@ -352,7 +357,7 @@ class MUASAssignmentEvaluator:
                     if not rep.violations:
                         return {**{uid: None for uid in routes}, **cand}
 
-        # ② 编码终点缺失 / 超容 / 命中禁用机巢 → 容量感知改派（兜底）
+        # ② 编码终点缺失 / 超容 / 命中禁用机巢 → 内层精确分配（方案 A 兜底）
         last_cost: dict[int, dict[int, float]] = {}
         for uav_id, tids in routes.items():
             if not tids:
@@ -378,7 +383,7 @@ class MUASAssignmentEvaluator:
         if not last_cost:
             return {uid: None for uid in routes}
 
-        chosen = choose_end_nests(
+        chosen = solve_end_nest_assignment(
             self.fleet_uavs,
             cand_nests,
             last_cost,
@@ -872,8 +877,13 @@ def run_selective_muas(
             "n_participating": len(participating),
             "n_nests": n_nests,
             # 终点机巢中有多少来自编码（论文 §5(2) 的可观测证据）
-            "n_end_nests_coded": len(best_ends or {}),
-            "coded_end_nests": {str(k): v for k, v in (best_ends or {}).items()},
+            # 只统计真正由编码给出的终点（None 占位不算，方案 A 下应为 0）
+            "n_end_nests_coded": sum(
+                1 for v in (best_ends or {}).values() if v is not None
+            ),
+            "coded_end_nests": {
+                str(k): v for k, v in (best_ends or {}).items() if v is not None
+            },
             "n_executed": len(final.executed_task_ids),
             "n_deferred": len(task_list) - len(final.executed_task_ids),
             "f1_reward": final.f1_reward,

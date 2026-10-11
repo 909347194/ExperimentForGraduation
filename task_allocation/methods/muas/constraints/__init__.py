@@ -24,6 +24,7 @@ from .nest_capacity import (
     fleet_occupancy,
     free_slots,
     nest_occupancy,
+    solve_end_nest_assignment,
 )
 from .single_constraints import (
     SingleConstraintViolation,
@@ -43,6 +44,7 @@ __all__ = [
     "CapacityReport",
     "check_nest_capacity",
     "choose_end_nests",
+    "solve_end_nest_assignment",
     "fleet_occupancy",
     "free_slots",
     "nest_occupancy",
