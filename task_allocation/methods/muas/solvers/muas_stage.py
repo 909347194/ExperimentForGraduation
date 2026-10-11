@@ -585,7 +585,7 @@ class MUASAssignmentEvaluator:
         Args:
             individual: 进化个体（可选）。给出时从中读取**编码的终点机巢**
                 （``Individual.end_nests``，论文 §5(2)），使终点真正参与
-                适应度评价；省略时终点退化为容量感知启发式。
+                适应度评价；省略时终点由内层精确分配（方案 A）决定。
         """
         assign_key = tuple((int(a), int(b)) for a, b in assignment)
         coded = dict(individual.end_nests) if individual is not None else None

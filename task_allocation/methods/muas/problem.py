@@ -527,6 +527,16 @@ class SelectiveMUASProblem:
         # ---- 终点机巢：合法性 + 可用性 + 可达性 ----
         for tour in solution.tours:
             if tour.end_nest_id is None:
+                if tour.task_ids:
+                    # 有航次却无终点机巢：返航义务未落账（否则返航零成本、
+                    # 容量不计账，适应度被系统性低估，恰是方案 A 要避免的
+                    # 「进化不考虑返航」陷阱的残余缺口）→ 计违约使缺口在
+                    # 评价中可见。空航次（不飞）无返航义务，不计。
+                    report.add_misc(
+                        f"end_nest_missing_{tour.uav_id}",
+                        cons.w_end_nest_reachability * 1e3,
+                    )
+                    tour.feasible = False
                 continue
             nest = self.nest_by_id.get(tour.end_nest_id)
             if nest is None:
