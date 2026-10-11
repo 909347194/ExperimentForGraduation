@@ -174,6 +174,8 @@ def build_config_bundle(cfg: Mapping[str, Any]) -> ConfigBundle:
     )
     stage_model = MUASStageConfig(
         max_participating_uavs=m.get("max_participating_uavs", None),
+        sortie_budget=(None if m.get("sortie_budget") is None else int(m["sortie_budget"])),
+        participation_cost=float(m.get("participation_cost", 0.0)),
         participating_policy=str(m.get("participating_policy", "cheapest")),
         prune_unprofitable=bool(m.get("prune_unprofitable", True)),
         prune_margin=float(m.get("prune_margin", 0.0)),

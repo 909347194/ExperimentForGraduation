@@ -28,7 +28,7 @@ data:
 problem:
     n_nests: 8 # 用前 8 个机巢（CSV 共 8 条）
     nest_capacity: 4 # 单机巢容量（架）
-    n_uavs: 24 # 机队规模（<= n_nests × nest_capacity 才不初始超容）
+    n_uavs: 10 # 机队规模（<= n_nests × nest_capacity 才不初始超容；8×4=32）
     uav_speed: 15.0 # m/s
     uav_max_range: 120000.0 # 满电航程（m）；机巢跨度约 90 km，需留足余量
 
@@ -92,7 +92,19 @@ muas:
     default_service_time: 60.0 # 单任务作业时长（s）
     # 参与规划的 UAV 上限；null → 自动取 min(K_avail, M-1) 以走 srp 巡游模型
     max_participating_uavs: null
-    participating_policy: cheapest # cheapest | first
+    participating_policy: cheapest # cheapest | first | marginal
+    # ── K 决策扩展旋钮（与 M 解耦，实验/消融用；默认不启用）──
+    # 三者（max_participating_uavs / sortie_budget / participation_cost）共同决定
+    # 本周期参与机数 K；均不配置时退回旧行为 K = min(K_avail, M-1)。
+    # sortie_budget：本周期出动架次硬上限 S_t（独立天花板，与边际收益无关）。
+    #   null → 不设架次上限（仅受 max_participating_uavs / SRP 不变式 K≤M-1 约束）。
+    #   例：机巢同时只能起降 3 架 / 充电位有限 → 设 3。
+    sortie_budget: null
+    # participation_cost：每架固定出动代价 γ（起降/能耗/架次占用）。
+    #   仅在 participating_policy=marginal 时生效：
+    #   γ=0（默认）→ 只要加一架机能降一点代价就继续派，不早停（只剔纯冗余机）；
+    #   γ>0       → 新增一架机的覆盖代价下降 ≤ γ 即停，按「边际收益 vs 出动成本」经济性早停。
+    participation_cost: 0.0
     prune_unprofitable: true # 剔除执行代价高于收益的任务（y_j = 0）
     prune_margin: 0.0 # 剔除判据裕度：λ·节省 > R·(1+margin) 才剔除
     prune_max_rounds: 8
@@ -103,7 +115,7 @@ muas:
     # 终点机巢是否进入编码、由差分进化搜索（论文 §5(1)(2)）。
     # true  → 终止基因随 cost_vector 一同变异，终点是进化结果（本章方法）
     # false → 退化为「解码后再用容量感知策略挑终点」，用于 exp04 消融对比
-    end_nest_in_encoding: true
+    end_nest_in_encoding: false
     # Lamarckian 回写（TODO §2.7）：把修复后的解（经 _prune / _repair_range /
     # 终点机巢）的起始任务归属与终点机巢编码回获胜个体基因，使后继代际的
     # 差分变异围绕修复后的可行子空间展开。关闭则退化为围绕未修复空间搜索。
@@ -143,8 +155,8 @@ constraints:
 
 # ── DMDE 求解器超参（论文 §5 算法 3.1）────────────────────────────
 solver:
-    population: 100 # pop_size（论文 §5 算法 3.1，放大到 100 以增强收敛稳定性）
-    max_iter: 500 # max_generations（论文 §5 算法 3.1，放大到 500 代）
+    population: 50 # pop_size（默认：论文实验配置）
+    max_iter: 100 # max_generations（默认：论文实验配置）
     zeta: 3 # 动态交叉率曲率指数 ζ（论文式 3-9 取 3）
     # 灭绝门限 δ：留空 = 论文公式 3-12 原式 GMR = 1 - CR（不加门限）。
     # 填一个数值（如 0.3）则附加工程门限 CR>=δ 时不灭绝，把重置推迟到后期。
