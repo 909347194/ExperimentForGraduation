@@ -30,7 +30,7 @@ def _series(cycles: Sequence[dict[str, Any]], getter) -> list[float]:
 def plot_cycle_metrics(
     metrics: dict[str, Any],
     out_dir: Path,
-    formats: Sequence[str] = ("png", "pdf"),
+    formats: Sequence[str] = ("png",),
     *,
     dpi: int = 200,
 ) -> list[Path]:

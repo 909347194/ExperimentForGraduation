@@ -8,9 +8,9 @@
     {
       "n_tasks": 50,
       "n_uav_avail": 8,
-      "t_cost_matrix_ms": 683.697483999822,
+      "t_cost_matrix_ms": 1204.3150002136827,
       "n_pairs": 2900,
-      "t_selection_ms": 7.207296000160568,
+      "t_selection_ms": 11.908700689673424,
       "selection": {
         "n_tasks_in": 50,
         "n_uav_avail": 8,
@@ -24,7 +24,7 @@
       },
       "n_selected": 16,
       "compression_ratio": 3.125,
-      "t_muas_ms": 1285.2622600003087,
+      "t_muas_ms": 2003.2488005235791,
       "muas": {
         "model_type": null,
         "n_executed": 16,
@@ -32,8 +32,8 @@
         "f1_reward": 129.955,
         "f2_cost": 547771.0
       },
-      "t_total_ms": 1976.1670400002913,
-      "t_muas_full_ms": 2027.3382739997032,
+      "t_total_ms": 3219.472501426935,
+      "t_muas_full_ms": 3359.3586003407836,
       "muas_full": {
         "n_executed": 50,
         "f1_reward": 314.064,
@@ -43,9 +43,9 @@
     {
       "n_tasks": 100,
       "n_uav_avail": 8,
-      "t_cost_matrix_ms": 2530.7469370000035,
+      "t_cost_matrix_ms": 4284.818199463189,
       "n_pairs": 10800,
-      "t_selection_ms": 13.597811999716214,
+      "t_selection_ms": 18.17920058965683,
       "selection": {
         "n_tasks_in": 100,
         "n_uav_avail": 8,
@@ -59,7 +59,7 @@
       },
       "n_selected": 16,
       "compression_ratio": 6.25,
-      "t_muas_ms": 1580.554060000395,
+      "t_muas_ms": 2332.6844004914165,
       "muas": {
         "model_type": null,
         "n_executed": 16,
@@ -67,14 +67,14 @@
         "f1_reward": 134.125,
         "f2_cost": 619628.4
       },
-      "t_total_ms": 4124.898809000115
+      "t_total_ms": 6635.681800544262
     },
     {
       "n_tasks": 200,
       "n_uav_avail": 8,
-      "t_cost_matrix_ms": 9752.32242400034,
+      "t_cost_matrix_ms": 16531.096200458705,
       "n_pairs": 41600,
-      "t_selection_ms": 18.131971000002522,
+      "t_selection_ms": 41.520300321280956,
       "selection": {
         "n_tasks_in": 200,
         "n_uav_avail": 8,
@@ -88,7 +88,7 @@
       },
       "n_selected": 16,
       "compression_ratio": 12.5,
-      "t_muas_ms": 1620.3142419999494,
+      "t_muas_ms": 2189.9183997884393,
       "muas": {
         "model_type": null,
         "n_executed": 16,
@@ -96,7 +96,7 @@
         "f1_reward": 146.082,
         "f2_cost": 708221.5
       },
-      "t_total_ms": 11390.768637000292
+      "t_total_ms": 18762.534900568426
     }
   ]
 }

@@ -306,16 +306,17 @@ def _inverse_phi_srp(
 ) -> Individual:
     """SRP 反映射（N<M 巡游模型）。
 
-    改进：
-    1. UAV→Target 匹配使用温度自适应采样。
-    2. 巡游顺序构建后执行扰动（swap/insert/reverse），
-       打破贪心最近邻的确定性。
-
     结构扩展（论文 §5(1)(2)）：
-    3. 终点机巢作为航次**终止节点**进入编码：用 ``cost_vector`` 末尾的
+    1. 终点机巢作为航次**终止节点**进入编码：用 ``cost_vector`` 末尾的
        K 个分量在「末任务 → 机巢」代价行上做温度自适应匹配，
        因此终点是**进化搜索的结果**。
-    4. 扰动后强制做段结构规范化（见 :func:`normalize_srp_segments`）。
+    2. 扰动后强制做段结构规范化（见 :func:`normalize_srp_segments`）。
+
+    访问顺序对齐原文（Ming 2017 §4.1 Rule 1 + Rule 2(c)）：
+    3. 巡游段 ``[K, M)`` 的每一位独立地在「当前已访问目标」的行上做最近邻
+       匹配（详见 :func:`_match_tour_edge`），使**顺序由 DE 的连续向量决定**，
+       而非历史实现中的「按任务编号顺序 + 贪心最近追加」。
+    4. 匹配后再执行扰动（swap/insert/reverse），进一步打破确定性。
     """
     cm_work = cost_matrix.copy().astype(float)
     mask = np.zeros_like(cm_work, dtype=bool)
@@ -366,28 +367,49 @@ def _inverse_phi_srp(
     # 导致子代 fitness 系统性劣于父代、进化零接受（S2 停滞的根因）。
     uav_end_index: dict[int, int] = {i: i for i in range(len(genes))}
 
-    # 先用贪心构建初始巡游顺序
-    for tgt in remaining_targets:
-        best_uav = -1
-        best_cost = np.inf
-        for uav_id, current_tgt in uav_first_target.items():
-            tc = cm_work[n_uavs + current_tgt, tgt]
-            if tc < best_cost:
-                best_cost = tc
-                best_uav = uav_id
+    # Ming 2017 §4.1 Rule 2(c)「迭代行替换」+ Rule 1「最近邻匹配」。
+    #
+    #   每个巡游基因位 j ∈ [0, M-K) 拥有自己的连续代价值 cv = cost_vector[K + j]；
+    #   匹配所用的**行**由上一轮已访问目标决定 —— 即把「UAV 起点行」替换为
+    #   「当前已访问目标行」（原文：uses current visited target point as the
+    #   UAV's new start point），列限定为未访问任务。
+    #
+    # 于是「接下来访问哪个任务」与「挂在哪条航线尾」都由 DE 的连续向量决定，
+    # 访问顺序真正进入进化搜索空间。旧实现此处只做「按任务编号顺序取任务 +
+    # 贪心最近追加」，完全不读 cost_vector[K, M)，使该区段成为死维度。
+    #
+    # 复杂度：每位的候选矩阵为 K×(剩余任务数)，整体 O(K·(M-K)^2)；数值全部由
+    # numpy 完成，规模被第一阶段的 Top-αK 选中集合封顶。
+    for j in range(len(remaining_targets)):
+        cv_idx = n_uavs + j
+        cv = (
+            float(cost_vector[cv_idx])
+            if 0 <= cv_idx < len(cost_vector)
+            else float("nan")
+        )
 
-        if best_uav >= 0:
-            prev_tgt = uav_first_target[best_uav]
-            cost = float(cm_work[n_uavs + prev_tgt, tgt])
-            # 插入到 best_uav 路线段的末尾
-            insert_at = uav_end_index[best_uav] + 1
-            genes.insert(insert_at, Gene(uav_id=-1, target_id=tgt, cost=cost))
-            # 后移受插入影响的各 UAV 段结束下标
-            for u, end in uav_end_index.items():
-                if end >= insert_at:
-                    uav_end_index[u] = end + 1
-            uav_end_index[best_uav] = insert_at
-            uav_first_target[best_uav] = tgt
+        uav_id, tgt, cost = _match_tour_edge(
+            cv=cv,
+            cost_matrix=cm_work,
+            n_uavs=n_uavs,
+            uav_last_target=uav_first_target,
+            candidates=remaining_targets,
+            temperature=temperature,
+            rng=rng,
+        )
+        if uav_id < 0 or tgt < 0:
+            break  # 无可行候选（退化情形），交由规范化阶段回收
+
+        # 插入到 uav_id 路线段的末尾
+        insert_at = uav_end_index[uav_id] + 1
+        genes.insert(insert_at, Gene(uav_id=TOUR_UAV_ID, target_id=tgt, cost=cost))
+        # 后移受插入影响的各 UAV 段结束下标
+        for u, end in uav_end_index.items():
+            if end >= insert_at:
+                uav_end_index[u] = end + 1
+        uav_end_index[uav_id] = insert_at
+        uav_first_target[uav_id] = tgt
+        remaining_targets.remove(tgt)
 
     # ── 第三阶段：巡游扰动 ──
     if temperature > 0.1:
@@ -418,6 +440,82 @@ def _inverse_phi_srp(
     return Individual(genes=genes, model_type="srp")
 
 
+def _match_tour_edge(
+    cv: float,
+    cost_matrix: np.ndarray,
+    n_uavs: int,
+    uav_last_target: dict[int, int],
+    candidates: list[int],
+    temperature: float,
+    rng: np.random.Generator,
+) -> tuple[int, int, float]:
+    """Rule 2(c) 的单次迭代：在「已替换为当前已访问目标」的行上匹配一条巡游边。
+
+    对应 Ming 2017 §4.1 Rule 1（最近邻匹配）与 Rule 2(c)（迭代行替换）：
+
+    - 行集合 = ``{n_uavs + last_target[u]}``，即每架 UAV 的**当前已访问最后
+      一个任务**所在的行（原文所谓 "new start point"）；
+    - 列集合 = 尚未访问的任务；
+    - 每个巡游基因位的连续代价值 ``cv`` 在这张 K×|cand| 子矩阵上做最近邻匹配
+      （``temperature >= 0.1`` 时退化为温差 softmax 采样），同时决定「访问哪个
+      任务」与「接入哪条航线」。
+
+    Args:
+        cv:             该巡游基因位的连续代价值（来自 DE 差分/交叉后的向量）。
+        cost_matrix:    扩展代价矩阵 ``(K+M, M+B)``。
+        n_uavs:         UAV 数 K。
+        uav_last_target:``{uav_id: 该航线当前最后一个任务下标}``。
+        candidates:     未访问任务下标列表。
+        temperature:    温度；``< 0.1`` 时纯开发（取最近），否则 softmax 采样。
+        rng:            随机数生成器。
+
+    Returns:
+        ``(uav_id, target_idx, cost)``；无可行候选时返回 ``(-1, -1, inf)``。
+    """
+    if not candidates or not uav_last_target:
+        return -1, -1, float("inf")
+
+    n_rows, n_cols = cost_matrix.shape
+    # 行/列必须成对裁剪，否则 flat 下标无法还原回 (uav, target)
+    pairs = [
+        (u, n_uavs + uav_last_target[u])
+        for u in sorted(uav_last_target)
+        if 0 <= n_uavs + uav_last_target[u] < n_rows
+    ]
+    cols = [c for c in candidates if 0 <= c < n_cols]
+    if not pairs or not cols:
+        return -1, -1, float("inf")
+
+    rows = [r for _, r in pairs]
+    uav_ids = [u for u, _ in pairs]
+
+    costs = np.asarray(cost_matrix[np.ix_(rows, cols)], dtype=float)
+    costs = np.where(np.isfinite(costs), costs, np.inf)
+
+    if np.isfinite(cv) and cv >= 0.0:
+        diffs = np.abs(costs - cv)
+    else:
+        # Rule 3：无效值（nan / 负数 / 越界）退化为最小代价，保住健壮兜底语义
+        diffs = costs.copy()
+
+    flat_size = int(diffs.size)
+    spread = float(np.std(diffs)) if flat_size else float("nan")
+    if temperature < 0.1 or not np.isfinite(spread) or spread <= 1e-8:
+        # np.argmin 在多维数组上返回的即扁平下标
+        flat = int(np.argmin(diffs))
+    else:
+        tau = max(0.01, temperature * 2.0)
+        # 必须摊平成 1 维权重，否则 rng.choice 的 p 参数会报错
+        logits = (-diffs / spread / tau).ravel()
+        logits -= logits.max()
+        probs = np.exp(logits)
+        probs /= probs.sum()
+        flat = int(rng.choice(flat_size, p=probs))
+
+    row_i, col_i = divmod(flat, len(cols))
+    return uav_ids[row_i], cols[col_i], float(costs[row_i, col_i])
+
+
 def _select_end_nests(
     genes: list[Gene],
     cost_matrix: np.ndarray,
@@ -430,11 +528,16 @@ def _select_end_nests(
 ) -> dict[int, int]:
     """为每架 UAV 选定终点机巢（反映射阶段的终止基因取值）。
 
-    ``cost_vector`` 的布局约定（与 ``PopulationEncoder`` 的基因顺序对称）：
+    ``cost_vector`` 的布局约定（与 :class:`encoder.Individual.cost_vector` 一致）：
 
-        ``[0, K)``              起始基因的代价值（UAV → 首个任务）
-        ``[K, K+M)``            巡游段（srp 下巡游用贪心构建，此处未直接使用）
-        ``[K+M, K+M+K)``        终止基因的代价值（末任务 → 机巢）
+        ``[0, K)``      起始基因的代价值（UAV → 首个任务）
+        ``[K, M)``      巡游基因的代价值（任务 → 任务），由 :func:`_match_tour_edge`
+                        按 Ming 2017 Rule 2(c) 逐个消费，决定访问顺序
+        ``[M, M+K)``    终止基因的代价值（末任务 → 机巢），**按 UAV 下标升序**
+
+    因此 UAV i 的终止代价值位于 ``cost_vector[n_targets + i]``（``n_targets = M``），
+    该值是上一世代由 DE 变异得到的量，经本函数与「末任务 → 机巢」代价列做温度
+    自适应匹配，还原出终点机巢下标 —— 终点是**进化搜索的结果**，而非最近机巢贪心。
 
     Returns:
         ``{uav_id: nest_idx}``。
@@ -447,8 +550,8 @@ def _select_end_nests(
         # 有任务时从「末任务」行取机巢代价；空航次时从 UAV 起点行取
         row = (n_uavs + seg[-1]) if seg else i
 
-        cv_idx = n_uavs + n_targets + i
-        cv = float(cost_vector[cv_idx]) if cv_idx < len(cost_vector) else float("nan")
+        cv_idx = n_targets + i
+        cv = float(cost_vector[cv_idx]) if 0 <= cv_idx < len(cost_vector) else float("nan")
 
         ends[i] = _pick_nest_by_cost(
             cv, cost_matrix, row, n_targets, n_nests, temperature, rng

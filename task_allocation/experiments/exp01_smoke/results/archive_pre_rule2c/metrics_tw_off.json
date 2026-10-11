@@ -1,0 +1,3064 @@
+{
+  "status": "ok",
+  "experiment": "exp01_smoke",
+  "n_cycles": 3,
+  "problem": {
+    "n_tasks_initial": 10,
+    "n_arrived": 18,
+    "n_arrived_per_cycle": {
+      "1": 10,
+      "2": 5,
+      "3": 3
+    },
+    "n_uavs": 24,
+    "n_nests": 8,
+    "nest_capacity": 4
+  },
+  "local_frame": {
+    "lat0": 29.5222025,
+    "lon0": 91.47933125
+  },
+  "nests": [
+    {
+      "id": 0,
+      "x": -33191.592,
+      "y": 13904.324,
+      "z": 3650.792,
+      "capacity": 4,
+      "lat": 29.6472,
+      "lon": 91.136532
+    },
+    {
+      "id": 1,
+      "x": -41347.962,
+      "y": 8052.905,
+      "z": 3664.076,
+      "capacity": 4,
+      "lat": 29.594168,
+      "lon": 91.052516
+    },
+    {
+      "id": 2,
+      "x": 27684.776,
+      "y": -29893.537,
+      "z": 3546.549,
+      "capacity": 4,
+      "lat": 29.252201,
+      "lon": 91.764151
+    },
+    {
+      "id": 3,
+      "x": 22020.696,
+      "y": -49149.428,
+      "z": 3685.872,
+      "capacity": 4,
+      "lat": 29.078581,
+      "lon": 91.705498
+    },
+    {
+      "id": 4,
+      "x": -14345.183,
+      "y": -31147.541,
+      "z": 3584.0,
+      "capacity": 4,
+      "lat": 29.241111,
+      "lon": 91.331765
+    },
+    {
+      "id": 5,
+      "x": 25534.372,
+      "y": 37533.915,
+      "z": 3815.0,
+      "capacity": 4,
+      "lat": 29.860552,
+      "lon": 91.743606
+    },
+    {
+      "id": 6,
+      "x": 23606.393,
+      "y": 34763.367,
+      "z": 3815.063,
+      "capacity": 4,
+      "lat": 29.835596,
+      "lon": 91.723591
+    },
+    {
+      "id": 7,
+      "x": -9907.106,
+      "y": 16188.749,
+      "z": 3711.872,
+      "capacity": 4,
+      "lat": 29.668211,
+      "lon": 91.376991
+    }
+  ],
+  "cycles": [
+    {
+      "cycle": 1,
+      "current_time": 600.0,
+      "pool_counts": {
+        "n_total": 10,
+        "n_remain": 0,
+        "n_new": 10,
+        "n_release": 0,
+        "n_executing": 0,
+        "n_expired": 0
+      },
+      "selection": {
+        "n_tasks_in": 10,
+        "n_uav_avail": 24,
+        "current_time": 600.0,
+        "n_forced_in": 0,
+        "n_after_priority": 10,
+        "n_after_prefilter": 10,
+        "n_rejected_prefilter": 0,
+        "n_after_marginal": 10,
+        "n_selected": 10,
+        "n_dropped_postcheck": 0,
+        "replan": true,
+        "forced_task_ids": [
+          0,
+          1,
+          3,
+          6,
+          8
+        ]
+      },
+      "muas": {
+        "n_tasks": 10,
+        "n_uav_avail": 24,
+        "n_participating": 9,
+        "n_nests": 8,
+        "n_end_nests_coded": 9,
+        "coded_end_nests": {
+          "0": 7,
+          "1": 6,
+          "2": 7,
+          "3": 2,
+          "4": 3,
+          "5": 1,
+          "6": 5,
+          "7": 0,
+          "8": 4
+        },
+        "n_executed": 6,
+        "n_deferred": 4,
+        "f1_reward": 31.9609679112891,
+        "f2_cost": 97102.14134957227,
+        "feasible": true,
+        "best_fitness": -22.250753776331873,
+        "model_type": "srp",
+        "solve_seconds": 153.0312,
+        "n_evals": 76317,
+        "n_selected": 10,
+        "replan": true,
+        "excluded_nest_ids": [],
+        "violations": [],
+        "penalty": 0.0
+      },
+      "n_executed": 6,
+      "n_deferred": 4,
+      "n_completed": 6,
+      "n_released": 0,
+      "executed_ids": [
+        5,
+        4,
+        1,
+        9,
+        0,
+        7
+      ],
+      "deferred_ids": [
+        2,
+        3,
+        6,
+        8
+      ],
+      "completed_ids": [
+        5,
+        4,
+        1,
+        9,
+        0,
+        7
+      ],
+      "released_ids": [],
+      "expired_ids": [],
+      "events": [
+        {
+          "type": "urgent_task",
+          "task_id": 0,
+          "reward": 2.751748370667708,
+          "slack": 584.2070386264286
+        },
+        {
+          "type": "urgent_task",
+          "task_id": 1,
+          "reward": 5.200489033543308,
+          "slack": 494.8822580032074
+        },
+        {
+          "type": "urgent_task",
+          "task_id": 3,
+          "reward": 2.3886054286079306,
+          "slack": 640.364023576326
+        },
+        {
+          "type": "urgent_task",
+          "task_id": 6,
+          "reward": 9.70758759190789,
+          "slack": 1549.017294086756
+        },
+        {
+          "type": "urgent_task",
+          "task_id": 8,
+          "reward": 4.33413735431382,
+          "slack": 768.5499620730616
+        }
+      ],
+      "nest_occupancy": {
+        "0": 3,
+        "1": 3,
+        "2": 3,
+        "3": 3,
+        "4": 3,
+        "5": 3,
+        "6": 4,
+        "7": 2
+      },
+      "capacity_violations": [],
+      "replan": true,
+      "replan_context": {
+        "replan": true,
+        "urgent_task_ids": [
+          0,
+          1,
+          3,
+          6,
+          8
+        ],
+        "unavailable_nest_ids": [],
+        "faulted_uav_ids": []
+      },
+      "released_by_fault": [],
+      "n_infeasible": 0,
+      "infeasible_ids": [],
+      "infeasible_tags": {}
+    },
+    {
+      "cycle": 2,
+      "current_time": 1200.0,
+      "pool_counts": {
+        "n_total": 9,
+        "n_remain": 4,
+        "n_new": 5,
+        "n_release": 0,
+        "n_executing": 0,
+        "n_expired": 0
+      },
+      "selection": {
+        "n_tasks_in": 9,
+        "n_uav_avail": 24,
+        "current_time": 1200.0,
+        "n_forced_in": 0,
+        "n_after_priority": 9,
+        "n_after_prefilter": 9,
+        "n_rejected_prefilter": 0,
+        "n_after_marginal": 9,
+        "n_selected": 9,
+        "n_dropped_postcheck": 0,
+        "replan": true,
+        "forced_task_ids": [
+          2,
+          3,
+          6,
+          8,
+          14
+        ]
+      },
+      "muas": {
+        "n_tasks": 9,
+        "n_uav_avail": 24,
+        "n_participating": 8,
+        "n_nests": 8,
+        "n_end_nests_coded": 8,
+        "coded_end_nests": {
+          "0": 6,
+          "1": 2,
+          "2": 1,
+          "3": 3,
+          "4": 2,
+          "5": 3,
+          "6": 7,
+          "7": 7
+        },
+        "n_executed": 6,
+        "n_deferred": 3,
+        "f1_reward": 33.74709793203424,
+        "f2_cost": 94410.15606526064,
+        "feasible": true,
+        "best_fitness": -24.30608232550817,
+        "model_type": "srp",
+        "solve_seconds": 119.3734,
+        "n_evals": 67962,
+        "n_selected": 9,
+        "replan": true,
+        "excluded_nest_ids": [],
+        "violations": [],
+        "penalty": 0.0
+      },
+      "n_executed": 6,
+      "n_deferred": 3,
+      "n_completed": 6,
+      "n_released": 0,
+      "executed_ids": [
+        6,
+        11,
+        14,
+        10,
+        3,
+        13
+      ],
+      "deferred_ids": [
+        2,
+        8,
+        12
+      ],
+      "completed_ids": [
+        6,
+        11,
+        14,
+        10,
+        3,
+        13
+      ],
+      "released_ids": [],
+      "expired_ids": [],
+      "events": [
+        {
+          "type": "urgent_task",
+          "task_id": 2,
+          "reward": 1.394233892085059,
+          "slack": 413.5573893389005
+        },
+        {
+          "type": "urgent_task",
+          "task_id": 3,
+          "reward": 2.3886054286079306,
+          "slack": 40.36402357632596
+        },
+        {
+          "type": "urgent_task",
+          "task_id": 6,
+          "reward": 9.70758759190789,
+          "slack": 949.017294086756
+        },
+        {
+          "type": "urgent_task",
+          "task_id": 8,
+          "reward": 4.33413735431382,
+          "slack": 168.54996207306158
+        },
+        {
+          "type": "urgent_task",
+          "task_id": 14,
+          "reward": 9.56578614817253,
+          "slack": 1189.7612811962454
+        }
+      ],
+      "nest_occupancy": {
+        "0": 3,
+        "1": 3,
+        "2": 3,
+        "3": 3,
+        "4": 3,
+        "5": 3,
+        "6": 4,
+        "7": 2
+      },
+      "capacity_violations": [],
+      "replan": true,
+      "replan_context": {
+        "replan": true,
+        "urgent_task_ids": [
+          2,
+          3,
+          6,
+          8,
+          14
+        ],
+        "unavailable_nest_ids": [],
+        "faulted_uav_ids": []
+      },
+      "released_by_fault": [],
+      "n_infeasible": 0,
+      "infeasible_ids": [],
+      "infeasible_tags": {}
+    },
+    {
+      "cycle": 3,
+      "current_time": 1800.0,
+      "pool_counts": {
+        "n_total": 4,
+        "n_remain": 1,
+        "n_new": 3,
+        "n_release": 0,
+        "n_executing": 0,
+        "n_expired": 2
+      },
+      "selection": {
+        "n_tasks_in": 4,
+        "n_uav_avail": 24,
+        "current_time": 1800.0,
+        "n_forced_in": 0,
+        "n_after_priority": 4,
+        "n_after_prefilter": 4,
+        "n_rejected_prefilter": 0,
+        "n_after_marginal": 4,
+        "n_selected": 4,
+        "n_dropped_postcheck": 0,
+        "replan": true,
+        "forced_task_ids": [
+          12,
+          17
+        ]
+      },
+      "muas": {
+        "n_tasks": 4,
+        "n_uav_avail": 24,
+        "n_participating": 3,
+        "n_nests": 8,
+        "n_end_nests_coded": 3,
+        "coded_end_nests": {
+          "0": 3,
+          "1": 6,
+          "2": 3
+        },
+        "n_executed": 3,
+        "n_deferred": 1,
+        "f1_reward": 23.242738377116503,
+        "f2_cost": 54826.7083806009,
+        "feasible": true,
+        "best_fitness": -17.76006753905641,
+        "model_type": "srp",
+        "solve_seconds": 26.3679,
+        "n_evals": 10589,
+        "n_selected": 4,
+        "replan": true,
+        "excluded_nest_ids": [],
+        "violations": [],
+        "penalty": 0.0
+      },
+      "n_executed": 3,
+      "n_deferred": 1,
+      "n_completed": 3,
+      "n_released": 0,
+      "executed_ids": [
+        16,
+        17,
+        15
+      ],
+      "deferred_ids": [
+        12
+      ],
+      "completed_ids": [
+        16,
+        17,
+        15
+      ],
+      "released_ids": [],
+      "expired_ids": [
+        2,
+        8
+      ],
+      "events": [
+        {
+          "type": "urgent_task",
+          "task_id": 12,
+          "reward": 1.0366995248738982,
+          "slack": 428.2328189362315
+        },
+        {
+          "type": "urgent_task",
+          "task_id": 17,
+          "reward": 9.594425476616495,
+          "slack": 1690.1230391303402
+        }
+      ],
+      "nest_occupancy": {
+        "0": 4,
+        "1": 2,
+        "2": 3,
+        "3": 3,
+        "4": 3,
+        "5": 3,
+        "6": 4,
+        "7": 2
+      },
+      "capacity_violations": [],
+      "replan": true,
+      "replan_context": {
+        "replan": true,
+        "urgent_task_ids": [
+          12,
+          17
+        ],
+        "unavailable_nest_ids": [],
+        "faulted_uav_ids": []
+      },
+      "released_by_fault": [],
+      "n_infeasible": 0,
+      "infeasible_ids": [],
+      "infeasible_tags": {}
+    }
+  ],
+  "summary": {
+    "n_arrived": 18,
+    "n_completed": 15,
+    "completion_rate": 0.8333333333333334,
+    "cycle_feasible_rate": 1.0,
+    "n_infeasible_delivery": 0,
+    "avg_wait": 680.0,
+    "total_reward": 88.9508,
+    "total_cost": 246339.006,
+    "solve_time_ms": 298772.5,
+    "K_avail_mean": 24.0,
+    "n_deferred_last": 1,
+    "n_remaining_pool": 1,
+    "wall_seconds": 0.0
+  },
+  "fleet": {
+    "current_time": 0.0,
+    "stats": {
+      "n_uav": 24,
+      "n_available": 24,
+      "n_idle": 24,
+      "n_busy": 0,
+      "n_charging": 0,
+      "n_fault": 0,
+      "n_bound_tasks": 0
+    },
+    "nest_occupancy": {
+      "0": 4,
+      "1": 2,
+      "2": 3,
+      "3": 3,
+      "4": 3,
+      "5": 3,
+      "6": 4,
+      "7": 2
+    },
+    "uavs": [
+      {
+        "id": 0,
+        "status": "idle",
+        "x": -33191.592,
+        "y": 13904.324,
+        "z": 3650.792,
+        "remaining_range": 120000.0,
+        "nest_id": 0,
+        "bound_task_ids": []
+      },
+      {
+        "id": 1,
+        "status": "idle",
+        "x": -41347.962,
+        "y": 8052.905,
+        "z": 3664.076,
+        "remaining_range": 120000.0,
+        "nest_id": 1,
+        "bound_task_ids": []
+      },
+      {
+        "id": 2,
+        "status": "idle",
+        "x": 27684.776,
+        "y": -29893.537,
+        "z": 3546.549,
+        "remaining_range": 120000.0,
+        "nest_id": 2,
+        "bound_task_ids": []
+      },
+      {
+        "id": 3,
+        "status": "idle",
+        "x": 22020.696,
+        "y": -49149.428,
+        "z": 3685.872,
+        "remaining_range": 120000.0,
+        "nest_id": 3,
+        "bound_task_ids": []
+      },
+      {
+        "id": 4,
+        "status": "idle",
+        "x": -14345.183,
+        "y": -31147.541,
+        "z": 3584.0,
+        "remaining_range": 120000.0,
+        "nest_id": 4,
+        "bound_task_ids": []
+      },
+      {
+        "id": 5,
+        "status": "idle",
+        "x": 25534.372,
+        "y": 37533.915,
+        "z": 3815.0,
+        "remaining_range": 120000.0,
+        "nest_id": 5,
+        "bound_task_ids": []
+      },
+      {
+        "id": 6,
+        "status": "idle",
+        "x": 23606.393,
+        "y": 34763.367,
+        "z": 3815.063,
+        "remaining_range": 120000.0,
+        "nest_id": 6,
+        "bound_task_ids": []
+      },
+      {
+        "id": 7,
+        "status": "idle",
+        "x": -9907.106,
+        "y": 16188.749,
+        "z": 3711.872,
+        "remaining_range": 120000.0,
+        "nest_id": 7,
+        "bound_task_ids": []
+      },
+      {
+        "id": 8,
+        "status": "idle",
+        "x": -33191.592,
+        "y": 13904.324,
+        "z": 3650.792,
+        "remaining_range": 120000.0,
+        "nest_id": 0,
+        "bound_task_ids": []
+      },
+      {
+        "id": 9,
+        "status": "idle",
+        "x": -41347.962,
+        "y": 8052.905,
+        "z": 3664.076,
+        "remaining_range": 120000.0,
+        "nest_id": 1,
+        "bound_task_ids": []
+      },
+      {
+        "id": 10,
+        "status": "idle",
+        "x": 27684.776,
+        "y": -29893.537,
+        "z": 3546.549,
+        "remaining_range": 120000.0,
+        "nest_id": 2,
+        "bound_task_ids": []
+      },
+      {
+        "id": 11,
+        "status": "idle",
+        "x": 22020.696,
+        "y": -49149.428,
+        "z": 3685.872,
+        "remaining_range": 120000.0,
+        "nest_id": 3,
+        "bound_task_ids": []
+      },
+      {
+        "id": 12,
+        "status": "idle",
+        "x": -14345.183,
+        "y": -31147.541,
+        "z": 3584.0,
+        "remaining_range": 120000.0,
+        "nest_id": 4,
+        "bound_task_ids": []
+      },
+      {
+        "id": 13,
+        "status": "idle",
+        "x": 25534.372,
+        "y": 37533.915,
+        "z": 3815.0,
+        "remaining_range": 120000.0,
+        "nest_id": 5,
+        "bound_task_ids": []
+      },
+      {
+        "id": 14,
+        "status": "idle",
+        "x": 23606.393,
+        "y": 34763.367,
+        "z": 3815.063,
+        "remaining_range": 120000.0,
+        "nest_id": 6,
+        "bound_task_ids": []
+      },
+      {
+        "id": 15,
+        "status": "idle",
+        "x": 23606.393,
+        "y": 34763.367,
+        "z": 3815.063,
+        "remaining_range": 120000.0,
+        "nest_id": 6,
+        "bound_task_ids": []
+      },
+      {
+        "id": 16,
+        "status": "idle",
+        "x": -33191.592,
+        "y": 13904.324,
+        "z": 3650.792,
+        "remaining_range": 120000.0,
+        "nest_id": 0,
+        "bound_task_ids": []
+      },
+      {
+        "id": 17,
+        "status": "idle",
+        "x": -33191.592,
+        "y": 13904.324,
+        "z": 3650.792,
+        "remaining_range": 120000.0,
+        "nest_id": 0,
+        "bound_task_ids": []
+      },
+      {
+        "id": 18,
+        "status": "idle",
+        "x": 27684.776,
+        "y": -29893.537,
+        "z": 3546.549,
+        "remaining_range": 120000.0,
+        "nest_id": 2,
+        "bound_task_ids": []
+      },
+      {
+        "id": 19,
+        "status": "idle",
+        "x": 22020.696,
+        "y": -49149.428,
+        "z": 3685.872,
+        "remaining_range": 120000.0,
+        "nest_id": 3,
+        "bound_task_ids": []
+      },
+      {
+        "id": 20,
+        "status": "idle",
+        "x": -14345.183,
+        "y": -31147.541,
+        "z": 3584.0,
+        "remaining_range": 120000.0,
+        "nest_id": 4,
+        "bound_task_ids": []
+      },
+      {
+        "id": 21,
+        "status": "idle",
+        "x": 25534.372,
+        "y": 37533.915,
+        "z": 3815.0,
+        "remaining_range": 120000.0,
+        "nest_id": 5,
+        "bound_task_ids": []
+      },
+      {
+        "id": 22,
+        "status": "idle",
+        "x": 23606.393,
+        "y": 34763.367,
+        "z": 3815.063,
+        "remaining_range": 120000.0,
+        "nest_id": 6,
+        "bound_task_ids": []
+      },
+      {
+        "id": 23,
+        "status": "idle",
+        "x": -9907.106,
+        "y": 16188.749,
+        "z": 3711.872,
+        "remaining_range": 120000.0,
+        "nest_id": 7,
+        "bound_task_ids": []
+      }
+    ]
+  },
+  "pool": {
+    "cycle": 3,
+    "current_time": 1800.0,
+    "counts": {
+      "n_total": 1,
+      "n_remain": 1,
+      "n_new": 0,
+      "n_release": 0,
+      "n_executing": 0,
+      "n_expired": 0
+    },
+    "planning_ids": [
+      12
+    ],
+    "source": {
+      "remain": [
+        12
+      ],
+      "new": [],
+      "release": []
+    },
+    "executing": []
+  },
+  "multi_seed": true,
+  "seeds": [
+    42,
+    123,
+    777,
+    2024,
+    9093
+  ],
+  "seed_summary": {
+    "n_completed": {
+      "mean": 16.0,
+      "std": 2.097618
+    },
+    "completion_rate": {
+      "mean": 0.851942,
+      "std": 0.083436
+    },
+    "cycle_feasible_rate": {
+      "mean": 1.0,
+      "std": 0.0
+    },
+    "n_infeasible_delivery": {
+      "mean": 0.0,
+      "std": 0.0
+    },
+    "avg_wait": {
+      "mean": 651.571429,
+      "std": 28.857143
+    },
+    "total_reward": {
+      "mean": 95.60672,
+      "std": 18.486026
+    },
+    "total_cost": {
+      "mean": 313803.27,
+      "std": 95565.033253
+    },
+    "solve_time_ms": {
+      "mean": 288464.56,
+      "std": 41185.201946
+    },
+    "K_avail_mean": {
+      "mean": 24.0,
+      "std": 0.0
+    },
+    "n_deferred_last": {
+      "mean": 1.6,
+      "std": 1.624808
+    },
+    "n_remaining_pool": {
+      "mean": 1.6,
+      "std": 1.624808
+    },
+    "wall_seconds": {
+      "mean": 0.0,
+      "std": 0.0
+    },
+    "n_arrived": {
+      "mean": 18.8,
+      "std": 1.720465
+    }
+  },
+  "per_seed": {
+    "42": {
+      "summary": {
+        "n_arrived": 18,
+        "n_completed": 15,
+        "completion_rate": 0.8333333333333334,
+        "cycle_feasible_rate": 1.0,
+        "n_infeasible_delivery": 0,
+        "avg_wait": 680.0,
+        "total_reward": 88.9508,
+        "total_cost": 246339.006,
+        "solve_time_ms": 298772.5,
+        "K_avail_mean": 24.0,
+        "n_deferred_last": 1,
+        "n_remaining_pool": 1,
+        "wall_seconds": 0.0
+      },
+      "cycles": [
+        {
+          "cycle": 1,
+          "current_time": 600.0,
+          "pool_counts": {
+            "n_total": 10,
+            "n_remain": 0,
+            "n_new": 10,
+            "n_release": 0,
+            "n_executing": 0,
+            "n_expired": 0
+          },
+          "selection": {
+            "n_tasks_in": 10,
+            "n_uav_avail": 24,
+            "current_time": 600.0,
+            "n_forced_in": 0,
+            "n_after_priority": 10,
+            "n_after_prefilter": 10,
+            "n_rejected_prefilter": 0,
+            "n_after_marginal": 10,
+            "n_selected": 10,
+            "n_dropped_postcheck": 0,
+            "replan": true,
+            "forced_task_ids": [
+              0,
+              1,
+              3,
+              6,
+              8
+            ]
+          },
+          "muas": {
+            "n_tasks": 10,
+            "n_uav_avail": 24,
+            "n_participating": 9,
+            "n_nests": 8,
+            "n_end_nests_coded": 9,
+            "coded_end_nests": {
+              "0": 7,
+              "1": 6,
+              "2": 7,
+              "3": 2,
+              "4": 3,
+              "5": 1,
+              "6": 5,
+              "7": 0,
+              "8": 4
+            },
+            "n_executed": 6,
+            "n_deferred": 4,
+            "f1_reward": 31.9609679112891,
+            "f2_cost": 97102.14134957227,
+            "feasible": true,
+            "best_fitness": -22.250753776331873,
+            "model_type": "srp",
+            "solve_seconds": 153.0312,
+            "n_evals": 76317,
+            "n_selected": 10,
+            "replan": true,
+            "excluded_nest_ids": [],
+            "violations": [],
+            "penalty": 0.0
+          },
+          "n_executed": 6,
+          "n_deferred": 4,
+          "n_completed": 6,
+          "n_released": 0,
+          "executed_ids": [
+            5,
+            4,
+            1,
+            9,
+            0,
+            7
+          ],
+          "deferred_ids": [
+            2,
+            3,
+            6,
+            8
+          ],
+          "completed_ids": [
+            5,
+            4,
+            1,
+            9,
+            0,
+            7
+          ],
+          "released_ids": [],
+          "expired_ids": [],
+          "events": [
+            {
+              "type": "urgent_task",
+              "task_id": 0,
+              "reward": 2.751748370667708,
+              "slack": 584.2070386264286
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 1,
+              "reward": 5.200489033543308,
+              "slack": 494.8822580032074
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 3,
+              "reward": 2.3886054286079306,
+              "slack": 640.364023576326
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 6,
+              "reward": 9.70758759190789,
+              "slack": 1549.017294086756
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 8,
+              "reward": 4.33413735431382,
+              "slack": 768.5499620730616
+            }
+          ],
+          "nest_occupancy": {
+            "0": 3,
+            "1": 3,
+            "2": 3,
+            "3": 3,
+            "4": 3,
+            "5": 3,
+            "6": 4,
+            "7": 2
+          },
+          "capacity_violations": [],
+          "replan": true,
+          "replan_context": {
+            "replan": true,
+            "urgent_task_ids": [
+              0,
+              1,
+              3,
+              6,
+              8
+            ],
+            "unavailable_nest_ids": [],
+            "faulted_uav_ids": []
+          },
+          "released_by_fault": [],
+          "n_infeasible": 0,
+          "infeasible_ids": [],
+          "infeasible_tags": {}
+        },
+        {
+          "cycle": 2,
+          "current_time": 1200.0,
+          "pool_counts": {
+            "n_total": 9,
+            "n_remain": 4,
+            "n_new": 5,
+            "n_release": 0,
+            "n_executing": 0,
+            "n_expired": 0
+          },
+          "selection": {
+            "n_tasks_in": 9,
+            "n_uav_avail": 24,
+            "current_time": 1200.0,
+            "n_forced_in": 0,
+            "n_after_priority": 9,
+            "n_after_prefilter": 9,
+            "n_rejected_prefilter": 0,
+            "n_after_marginal": 9,
+            "n_selected": 9,
+            "n_dropped_postcheck": 0,
+            "replan": true,
+            "forced_task_ids": [
+              2,
+              3,
+              6,
+              8,
+              14
+            ]
+          },
+          "muas": {
+            "n_tasks": 9,
+            "n_uav_avail": 24,
+            "n_participating": 8,
+            "n_nests": 8,
+            "n_end_nests_coded": 8,
+            "coded_end_nests": {
+              "0": 6,
+              "1": 2,
+              "2": 1,
+              "3": 3,
+              "4": 2,
+              "5": 3,
+              "6": 7,
+              "7": 7
+            },
+            "n_executed": 6,
+            "n_deferred": 3,
+            "f1_reward": 33.74709793203424,
+            "f2_cost": 94410.15606526064,
+            "feasible": true,
+            "best_fitness": -24.30608232550817,
+            "model_type": "srp",
+            "solve_seconds": 119.3734,
+            "n_evals": 67962,
+            "n_selected": 9,
+            "replan": true,
+            "excluded_nest_ids": [],
+            "violations": [],
+            "penalty": 0.0
+          },
+          "n_executed": 6,
+          "n_deferred": 3,
+          "n_completed": 6,
+          "n_released": 0,
+          "executed_ids": [
+            6,
+            11,
+            14,
+            10,
+            3,
+            13
+          ],
+          "deferred_ids": [
+            2,
+            8,
+            12
+          ],
+          "completed_ids": [
+            6,
+            11,
+            14,
+            10,
+            3,
+            13
+          ],
+          "released_ids": [],
+          "expired_ids": [],
+          "events": [
+            {
+              "type": "urgent_task",
+              "task_id": 2,
+              "reward": 1.394233892085059,
+              "slack": 413.5573893389005
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 3,
+              "reward": 2.3886054286079306,
+              "slack": 40.36402357632596
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 6,
+              "reward": 9.70758759190789,
+              "slack": 949.017294086756
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 8,
+              "reward": 4.33413735431382,
+              "slack": 168.54996207306158
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 14,
+              "reward": 9.56578614817253,
+              "slack": 1189.7612811962454
+            }
+          ],
+          "nest_occupancy": {
+            "0": 3,
+            "1": 3,
+            "2": 3,
+            "3": 3,
+            "4": 3,
+            "5": 3,
+            "6": 4,
+            "7": 2
+          },
+          "capacity_violations": [],
+          "replan": true,
+          "replan_context": {
+            "replan": true,
+            "urgent_task_ids": [
+              2,
+              3,
+              6,
+              8,
+              14
+            ],
+            "unavailable_nest_ids": [],
+            "faulted_uav_ids": []
+          },
+          "released_by_fault": [],
+          "n_infeasible": 0,
+          "infeasible_ids": [],
+          "infeasible_tags": {}
+        },
+        {
+          "cycle": 3,
+          "current_time": 1800.0,
+          "pool_counts": {
+            "n_total": 4,
+            "n_remain": 1,
+            "n_new": 3,
+            "n_release": 0,
+            "n_executing": 0,
+            "n_expired": 2
+          },
+          "selection": {
+            "n_tasks_in": 4,
+            "n_uav_avail": 24,
+            "current_time": 1800.0,
+            "n_forced_in": 0,
+            "n_after_priority": 4,
+            "n_after_prefilter": 4,
+            "n_rejected_prefilter": 0,
+            "n_after_marginal": 4,
+            "n_selected": 4,
+            "n_dropped_postcheck": 0,
+            "replan": true,
+            "forced_task_ids": [
+              12,
+              17
+            ]
+          },
+          "muas": {
+            "n_tasks": 4,
+            "n_uav_avail": 24,
+            "n_participating": 3,
+            "n_nests": 8,
+            "n_end_nests_coded": 3,
+            "coded_end_nests": {
+              "0": 3,
+              "1": 6,
+              "2": 3
+            },
+            "n_executed": 3,
+            "n_deferred": 1,
+            "f1_reward": 23.242738377116503,
+            "f2_cost": 54826.7083806009,
+            "feasible": true,
+            "best_fitness": -17.76006753905641,
+            "model_type": "srp",
+            "solve_seconds": 26.3679,
+            "n_evals": 10589,
+            "n_selected": 4,
+            "replan": true,
+            "excluded_nest_ids": [],
+            "violations": [],
+            "penalty": 0.0
+          },
+          "n_executed": 3,
+          "n_deferred": 1,
+          "n_completed": 3,
+          "n_released": 0,
+          "executed_ids": [
+            16,
+            17,
+            15
+          ],
+          "deferred_ids": [
+            12
+          ],
+          "completed_ids": [
+            16,
+            17,
+            15
+          ],
+          "released_ids": [],
+          "expired_ids": [
+            2,
+            8
+          ],
+          "events": [
+            {
+              "type": "urgent_task",
+              "task_id": 12,
+              "reward": 1.0366995248738982,
+              "slack": 428.2328189362315
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 17,
+              "reward": 9.594425476616495,
+              "slack": 1690.1230391303402
+            }
+          ],
+          "nest_occupancy": {
+            "0": 4,
+            "1": 2,
+            "2": 3,
+            "3": 3,
+            "4": 3,
+            "5": 3,
+            "6": 4,
+            "7": 2
+          },
+          "capacity_violations": [],
+          "replan": true,
+          "replan_context": {
+            "replan": true,
+            "urgent_task_ids": [
+              12,
+              17
+            ],
+            "unavailable_nest_ids": [],
+            "faulted_uav_ids": []
+          },
+          "released_by_fault": [],
+          "n_infeasible": 0,
+          "infeasible_ids": [],
+          "infeasible_tags": {}
+        }
+      ]
+    },
+    "123": {
+      "summary": {
+        "n_arrived": 21,
+        "n_completed": 16,
+        "completion_rate": 0.7619047619047619,
+        "cycle_feasible_rate": 1.0,
+        "n_infeasible_delivery": 0,
+        "avg_wait": 675.0,
+        "total_reward": 104.1986,
+        "total_cost": 264016.25,
+        "solve_time_ms": 330929.1,
+        "K_avail_mean": 24.0,
+        "n_deferred_last": 4,
+        "n_remaining_pool": 4,
+        "wall_seconds": 0.0
+      },
+      "cycles": [
+        {
+          "cycle": 1,
+          "current_time": 600.0,
+          "pool_counts": {
+            "n_total": 10,
+            "n_remain": 0,
+            "n_new": 10,
+            "n_release": 0,
+            "n_executing": 0,
+            "n_expired": 0
+          },
+          "selection": {
+            "n_tasks_in": 10,
+            "n_uav_avail": 24,
+            "current_time": 600.0,
+            "n_forced_in": 0,
+            "n_after_priority": 10,
+            "n_after_prefilter": 10,
+            "n_rejected_prefilter": 0,
+            "n_after_marginal": 10,
+            "n_selected": 10,
+            "n_dropped_postcheck": 0,
+            "replan": true,
+            "forced_task_ids": [
+              0,
+              3,
+              5,
+              6,
+              7,
+              8,
+              9
+            ]
+          },
+          "muas": {
+            "n_tasks": 10,
+            "n_uav_avail": 24,
+            "n_participating": 9,
+            "n_nests": 8,
+            "n_end_nests_coded": 9,
+            "coded_end_nests": {
+              "0": 0,
+              "1": 0,
+              "2": 0,
+              "3": 4,
+              "4": 3,
+              "5": 4,
+              "6": 0,
+              "7": 1,
+              "8": 1
+            },
+            "n_executed": 9,
+            "n_deferred": 1,
+            "f1_reward": 66.06311506725233,
+            "f2_cost": 176396.59904974035,
+            "feasible": true,
+            "best_fitness": -48.42345516227829,
+            "model_type": "srp",
+            "solve_seconds": 149.957,
+            "n_evals": 72276,
+            "n_selected": 10,
+            "replan": true,
+            "excluded_nest_ids": [],
+            "violations": [],
+            "penalty": 0.0
+          },
+          "n_executed": 9,
+          "n_deferred": 1,
+          "n_completed": 9,
+          "n_released": 0,
+          "executed_ids": [
+            2,
+            1,
+            7,
+            6,
+            9,
+            8,
+            5,
+            4,
+            3
+          ],
+          "deferred_ids": [
+            0
+          ],
+          "completed_ids": [
+            2,
+            1,
+            7,
+            6,
+            9,
+            8,
+            5,
+            4,
+            3
+          ],
+          "released_ids": [],
+          "expired_ids": [],
+          "events": [
+            {
+              "type": "urgent_task",
+              "task_id": 0,
+              "reward": 1.13405425084209,
+              "slack": 716.7979354483919
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 3,
+              "reward": 9.267404425961889,
+              "slack": 749.1568434561857
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 5,
+              "reward": 9.25410315292842,
+              "slack": 407.23020993509533
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 6,
+              "reward": 8.782212259843973,
+              "slack": 1174.857615226587
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 7,
+              "reward": 2.9632858592498916,
+              "slack": 656.8595994444263
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 8,
+              "reward": 8.795146876644186,
+              "slack": 1447.4454691554727
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 9,
+              "reward": 7.576767427341284,
+              "slack": 560.4474542631037
+            }
+          ],
+          "nest_occupancy": {
+            "0": 4,
+            "1": 2,
+            "2": 3,
+            "3": 4,
+            "4": 2,
+            "5": 3,
+            "6": 3,
+            "7": 3
+          },
+          "capacity_violations": [],
+          "replan": true,
+          "replan_context": {
+            "replan": true,
+            "urgent_task_ids": [
+              0,
+              3,
+              5,
+              6,
+              7,
+              8,
+              9
+            ],
+            "unavailable_nest_ids": [],
+            "faulted_uav_ids": []
+          },
+          "released_by_fault": [],
+          "n_infeasible": 0,
+          "infeasible_ids": [],
+          "infeasible_tags": {}
+        },
+        {
+          "cycle": 2,
+          "current_time": 1200.0,
+          "pool_counts": {
+            "n_total": 5,
+            "n_remain": 1,
+            "n_new": 4,
+            "n_release": 0,
+            "n_executing": 0,
+            "n_expired": 0
+          },
+          "selection": {
+            "n_tasks_in": 5,
+            "n_uav_avail": 24,
+            "current_time": 1200.0,
+            "n_forced_in": 0,
+            "n_after_priority": 5,
+            "n_after_prefilter": 5,
+            "n_rejected_prefilter": 0,
+            "n_after_marginal": 5,
+            "n_selected": 5,
+            "n_dropped_postcheck": 0,
+            "replan": true,
+            "forced_task_ids": [
+              0,
+              12
+            ]
+          },
+          "muas": {
+            "n_tasks": 5,
+            "n_uav_avail": 24,
+            "n_participating": 4,
+            "n_nests": 8,
+            "n_end_nests_coded": 4,
+            "coded_end_nests": {
+              "0": 7,
+              "1": 3,
+              "2": 5,
+              "3": 0
+            },
+            "n_executed": 1,
+            "n_deferred": 4,
+            "f1_reward": 9.90517139441695,
+            "f2_cost": 12152.839318871658,
+            "feasible": true,
+            "best_fitness": -8.689887462529784,
+            "model_type": "srp",
+            "solve_seconds": 49.5154,
+            "n_evals": 42588,
+            "n_selected": 5,
+            "replan": true,
+            "excluded_nest_ids": [],
+            "violations": [],
+            "penalty": 0.0
+          },
+          "n_executed": 1,
+          "n_deferred": 4,
+          "n_completed": 1,
+          "n_released": 0,
+          "executed_ids": [
+            12
+          ],
+          "deferred_ids": [
+            0,
+            10,
+            11,
+            13
+          ],
+          "completed_ids": [
+            12
+          ],
+          "released_ids": [],
+          "expired_ids": [],
+          "events": [
+            {
+              "type": "urgent_task",
+              "task_id": 0,
+              "reward": 1.13405425084209,
+              "slack": 116.79793544839185
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 12,
+              "reward": 9.90517139441695,
+              "slack": 1296.166985761025
+            }
+          ],
+          "nest_occupancy": {
+            "0": 4,
+            "1": 2,
+            "2": 3,
+            "3": 4,
+            "4": 2,
+            "5": 3,
+            "6": 3,
+            "7": 3
+          },
+          "capacity_violations": [],
+          "replan": true,
+          "replan_context": {
+            "replan": true,
+            "urgent_task_ids": [
+              0,
+              12
+            ],
+            "unavailable_nest_ids": [],
+            "faulted_uav_ids": []
+          },
+          "released_by_fault": [],
+          "n_infeasible": 0,
+          "infeasible_ids": [],
+          "infeasible_tags": {}
+        },
+        {
+          "cycle": 3,
+          "current_time": 1800.0,
+          "pool_counts": {
+            "n_total": 10,
+            "n_remain": 3,
+            "n_new": 7,
+            "n_release": 0,
+            "n_executing": 0,
+            "n_expired": 1
+          },
+          "selection": {
+            "n_tasks_in": 10,
+            "n_uav_avail": 24,
+            "current_time": 1800.0,
+            "n_forced_in": 0,
+            "n_after_priority": 10,
+            "n_after_prefilter": 10,
+            "n_rejected_prefilter": 0,
+            "n_after_marginal": 10,
+            "n_selected": 10,
+            "n_dropped_postcheck": 0,
+            "replan": true,
+            "forced_task_ids": [
+              10,
+              11,
+              13,
+              14
+            ]
+          },
+          "muas": {
+            "n_tasks": 10,
+            "n_uav_avail": 24,
+            "n_participating": 9,
+            "n_nests": 8,
+            "n_end_nests_coded": 9,
+            "coded_end_nests": {
+              "0": 4,
+              "1": 5,
+              "2": 1,
+              "3": 2,
+              "4": 2,
+              "5": 2,
+              "6": 2,
+              "7": 6,
+              "8": 7
+            },
+            "n_executed": 6,
+            "n_deferred": 4,
+            "f1_reward": 28.23029334289333,
+            "f2_cost": 75466.81145500475,
+            "feasible": true,
+            "best_fitness": -20.683612197392854,
+            "model_type": "srp",
+            "solve_seconds": 131.4567,
+            "n_evals": 65245,
+            "n_selected": 10,
+            "replan": true,
+            "excluded_nest_ids": [],
+            "violations": [],
+            "penalty": 0.0
+          },
+          "n_executed": 6,
+          "n_deferred": 4,
+          "n_completed": 6,
+          "n_released": 0,
+          "executed_ids": [
+            19,
+            13,
+            10,
+            16,
+            20,
+            15
+          ],
+          "deferred_ids": [
+            11,
+            14,
+            17,
+            18
+          ],
+          "completed_ids": [
+            19,
+            13,
+            10,
+            16,
+            20,
+            15
+          ],
+          "released_ids": [],
+          "expired_ids": [
+            0
+          ],
+          "events": [
+            {
+              "type": "urgent_task",
+              "task_id": 10,
+              "reward": 3.9783654597222107,
+              "slack": 773.6473003726824
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 11,
+              "reward": 2.434318145741643,
+              "slack": 458.8276788205999
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 13,
+              "reward": 3.31399698651514,
+              "slack": 753.5137083433006
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 14,
+              "reward": 6.949897055818806,
+              "slack": 344.20703807863447
+            }
+          ],
+          "nest_occupancy": {
+            "0": 4,
+            "1": 2,
+            "2": 3,
+            "3": 4,
+            "4": 2,
+            "5": 3,
+            "6": 3,
+            "7": 3
+          },
+          "capacity_violations": [],
+          "replan": true,
+          "replan_context": {
+            "replan": true,
+            "urgent_task_ids": [
+              10,
+              11,
+              13,
+              14
+            ],
+            "unavailable_nest_ids": [],
+            "faulted_uav_ids": []
+          },
+          "released_by_fault": [],
+          "n_infeasible": 0,
+          "infeasible_ids": [],
+          "infeasible_tags": {}
+        }
+      ]
+    },
+    "777": {
+      "summary": {
+        "n_arrived": 16,
+        "n_completed": 14,
+        "completion_rate": 0.875,
+        "cycle_feasible_rate": 1.0,
+        "n_infeasible_delivery": 0,
+        "avg_wait": 642.8571428571429,
+        "total_reward": 79.7291,
+        "total_cost": 289096.315,
+        "solve_time_ms": 211163.6,
+        "K_avail_mean": 24.0,
+        "n_deferred_last": 0,
+        "n_remaining_pool": 0,
+        "wall_seconds": 0.0
+      },
+      "cycles": [
+        {
+          "cycle": 1,
+          "current_time": 600.0,
+          "pool_counts": {
+            "n_total": 10,
+            "n_remain": 0,
+            "n_new": 10,
+            "n_release": 0,
+            "n_executing": 0,
+            "n_expired": 0
+          },
+          "selection": {
+            "n_tasks_in": 10,
+            "n_uav_avail": 24,
+            "current_time": 600.0,
+            "n_forced_in": 0,
+            "n_after_priority": 10,
+            "n_after_prefilter": 10,
+            "n_rejected_prefilter": 0,
+            "n_after_marginal": 10,
+            "n_selected": 10,
+            "n_dropped_postcheck": 0,
+            "replan": true,
+            "forced_task_ids": [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              7
+            ]
+          },
+          "muas": {
+            "n_tasks": 10,
+            "n_uav_avail": 24,
+            "n_participating": 9,
+            "n_nests": 8,
+            "n_end_nests_coded": 9,
+            "coded_end_nests": {
+              "0": 6,
+              "1": 7,
+              "2": 5,
+              "3": 4,
+              "4": 0,
+              "5": 0,
+              "6": 2,
+              "7": 3,
+              "8": 2
+            },
+            "n_executed": 7,
+            "n_deferred": 3,
+            "f1_reward": 34.828660145450485,
+            "f2_cost": 84325.25329046889,
+            "feasible": true,
+            "best_fitness": -26.396134816403595,
+            "model_type": "srp",
+            "solve_seconds": 137.7579,
+            "n_evals": 70351,
+            "n_selected": 10,
+            "replan": true,
+            "excluded_nest_ids": [],
+            "violations": [],
+            "penalty": 0.0
+          },
+          "n_executed": 7,
+          "n_deferred": 3,
+          "n_completed": 7,
+          "n_released": 0,
+          "executed_ids": [
+            5,
+            6,
+            9,
+            2,
+            3,
+            0,
+            4
+          ],
+          "deferred_ids": [
+            1,
+            7,
+            8
+          ],
+          "completed_ids": [
+            5,
+            6,
+            9,
+            2,
+            3,
+            0,
+            4
+          ],
+          "released_ids": [],
+          "expired_ids": [],
+          "events": [
+            {
+              "type": "urgent_task",
+              "task_id": 0,
+              "reward": 2.1519192650041923,
+              "slack": 500.66944928434873
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 1,
+              "reward": 2.800168524050457,
+              "slack": 536.6345377055814
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 2,
+              "reward": 2.530629678310216,
+              "slack": 364.9192551328812
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 3,
+              "reward": 9.028129297594033,
+              "slack": 824.1478459557409
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 4,
+              "reward": 7.648235854648194,
+              "slack": 466.90276197588514
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 5,
+              "reward": 8.00111694197834,
+              "slack": 532.5741445933065
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 7,
+              "reward": 2.188465451087906,
+              "slack": 642.249367437782
+            }
+          ],
+          "nest_occupancy": {
+            "0": 3,
+            "1": 3,
+            "2": 2,
+            "3": 4,
+            "4": 3,
+            "5": 4,
+            "6": 2,
+            "7": 3
+          },
+          "capacity_violations": [],
+          "replan": true,
+          "replan_context": {
+            "replan": true,
+            "urgent_task_ids": [
+              0,
+              1,
+              2,
+              3,
+              4,
+              5,
+              7
+            ],
+            "unavailable_nest_ids": [],
+            "faulted_uav_ids": []
+          },
+          "released_by_fault": [],
+          "n_infeasible": 0,
+          "infeasible_ids": [],
+          "infeasible_tags": {}
+        },
+        {
+          "cycle": 2,
+          "current_time": 1200.0,
+          "pool_counts": {
+            "n_total": 6,
+            "n_remain": 2,
+            "n_new": 4,
+            "n_release": 0,
+            "n_executing": 0,
+            "n_expired": 1
+          },
+          "selection": {
+            "n_tasks_in": 6,
+            "n_uav_avail": 24,
+            "current_time": 1200.0,
+            "n_forced_in": 0,
+            "n_after_priority": 6,
+            "n_after_prefilter": 6,
+            "n_rejected_prefilter": 0,
+            "n_after_marginal": 6,
+            "n_selected": 6,
+            "n_dropped_postcheck": 0,
+            "replan": true,
+            "forced_task_ids": [
+              7,
+              8,
+              12
+            ]
+          },
+          "muas": {
+            "n_tasks": 6,
+            "n_uav_avail": 24,
+            "n_participating": 5,
+            "n_nests": 8,
+            "n_end_nests_coded": 5,
+            "coded_end_nests": {
+              "0": 7,
+              "1": 7,
+              "2": 6,
+              "3": 2,
+              "4": 5
+            },
+            "n_executed": 5,
+            "n_deferred": 1,
+            "f1_reward": 29.9410729182758,
+            "f2_cost": 133490.45732824993,
+            "feasible": true,
+            "best_fitness": -16.592027185450807,
+            "model_type": "srp",
+            "solve_seconds": 63.3138,
+            "n_evals": 43077,
+            "n_selected": 6,
+            "replan": true,
+            "excluded_nest_ids": [],
+            "violations": [],
+            "penalty": 0.0
+          },
+          "n_executed": 5,
+          "n_deferred": 1,
+          "n_completed": 5,
+          "n_released": 0,
+          "executed_ids": [
+            10,
+            13,
+            8,
+            11,
+            12
+          ],
+          "deferred_ids": [
+            7
+          ],
+          "completed_ids": [
+            10,
+            13,
+            8,
+            11,
+            12
+          ],
+          "released_ids": [],
+          "expired_ids": [
+            1
+          ],
+          "events": [
+            {
+              "type": "urgent_task",
+              "task_id": 7,
+              "reward": 2.188465451087906,
+              "slack": 42.249367437781984
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 8,
+              "reward": 2.4783556699770766,
+              "slack": 394.106300655503
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 12,
+              "reward": 8.20520972133071,
+              "slack": 1523.684035896776
+            }
+          ],
+          "nest_occupancy": {
+            "0": 3,
+            "1": 3,
+            "2": 3,
+            "3": 4,
+            "4": 2,
+            "5": 4,
+            "6": 3,
+            "7": 2
+          },
+          "capacity_violations": [],
+          "replan": true,
+          "replan_context": {
+            "replan": true,
+            "urgent_task_ids": [
+              7,
+              8,
+              12
+            ],
+            "unavailable_nest_ids": [],
+            "faulted_uav_ids": []
+          },
+          "released_by_fault": [],
+          "n_infeasible": 0,
+          "infeasible_ids": [],
+          "infeasible_tags": {}
+        },
+        {
+          "cycle": 3,
+          "current_time": 1800.0,
+          "pool_counts": {
+            "n_total": 2,
+            "n_remain": 0,
+            "n_new": 2,
+            "n_release": 0,
+            "n_executing": 0,
+            "n_expired": 1
+          },
+          "selection": {
+            "n_tasks_in": 2,
+            "n_uav_avail": 24,
+            "current_time": 1800.0,
+            "n_forced_in": 0,
+            "n_after_priority": 2,
+            "n_after_prefilter": 2,
+            "n_rejected_prefilter": 0,
+            "n_after_marginal": 2,
+            "n_selected": 2,
+            "n_dropped_postcheck": 0,
+            "replan": true,
+            "forced_task_ids": [
+              15
+            ]
+          },
+          "muas": {
+            "n_tasks": 2,
+            "n_uav_avail": 24,
+            "n_participating": 1,
+            "n_nests": 8,
+            "n_end_nests_coded": 1,
+            "coded_end_nests": {
+              "0": 7
+            },
+            "n_executed": 2,
+            "n_deferred": 0,
+            "f1_reward": 14.959399088266066,
+            "f2_cost": 71280.60432263551,
+            "feasible": true,
+            "best_fitness": -7.831338656002514,
+            "model_type": "srp",
+            "solve_seconds": 10.0919,
+            "n_evals": 16,
+            "n_selected": 2,
+            "replan": true,
+            "excluded_nest_ids": [],
+            "violations": [],
+            "penalty": 0.0
+          },
+          "n_executed": 2,
+          "n_deferred": 0,
+          "n_completed": 2,
+          "n_released": 0,
+          "executed_ids": [
+            14,
+            15
+          ],
+          "deferred_ids": [],
+          "completed_ids": [
+            14,
+            15
+          ],
+          "released_ids": [],
+          "expired_ids": [
+            7
+          ],
+          "events": [
+            {
+              "type": "urgent_task",
+              "task_id": 15,
+              "reward": 9.688039288031659,
+              "slack": 699.5903909762219
+            }
+          ],
+          "nest_occupancy": {
+            "0": 3,
+            "1": 3,
+            "2": 3,
+            "3": 4,
+            "4": 1,
+            "5": 4,
+            "6": 3,
+            "7": 3
+          },
+          "capacity_violations": [],
+          "replan": true,
+          "replan_context": {
+            "replan": true,
+            "urgent_task_ids": [
+              15
+            ],
+            "unavailable_nest_ids": [],
+            "faulted_uav_ids": []
+          },
+          "released_by_fault": [],
+          "n_infeasible": 0,
+          "infeasible_ids": [],
+          "infeasible_tags": {}
+        }
+      ]
+    },
+    "2024": {
+      "summary": {
+        "n_arrived": 19,
+        "n_completed": 15,
+        "completion_rate": 0.7894736842105263,
+        "cycle_feasible_rate": 1.0,
+        "n_infeasible_delivery": 0,
+        "avg_wait": 600.0,
+        "total_reward": 77.6651,
+        "total_cost": 266573.466,
+        "solve_time_ms": 288576.6,
+        "K_avail_mean": 24.0,
+        "n_deferred_last": 3,
+        "n_remaining_pool": 3,
+        "wall_seconds": 0.0
+      },
+      "cycles": [
+        {
+          "cycle": 1,
+          "current_time": 600.0,
+          "pool_counts": {
+            "n_total": 10,
+            "n_remain": 0,
+            "n_new": 10,
+            "n_release": 0,
+            "n_executing": 0,
+            "n_expired": 0
+          },
+          "selection": {
+            "n_tasks_in": 10,
+            "n_uav_avail": 24,
+            "current_time": 600.0,
+            "n_forced_in": 0,
+            "n_after_priority": 10,
+            "n_after_prefilter": 10,
+            "n_rejected_prefilter": 0,
+            "n_after_marginal": 10,
+            "n_selected": 10,
+            "n_dropped_postcheck": 0,
+            "replan": true,
+            "forced_task_ids": [
+              1,
+              4,
+              5,
+              6,
+              7,
+              9
+            ]
+          },
+          "muas": {
+            "n_tasks": 10,
+            "n_uav_avail": 24,
+            "n_participating": 9,
+            "n_nests": 8,
+            "n_end_nests_coded": 9,
+            "coded_end_nests": {
+              "0": 6,
+              "1": 4,
+              "2": 0,
+              "3": 5,
+              "4": 5,
+              "5": 5,
+              "6": 0,
+              "7": 1,
+              "8": 0
+            },
+            "n_executed": 8,
+            "n_deferred": 2,
+            "f1_reward": 40.70516140827249,
+            "f2_cost": 109298.61408838656,
+            "feasible": true,
+            "best_fitness": -29.775299999433834,
+            "model_type": "srp",
+            "solve_seconds": 144.1833,
+            "n_evals": 65740,
+            "n_selected": 10,
+            "replan": true,
+            "excluded_nest_ids": [],
+            "violations": [],
+            "penalty": 0.0
+          },
+          "n_executed": 8,
+          "n_deferred": 2,
+          "n_completed": 8,
+          "n_released": 0,
+          "executed_ids": [
+            1,
+            2,
+            4,
+            0,
+            6,
+            7,
+            9,
+            8
+          ],
+          "deferred_ids": [
+            3,
+            5
+          ],
+          "completed_ids": [
+            1,
+            2,
+            4,
+            0,
+            6,
+            7,
+            9,
+            8
+          ],
+          "released_ids": [],
+          "expired_ids": [],
+          "events": [
+            {
+              "type": "urgent_task",
+              "task_id": 1,
+              "reward": 8.264637878210724,
+              "slack": 1002.0285704019129
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 4,
+              "reward": 1.637936058071411,
+              "slack": 418.55147564632773
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 5,
+              "reward": 5.204879324428068,
+              "slack": 667.8064059873986
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 6,
+              "reward": 3.3778489594642167,
+              "slack": 577.1806180149435
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 7,
+              "reward": 9.000478342283431,
+              "slack": 1658.2123560614054
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 9,
+              "reward": 7.963902385286837,
+              "slack": 857.4884712397877
+            }
+          ],
+          "nest_occupancy": {
+            "0": 2,
+            "1": 4,
+            "2": 3,
+            "3": 3,
+            "4": 3,
+            "5": 3,
+            "6": 3,
+            "7": 3
+          },
+          "capacity_violations": [],
+          "replan": true,
+          "replan_context": {
+            "replan": true,
+            "urgent_task_ids": [
+              1,
+              4,
+              5,
+              6,
+              7,
+              9
+            ],
+            "unavailable_nest_ids": [],
+            "faulted_uav_ids": []
+          },
+          "released_by_fault": [],
+          "n_infeasible": 0,
+          "infeasible_ids": [],
+          "infeasible_tags": {}
+        },
+        {
+          "cycle": 2,
+          "current_time": 1200.0,
+          "pool_counts": {
+            "n_total": 6,
+            "n_remain": 2,
+            "n_new": 4,
+            "n_release": 0,
+            "n_executing": 0,
+            "n_expired": 0
+          },
+          "selection": {
+            "n_tasks_in": 6,
+            "n_uav_avail": 24,
+            "current_time": 1200.0,
+            "n_forced_in": 0,
+            "n_after_priority": 6,
+            "n_after_prefilter": 6,
+            "n_rejected_prefilter": 0,
+            "n_after_marginal": 6,
+            "n_selected": 6,
+            "n_dropped_postcheck": 0,
+            "replan": true,
+            "forced_task_ids": [
+              5,
+              12
+            ]
+          },
+          "muas": {
+            "n_tasks": 6,
+            "n_uav_avail": 24,
+            "n_participating": 5,
+            "n_nests": 8,
+            "n_end_nests_coded": 5,
+            "coded_end_nests": {
+              "0": 3,
+              "1": 3,
+              "2": 0,
+              "3": 3,
+              "4": 0
+            },
+            "n_executed": 3,
+            "n_deferred": 3,
+            "f1_reward": 10.08051361385214,
+            "f2_cost": 59172.25602390187,
+            "feasible": true,
+            "best_fitness": -4.163288011461953,
+            "model_type": "srp",
+            "solve_seconds": 63.4398,
+            "n_evals": 50654,
+            "n_selected": 6,
+            "replan": true,
+            "excluded_nest_ids": [],
+            "violations": [],
+            "penalty": 0.0
+          },
+          "n_executed": 3,
+          "n_deferred": 3,
+          "n_completed": 3,
+          "n_released": 0,
+          "executed_ids": [
+            12,
+            10,
+            11
+          ],
+          "deferred_ids": [
+            3,
+            5,
+            13
+          ],
+          "completed_ids": [
+            12,
+            10,
+            11
+          ],
+          "released_ids": [],
+          "expired_ids": [],
+          "events": [
+            {
+              "type": "urgent_task",
+              "task_id": 5,
+              "reward": 5.204879324428068,
+              "slack": 67.80640598739865
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 12,
+              "reward": 2.5026503559559448,
+              "slack": 394.71584188978227
+            }
+          ],
+          "nest_occupancy": {
+            "0": 2,
+            "1": 4,
+            "2": 3,
+            "3": 3,
+            "4": 3,
+            "5": 3,
+            "6": 2,
+            "7": 4
+          },
+          "capacity_violations": [],
+          "replan": true,
+          "replan_context": {
+            "replan": true,
+            "urgent_task_ids": [
+              5,
+              12
+            ],
+            "unavailable_nest_ids": [],
+            "faulted_uav_ids": []
+          },
+          "released_by_fault": [],
+          "n_infeasible": 0,
+          "infeasible_ids": [],
+          "infeasible_tags": {}
+        },
+        {
+          "cycle": 3,
+          "current_time": 1800.0,
+          "pool_counts": {
+            "n_total": 7,
+            "n_remain": 2,
+            "n_new": 5,
+            "n_release": 0,
+            "n_executing": 0,
+            "n_expired": 1
+          },
+          "selection": {
+            "n_tasks_in": 7,
+            "n_uav_avail": 24,
+            "current_time": 1800.0,
+            "n_forced_in": 0,
+            "n_after_priority": 7,
+            "n_after_prefilter": 7,
+            "n_rejected_prefilter": 0,
+            "n_after_marginal": 7,
+            "n_selected": 7,
+            "n_dropped_postcheck": 0,
+            "replan": true,
+            "forced_task_ids": [
+              3,
+              13,
+              14,
+              15,
+              16
+            ]
+          },
+          "muas": {
+            "n_tasks": 7,
+            "n_uav_avail": 24,
+            "n_participating": 6,
+            "n_nests": 8,
+            "n_end_nests_coded": 6,
+            "coded_end_nests": {
+              "0": 6,
+              "1": 0,
+              "2": 5,
+              "3": 0,
+              "4": 0,
+              "5": 0
+            },
+            "n_executed": 4,
+            "n_deferred": 3,
+            "f1_reward": 26.879454374594008,
+            "f2_cost": 98102.5959872346,
+            "feasible": true,
+            "best_fitness": -17.06919477587055,
+            "model_type": "srp",
+            "solve_seconds": 80.9535,
+            "n_evals": 53198,
+            "n_selected": 7,
+            "replan": true,
+            "excluded_nest_ids": [],
+            "violations": [],
+            "penalty": 0.0
+          },
+          "n_executed": 4,
+          "n_deferred": 3,
+          "n_completed": 4,
+          "n_released": 0,
+          "executed_ids": [
+            14,
+            16,
+            17,
+            15
+          ],
+          "deferred_ids": [
+            3,
+            13,
+            18
+          ],
+          "completed_ids": [
+            14,
+            16,
+            17,
+            15
+          ],
+          "released_ids": [],
+          "expired_ids": [
+            5
+          ],
+          "events": [
+            {
+              "type": "urgent_task",
+              "task_id": 3,
+              "reward": 3.412565826108663,
+              "slack": 447.3410014673168
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 13,
+              "reward": 2.380927860810841,
+              "slack": 437.37972667956956
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 14,
+              "reward": 7.77458887371178,
+              "slack": 716.8488232502386
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 15,
+              "reward": 5.6363832669011655,
+              "slack": 639.499585265105
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 16,
+              "reward": 8.43305732538013,
+              "slack": 1088.7252650178725
+            }
+          ],
+          "nest_occupancy": {
+            "0": 3,
+            "1": 4,
+            "2": 3,
+            "3": 3,
+            "4": 3,
+            "5": 3,
+            "6": 1,
+            "7": 4
+          },
+          "capacity_violations": [],
+          "replan": true,
+          "replan_context": {
+            "replan": true,
+            "urgent_task_ids": [
+              3,
+              13,
+              14,
+              15,
+              16
+            ],
+            "unavailable_nest_ids": [],
+            "faulted_uav_ids": []
+          },
+          "released_by_fault": [],
+          "n_infeasible": 0,
+          "infeasible_ids": [],
+          "infeasible_tags": {}
+        }
+      ]
+    },
+    "9093": {
+      "summary": {
+        "n_arrived": 20,
+        "n_completed": 20,
+        "completion_rate": 1.0,
+        "cycle_feasible_rate": 1.0,
+        "n_infeasible_delivery": 0,
+        "avg_wait": 660.0,
+        "total_reward": 127.49,
+        "total_cost": 502991.313,
+        "solve_time_ms": 312881.0,
+        "K_avail_mean": 24.0,
+        "n_deferred_last": 0,
+        "n_remaining_pool": 0,
+        "wall_seconds": 0.0
+      },
+      "cycles": [
+        {
+          "cycle": 1,
+          "current_time": 600.0,
+          "pool_counts": {
+            "n_total": 10,
+            "n_remain": 0,
+            "n_new": 10,
+            "n_release": 0,
+            "n_executing": 0,
+            "n_expired": 0
+          },
+          "selection": {
+            "n_tasks_in": 10,
+            "n_uav_avail": 24,
+            "current_time": 600.0,
+            "n_forced_in": 0,
+            "n_after_priority": 10,
+            "n_after_prefilter": 10,
+            "n_rejected_prefilter": 0,
+            "n_after_marginal": 10,
+            "n_selected": 10,
+            "n_dropped_postcheck": 0,
+            "replan": true,
+            "forced_task_ids": [
+              0,
+              2,
+              6
+            ]
+          },
+          "muas": {
+            "n_tasks": 10,
+            "n_uav_avail": 24,
+            "n_participating": 9,
+            "n_nests": 8,
+            "n_end_nests_coded": 9,
+            "coded_end_nests": {
+              "0": 6,
+              "1": 7,
+              "2": 6,
+              "3": 5,
+              "4": 6,
+              "5": 3,
+              "6": 3,
+              "7": 7,
+              "8": 0
+            },
+            "n_executed": 8,
+            "n_deferred": 2,
+            "f1_reward": 43.44763655246709,
+            "f2_cost": 172772.973413508,
+            "feasible": true,
+            "best_fitness": -26.170339211116286,
+            "model_type": "srp",
+            "solve_seconds": 157.6676,
+            "n_evals": 77691,
+            "n_selected": 10,
+            "replan": true,
+            "excluded_nest_ids": [],
+            "violations": [],
+            "penalty": 0.0
+          },
+          "n_executed": 8,
+          "n_deferred": 2,
+          "n_completed": 8,
+          "n_released": 0,
+          "executed_ids": [
+            0,
+            6,
+            1,
+            3,
+            2,
+            5,
+            7,
+            4
+          ],
+          "deferred_ids": [
+            8,
+            9
+          ],
+          "completed_ids": [
+            0,
+            6,
+            1,
+            3,
+            2,
+            5,
+            7,
+            4
+          ],
+          "released_ids": [],
+          "expired_ids": [],
+          "events": [
+            {
+              "type": "urgent_task",
+              "task_id": 0,
+              "reward": 8.196044983512351,
+              "slack": 1454.8215501118452
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 2,
+              "reward": 2.1375590729336915,
+              "slack": 663.9291501338537
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 6,
+              "reward": 4.380886215169338,
+              "slack": 440.36533476746877
+            }
+          ],
+          "nest_occupancy": {
+            "0": 4,
+            "1": 3,
+            "2": 3,
+            "3": 4,
+            "4": 3,
+            "5": 2,
+            "6": 4,
+            "7": 1
+          },
+          "capacity_violations": [],
+          "replan": true,
+          "replan_context": {
+            "replan": true,
+            "urgent_task_ids": [
+              0,
+              2,
+              6
+            ],
+            "unavailable_nest_ids": [],
+            "faulted_uav_ids": []
+          },
+          "released_by_fault": [],
+          "n_infeasible": 0,
+          "infeasible_ids": [],
+          "infeasible_tags": {}
+        },
+        {
+          "cycle": 2,
+          "current_time": 1200.0,
+          "pool_counts": {
+            "n_total": 9,
+            "n_remain": 2,
+            "n_new": 7,
+            "n_release": 0,
+            "n_executing": 0,
+            "n_expired": 0
+          },
+          "selection": {
+            "n_tasks_in": 9,
+            "n_uav_avail": 24,
+            "current_time": 1200.0,
+            "n_forced_in": 0,
+            "n_after_priority": 9,
+            "n_after_prefilter": 9,
+            "n_rejected_prefilter": 0,
+            "n_after_marginal": 9,
+            "n_selected": 9,
+            "n_dropped_postcheck": 0,
+            "replan": true,
+            "forced_task_ids": [
+              8,
+              9,
+              10,
+              11,
+              13,
+              14
+            ]
+          },
+          "muas": {
+            "n_tasks": 9,
+            "n_uav_avail": 24,
+            "n_participating": 8,
+            "n_nests": 8,
+            "n_end_nests_coded": 8,
+            "coded_end_nests": {
+              "0": 7,
+              "1": 2,
+              "2": 3,
+              "3": 7,
+              "4": 1,
+              "5": 4,
+              "6": 4,
+              "7": 2
+            },
+            "n_executed": 9,
+            "n_deferred": 0,
+            "f1_reward": 56.55074092484841,
+            "f2_cost": 238010.3546261907,
+            "feasible": true,
+            "best_fitness": -32.74970546222934,
+            "model_type": "srp",
+            "solve_seconds": 138.2464,
+            "n_evals": 71288,
+            "n_selected": 9,
+            "replan": true,
+            "excluded_nest_ids": [],
+            "violations": [],
+            "penalty": 0.0
+          },
+          "n_executed": 9,
+          "n_deferred": 0,
+          "n_completed": 9,
+          "n_released": 0,
+          "executed_ids": [
+            12,
+            16,
+            14,
+            13,
+            8,
+            15,
+            11,
+            10,
+            9
+          ],
+          "deferred_ids": [],
+          "completed_ids": [
+            12,
+            16,
+            14,
+            13,
+            8,
+            15,
+            11,
+            10,
+            9
+          ],
+          "released_ids": [],
+          "expired_ids": [],
+          "events": [
+            {
+              "type": "urgent_task",
+              "task_id": 8,
+              "reward": 2.6303096577411287,
+              "slack": 835.1987773954647
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 9,
+              "reward": 4.373068448098373,
+              "slack": 700.0116145535378
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 10,
+              "reward": 9.253580291014485,
+              "slack": 601.3042043945529
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 11,
+              "reward": 7.08317567611026,
+              "slack": 357.39408913218676
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 13,
+              "reward": 8.98524387093328,
+              "slack": 1461.886623352254
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 14,
+              "reward": 9.13940674606586,
+              "slack": 1250.04743538299
+            }
+          ],
+          "nest_occupancy": {
+            "0": 4,
+            "1": 4,
+            "2": 2,
+            "3": 4,
+            "4": 2,
+            "5": 2,
+            "6": 4,
+            "7": 2
+          },
+          "capacity_violations": [],
+          "replan": true,
+          "replan_context": {
+            "replan": true,
+            "urgent_task_ids": [
+              8,
+              9,
+              10,
+              11,
+              13,
+              14
+            ],
+            "unavailable_nest_ids": [],
+            "faulted_uav_ids": []
+          },
+          "released_by_fault": [],
+          "n_infeasible": 0,
+          "infeasible_ids": [],
+          "infeasible_tags": {}
+        },
+        {
+          "cycle": 3,
+          "current_time": 1800.0,
+          "pool_counts": {
+            "n_total": 3,
+            "n_remain": 0,
+            "n_new": 3,
+            "n_release": 0,
+            "n_executing": 0,
+            "n_expired": 0
+          },
+          "selection": {
+            "n_tasks_in": 3,
+            "n_uav_avail": 24,
+            "current_time": 1800.0,
+            "n_forced_in": 0,
+            "n_after_priority": 3,
+            "n_after_prefilter": 3,
+            "n_rejected_prefilter": 0,
+            "n_after_marginal": 3,
+            "n_selected": 3,
+            "n_dropped_postcheck": 0,
+            "replan": true,
+            "forced_task_ids": [
+              17,
+              18,
+              19
+            ]
+          },
+          "muas": {
+            "n_tasks": 3,
+            "n_uav_avail": 24,
+            "n_participating": 2,
+            "n_nests": 8,
+            "n_end_nests_coded": 2,
+            "coded_end_nests": {
+              "0": 6,
+              "1": 4
+            },
+            "n_executed": 3,
+            "n_deferred": 0,
+            "f1_reward": 27.491648529725705,
+            "f2_cost": 92207.98534524172,
+            "feasible": true,
+            "best_fitness": -18.27084999520153,
+            "model_type": "srp",
+            "solve_seconds": 16.967,
+            "n_evals": 415,
+            "n_selected": 3,
+            "replan": true,
+            "excluded_nest_ids": [],
+            "violations": [],
+            "penalty": 0.0
+          },
+          "n_executed": 3,
+          "n_deferred": 0,
+          "n_completed": 3,
+          "n_released": 0,
+          "executed_ids": [
+            19,
+            18,
+            17
+          ],
+          "deferred_ids": [],
+          "completed_ids": [
+            19,
+            18,
+            17
+          ],
+          "released_ids": [],
+          "expired_ids": [],
+          "events": [
+            {
+              "type": "urgent_task",
+              "task_id": 17,
+              "reward": 9.874781427639736,
+              "slack": 858.8945359455961
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 18,
+              "reward": 9.07698289082522,
+              "slack": 735.9606730129403
+            },
+            {
+              "type": "urgent_task",
+              "task_id": 19,
+              "reward": 8.539884211260746,
+              "slack": 902.8551177171266
+            }
+          ],
+          "nest_occupancy": {
+            "0": 4,
+            "1": 4,
+            "2": 3,
+            "3": 4,
+            "4": 2,
+            "5": 2,
+            "6": 4,
+            "7": 1
+          },
+          "capacity_violations": [],
+          "replan": true,
+          "replan_context": {
+            "replan": true,
+            "urgent_task_ids": [
+              17,
+              18,
+              19
+            ],
+            "unavailable_nest_ids": [],
+            "faulted_uav_ids": []
+          },
+          "released_by_fault": [],
+          "n_infeasible": 0,
+          "infeasible_ids": [],
+          "infeasible_tags": {}
+        }
+      ]
+    }
+  }
+}

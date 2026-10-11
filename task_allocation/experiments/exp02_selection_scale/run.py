@@ -118,6 +118,7 @@ def main() -> int:
         lambda_cost=float(m.get("lambda_cost", 1.0e-4)),
         w_penalty=float(m.get("w_penalty", 1.0)),
         w_nest_capacity=float(m.get("w_nest_capacity", 1.0)),
+        w_time=float(m.get("w_time", 0.0)),
     )
     s = cfg.get("stage", {}) or {}
     stage_cfg = MUASStageConfig(

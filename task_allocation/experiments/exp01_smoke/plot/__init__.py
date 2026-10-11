@@ -30,6 +30,13 @@ from .allocation import plot_allocation_gantt
 from .assignment import plot_assignment_map
 from .convergence import plot_convergence
 from .cycles import plot_cycle_metrics
+from .geo_map import (
+    plot_geo_evolution,
+    plot_geo_fleet_transition,
+    plot_geo_overview,
+    plot_geo_task_lifecycle,
+)
+from .seed_summary import plot_seed_summary
 from .selection import plot_selection_funnel
 
 __all__ = [
@@ -46,7 +53,12 @@ FIGURE_NAMES = (
     "selection_funnel",
     "allocation_gantt",
     "assignment_map",
+    "geo_overview",
+    "geo_evolution",
+    "geo_task_lifecycle",
+    "geo_fleet_transition",
     "convergence",
+    "seed_summary",
 )
 
 setup_style = _theme.setup_style
@@ -69,7 +81,7 @@ def make_plots(
     solution: dict[str, Any],
     out_dir: Path | str,
     *,
-    formats: Sequence[str] = ("png", "pdf"),
+    formats: Sequence[str] = ("png",),
     dpi: int = 200,
 ) -> list[Path]:
     """按固定顺序生成全部图到 ``out_dir``，返回落盘路径列表。"""
@@ -82,7 +94,12 @@ def make_plots(
     written += plot_selection_funnel(metrics, out_dir, formats, dpi=dpi)
     written += plot_allocation_gantt(metrics, solution, out_dir, formats, dpi=dpi)
     written += plot_assignment_map(metrics, solution, out_dir, formats, dpi=dpi)
+    written += plot_geo_overview(metrics, solution, out_dir, formats, dpi=dpi)
+    written += plot_geo_evolution(metrics, solution, out_dir, formats, dpi=dpi)
+    written += plot_geo_task_lifecycle(metrics, solution, out_dir, formats, dpi=dpi)
+    written += plot_geo_fleet_transition(metrics, solution, out_dir, formats, dpi=dpi)
     written += plot_convergence(solution, out_dir, formats, dpi=dpi)
+    written += plot_seed_summary(metrics, out_dir, formats, dpi=dpi)
 
     print(f"[exp01] 图：{len(written)} 个文件 → {out_dir}（字体 {font}）")
     for p in written:
@@ -94,7 +111,7 @@ def render_from_results(
     results_dir: Path | str,
     out_dir: Path | str | None = None,
     *,
-    formats: Sequence[str] = ("png", "pdf"),
+    formats: Sequence[str] = ("png",),
     dpi: int = 200,
 ) -> list[Path]:
     """从已落盘的 ``results/`` 直接重画图（不重跑实验）。

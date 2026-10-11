@@ -76,7 +76,7 @@ def plot_assignment_map(
     metrics: dict[str, Any],
     solution: dict[str, Any],
     out_dir: Path,
-    formats: Sequence[str] = ("png", "pdf"),
+    formats: Sequence[str] = ("png",),
     *,
     dpi: int = 200,
 ) -> list[Path]:

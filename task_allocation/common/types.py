@@ -73,6 +73,7 @@ class UAV:
     z: float = 0.0
     remaining_range: float = 1e9
     speed: float = 10.0
+    max_time: float | None = None  # 最大飞行时间（秒）；None 表示不限制（默认）
     nest_id: int | None = None
     status: UAVStatus = UAVStatus.IDLE
     meta: dict[str, Any] = field(default_factory=dict)

@@ -95,6 +95,12 @@ class HorizonConfig:
     faults: dict[int, list[int]] = field(default_factory=dict)
     # 落地期容量硬校验：True 时超容直接抛异常
     strict_capacity: bool = False
+    # 完成反馈的可行性闸门（论文 §6 完成反馈的判据）：
+    # True 时，周期末只把「本周期解中未违约」的任务判为完成；被 ``check_feasible``
+    # 判为违约的任务（时间窗 / 航程 / 续航 / 终点机巢不可达等）不顺延完成，
+    # 而是解绑回任务池、下一周期重新纳入选择，并记入 ``record.infeasible_ids``。
+    # 置 False 则回到历史行为（一律标完成），用于消融对比。
+    completion_feasibility_gate: bool = True
     # 事件驱动重规划：检测到 UAV 故障 / 突发高优先级任务 / 机巢不可用时，
     # 在本周期计划内做反应式调整（强制纳入紧急任务、剔除不可用机巢）。
     # 置 False 则事件仅被记录、不触发本期重规划（供消融对比关停该机制）。
@@ -146,6 +152,11 @@ class CycleRecord:
     replan_context: dict[str, Any] = field(default_factory=dict)
     # 本周期因 UAV 故障释放回任务池的任务（供下一周期强制纳入选择）
     released_by_fault: list[int] = field(default_factory=list)
+    # 完成闸门拦截的违约交付：解被判不可行、本周期未真正交付的任务。
+    # 不顺延完成，解绑回任务池并在下一周期重新选择（区别于 completed_ids）。
+    infeasible_ids: list[int] = field(default_factory=list)
+    # 违约任务的归因标签：{task_id: [violation_tag, ...]}，供指标与论文取数
+    infeasible_tags: dict[str, list[str]] = field(default_factory=dict)
     # 分配结构与求解轨迹：不进 as_dict()/metrics.json（数值指标保持精简），
     # 由实验编排写入 results/solution.json，供分配图 / 收敛图取用。
     tours: list[dict[str, Any]] = field(default_factory=list)
@@ -173,6 +184,9 @@ class CycleRecord:
             "replan": self.replan,
             "replan_context": self.replan_context,
             "released_by_fault": self.released_by_fault,
+            "n_infeasible": len(self.infeasible_ids),
+            "infeasible_ids": self.infeasible_ids,
+            "infeasible_tags": self.infeasible_tags,
         }
 
 
@@ -499,6 +513,72 @@ class RollingHorizon:
             hint[t.id] = best if np.isfinite(best) else 1e6
         return hint
 
+    # 违约标签 → 受影响任务的映射规则（供完成闸门归因）
+    #   任务级：tw_task_{tid} / unknown_task_{tid}
+    #   UAV 级：range_uav_{uid} / time_uav_{uid} → 该机航次内全部任务
+    #   机巢级：nest_capacity_{nid} / nest_unavailable_{nid} / bad_nest_{nid}
+    #           / end_nest_unreachable_{nid} → 终点为该巢的航次内全部任务
+    _UAV_LEVEL_TAGS = ("range_uav", "time_uav")
+    _NEST_LEVEL_TAGS = (
+        "nest_capacity",
+        "nest_unavailable",
+        "bad_nest",
+        "end_nest_unreachable",
+    )
+
+    def _violated_task_ids(
+        self, solution: AllocationSolution
+    ) -> dict[int, list[str]]:
+        """把 ``check_feasible`` 的违约标签归因到具体任务。
+
+        Returns:
+            ``{task_id: [violation_tag, ...]}``；解可行时返回空字典。
+
+        解析不了的标签（结构类 ``sum_x_neq_y``、时序 ``seq_group_*`` 等）
+        不参与归因——它们不指向单个任务的交付失败，交给可行性判定整体把关。
+        """
+        feas = solution.meta.get("feasibility", {}) or {}
+        tags = [str(t) for t in feas.get("violations", [])]
+        if not tags:
+            return {}
+
+        uav_tasks: dict[int, list[int]] = {}
+        nest_tasks: dict[int, list[int]] = {}
+        for tour in solution.tours:
+            tids = [int(i) for i in tour.task_ids]
+            uav_tasks.setdefault(int(tour.uav_id), []).extend(tids)
+            if tour.end_nest_id is not None:
+                nest_tasks.setdefault(int(tour.end_nest_id), []).extend(tids)
+
+        out: dict[int, list[str]] = {}
+
+        def _mark(tid: int, tag: str) -> None:
+            out.setdefault(int(tid), []).append(tag)
+
+        for tag in tags:
+            kind, _, tail = tag.rpartition("_")
+            try:
+                key = int(tail)
+            except ValueError:
+                continue
+            if kind == "tw_task" or kind == "unknown_task":
+                _mark(key, tag)
+            elif kind in self._UAV_LEVEL_TAGS:
+                for tid in uav_tasks.get(key, []):
+                    _mark(tid, tag)
+            elif kind in self._NEST_LEVEL_TAGS:
+                for tid in nest_tasks.get(key, []):
+                    _mark(tid, tag)
+
+        # 兜底：航次自身被判不可行（tour.feasible=False）时，其任务一并归因
+        for tour in solution.tours:
+            if tour.feasible:
+                continue
+            for tid in tour.task_ids:
+                _mark(int(tid), f"tour_infeasible_uav_{int(tour.uav_id)}")
+
+        return out
+
     def _advance_execution(self, solution: AllocationSolution, record: CycleRecord) -> None:
         """按航次推进位置与剩余航程，并在周期末判定完成。"""
         cfg = self.hcfg
@@ -519,20 +599,47 @@ class RollingHorizon:
         if not cfg.complete_after_cycle:
             return
 
+        # 完成闸门：本周期解被判违约的任务不顺延完成（默认开启）
+        violated = (
+            self._violated_task_ids(solution)
+            if cfg.completion_feasibility_gate
+            else {}
+        )
+
         for tour in solution.tours:
             if not tour.task_ids:
                 continue
             bound = self.fleet.bound_tasks(tour.uav_id)
             if not bound:
                 continue
-            # 记录完成时刻，供 avg_wait 等指标使用
-            for tid in bound:
+
+            bad = [int(t) for t in bound if int(t) in violated]
+            ok = [int(t) for t in bound if int(t) not in violated]
+
+            # ① 违约交付：解绑回任务池，下一周期重新纳入选择（不计完成、不计奖励）
+            if bad:
+                self.fleet.unbind_tasks(tour.uav_id, bad)
+                self.pool.release(bad, reason="infeasible_delivery")
+                for tid in bad:
+                    task = self.pool.find(tid)
+                    if task is None:
+                        continue
+                    tags = violated.get(tid, [])
+                    task.meta["infeasible_delivery"] = True
+                    task.meta["infeasible_tags"] = list(tags)
+                    record.infeasible_tags[str(tid)] = list(tags)
+                record.infeasible_ids.extend(bad)
+
+            if not ok:
+                continue
+            # ② 正常交付：记录完成时刻，供 avg_wait 等指标使用
+            for tid in ok:
                 task = self.pool.find(int(tid))
                 if task is not None:
                     task.meta["completed_at"] = float(self._time)
-            self.fleet.complete_tasks(tour.uav_id, bound)
-            self.pool.complete(bound)
-            record.completed_ids.extend(int(t) for t in bound)
+            self.fleet.complete_tasks(tour.uav_id, ok)
+            self.pool.complete(ok)
+            record.completed_ids.extend(int(t) for t in ok)
 
     def _fill_occupancy(self, record: CycleRecord) -> None:
         occ = self.fleet.nest_occupancy(self.nests)

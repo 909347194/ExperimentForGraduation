@@ -296,6 +296,26 @@ class UAVFleet:
             uav.status = UAVStatus.IDLE
         return list(task_ids)
 
+    def unbind_tasks(self, uav_id: int, task_ids: Sequence[int]) -> list[int]:
+        """解除 UAV 与指定任务的绑定，**不计为完成**。
+
+        与 :meth:`complete_tasks` 的唯一区别是语义：本方法用于「解被判不可行、
+        该任务本周期并未真正交付」的情形（完成闸门），调用方随后把任务交给
+        ``TaskPool.release()`` 回池、下一周期重新纳入选择。绑定清空且状态为
+        BUSY 时同样回到 IDLE。
+
+        Returns:
+            本次解绑的 task_id（未绑定的 task_id 被忽略，不报错）。
+        """
+        uav = self.get(uav_id)
+        bound = self._bindings.get(uav_id, [])
+        drop = set(int(t) for t in task_ids)
+        released = [tid for tid in bound if tid in drop]
+        self._bindings[uav_id] = [tid for tid in bound if tid not in drop]
+        if not self._bindings[uav_id] and uav.status == UAVStatus.BUSY:
+            uav.status = UAVStatus.IDLE
+        return released
+
     # ------------------------------------------------------------------
     # 状态更新(位置 / 航程)
     # ------------------------------------------------------------------
