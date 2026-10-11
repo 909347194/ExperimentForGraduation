@@ -62,8 +62,9 @@ class DMDEConfig:
     Attributes:
         pop_size:       种群大小。
         max_generations: 最大迭代代数。
-        zeta:           动态交叉率曲率指数 ζ（默认 3）。
-        delta:          灭绝临界值 δ（默认 0.3）。
+        zeta:           动态交叉率曲率指数 ζ（默认 3，论文取值）。
+        delta:          可选的灭绝门限 δ（默认 ``None``，即论文公式 3-12 原式
+                        GMR = 1 - CR，不加门限）。
         alpha:          时间代价缩放因子 α。
         beta:           约束违背惩罚缩放因子 β。
         seed:           随机种子（可选）。
@@ -74,7 +75,7 @@ class DMDEConfig:
     pop_size: int = 50
     max_generations: int = 1000
     zeta: int = 3
-    delta: float = 0.3
+    delta: float | None = None
     alpha: float = 2.5
     beta: float = 1.5
     seed: int | None = None

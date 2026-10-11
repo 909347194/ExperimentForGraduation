@@ -112,8 +112,23 @@ class Individual:
 
     @property
     def cost_vector(self) -> np.ndarray:
-        """提取代价值向量（用于正向映射）。"""
-        return np.array([g.cost for g in self.genes])
+        """提取代价值向量（用于正向映射 / DE 种群矩阵）。
+
+        DE 侧采用**固定布局**，与基因在个体中的交错顺序解耦，保证差分算子
+        每个分量的语义稳定（修复 §5(2) 终点机巢未真正被搜索的缺陷）：
+
+            ``[0, K)``              起始基因代价（UAV i → 首个任务），按 UAV 下标升序
+            ``[K, M)``              巡游基因代价（任务 → 任务），按出现顺序
+            ``[M, M+K)``            终止基因代价（末任务 → 机巢），按 UAV 下标升序
+
+        ``K`` = UAV 数、``M`` = 任务数、``M+K`` = 基因总数。该布局与
+        :func:`inverse_mapper._select_end_nests` 读取终点代价值的下标约定严格一致，
+        使 ``z_ub`` 真正随 ``cost_vector`` 被 DE 差分搜索，而非退化为最近机巢贪心。
+        """
+        starts = [g.cost for g in self.genes if g.uav_id >= 0]
+        tours = [g.cost for g in self.genes if g.uav_id == -1]
+        terms = [g.cost for g in self.genes if g.uav_id == -2]
+        return np.array(starts + tours + terms, dtype=float)
 
     def copy(self) -> "Individual":
         """深拷贝。"""

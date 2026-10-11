@@ -41,7 +41,7 @@ def _stage_value(cycle: dict[str, Any], key: str, section: str) -> float:
 def plot_selection_funnel(
     metrics: dict[str, Any],
     out_dir: Path,
-    formats: Sequence[str] = ("png", "pdf"),
+    formats: Sequence[str] = ("png",),
     *,
     dpi: int = 200,
 ) -> list[Path]:

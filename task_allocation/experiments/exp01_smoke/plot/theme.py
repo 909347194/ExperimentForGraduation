@@ -105,14 +105,13 @@ def cycle_colors(n: int) -> list[str]:
 def save_figure(
     fig,
     stem: Path | str,
-    formats: Iterable[str] = ("png", "pdf"),
+    formats: Iterable[str] = ("png",),
     *,
     dpi: int = 200,
 ) -> list[Path]:
     """按 ``stem``（不含扩展名）写出所有格式，返回落盘路径并关闭画布。
 
-    同时给 png（论文插图预览 / 网页）与 pdf（矢量，直接进 LaTeX），
-    两者共享同一份绘图代码，避免图像与版式各画一遍。
+    默认给 PNG；调用方传入 ``("png", "pdf")`` 时才额外生成论文用 PDF 矢量图。
     """
     stem = Path(stem)
     stem.parent.mkdir(parents=True, exist_ok=True)

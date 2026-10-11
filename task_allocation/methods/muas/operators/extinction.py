@@ -5,14 +5,22 @@
     当种群陷入早熟收敛时，执行世代间灭绝操作，保留较优个体，
     重置其余个体，以增加种群多样性和搜索覆盖范围。
 
-对应论文：
-    公式 (3-12):
-        GMR(t) = 0,           if CR(t) >= δ
-        GMR(t) = 1 - CR(t),   if CR(t) < δ
-    δ 为产生灭绝的动态变异率临界值。
+对应论文（Zhao Ming 等, 2017, 离散映射差分进化 DMDE）公式 (3-12)：
+    GMR(t) = 1 - CR(t)
 
-    灭绝操作：保留当前种群中一定数量的较优个体（环境压力范围内），
-    将其他普通个体全部重置。最优解始终保留。
+    即代间变异（灭绝）概率直接由当前交叉率 CR 决定：
+    前期 CR 高 → GMR 低（种群稳定，不灭绝）；
+    后期 CR 低 → GMR 高（种群大量重置，跳出局部最优）。
+
+    灭绝操作：把当代个体按（最小化）适应度归一化，保留落在随机
+    "环境压力"阈值内的较优个体以及当代最优解，其余个体全部用随机
+    新个体替换。
+
+    关于 δ：
+        论文公式 (3-12) **没有** δ 门限，故 ``delta=None``（默认）即为原文行为。
+        本实现额外保留一个可选门限 ``delta``：当 ``CR >= delta`` 时直接
+        GMR=0，即把灭绝强制推迟到搜索后期。这属于可选的工程扩展，
+        论文复现时保持默认 ``None`` 即可。
 """
 
 from __future__ import annotations
@@ -20,31 +28,30 @@ from __future__ import annotations
 import numpy as np
 
 
-def gmr_rate(cr: float, delta: float = 0.3) -> float:
-    """计算代间变异率 GMR。
-
-    对应公式 (3-12)。
+def gmr_rate(cr: float, delta: float | None = None) -> float:
+    """计算代间变异率 GMR（公式 3-12）。
 
     Args:
         cr:    当前动态交叉率。
-        delta: 灭绝临界值 δ（默认 0.3）。
+        delta: 可选的灭绝门限 δ。``None``（默认）为论文原式 ``GMR = 1 - CR``；
+               给定数值时附加工程门限 ``CR >= δ → GMR = 0``，把灭绝推迟到后期。
 
     Returns:
-        GMR 值。0 表示不触发灭绝。
+        GMR 值（灭绝概率），范围 [0, 1]。0 表示不触发灭绝。
     """
-    if cr >= delta:
+    if delta is not None and cr >= delta:
         return 0.0
     return 1.0 - cr
 
 
-def should_extinct(cr: float, delta: float = 0.3, rng=None) -> bool:
+def should_extinct(cr: float, delta: float | None = None, rng=None) -> bool:
     """判断当前代是否触发灭绝。
 
-    灭绝概率由 GMR 决定。
+    灭绝概率由 GMR 决定（公式 3-12）。
 
     Args:
         cr:    当前动态交叉率。
-        delta: 灭绝临界值。
+        delta: 可选灭绝门限 δ（默认 ``None`` = 论文原式）。
         rng:   随机数生成器。
 
     Returns:

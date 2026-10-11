@@ -23,7 +23,10 @@ try:
 except ImportError:  # pragma: no cover
     yaml = None
 
-from task_allocation.methods.muas.problem import MUASProblemConfig
+from task_allocation.methods.muas.problem import (
+    ConstraintConfig,
+    MUASProblemConfig,
+)
 from task_allocation.methods.muas.solvers.dmde_solver import DMDEConfig
 from task_allocation.methods.muas.solvers.muas_stage import MUASStageConfig
 from task_allocation.methods.rolling.event_trigger import EventTriggerConfig
@@ -150,13 +153,24 @@ def build_config_bundle(cfg: Mapping[str, Any]) -> ConfigBundle:
     seed = exp.get("seed", 42)
 
     m = _section(cfg, "muas")
+    # ── 约束开关（constraints: 段）───────────────────────────────
+    # 缺省 = 全部启用、权重 1；逐项在 yaml 里开关 / 调权即可做消融与口径取舍。
+    cons_raw = _section(cfg, "constraints")
+    constraints = ConstraintConfig.from_dict(cons_raw)
+    # 历史字段兼容：未显式给出 constraints.w_nest_capacity 时取 muas.w_nest_capacity
+    if "w_nest_capacity" not in cons_raw:
+        constraints.w_nest_capacity = float(m.get("w_nest_capacity", 1.0))
     problem_model = MUASProblemConfig(
         allow_unassigned=bool(m.get("allow_unassigned", True)),
         allow_idle_uav=bool(m.get("allow_idle_uav", True)),
         lambda_cost=float(m.get("lambda_cost", 1.0e-4)),
         w_penalty=float(m.get("w_penalty", 1.0)),
+        # 惩罚量纲解耦开关：留空/None = 历史口径（惩罚随 F2 一起乘 λ）
+        w_violation=(None if m.get("w_violation") is None else float(m["w_violation"])),
         w_nest_capacity=float(m.get("w_nest_capacity", 1.0)),
+        w_time=float(m.get("w_time", 0.0)),
         default_service_time=float(m.get("default_service_time", 0.0)),
+        constraints=constraints,
     )
     stage_model = MUASStageConfig(
         max_participating_uavs=m.get("max_participating_uavs", None),
@@ -175,7 +189,8 @@ def build_config_bundle(cfg: Mapping[str, Any]) -> ConfigBundle:
         pop_size=int(s.get("population", 20)),
         max_generations=int(s.get("max_iter", 40)),
         zeta=int(s.get("zeta", 3)),
-        delta=float(s.get("delta", 0.3)),
+        # None/留空 = 论文公式 3-12 原式 GMR = 1 - CR；给数值则附加 δ 门限
+        delta=(None if s.get("delta") is None else float(s["delta"])),
         seed=s.get("seed", seed),
         verbose=bool(s.get("verbose", False)),
         log_interval=int(s.get("log_interval", 10)),
@@ -205,9 +220,16 @@ def build_config_bundle(cfg: Mapping[str, Any]) -> ConfigBundle:
             for k, v in (rolling.get("faults") or {}).items()
         },
         strict_capacity=bool(rolling.get("strict_capacity", False)),
+        completion_feasibility_gate=bool(
+            rolling.get("completion_feasibility_gate", True)
+        ),
     )
 
     selection = RollingHorizon.selection_config_from_dict(cfg.get("selection"))
+    # 约束开关贯通两阶段：关闭交付时间窗时，第一阶段的可行性预筛同步关闭，
+    # 避免「第二阶段不计违约、第一阶段却把它筛掉」的口径不一致。
+    if not constraints.time_window:
+        selection.feasibility.check_time_window = False
     cost = _section(cfg, "cost")
 
     return ConfigBundle(

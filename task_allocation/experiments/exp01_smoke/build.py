@@ -151,6 +151,8 @@ def build_uavs(nests: Sequence[Nest], cfg: Mapping[str, Any]) -> list[UAV]:
 def build_task_config(cfg: Mapping[str, Any], seed: int) -> SyntheticTaskConfig:
     """按 ``tasks`` 段构建合成任务生成器参数。"""
     t = cfg.get("tasks", {}) or {}
+    rolling = cfg.get("rolling", {}) or {}
+    cycle_length = float(rolling.get("cycle_length", 600.0))
     return SyntheticTaskConfig(
         n_tasks=int(t.get("n_tasks", 10)),
         seed=int(seed),
@@ -159,6 +161,9 @@ def build_task_config(cfg: Mapping[str, Any], seed: int) -> SyntheticTaskConfig:
         reward_max=float(t.get("reward_max", 10.0)),
         deadline_min=float(t.get("deadline_min", 3600.0)),
         deadline_max=float(t.get("deadline_max", 14400.0)),
+        deadline_cycles_min=float(t.get("deadline_cycles_min", 0.5)),
+        deadline_cycles_max=float(t.get("deadline_cycles_max", 2.0)),
+        cycle_length=cycle_length,
         anchor_to_nests=bool(t.get("anchor_to_nests", True)),
     )
 
@@ -171,15 +176,48 @@ def build_arrivals(
 ) -> TaskBatch:
     """生成第 1 周期初始任务与后续各周期的到达批次。
 
-    ``rolling.arrivals_per_cycle`` 的语义是**第 2 周期起每周期的新到达任务数**
-    （见 config.yaml 注释）。而 ``build_task_batches`` 把 ``per_cycle`` 下标 0 映射到
-    第 1 周期，因此这里在前面补一个 0 对齐到周期 2，避免首批任务被静默丢弃
-    （历史 bug：不补 0 时第 2 周期的批次落到周期 1 并被过滤掉，
-    导致 ``n_arrived`` 与实际进池任务数不一致）。
+    后续各周期的新到达任务数由 ``rolling.arrivals`` 决定（默认 Poisson 随机流，
+    体现真正的动态到达；也可 ``fixed`` 用确定列表、``uniform`` 用均匀随机）。
+    随机流以 ``task_cfg.seed`` 为种子，保证同配置可复现。
+
+    ``build_task_batches`` 把 ``per_cycle`` 下标 0 映射到第 1 周期，因此在前面补
+    一个 0 对齐到周期 2，避免首批任务被静默丢弃（历史 bug：不补 0 时第 2 周期
+    的批次落到周期 1 并被过滤掉，导致 ``n_arrived`` 与实际进池任务数不一致）。
     """
+    import numpy as np  # 仅本函数用，避免顶层强行依赖
+
     rolling_cfg = cfg.get("rolling", {}) or {}
     cycle_length = float(rolling_cfg.get("cycle_length", 600.0))
-    later_counts = [int(c) for c in (rolling_cfg.get("arrivals_per_cycle") or [])]
+    n_cycles = int(rolling_cfg.get("n_cycles", 1))
+
+    # ── 解析到达过程设定 ──────────────────────────────────────────
+    arr_spec = rolling_cfg.get("arrivals") or {}
+    if isinstance(arr_spec, dict) and arr_spec:
+        mode = str(arr_spec.get("mode", "poisson")).lower()
+    elif rolling_cfg.get("arrivals_per_cycle"):
+        # 向后兼容：老配置用固定列表
+        arr_spec = {"mode": "fixed", "counts": list(rolling_cfg["arrivals_per_cycle"])}
+        mode = "fixed"
+    else:
+        mode = "poisson"
+        arr_spec = {"mode": "poisson", "lambda": 5.0}
+
+    # 第 2 周期起每周期的新到达任务数（共 n_cycles-1 个）
+    rng = np.random.default_rng(int(task_cfg.seed) + 1000)
+    later_counts: list[int] = []
+    if mode == "fixed":
+        later_counts = [int(c) for c in arr_spec.get("counts", [])]
+    elif mode == "poisson":
+        lam = float(arr_spec.get("lambda", 5.0))
+        later_counts = [int(rng.poisson(lam)) for _ in range(max(n_cycles - 1, 0))]
+    elif mode == "uniform":
+        lo = int(arr_spec.get("low", 3))
+        hi = int(arr_spec.get("high", 7))
+        later_counts = [int(rng.integers(lo, hi + 1)) for _ in range(max(n_cycles - 1, 0))]
+    # 对齐长度（不足补 0，超出截断）
+    while len(later_counts) < max(n_cycles - 1, 0):
+        later_counts.append(0)
+    later_counts = later_counts[: max(n_cycles - 1, 0)]
 
     initial = build_synthetic_tasks(
         nests,

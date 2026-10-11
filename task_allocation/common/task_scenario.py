@@ -48,9 +48,17 @@ class SyntheticTaskConfig:
     # 收益区间（与输电巡检业务对齐：杆塔等级 / 缺陷等级）
     reward_min: float = 1.0
     reward_max: float = 10.0
-    # 时间窗：earliest 恒为 0，latest = arrival_time + U(deadline_min, deadline_max)
+    # 时间窗（绝对秒数，fallback）：earliest 恒为 0，
+    # latest = arrival_time + U(deadline_min, deadline_max)。
+    # 当 ``cycle_length`` 给定时，优先使用周期相关的 ``deadline_cycles_*``，
+    # 使 latest = arrival_time + U(k_min, k_max) * cycle_length，
+    # 让时间窗尺度与滚动时域对齐（见 exp01 配置注释）。
     deadline_min: float = 1800.0
     deadline_max: float = 7200.0
+    deadline_cycles_min: float = 0.5
+    deadline_cycles_max: float = 2.0
+    # 滚动周期长度（秒）。非 None 且 >0 时时间窗按周期倍数生成。
+    cycle_length: float | None = None
     # 任务均匀锚定到机巢；False 时绕机巢群中心撒点
     anchor_to_nests: bool = True
 
@@ -65,6 +73,7 @@ def build_synthetic_tasks(
     id_offset: int = 0,
     n_tasks: int | None = None,
     seed: int | None = None,
+    cycle_length: float | None = None,
 ) -> list[Task]:
     """生成一批合成任务。
 
@@ -77,6 +86,9 @@ def build_synthetic_tasks(
         id_offset:    任务 id 起始值（保证跨批次不重复）。
         n_tasks:      覆盖 ``config.n_tasks``（分批次时用）。
         seed:         覆盖 ``config.seed``（分批次时用，保证可复现）。
+        cycle_length: 覆盖 ``config.cycle_length``。非 None 且 >0 时时间窗按
+            周期倍数生成（latest = arrival + U(k_min,k_max)*cycle_length），
+            使时间窗尺度与滚动时域对齐；否则退回绝对秒数。
 
     Returns:
         ``list[Task]``，长度 = n_tasks。
@@ -108,7 +120,16 @@ def build_synthetic_tasks(
     xy = anchors + np.column_stack([dx, dy])
 
     rewards = rng.uniform(config.reward_min, config.reward_max, size=n)
-    deadlines = rng.uniform(config.deadline_min, config.deadline_max, size=n)
+
+    # 时间窗：优先周期相关；否则绝对秒数（fallback）
+    cl = cycle_length if cycle_length is not None else config.cycle_length
+    if cl and cl > 0:
+        span = (
+            rng.uniform(config.deadline_cycles_min, config.deadline_cycles_max, size=n)
+            * cl
+        )
+    else:
+        span = rng.uniform(config.deadline_min, config.deadline_max, size=n)
 
     tasks: list[Task] = []
     for i in range(n):
@@ -132,7 +153,7 @@ def build_synthetic_tasks(
                 z=z,
                 reward=float(rewards[i]),
                 earliest=0.0,
-                latest=float(arrival_time + deadlines[i]),
+                latest=float(arrival_time + span[i]),
                 arrival_time=float(arrival_time),
             )
         )
@@ -153,7 +174,7 @@ def build_task_batches(
 
     Args:
         per_cycle:    每个周期新到达的任务数（下标 0 → 第 1 周期）。
-        cycle_length: 周期长度，用于设置各批次的到达时刻。
+        cycle_length: 周期长度，用于设置各批次的到达时刻与时间窗尺度。
 
     Returns:
         ``{周期号(1-based): [Task, ...]}``
@@ -174,6 +195,7 @@ def build_task_batches(
             id_offset=next_id,
             n_tasks=int(count),
             seed=int(config.seed) + idx,
+            cycle_length=cycle_length,
         )
         batches[cycle] = batch
         next_id += len(batch)

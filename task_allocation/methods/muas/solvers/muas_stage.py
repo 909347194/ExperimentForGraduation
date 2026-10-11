@@ -317,14 +317,33 @@ class MUASAssignmentEvaluator:
         # 事件驱动：被标记不可用的机巢不可选为终点（多机巢异巢终止的容错分支）
         excluded = self.excluded_nest_ids
         cand_nests = [n for n in self.nests if n.id not in excluded]
+        # 终点机巢可达性约束开关：关闭时改派不再过滤不可达巢
+        # （与 problem.check_feasible 的 end_nest_reachability 共用判据）
+        check_reach = bool(
+            getattr(self.problem.config, "constraints", None)
+            and self.problem.config.constraints.end_nest_reachability
+        )
 
-        # ① 优先采用编码给出的终点（仅当容量校验通过且非禁用机巢）
+        # ① 优先采用编码给出的终点（仅当容量校验通过、非禁用机巢、且可达）
         if coded_ends:
             flying = [uid for uid, tids in routes.items() if tids]
             cand = {uid: coded_ends[uid] for uid in flying if uid in coded_ends}
             if flying and len(cand) == len(flying):
                 # 编码终点命中禁用机巢 → 视为冲突，走容量感知兜底改派
-                if any(eid in excluded for eid in cand.values()):
+                bad = any(eid in excluded for eid in cand.values())
+                # 编码终点不可达（末任务→机巢代价 inf：地形遮挡 / 禁飞区）
+                # → 同样视为冲突，改派可达机巢（终点机巢可达性约束落地）
+                if not bad and check_reach:
+                    bad = any(
+                        not np.isfinite(
+                            self.problem.costs.cost(
+                                routes[uid][-1],
+                                self.problem.costs.nest_key(cid),
+                            )
+                        )
+                        for uid, cid in cand.items()
+                    )
+                if bad:
                     pass
                 else:
                     rep = check_nest_capacity(
@@ -343,11 +362,16 @@ class MUASAssignmentEvaluator:
             for nest in cand_nests:
                 if not nest.available or nest.capacity <= 0:
                     continue
-                costs[nest.id] = float(
+                c = float(
                     self.problem.costs.cost(
                         last_node, self.problem.costs.nest_key(nest.id)
                     )
                 )
+                if check_reach and not np.isfinite(c):
+                    # 末任务→机巢不可达（地形遮挡 / 禁飞）：排除该候选，
+                    # 不纳入容量感知改派的候选集（可达性约束落地）
+                    continue
+                costs[nest.id] = c
             if costs:
                 last_cost[uav_id] = costs
 
@@ -601,10 +625,12 @@ class MUASAssignmentEvaluator:
 
         本函数把 ``solution`` 中可解码的两条通道回写到获胜个体的基因：
 
-          * 起始基因（位置 ``[0,K)``）：改写为该 UAV 在修复解中的**首任务**，
-            使下一轮 ``inverse_phi`` 的贪心起点精确复现修复解的归属；
-          * 终止基因（位置 ``[K+M, K+M+K)``）：改写为修复解的**终点机巢**
-            （论文 §5(2) 的创新点），使终点机巢真正进入后继的进化搜索压力。
+          * 起始基因（基因序列中 ``uav_id >= 0`` 者）：改写为该 UAV 在修复解中的
+            **首任务**，使下一轮 ``inverse_phi`` 的贪心起点精确复现修复解的归属；
+          * 终止基因（基因序列中 ``uav_id == -2`` 者，紧跟其航次段末）：改写为
+            修复解的**终点机巢**（论文 §5(2) 的创新点），使终点机巢真正进入
+            后继的进化搜索压力（DE 侧 ``cost_vector`` 末尾 K 个分量会被改写为
+            「末任务 → 机巢」代价，见 :meth:`encoder.Individual.cost_vector`）。
 
         巡游基因（任务→任务）**保留原样**：本函数只原地改写 start / terminal
         基因的 ``target_id`` 与 ``cost`` 字段，绝不增删任何基因，因此基因长度
