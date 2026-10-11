@@ -1,5 +1,13 @@
 # -*- coding: utf-8 -*-
-"""priority.py — 基础优先级评价与 Top-α 预筛选（论文 3.2.1）。"""
+"""priority.py — 基础优先级评价与 Top-α 预筛选（论文 3.2–3.3）。
+
+候选规模的完整规则（论文 3.3）：
+
+    k = min(⌈α · K_avail⌉, cap(t))
+
+即"机数名额"与"能力预算可承载数"（:mod:`.capability`）取交；
+``hard_cap`` 为 None 时退回纯机数名额（消融对比用）。
+"""
 
 from __future__ import annotations
 
@@ -8,6 +16,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from task_allocation.common.types import ScoredTask, Task, UAV
+from task_allocation.methods.selection.capability import coarse_task_costs
 
 
 @dataclass
@@ -91,16 +100,6 @@ def _synergy_gain(task: Task, others: list[Task], radius: float) -> float:
     return total / weight
 
 
-def _coarse_exec_cost(task: Task, uavs: list[UAV]) -> float:
-    avail = [u for u in uavs if u.is_available]
-    if not avail:
-        return 1e6
-    tx, ty, tz = task.position
-    return float(
-        min(((u.x - tx) ** 2 + (u.y - ty) ** 2 + (u.z - tz) ** 2) ** 0.5 for u in avail)
-    )
-
-
 def compute_priorities(
     tasks: list[Task],
     uavs: list[UAV],
@@ -120,13 +119,8 @@ def compute_priorities(
         dtype=float,
     )
     G = np.array([_synergy_gain(t, tasks, cfg.synergy_radius) for t in tasks], dtype=float)
-    if cost_hint:
-        C = np.array(
-            [float(cost_hint.get(t.id, _coarse_exec_cost(t, uavs))) for t in tasks],
-            dtype=float,
-        )
-    else:
-        C = np.array([_coarse_exec_cost(t, uavs) for t in tasks], dtype=float)
+    # C_i(t) 与 capability.coarse_task_costs 同口径：cost_hint 优先，否则最近可用 UAV 距离
+    C = np.array(coarse_task_costs(tasks, uavs, cost_hint), dtype=float)
 
     Rn, Un, Wn, Gn, Cn = map(_minmax_norm, (R, U, W, G, C))
     scores = w.w_r * Rn + w.w_u * Un + w.w_w * Wn + w.w_s * Gn - w.w_c * Cn
@@ -139,8 +133,18 @@ def top_alpha_preselect(
     scored: list[ScoredTask],
     n_avail_uavs: int,
     alpha: float = 2.5,
+    hard_cap: int | None = None,
 ) -> list[ScoredTask]:
+    """Top-αK 候选预筛选（论文 3.3）。
+
+    Args:
+        hard_cap: 能力预算可承载数 cap(t)（:func:`capability.capability_task_cap`）。
+            非 None 时候选数取 ``min(⌈α·K_avail⌉, hard_cap)``，实现"规模跟着
+            机队能力走"；None 时退回纯机数名额。
+    """
     if n_avail_uavs <= 0 or not scored:
         return []
     k = max(1, int(np.ceil(alpha * n_avail_uavs)))
+    if hard_cap is not None:
+        k = max(1, min(k, int(hard_cap)))
     return scored[: min(k, len(scored))]

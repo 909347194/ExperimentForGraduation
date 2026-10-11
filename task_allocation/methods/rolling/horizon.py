@@ -62,6 +62,7 @@ from task_allocation.methods.rolling.event_trigger import (
     summarize_events,
 )
 from task_allocation.methods.selection.pipeline import run as run_selection
+from task_allocation.methods.selection.capability import CapabilityScaleConfig
 from task_allocation.methods.selection.feasibility import FeasibilityConfig
 from task_allocation.methods.selection.marginal_gain import MarginalConfig
 from task_allocation.methods.selection.priority import PriorityConfig, PriorityWeights
@@ -673,6 +674,14 @@ class RollingHorizon:
             max_ratio=float(marg_d.get("max_ratio", 2.0)),
             min_marginal_ratio=float(marg_d.get("min_marginal_ratio", 0.0)),
         )
+        cap_d = dict(d.get("capability", {}) or {})
+        capability = CapabilityScaleConfig(
+            enabled=bool(cap_d.get("enabled", True)),
+            budget_scale=float(cap_d.get("budget_scale", 1.0)),
+            quantile=float(cap_d.get("quantile", 0.5)),
+            min_cap=int(cap_d.get("min_cap", 1)),
+        )
         return SelectionConfig(
-            priority=priority, feasibility=feasibility, marginal=marginal
+            priority=priority, feasibility=feasibility, marginal=marginal,
+            capability=capability,
         )
