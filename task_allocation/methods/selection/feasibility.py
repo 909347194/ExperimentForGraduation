@@ -1,8 +1,14 @@
 # -*- coding: utf-8 -*-
-"""feasibility.py — 快速可行性检查（论文 3.2.3）。
+"""feasibility.py — 快速可行性检查（论文 3.5）。
 
-1. prefilter — 初步过滤
-2. postcheck — 候选集粗预算检查
+1. prefilter — 初步过滤（候选预筛选之后、边际选择之前）
+2. postcheck — 候选集粗预算检查（边际选择之后）
+
+行进代价口径（两套几何合一）：``travel = cost_hint[t.id]``（三维地理代价，
+与基础优先级 C_i(t)、ΔC 插入式估计、postcheck 预算同源）优先，缺省回退
+欧氏距离。**航程检查与时间窗 ETA 共用同一 travel**——此前 ETA 用欧氏
+距离/速度、其余环节用三维代价，山区里 ETA 系统性低估，会放进必然赶不上
+时间窗的任务，徒增完成闸门的违约回池。
 """
 
 from __future__ import annotations
@@ -38,7 +44,14 @@ def prefilter(
     scored: list[ScoredTask],
     uavs: list[UAV],
     config: FeasibilityConfig | None = None,
+    cost_hint: dict[int, float] | None = None,
 ) -> tuple[list[ScoredTask], list[ScoredTask]]:
+    """初步可行性过滤。
+
+    Args:
+        cost_hint: ``task_id -> 三维行进代价``（与优先级 C_i(t) 同源）。
+            非 None 时航程检查与时间窗 ETA 均以其为 travel；缺省回退欧氏距离。
+    """
     cfg = config or FeasibilityConfig()
     passed: list[ScoredTask] = []
     rejected: list[ScoredTask] = []
@@ -56,12 +69,16 @@ def prefilter(
             reason = f"status_{t.status.value}"
         else:
             u, dist = _nearest_avail_uav(t, uavs)
+            # 行进代价统一口径：三维代价优先、欧氏回退；航程与时间窗同用 travel
+            travel = (
+                float(cost_hint[t.id]) if (cost_hint and t.id in cost_hint) else dist
+            )
             if u is None:
                 reason = "no_available_uav"
-            elif dist > cfg.range_margin * max(u.remaining_range, 0.0):
+            elif travel > cfg.range_margin * max(u.remaining_range, 0.0):
                 reason = "exceed_remaining_range"
             elif cfg.check_time_window and t.latest is not None:
-                eta = dist / max(u.speed, 1e-6)
+                eta = travel / max(u.speed, 1e-6)
                 if cfg.current_time + eta > t.latest:
                     reason = "miss_time_window"
         if reason is not None:

@@ -108,7 +108,9 @@ def run(
         if s.task.id not in pre_ids and s.filter_reason is None:
             s.filter_reason = "not_in_top_alpha"
 
-    passed, rejected_pre = prefilter(preselected, uavs, cfg.feasibility)
+    passed, rejected_pre = prefilter(
+        preselected, uavs, cfg.feasibility, cost_hint=cost_hint
+    )
     diagnostics["n_after_prefilter"] = len(passed)
     diagnostics["n_rejected_prefilter"] = len(rejected_pre)
 
