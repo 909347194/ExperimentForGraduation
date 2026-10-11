@@ -70,6 +70,7 @@ __all__ = [
 # 参与 UAV 的选择策略
 POLICY_CHEAPEST = "cheapest"     # 按「到最近任务的最小代价」升序取前 K 架
 POLICY_FIRST = "first"           # 按登记顺序取前 K 架（便于复现）
+POLICY_MARGINAL = "marginal"     # 边际出动决策：覆盖代价边际下降 ≤ 出动代价即停
 
 
 @dataclass
@@ -79,6 +80,13 @@ class MUASStageConfig:
     # 参与本周期规划的 UAV 数上限；None 表示自动（保证 K < 任务数以走 srp 模型）
     max_participating_uavs: int | None = None
     participating_policy: str = POLICY_CHEAPEST
+    # 参与机数 K 与任务数解耦（修复「K 顶格 M-1 → M-K 恒小、巡游顺序维度塌缩」）：
+    #   sortie_budget        本周期出动架次上限 S_t（可由滚动层按起降/充电能力推导）；
+    #   participation_cost   每架固定出动代价 γ（起降/能耗/架次占用）；
+    #   participating_policy="marginal" 时按「覆盖代价边际下降 ≤ γ 即停」内生定 K。
+    # 三者都缺省时退化为旧规则（尽量多派，上界 M-1）。
+    sortie_budget: int | None = None
+    participation_cost: float = 0.0
     # 选择性：剔除「执行代价超过收益」的任务（y_j = 0，保留到下一周期）
     prune_unprofitable: bool = True
     prune_max_rounds: int = 8
@@ -113,7 +121,7 @@ class MUASStageConfig:
     def __post_init__(self) -> None:
         if self.max_participating_uavs is not None and self.max_participating_uavs < 1:
             raise ValueError("max_participating_uavs 必须 >= 1 或为 None")
-        if self.participating_policy not in (POLICY_CHEAPEST, POLICY_FIRST):
+        if self.participating_policy not in (POLICY_CHEAPEST, POLICY_FIRST, POLICY_MARGINAL):
             raise ValueError(f"未知的参与 UAV 选择策略：{self.participating_policy}")
 
 
@@ -153,40 +161,103 @@ def select_participating_uavs(
 ) -> list[UAV]:
     """挑选本周期参与规划的 UAV（``U_t^exec`` 的候选）。
 
-    上限 K 满足 ``K < n_tasks``（走 srp 巡游模型，保证一任务一机且允许巡游）；
-    任务数为 1 时退化为 K = 1（balanced 亦可，一一对应）。
+    参与机数 K 的确定**与任务数解耦**，按三层裁剪：
+
+    1. **SRP 模型不变式**：``K ≤ M-1``（保证一任务一机且允许巡游；
+       ``M=1`` 时 ``K=1``）。显式配置同样裁剪到该上界——旧实现只裁 auto
+       不裁显式值，``K≥M`` 会走进 balanced/overloaded 路径；
+    2. **运营预算**：``sortie_budget``（出动架次上限）与
+       ``max_participating_uavs``（硬上限），与 M 无关地压低 K；
+    3. **出动经济性**（``participating_policy="marginal"``）：按代价升序
+       逐个纳入，第 j 架带来的「任务覆盖代价」边际下降 ≤
+       ``participation_cost`` γ 时停止增派。
+
+    旧 auto 规则在机队充裕时总是顶格 ``K=M-1``，使 ``M-K`` 塌缩为常数、
+    巡游顺序搜索维度名存实亡；解耦后 K 可显著小于 M-1，支撑 M≫K 的
+    长航次巡游实例（顺序维度 = M-K 个巡游基因）。
 
     Args:
-        uavs:        可用无人机（``U_t^avail``）。
-        n_tasks:     候选任务数 M。
-        config:      编排参数。
-        uav_target:  ``(n_uavs, n_tasks)`` 代价矩阵，用于 cheapest 策略。
-        row_of_uav:  ``{uav_id: 矩阵行号}``，配合 ``uav_target`` 使用。
+        uavs:             可用无人机（``U_t^avail``）。
+        n_tasks:          候选任务数 M。
+        config:           编排参数（含 K 决策旋钮）。
+        uav_target:       ``(n_rows, n_tasks)`` 代价矩阵，供 cheapest/marginal 策略。
+        row_of_uav:       ``{uav_id: 矩阵行号}``。
 
     Returns:
-        参与规划的 UAV 列表（长度 K）。
+        参与规划的 UAV 列表（长度 K ≥ 1）。
     """
     avail = [u for u in uavs if u.is_available]
     if not avail or n_tasks <= 0:
         return []
 
-    # K 必须 < M 才能走 srp；M == 1 时只能 1:1
-    auto_k = min(len(avail), max(1, n_tasks - 1)) if n_tasks > 1 else min(len(avail), 1)
-    k = auto_k if config.max_participating_uavs is None else min(
-        config.max_participating_uavs, len(avail)
-    )
-    k = max(1, min(k, len(avail)))
+    # 1) 上界裁剪：SRP 不变式 + 运营预算
+    k_cap = max(1, n_tasks - 1) if n_tasks > 1 else 1
+    if config.max_participating_uavs is not None:
+        k_cap = min(k_cap, int(config.max_participating_uavs))
+    if config.sortie_budget is not None:
+        k_cap = min(k_cap, max(0, int(config.sortie_budget)))
+    k = max(1, min(k_cap, len(avail)))
 
+    # 2) 排序（marginal 需要代价序；无代价矩阵时退化为登记序）
     if config.participating_policy == POLICY_FIRST or uav_target is None:
-        return avail[:k]
+        ordered = avail[:k]
+    else:
+        def cheapest_cost(u: UAV) -> float:
+            row = row_of_uav.get(u.id) if row_of_uav else None
+            if row is None or row >= uav_target.shape[0]:
+                return float("inf")
+            return float(np.min(uav_target[row]))
 
-    def cheapest_cost(u: UAV) -> float:
+        ordered = sorted(avail, key=lambda u: (cheapest_cost(u), u.id))[:k]
+
+    # 3) 出动经济性：边际收益递减停机
+    if (
+        config.participating_policy == POLICY_MARGINAL
+        and uav_target is not None
+        and len(ordered) > 1
+    ):
+        return _select_by_marginal_takeoff(
+            ordered,
+            float(config.participation_cost),
+            uav_target,
+            row_of_uav,
+            n_tasks,
+        )
+    return ordered
+
+
+def _select_by_marginal_takeoff(
+    ordered: Sequence[UAV],
+    gamma: float,
+    uav_target: np.ndarray,
+    row_of_uav: Mapping[int, int] | None,
+    n_tasks: int,
+) -> list[UAV]:
+    """边际出动决策：覆盖代价的边际下降决定出动架次。
+
+    估计器与选择层的插入式粗估同源思路：``est(j) = Σ_t min_{u∈前j架} C(u,t)``，
+    第 j 架的边际贡献 ``gain_j = est(j-1) - est(j)``（单调非增）。仅当
+    ``gain_j > γ``（每架固定出动代价）才继续增派；第一架无条件纳入（保证非空）。
+    """
+    picked: list[UAV] = []
+    rows: list[int] = []
+    prev = 0.0
+    for u in ordered:
         row = row_of_uav.get(u.id) if row_of_uav else None
         if row is None or row >= uav_target.shape[0]:
-            return float("inf")
-        return float(np.min(uav_target[row]))
-
-    return sorted(avail, key=lambda u: (cheapest_cost(u), u.id))[:k]
+            continue
+        if not picked:
+            picked.append(u)
+            rows.append(row)
+            prev = float(np.min(uav_target[rows][:, :n_tasks], axis=0).sum())
+            continue
+        cur = float(np.min(uav_target[rows + [row]][:, :n_tasks], axis=0).sum())
+        if prev - cur <= gamma:
+            break
+        picked.append(u)
+        rows.append(row)
+        prev = cur
+    return picked
 
 
 # ---------------------------------------------------------------------------
