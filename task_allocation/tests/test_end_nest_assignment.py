@@ -9,7 +9,9 @@
 3. **起飞让名额**：参与规划的 UAV 从当前归属巢让出泊位后可「原地不动」；
 4. **候选过滤**：禁用 / 不可用 / 不可达（inf 代价）的机巢不被选中；
 5. **溢出兜底**：泊位被非规划 UAV 占满时仍返回分配，由 check_nest_capacity 计罚；
-6. **默认配置**：``MUASStageConfig.end_nest_in_encoding`` 默认 False（方案 A）。
+6. **默认配置**：``MUASStageConfig.end_nest_in_encoding`` 默认 False（方案 A）；
+7. **陷阱规避**：返航代价必须进入标量适应度（同路线不同终点 → 适应度不同）；
+8. **漏洞可见化**：非空航次 end_nest_id=None → 计违约，而非返航零成本静默漏计。
 """
 
 from __future__ import annotations
@@ -18,11 +20,15 @@ import itertools
 
 import pytest
 
-from task_allocation.common.types import Nest, UAV
+from task_allocation.common.types import AllocationSolution, Nest, Task, UAV, UAVTour
 from task_allocation.methods.muas.constraints.nest_capacity import (
     DEFAULT_CAPACITY_UNIT_PENALTY,
     check_nest_capacity,
     solve_end_nest_assignment,
+)
+from task_allocation.methods.muas.problem import (
+    MUASProblemConfig,
+    SelectiveMUASProblem,
 )
 from task_allocation.methods.muas.solvers.muas_stage import MUASStageConfig
 
@@ -183,3 +189,74 @@ def test_overflow_fallback_when_full():
 
 def test_default_config_is_plan_a():
     assert MUASStageConfig().end_nest_in_encoding is False
+
+
+# ---------------------------------------------------------------------------
+# 7. 陷阱规避：返航代价必须进入完整方案评价
+# ---------------------------------------------------------------------------
+
+
+def test_return_cost_participates_in_fitness():
+    """同一路线、不同终点机巢 → 适应度必须不同（返航代价入评价）。
+
+    这是方案 A 第三条要求（"不同任务路线会因其最优终点分配及相应返航成本
+    而得到不同评价"）的直接契约：若返航不进适应度，终点分配对进化搜索
+    就是零影响，退回"最后随便找个合法机巢"的陷阱实现。
+    """
+    tasks = [Task(id=0, x=0.0, y=500.0, z=0.0, reward=5.0)]
+    uavs = [UAV(id=0, x=0.0, y=0.0, z=0.0,
+                remaining_range=1e6, speed=10.0, nest_id=0)]
+    nests = [Nest(id=0, x=0.0, y=0.0, z=0.0, capacity=10),
+             Nest(id=1, x=0.0, y=0.0, z=0.0, capacity=10)]
+    # 起点→任务 = 100；任务→巢0 = 100（近）；任务→巢1 = 400（远）
+    pairwise = {(-1, 0): 100.0, (0, 1_000_000): 100.0, (0, 1_000_001): 400.0}
+    prob = SelectiveMUASProblem.from_entities(
+        tasks, uavs, nests, pairwise_cost=pairwise,
+        config=MUASProblemConfig(w_time=0.0),
+    )
+
+    def sol(end):
+        return AllocationSolution(
+            tours=[UAVTour(uav_id=0, task_ids=[0], end_nest_id=end)],
+            candidate_task_ids=[0], executed_task_ids=[0],
+        )
+
+    f_near = prob.scalar_fitness(sol(0))
+    f_far = prob.scalar_fitness(sol(1))
+    # λ=1：返航差 400-100 = 300 必须体现在标量适应度里（远巢更差）
+    assert f_far - f_near == pytest.approx(300.0)
+    assert f_far > f_near
+
+
+# ---------------------------------------------------------------------------
+# 8. 漏洞可见化：有航次却无终点机巢必须计违约
+# ---------------------------------------------------------------------------
+
+
+def test_missing_end_nest_is_penalized():
+    """非空航次 end_nest_id=None → 违约可见，而非返航零成本静默漏计。"""
+    tasks = [Task(id=0, x=0.0, y=500.0, z=0.0, reward=5.0)]
+    uavs = [UAV(id=0, x=0.0, y=0.0, z=0.0,
+                remaining_range=1e6, speed=10.0, nest_id=0)]
+    nests = [Nest(id=0, x=0.0, y=0.0, z=0.0, capacity=10)]
+    pairwise = {(-1, 0): 100.0}
+    prob = SelectiveMUASProblem.from_entities(
+        tasks, uavs, nests, pairwise_cost=pairwise,
+        config=MUASProblemConfig(w_time=0.0),
+    )
+    sol = AllocationSolution(
+        tours=[UAVTour(uav_id=0, task_ids=[0], end_nest_id=None)],
+        candidate_task_ids=[0], executed_task_ids=[0],
+    )
+    ok, details = prob.check_feasible(sol)
+    assert not ok
+    assert "end_nest_missing_0" in details["violations"]
+    assert details["penalty"] >= 1e3
+
+    # 空航次（不飞）无返航义务：不计违约
+    idle = AllocationSolution(
+        tours=[UAVTour(uav_id=0, task_ids=[], end_nest_id=None)],
+        candidate_task_ids=[0], executed_task_ids=[],
+    )
+    ok2, det2 = prob.check_feasible(idle)
+    assert "end_nest_missing_0" not in det2["violations"]
