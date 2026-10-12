@@ -13,7 +13,8 @@ experiment:
     seed: 42
     # 多 seed 复现：多次随机重复取均值±标准差（论文实验的稳健性证据）。
     # 列表仅 1 个元素时退化为单 seed 运行（= 原 seed）。
-    seeds: [42, 123, 777, 2024, 9093]
+    # 调试态（仅验证代码可跑通）：退化为单 seed，5 个 seed 的稳健性统计留到正式实验。
+    seeds: [42]
     output_dir: results # 数值产物（metrics / run_meta / solution）
     figures_dir: results/figures # 图产物；绘图代码在 plot/ 包内，只负责绘制
 
@@ -30,7 +31,7 @@ problem:
     nest_capacity: 4 # 单机巢容量（架）
     n_uavs: 10 # 机队规模（<= n_nests × nest_capacity 才不初始超容；8×4=32）
     uav_speed: 15.0 # m/s
-    uav_max_range: 120000.0 # 满电航程（m）；机巢跨度约 90 km，需留足余量
+    uav_max_range: 80000.0 # 满电航程（m）；机巢跨度约 90 km，80km 为正式口径（兼顾可达性与避免单 tour 过度填充）
 
 # 合成任务点（暂无实测任务数据；后续换 data/task_location_data.csv 时
 # 只需替换生成函数，本节参数可平移）
@@ -43,7 +44,7 @@ tasks:
     domain: dem_extent
     dem_inset_m: 0.0 # DEM 包络内缩（m）；>0 可避开边缘半像素/插值外推区
     max_reject_trials: 8 # 落点出 DEM 时的拒绝采样重试轮数
-    n_tasks: 10 # 第 1 周期到达的初始任务数
+    n_tasks: 12 # 第 1 周期到达的初始任务数（=总20的60%，明确过半；后两周期各4）
     spread_m: 12000.0 # 相对锚点机巢的散布半径（m）；仅 domain=nest_anchored 生效
     reward_min: 1.0
     reward_max: 10.0
@@ -233,8 +234,8 @@ rolling:
     # mode=fixed    → 用固定列表 counts（向后兼容旧配置写法）
     # 随机流以 experiment.seeds 中对应 seed 为种子，同配置可复现。
     arrivals:
-        mode: poisson
-        lambda: 5
+        mode: fixed
+        counts: [4, 4] # 周期2/3 各固定到达4 → 12+4+4=20 总任务，严格可复现
     strict_capacity: false # true → 落地期超容直接抛异常（调试用）
     # 事件驱动本期重规划（论文 §6）：命中 UAV 故障 / 突发高优先级任务 /
     # 机巢不可用时，本周期内做反应式调整（强制纳入紧急任务、剔除不可用机巢）。
@@ -257,4 +258,4 @@ run:
 # ── 可视化（代码在 plot/，产物落到 experiment.figures_dir）─────
 plot:
     formats: [png] # 默认仅 PNG；运行时加 --pdf 才额外输出论文用矢量图
-    dpi: 200 # 位图分辨率；矢量格式忽略
+    dpi: 300 # 位图分辨率；矢量格式忽略
