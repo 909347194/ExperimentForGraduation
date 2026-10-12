@@ -1,0 +1,121 @@
+% exp01_smoke 实验结果表（由 tables.py 从 metrics.json / solution.json 生成）
+
+% 编译：pdflatex tables.tex（依赖 booktabs）
+
+\documentclass[a4paper,11pt]{article}
+
+\usepackage[margin=2.2cm]{geometry}
+
+\usepackage{booktabs}
+
+\usepackage{ctex} % 中文；推荐 xelatex 编译（无 ctex 宏包时改英文文档类）
+
+\begin{document}
+
+\title{exp01\_smoke 实验结果记录}
+
+\maketitle
+
+\begin{table}[htbp]\centering
+\caption{exp01\_smoke 运行配置总览（seed=42）}
+\label{tab:exp01-config}
+\begin{tabular}{ll}
+\toprule
+配置项 & 取值 \\
+\midrule
+随机种子 & [42] \\
+滚动周期数 & 3 \\
+机巢数 / 单巢容量 & 8 / 4 \\
+机队规模 $K_{\mathrm{avail}}$ & 10 \\
+无人机速度 / 满电航程 & 15.0 m/s / 80.0 km \\
+任务总数（首批/后续到达） & 12 + 8 \\
+DMDE 种群 / 迭代代数 & 50 / 100 \\
+目标标量化 & 字典序（big-M，收益优先） \\
+交付时间窗约束 & 开启 \\
+DEM 区域 / 重采样步长 & N29E091（约 97$\times$111 km）/ 200 m \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+\begin{table}[htbp]\centering
+\caption{逐周期任务漏斗与任务命运（闸门拦截 = 交付被判违约、解绑回池的任务次）}
+\label{tab:exp01-funnel}
+\begin{tabular}{rcccccccccc}
+\toprule
+周期 & 新到 & 滞留 & 释放 & 过预筛 & 选中 & 执行 & 延期 & 完成 & 拦截 \\
+\midrule
+1 & 12 & 0 & 0 & 12 & 12 & 4 & 8 & 3 & 1 \\
+2 & 4 & 8 & 1 & 9 & 9 & 6 & 3 & 2 & 4 \\
+3 & 4 & 7 & 4 & 8 & 8 & 5 & 3 & 3 & 2 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+\begin{table}[htbp]\centering
+\caption{逐周期目标、约束可行性与求解开销（$F_1^{\mathrm{plan}}$ 为规划口径收益，$F_1^{\mathrm{comp}}$ 为闸门后实际完成收益；$C^{3D}$ 为三维路径总代价，单位 km）}
+\label{tab:exp01-objective}
+\begin{tabular}{rccccccc}
+\toprule
+周期 & $F_1^{\mathrm{plan}}$ & $F_1^{\mathrm{comp}}$ & $C^{3D}$ (km) & 惩罚 & 违约数 & 可行 & 求解 (s) \\
+\midrule
+1 & 13.41 & 10.66 & 116.3 & 468.12 & 1 & 否 & 30.3 \\
+2 & 34.98 & 16.75 & 231.9 & 7079.61 & 4 & 否 & 16.1 \\
+3 & 32.42 & 18.69 & 94.1 & 1603.06 & 2 & 否 & 11.4 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+\begin{table}[htbp]\centering
+\caption{时间窗违约与出动明细（按任务列出全部曾出动任务；重复出动 = 同一任务多周期再次派出）}
+\label{tab:exp01-tw}
+\begin{tabular}{rcccl}
+\toprule
+任务 & $t_{\mathrm{latest}}$ (min) & 出动次数 & 闸门拦截 & 结局 \\
+\midrule
+T1 & 51.6 & 2 & 2 & 未交付（重复拦截） \\
+T3 & 58.4 & 2 & 1 & 完成 \\
+T4 & 50.3 & 1 & 0 & 完成 \\
+T5 & 64.1 & 1 & 0 & 完成 \\
+T6 & 59.5 & 1 & 0 & 完成 \\
+T8 & 64.1 & 1 & 0 & 完成 \\
+T9 & 63.2 & 1 & 0 & 完成 \\
+T13 & 54.7 & 1 & 1 & 未交付 \\
+T14 & 59.8 & 1 & 0 & 完成 \\
+T15 & 45.1 & 2 & 2 & 未交付（重复拦截） \\
+T18 & 80.0 & 1 & 0 & 完成 \\
+T19 & 55.7 & 1 & 1 & 未交付 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+\begin{table}[htbp]\centering
+\caption{结果总览与收益核算对账}
+\label{tab:exp01-outcome}
+\begin{tabular}{ll}
+\toprule
+指标 & 数值 \\
+\midrule
+到达任务总数 $|\mathcal{T}|$ & 20 \\
+完成任务数 & 8（唯一 8） \\
+完成率 & 40.0\% \\
+周期解可行率 & 0.0\%（0/3，全部含时间窗违约） \\
+规划口径收益 $\sum F_1^{\mathrm{plan}}$ & 80.81 \\
+完成口径收益 $\sum F_1^{\mathrm{comp}}$ & 46.09 \\
+核算膨胀率 & 75.3\%（闸门拦截 + 重复出动重复计数） \\
+总三维路径代价 & 442.3 km \\
+平均等待时间 & 16.2 min \\
+总出动任务次 / 重复出动 & 15 / 3 \\
+终点机巢使用 & 5 / 8 个 \\
+总求解时间 & 57.9 s \\
+\bottomrule
+\end{tabular}
+
+\vspace{2pt}\parbox{0.92\linewidth}{\footnotesize \textbf{口径注}：$F_1^{\mathrm{plan}}$ 为求解期目标值（含被完成闸门拦截的交付、以及重复出动任务的重复计数）；$F_1^{\mathrm{comp}}$ 按最终完成的唯一任务计。论文报完成率与收益时应使用完成口径，规划口径仅用于说明优化过程。}
+\end{table}
+
+
+\end{document}
