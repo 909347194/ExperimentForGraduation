@@ -186,6 +186,7 @@ def build_config_bundle(cfg: Mapping[str, Any]) -> ConfigBundle:
         prune_max_rounds=int(m.get("prune_max_rounds", 8)),
         prune_wait_bonus=float(m.get("prune_wait_bonus", 1.0)),
         wait_scale=float(m.get("wait_scale", 3600.0)),
+        end_nest_in_encoding=bool(m.get("end_nest_in_encoding", True)),
         lamarckian=bool(m.get("lamarckian", True)),
     )
 

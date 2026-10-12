@@ -350,6 +350,7 @@ def solve_end_nest_assignment(
     planning_uav_ids: Iterable[int] | None = None,
     excluded_nest_ids: Iterable[int] | None = None,
     overflow_penalty: float = DEFAULT_CAPACITY_UNIT_PENALTY,
+    pre_assigned: Mapping[int, int] | None = None,
 ) -> dict[int, int | None]:
     """精确求解「给定任务路线后的终点机巢分配」子问题（方案 A 内层）。
 
@@ -388,6 +389,11 @@ def solve_end_nest_assignment(
         planning_uav_ids:  参与本周期规划（有航次）的 UAV；省略取 ``last_node_cost`` 键。
         excluded_nest_ids: 事件驱动禁用的机巢（即便 ``available`` 未翻转也不可选）。
         overflow_penalty:  每超 1 架的惩罚，须与容量判定同量纲。
+        pre_assigned:      **预锁定分配** ``{uav_id: nest_id}``（方案 B 按 UAV
+            粒度回退用）。这些 UAV 仍从当前归属巢让出泊位（计入 ``planning``），
+            但其终点不再进 MCF 优化——目标巢泊位直接占用，剩余 UAV 在
+            「让出后基线 + 预锁定占位」的容量账上精确分配。保证「编码终点
+            锁定 + 内层改派」的联合末态容量可行。
 
     Returns:
         ``{uav_id: end_nest_id | None}``；无任何候选代价的 UAV 退化为
@@ -398,6 +404,13 @@ def solve_end_nest_assignment(
         if planning_uav_ids is not None
         else list(last_node_cost)
     )
+    # 预锁定（方案 B）：不进 MCF 优化，但其让出 + 占位必须进容量账
+    pre = {int(k): int(v) for k, v in (pre_assigned or {}).items()}
+    # planning_uav_ids 省略时也要含预锁定键（它们同样起飞让出原巢）
+    if planning_uav_ids is None:
+        for uid in pre:
+            if uid not in planning:
+                planning.append(uid)
     if not planning:
         return {}
 
@@ -418,13 +431,19 @@ def solve_end_nest_assignment(
         uav = uav_by_id.get(uid)
         if uav is not None and uav.nest_id is not None:
             occ[uav.nest_id] = occ.get(uav.nest_id, 0) - 1
+    # 1b) 预锁定占位（方案 B）：锁定的编码终点直接占泊位，
+    #     剩余 UAV 在「让出后基线 + 预锁定占位」的容量账上精确分配
+    for uid, nid in pre.items():
+        occ[nid] = occ.get(nid, 0) + 1
 
     # 2) 拆分：有可行候选的进优化；无候选的退化为原归属巢（并回占泊位）
-    result: dict[int, int | None] = {}
+    result: dict[int, int | None] = dict(pre)  # 预锁定终点优先入账
     solvable: list[int] = []
     candidates: dict[int, dict[int, float]] = {}
     nest_ids = {n.id for n in cand_nests}
     for uid in planning:
+        if uid in pre:
+            continue  # 已锁定：不进 MCF 优化（其占位已在 1b 计入）
         costs = {
             b: float(c)
             for b, c in (last_node_cost.get(uid) or {}).items()

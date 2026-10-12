@@ -5,10 +5,7 @@
     - 温度自适应反映射：top_k 随温度动态调节（早期探索多、后期开发多）。
     - 匹配后扰动：swap + reassign，概率与温度正相关。
     - SRP 巡游扰动：swap/insert/reverse，打破贪心顺序。
-    - 基因长度：balanced/overloaded = n_uavs，SRP = M（方案 A，无终止基因）。
-
-方案 A 口径：反映射只解码「UAV 归属 + 访问顺序」；终点机巢不进编码，
-由解码后内层最小费用流精确求解（见 solvers.muas_stage._choose_end_nests）。
+    - 基因长度：balanced/overloaded = n_uavs, SRP = n_uavs + n_targets。
 """
 
 from __future__ import annotations
@@ -20,8 +17,11 @@ from .repair_rules.nearest_match import nearest_match_adaptive
 from .repair_rules.unique_filter import mask_balanced, mask_overloaded
 from .repair_rules.invalid_mutator import repair_invalid
 from .repair_rules.terminal_nest import (
+    TERMINAL_UAV_ID,
     TOUR_UAV_ID,
     normalize_srp_segments,
+    repair_terminal_genes,
+    split_segments,
 )
 
 
@@ -37,10 +37,14 @@ def inverse_phi(
     model_type: str,
     rng: np.random.Generator | None = None,
     temperature: float = 0.5,
+    n_nests: int = 0,
 ) -> Individual:
     """反映射：将连续代价值向量还原为离散个体。
 
     对应公式 (3-7) 和算法 3.1 的 17-26 行。
+
+    结构扩展（论文 §5(1)(2)）：``n_nests > 0`` 时，终点机巢作为航次的
+    **特殊终止节点**进入编码，由差分进化的代价值匹配决定，而非解码后启发式挑选。
 
     改进：引入温度参数 temperature (0.0~1.0)，
     控制反映射的随机程度：
@@ -55,6 +59,7 @@ def inverse_phi(
         model_type:    分配模型类型。
         rng:           随机数生成器。
         temperature:   温度值 (0.0 ~ 1.0)。
+        n_nests:       机巢数量 B；``>0`` 时终点机巢进入编码。
 
     Returns:
         可行的子代个体。
@@ -64,7 +69,7 @@ def inverse_phi(
 
     if model_type == "srp":
         return _inverse_phi_srp(
-            cost_vector, cost_matrix, n_uavs, n_targets, rng, temperature
+            cost_vector, cost_matrix, n_uavs, n_targets, rng, temperature, n_nests
         )
     else:
         return _inverse_phi_standard(cost_vector, cost_matrix, n_uavs, n_targets, model_type, rng, temperature)
@@ -94,8 +99,10 @@ def _inverse_phi_standard(
     # balanced / overloaded 只产生 (uav, target) 分配，因此只允许在
     # 「UAV 行 × 任务列」子矩阵内匹配：
     #   row >= n_uavs      是巡游关系的目标行（只属于 SRP 的 uav_id=-1）
-    #   col >= n_targets   是越界列（方案 A 代价矩阵只有任务列；此处防御性屏蔽，
-    #                      防止未来布局扩展时 nearest_match_adaptive 取到非任务列）
+    #   col >= n_targets   是机巢列（只属于终止基因 uav_id=-2）
+    # 两者都不构成分配关系。若不预先屏蔽，nearest_match_adaptive 与
+    # repair_invalid 都会从全矩阵取位置，产出越界 uav_id / target_id
+    # （实测 balanced 下近半数分配携带不存在的 UAV）。
     mask[n_uavs:, :] = True
     mask[:, n_targets:] = True
 
@@ -296,19 +303,21 @@ def _inverse_phi_srp(
     n_targets: int,
     rng: np.random.Generator,
     temperature: float = 0.5,
+    n_nests: int = 0,
 ) -> Individual:
     """SRP 反映射（N<M 巡游模型）。
 
-    扰动后强制做段结构规范化（见 :func:`normalize_srp_segments`）。
+    结构扩展（论文 §5(1)(2)）：
+    1. 终点机巢作为航次**终止节点**进入编码：用 ``cost_vector`` 末尾的
+       K 个分量在「末任务 → 机巢」代价行上做温度自适应匹配，
+       因此终点是**进化搜索的结果**。
+    2. 扰动后强制做段结构规范化（见 :func:`normalize_srp_segments`）。
 
     访问顺序对齐原文（Ming 2017 §4.1 Rule 1 + Rule 2(c)）：
-    1. 巡游段 ``[K, M)`` 的每一位独立地在「当前已访问目标」的行上做最近邻
+    3. 巡游段 ``[K, M)`` 的每一位独立地在「当前已访问目标」的行上做最近邻
        匹配（详见 :func:`_match_tour_edge`），使**顺序由 DE 的连续向量决定**，
        而非历史实现中的「按任务编号顺序 + 贪心最近追加」。
-    2. 匹配后再执行扰动（swap/insert/reverse），进一步打破确定性。
-
-    方案 A 口径：只解码「UAV 归属 + 访问顺序」，基因总数恒为 ``M``；
-    终点机巢由解码后内层最小费用流求解，不进编码。
+    4. 匹配后再执行扰动（swap/insert/reverse），进一步打破确定性。
     """
     cm_work = cost_matrix.copy().astype(float)
     mask = np.zeros_like(cm_work, dtype=bool)
@@ -407,11 +416,36 @@ def _inverse_phi_srp(
     if temperature > 0.1:
         _perturb_srp_tour(genes, cm_work, n_uavs, n_targets, temperature, rng)
 
-    # ── 第四阶段：段结构规范化 ──
+    # ── 第四阶段：段结构规范化 + 终点机巢入编码（论文 §5(1)(2)）──
     # reverse / insert 扰动会把 uav_id >= 0 的起始基因卷进子序列
-    # （实测出现过起始顺序 [0, 2, 1]），必须先重建严格的航次分段。
-    # 方案 A：不生成终止基因，基因总数恒为 M。
-    genes = normalize_srp_segments(genes, cm_work, n_uavs, n_targets)
+    # （实测出现过起始顺序 [0, 2, 1]），必须先重建严格的航次分段，
+    # 终止基因才可能稳定落在段末。
+    ends = (
+        _select_end_nests(
+            genes,
+            cm_work,
+            cost_vector,
+            n_uavs,
+            n_targets,
+            n_nests,
+            temperature,
+            rng,
+        )
+        if n_nests > 0
+        else None
+    )
+    genes = normalize_srp_segments(
+        genes, cm_work, n_uavs, n_targets, n_nests, ends_override=ends
+    )
+    # 第五阶段：终止基因合法性修补（P3-3）。规范化只保证「每段至多一个
+    # 终止基因、越界回退 0」，不保证语义合法——负下标漏网、末任务→巢
+    # 不可达（inf）时代价仍留在编码里，会被评价端当成合法终点计入 F2。
+    # repair_terminal_genes 把越界 / inf 的终止基因改派可达最小代价巢，
+    # 使 cost_vector 的 [M, M+K) 段始终对应真实可达的返航边。
+    if n_nests > 0:
+        genes = repair_terminal_genes(
+            genes, cm_work, n_uavs, n_targets, n_nests, rng=rng
+        )
 
     return Individual(genes=genes, model_type="srp")
 
@@ -492,6 +526,104 @@ def _match_tour_edge(
     return uav_ids[row_i], cols[col_i], float(costs[row_i, col_i])
 
 
+def _select_end_nests(
+    genes: list[Gene],
+    cost_matrix: np.ndarray,
+    cost_vector: np.ndarray,
+    n_uavs: int,
+    n_targets: int,
+    n_nests: int,
+    temperature: float,
+    rng: np.random.Generator,
+) -> dict[int, int]:
+    """为每架 UAV 选定终点机巢（反映射阶段的终止基因取值）。
+
+    ``cost_vector`` 的布局约定（与 :class:`encoder.Individual.cost_vector` 一致）：
+
+        ``[0, K)``      起始基因的代价值（UAV → 首个任务）
+        ``[K, M)``      巡游基因的代价值（任务 → 任务），由 :func:`_match_tour_edge`
+                        按 Ming 2017 Rule 2(c) 逐个消费，决定访问顺序
+        ``[M, M+K)``    终止基因的代价值（末任务 → 机巢），**按 UAV 下标升序**
+
+    因此 UAV i 的终止代价值位于 ``cost_vector[n_targets + i]``（``n_targets = M``），
+    该值是上一世代由 DE 变异得到的量，经本函数与「末任务 → 机巢」代价列做温度
+    自适应匹配，还原出终点机巢下标 —— 终点是**进化搜索的结果**，而非最近机巢贪心。
+
+    Returns:
+        ``{uav_id: nest_idx}``。
+    """
+    routes, _ = split_segments(genes)
+    ends: dict[int, int] = {}
+
+    for i in range(n_uavs):
+        seg = routes.get(i, [])
+        # 有任务时从「末任务」行取机巢代价；空航次时从 UAV 起点行取
+        row = (n_uavs + seg[-1]) if seg else i
+
+        cv_idx = n_targets + i
+        cv = float(cost_vector[cv_idx]) if 0 <= cv_idx < len(cost_vector) else float("nan")
+
+        ends[i] = _pick_nest_by_cost(
+            cv, cost_matrix, row, n_targets, n_nests, temperature, rng
+        )
+
+    return ends
+
+
+def _pick_nest_by_cost(
+    target_value: float,
+    cost_matrix: np.ndarray,
+    row: int,
+    n_targets: int,
+    n_nests: int,
+    temperature: float,
+    rng: np.random.Generator,
+) -> int:
+    """在机巢列上做温度自适应匹配，返回机巢下标。
+
+    与 :func:`nearest_match_adaptive` 同源：温度高时 softmax 采样（探索），
+    温度低时取最近（开发）。
+
+    不可达机巢（返航代价 inf，地形遮挡 / 禁飞）**不参与匹配**：其 diff
+    被置为「大于任何有限 diff」，低温贪心与高温 softmax 都不会选中它；
+    全部不可达时退化为 argmin 保底（由下游 repair / 可达性判据处理）。
+    修复前 inf 进 std 产生 NaN 概率，``rng.choice`` 直接抛
+    ``ValueError: Probabilities contain NaN``。
+    """
+    if n_nests <= 0:
+        return 0
+
+    cols = [min(n_targets + b, cost_matrix.shape[1] - 1) for b in range(n_nests)]
+    if row >= cost_matrix.shape[0]:
+        return 0
+    costs = np.array([float(cost_matrix[row, c]) for c in cols], dtype=float)
+
+    if not np.isfinite(target_value):
+        return int(np.argmin(costs))
+
+    diffs = np.abs(costs - target_value)
+    finite = np.isfinite(diffs)
+    if not finite.all():
+        if not finite.any():
+            return int(np.argmin(costs))  # 全部不可达：保底
+        # 不可达巢不可选：diff 置为大于任何有限 diff 的值
+        big = float(np.max(diffs[finite])) + 1.0
+        diffs = np.where(finite, diffs, big)
+
+    if temperature < 0.1:
+        return int(np.argmin(diffs))
+
+    tau = max(0.01, temperature * 2.0)
+    spread = float(np.std(diffs))
+    if spread <= 1e-8:
+        return int(np.argmin(diffs))
+    logits = -diffs / spread / tau
+    logits -= logits.max()
+    probs = np.exp(logits)
+    probs /= probs.sum()
+    return int(rng.choice(n_nests, p=probs))
+
+
 def _perturb_srp_tour(
     genes: list[Gene],
     cost_matrix: np.ndarray,
@@ -564,6 +696,10 @@ def _recalculate_srp_tour_costs(
     for index, gene in enumerate(genes):
         if gene.uav_id >= 0:
             previous_target = gene.target_id
+            continue
+
+        if gene.uav_id == TERMINAL_UAV_ID:
+            # 终止基因（终点机巢）不是巡游边，不参与巡游代价重算
             continue
 
         if previous_target is not None:

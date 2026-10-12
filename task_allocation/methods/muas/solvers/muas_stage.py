@@ -43,6 +43,7 @@ from task_allocation.common.types import (
     UAVTour,
 )
 from task_allocation.methods.muas.constraints.nest_capacity import (
+    fleet_occupancy,
     solve_end_nest_assignment,
 )
 from task_allocation.methods.muas.cost.cost_matrix import CostMatrixBuildResult
@@ -51,6 +52,10 @@ from task_allocation.methods.muas.problem import (
     SelectiveMUASProblem,
 )
 from task_allocation.methods.muas.representation.encoder import Gene, Individual
+from task_allocation.methods.muas.representation.repair_rules.terminal_nest import (
+    TERMINAL_UAV_ID,
+    TOUR_UAV_ID,
+)
 from task_allocation.methods.muas.solvers.dmde_solver import DMDEConfig, DMDESolver
 
 __all__ = [
@@ -100,15 +105,17 @@ class MUASStageConfig:
     # 避免偏远任务连续多周期得不到执行而永久滞留
     prune_wait_bonus: float = 1.0
     wait_scale: float = 3600.0
-    # 终点机巢决策的求解方式：master 分支恒为方案 A（分层求解）——
-    #   DMDE 只搜任务分配与访问顺序，终点机巢由内层子问题
-    #   solve_end_nest_assignment 精确求解（容量约束下最优），返航代价经
-    #   完整成本评价间接影响进化搜索。
-    #   「终点机巢进编码」的联合变体（方案 B，编码优先、精确分配兜底）已从
-    #   master 移除，在 pro 分支实现。
+    # 终点机巢决策的求解方式（方案 A / 方案 B，阶段二实验对比）：
+    #   False（方案 A，master 主线）：DMDE 只搜任务分配与访问顺序，终点机巢由
+    #     内层子问题 solve_end_nest_assignment 精确求解（容量约束下最优），
+    #     返航代价经完整成本评价间接影响进化搜索（分层求解）。
+    #   True（方案 B，pro 分支主线/默认）：终点机巢作为终止基因进入 DMDE 编码
+    #     联合进化（论文 §5(1)(2)），编码结果按 UAV 粒度优先，非法/超容/
+    #     不可达时才该架回退内层精确分配。
+    end_nest_in_encoding: bool = True
     # Lamarckian 回写（TODO §2.7）：把修复后的解（经 _prune / _repair_range /
-    # _choose_end_nests）的「起始任务归属」编码回获胜个体的基因，使后继代际的
-    # 差分变异围绕**修复后的可行子空间**展开（默认开启）。
+    # _choose_end_nests）的「起始任务归属」与「终点机巢」编码回获胜个体的基因，
+    # 使后继代际的差分变异围绕**修复后的可行子空间**展开（默认开启）。
     # 关闭后退化为当前行为：进化搜索的是未修复空间。
     lamarckian: bool = True
     # 事件驱动重规划：被标记不可用的机巢（论文 §6 的 NEST_UNAVAILABLE 事件）
@@ -418,11 +425,14 @@ class MUASAssignmentEvaluator:
     def build_solution(
         self,
         assignment: Iterable[tuple[int, int]],
+        coded_end_nests: Mapping[int, int] | None = None,
     ) -> AllocationSolution:
         """局部下标的 assignment → AllocationSolution（含 π / y / z）。
 
-        方案 A：终点机巢 z_ub 不在编码内，由 :meth:`_choose_end_nests`
-        经内层最小费用流精确求解。
+        Args:
+            assignment: DMDE 输出的任务分配（局部下标）。
+            coded_end_nests: **编码给出的**终点机巢 ``{uav_idx(局部): nest_idx}``
+                （论文 §5(2)）。省略时终点完全由容量感知策略决定。
         """
         routes_local: dict[int, list[int]] = {}
         seen: set[int] = set()
@@ -443,6 +453,22 @@ class MUASAssignmentEvaluator:
         for uav_idx, tids in routes_local.items():
             routes[self.participating[uav_idx].id] = [self._task_ids[i] for i in tids]
 
+        # 编码终点：局部 uav_idx / nest_idx → 真实 id
+        # nest 用 self.nests 的下标换算成 Nest.id
+        coded_ends: dict[int, int] | None = None
+        if coded_end_nests:
+            coded_ends = {}
+            for uav_idx, nest_idx in coded_end_nests.items():
+                if nest_idx is None:
+                    continue  # 该 UAV 段未生成终止基因，交由容量感知兜底
+                uav_idx = int(uav_idx)
+                nest_idx = int(nest_idx)
+                if not (0 <= uav_idx < len(self.participating)):
+                    continue
+                if not (0 <= nest_idx < len(self.nests)):
+                    continue
+                coded_ends[self.participating[uav_idx].id] = self.nests[nest_idx].id
+
         # 航线与终点机巢必须**联合收敛**后才能定稿，顺序不能颠倒：
         # 只有真正有航次的 UAV 才会起飞让出原机巢名额。若先选巢再做剪枝 /
         # 航程修复，被清空的航次实际并未起飞，让出的名额是虚的 → 落地期超卖。
@@ -452,7 +478,7 @@ class MUASAssignmentEvaluator:
             if self.config.prune_unprofitable:
                 routes, end_nests = self._prune(routes, end_nests)
             routes, end_nests = self._repair_range(routes, end_nests)
-            end_nests = self._choose_end_nests(routes)
+            end_nests = self._choose_end_nests(routes, coded_ends=coded_ends)
             state = (
                 tuple((k, tuple(v)) for k, v in sorted(routes.items())),
                 tuple(sorted(end_nests.items(), key=lambda kv: str(kv[0]))),
@@ -466,23 +492,27 @@ class MUASAssignmentEvaluator:
     def _choose_end_nests(
         self,
         routes: Mapping[int, Sequence[int]],
+        coded_ends: Mapping[int, int] | None = None,
     ) -> dict[int, int | None]:
-        """为有航次的 UAV 选终点机巢（含飞行中也要占名额）。
+        """为有航次的 UAV 选终点机巢（方案 B：编码终点为主，按 UAV 粒度回退）。
 
-        方案 A（master 主线）：终点机巢由内层子问题
-        :func:`solve_end_nest_assignment` 在末态容量约束下**精确求解**，
-        联合考虑所有 UAV 的终点竞争（不是各抢最近巢、先到先得）；返航代价
-        进入 F2 完整评价，间接作用于进化方向。
+        论文 §5(2)：终点机巢可由**编码**（差分进化搜索）给出。与整批采用不同，
+        此处按 **UAV 粒度** 逐架校验编码终点：
 
-        「终点进编码」的联合变体（编码终点优先、精确分配兜底）已从 master
-        移除，在 pro 分支实现。
+        1. **合法性**：下标有效、非事件禁用、可用、有容量语义、可达
+           （末任务 → 巢的三维代价有限；``end_nest_reachability`` 开启时）；
+        2. **容量竞争**：合法者按 UAV 顺序贪心锁定，泊位被占满时**仅该架**
+           解锁转内层分配，其余锁定不变（不再「一损俱损」整批回退）；
+        3. **兜底**：未锁定（缺失 / 非法 / 超容）的 UAV 交内层最小费用流
+           :func:`solve_end_nest_assignment` 精确分配；锁定终点的让出 + 占位
+           经 ``pre_assigned`` 计入 MCF 容量账，保证「锁定 + 改派」的联合
+           末态容量可行。
         """
         if not self.nests:
             return {uid: None for uid in routes}
 
         # 事件驱动：被标记不可用的机巢不可选为终点（多机巢异巢终止的容错分支）
         excluded = self.excluded_nest_ids
-        cand_nests = [n for n in self.nests if n.id not in excluded]
         # 终点机巢可达性约束开关：关闭时改派不再过滤不可达巢
         # （与 problem.check_feasible 的 end_nest_reachability 共用判据）
         check_reach = bool(
@@ -490,15 +520,61 @@ class MUASAssignmentEvaluator:
             and self.problem.config.constraints.end_nest_reachability
         )
 
-        # 内层精确分配（方案 A）：为有航次的 UAV 联合选终点机巢
-        last_cost: dict[int, dict[int, float]] = {}
-        for uav_id, tids in routes.items():
-            if not tids:
+        flying = [uid for uid, tids in routes.items() if tids]
+
+        # ── ① 逐架校验编码终点（按 UAV 粒度，非整批）──
+        legal: dict[int, int] = {}  # uid -> nest_id（真实 id）
+        for uid in flying:
+            b = (coded_ends or {}).get(uid)
+            if b is None:
                 continue
-            last_node = tids[-1]
+            b = int(b)
+            if not (0 <= b < len(self.nests)):
+                continue  # 下标越界：该架转内层分配
+            nest = self.nests[b]
+            if nest.id in excluded or not nest.available or nest.capacity <= 0:
+                continue  # 禁用 / 不可用 / 无泊位语义：该架转内层分配
+            if check_reach and not np.isfinite(
+                self.problem.costs.cost(
+                    routes[uid][-1], self.problem.costs.nest_key(nest.id)
+                )
+            ):
+                continue  # 末任务 → 巢不可达（地形遮挡 / 禁飞）：该架转内层分配
+            legal[uid] = nest.id
+
+        # ── ② 容量竞争：贪心锁定，泊位满者仅该架解锁 ──
+        # 占用口径与 check_nest_capacity / MCF 一致：
+        # 末态 occupied_after = now - departures(全部 flying) + arrivals
+        uav_by_id = {u.id: u for u in self.fleet_uavs}
+        occ = fleet_occupancy(self.fleet_uavs)
+        for uid in flying:
+            u = uav_by_id.get(uid)
+            if u is not None and u.nest_id is not None:
+                occ[u.nest_id] = occ.get(u.nest_id, 0) - 1
+        cap = {n.id: n.capacity for n in self.nests}
+
+        locked: dict[int, int] = {}
+        for uid in flying:
+            nid = legal.get(uid)
+            if nid is None:
+                continue
+            if occ.get(nid, 0) < cap.get(nid, 0):
+                locked[uid] = nid
+                occ[nid] = occ.get(nid, 0) + 1
+            # 泊位已满：仅该架解锁转内层分配，其余锁定不变
+
+        pending = [uid for uid in flying if uid not in locked]
+        if not pending:
+            return {**{uid: None for uid in routes}, **locked}
+
+        # ── ③ 未锁定 UAV 走内层精确分配（方案 A 兜底）；锁定终点经
+        #      pre_assigned 计入容量账（让出原巢 + 占编码巢）──
+        last_cost: dict[int, dict[int, float]] = {}
+        for uav_id in pending:
+            last_node = routes[uav_id][-1]
             costs: dict[int, float] = {}
-            for nest in cand_nests:
-                if not nest.available or nest.capacity <= 0:
+            for nest in self.nests:
+                if nest.id in excluded or not nest.available or nest.capacity <= 0:
                     continue
                 c = float(
                     self.problem.costs.cost(
@@ -518,12 +594,13 @@ class MUASAssignmentEvaluator:
 
         chosen = solve_end_nest_assignment(
             self.fleet_uavs,
-            cand_nests,
+            [n for n in self.nests if n.id not in excluded],
             last_cost,
-            planning_uav_ids=list(last_cost),
+            planning_uav_ids=flying,
             excluded_nest_ids=excluded,
+            pre_assigned=locked,
         )
-        return chosen
+        return {**{uid: None for uid in routes}, **chosen}
 
     def _prune(
         self,
@@ -711,24 +788,35 @@ class MUASAssignmentEvaluator:
         assignment: Iterable[tuple[int, int]],
         cost_matrix: np.ndarray | None = None,
         n_uavs: int | None = None,
+        individual: Any | None = None,
     ) -> EvalResult:
         """DMDE 求解器要求的评估接口。
 
-        方案 A：终点机巢在 :meth:`build_solution` 内由内层最小费用流求解，
-        不经过编码，因此缓存键只需 assignment。
+        Args:
+            individual: 进化个体（可选）。给出时从中读取**编码的终点机巢**
+                （``Individual.end_nests``，论文 §5(2)），使终点真正参与
+                适应度评价；省略时终点由内层精确分配（方案 A）决定。
         """
         assign_key = tuple((int(a), int(b)) for a, b in assignment)
+        coded = dict(individual.end_nests) if individual is not None else None
 
-        if self.config.use_cache and assign_key in self._cache:
-            return self._cache[assign_key]
+        # 缓存键必须包含终点，否则「同任务分配、不同终点」会命中错误缓存
+        key: tuple = assign_key
+        if coded:
+            key = assign_key + tuple(
+                sorted((int(k), int(v)) for k, v in coded.items() if v is not None)
+            )
+
+        if self.config.use_cache and key in self._cache:
+            return self._cache[key]
 
         self.n_evals += 1
-        solution = self.build_solution(assign_key)
+        solution = self.build_solution(assign_key, coded_end_nests=coded)
         self.problem.evaluate(solution)
         fitness = float(self.problem.scalar_fitness(solution))
         result = EvalResult(fitness=fitness, solution=solution)
         if self.config.use_cache:
-            self._cache[assign_key] = result
+            self._cache[key] = result
         return result
 
     # ---- Lamarckian 回写（TODO §2.7）----------------------------------
@@ -740,6 +828,7 @@ class MUASAssignmentEvaluator:
         cost_matrix: np.ndarray,
         n_uavs: int,
         n_targets: int,
+        n_nests: int,
     ) -> "Individual | None":
         """把修复后的解写回获胜个体基因（Lamarckian 回写）。
 
@@ -749,27 +838,31 @@ class MUASAssignmentEvaluator:
         仍是 ``inverse_phi`` 由试验向量译出的**未修复**版本，于是下一世代的
         差分变异围绕未修复空间展开（进化搜的是未修复解）。
 
-        方案 A 口径：只回写**起始基因**一条通道 —— 基因序列中 ``uav_id >= 0``
-        者改写为该 UAV 在修复解中的**首任务**，使下一轮 ``inverse_phi`` 的
-        贪心起点精确复现修复解的归属。终点机巢不进编码（「终点进编码」的
-        联合变体在 pro 分支实现，届时才回写终止基因通道），巡游基因保留原样。
+        本函数把 ``solution`` 中可解码的两条通道回写到获胜个体的基因：
 
-        本函数只原地改写 start 基因的 ``target_id`` 与 ``cost`` 字段，绝不
-        增删任何基因，因此基因长度严格保持 ``M``，不会改变 DE 的代价矩阵
-        形状——这是 Lamarckian 回写在本 SRP 基因契约下能安全落地的关键。
+          * 起始基因（基因序列中 ``uav_id >= 0`` 者）：改写为该 UAV 在修复解中的
+            **首任务**，使下一轮 ``inverse_phi`` 的贪心起点精确复现修复解的归属；
+          * 终止基因（基因序列中 ``uav_id == -2`` 者，紧跟其航次段末）：改写为
+            修复解的**终点机巢**（论文 §5(2) 的创新点），使终点机巢真正进入
+            后继的进化搜索压力（DE 侧 ``cost_vector`` 末尾 K 个分量会被改写为
+            「末任务 → 机巢」代价，见 :meth:`encoder.Individual.cost_vector`）。
 
-        注意：巡游基因虽不被本函数改写，但 ``assignment`` 在计算修复解与
-        提取航线时仍会读取其 ``target_id``；修复阶段经 ``_prune`` /
-        ``_repair_range`` 剔除的任务，其巡游基因会随下一轮 ``inverse_phi``
-        解码重新出现并被再次剔除，故修复结果中"被剔除任务"的这一部分不会
-        永久写回基因（属于有意的保守设计：避免在基因层做脆弱的增删、破坏
-        "每任务恰出现一次"不变式）。
+        巡游基因（任务→任务）**保留原样**：本函数只原地改写 start / terminal
+        基因的 ``target_id`` 与 ``cost`` 字段，绝不增删任何基因，因此基因长度
+        严格保持 ``M+K``，不会改变 DE 的代价矩阵形状——这是 Lamarckian 回写
+        在本 SRP 基因契约下能安全落地的关键。
+
+        注意：巡游基因虽不被本函数改写，但 ``assignment`` / ``split_segments``
+        在计算修复解与提取航线时仍会读取其 ``target_id``；修复阶段经 ``_prune`` /
+        ``_repair_range`` 剔除的任务，其巡游基因会随下一轮 ``inverse_phi`` 解码
+        重新出现并被再次剔除，故修复结果中"被剔除任务"的这一部分不会永久写回基因
+        （属于有意的保守设计：避免在基因层做脆弱的增删、破坏"每任务恰出现一次"不变式）。
 
         Args:
             child:        获胜的子代个体（``inverse_phi`` 译出、已被评价）。
             solution:     本次评价用到的修复后 ``AllocationSolution``。
-            cost_matrix:  代价矩阵 ``(K+M, M)``（与编码同布局）。
-            n_uavs/n_targets: 维度 K / M。
+            cost_matrix:  扩展代价矩阵 ``(K+M, M+B)``（与编码同布局）。
+            n_uavs/n_targets/n_nests: 维度 K / M / B。
 
         Returns:
             回写后的新个体；长度不一致或异常时返回 ``None``（调用方回退到原 child）。
@@ -778,9 +871,12 @@ class MUASAssignmentEvaluator:
             return None
         local_task_idx = {tid: i for i, tid in enumerate(self._task_ids)}
         local_uav_idx = {u.id: i for i, u in enumerate(self.participating)}
+        local_nest_idx = {n.id: i for i, n in enumerate(self.nests)}
 
-        # 修复解里每架参与 UAV 的首任务（局部下标）
+        # 修复解里每架参与 UAV 的首任务 / 末任务 / 终点机巢（局部下标）
         start_of: dict[int, int] = {}
+        end_of: dict[int, int] = {}
+        last_of: dict[int, int] = {}
         for tour in solution.tours:
             u = local_uav_idx.get(tour.uav_id)
             if u is None:
@@ -788,10 +884,18 @@ class MUASAssignmentEvaluator:
             tlocal = [local_task_idx[t] for t in tour.task_ids if t in local_task_idx]
             if tlocal:
                 start_of[u] = tlocal[0]
+                last_of[u] = tlocal[-1]
+            if tour.end_nest_id is not None:
+                b = local_nest_idx.get(tour.end_nest_id)
+                if b is not None:
+                    end_of[u] = b
 
+        K, M, B = n_uavs, n_targets, n_nests
         new_genes: list[Gene] = []
+        current: int | None = None
         for g in child.genes:
             if g.uav_id >= 0:
+                current = g.uav_id
                 u = g.uav_id
                 if u in start_of:
                     t0 = start_of[u]
@@ -800,11 +904,28 @@ class MUASAssignmentEvaluator:
                     )
                 else:
                     new_genes.append(g)
+            elif g.uav_id == TOUR_UAV_ID:
+                new_genes.append(g)
+            elif g.uav_id == TERMINAL_UAV_ID:
+                u = current
+                if u is not None and u in end_of and B > 0:
+                    b = end_of[u]
+                    last = last_of.get(u)
+                    col = M + b
+                    if last is not None and col < cost_matrix.shape[1]:
+                        new_genes.append(
+                            Gene(
+                                uav_id=TERMINAL_UAV_ID,
+                                target_id=b,
+                                cost=float(cost_matrix[K + last, col]),
+                            )
+                        )
+                        continue
+                new_genes.append(g)
             else:
-                # 巡游基因（uav_id == -1）保留原样
                 new_genes.append(g)
 
-        # 长度不变式校验：必须仍为 M，否则回退到原 child，保证 DE 矩阵不错位
+        # 长度不变式校验：必须仍为 M+K，否则回退到原 child，保证 DE 矩阵不错位
         if len(new_genes) != len(child.genes):
             return None
         return Individual(genes=new_genes, model_type=child.model_type)
@@ -886,14 +1007,34 @@ def run_selective_muas(
     )
     part_rows = [row_of_uav[u.id] for u in participating]
 
-    # DMDE 代价矩阵（方案 A）：行 = UAV 起点 + 任务，列 = 任务。
-    # 终点机巢不进编码（由解码后内层最小费用流 solve_end_nest_assignment
-    # 精确求解，返航代价进 F2），故不挂机巢列；「终点进编码」的联合变体
-    # （列扩到 M+B、行末 B 列供终止基因匹配）在 pro 分支实现。
-    cm = np.vstack([
-        cost_build.uav_target[part_rows, :],
-        cost_build.task_task,
-    ]).astype(float)
+    # DMDE 代价矩阵（论文 §5(2)）：列从 M 扩到 M+B，末 B 列供终止基因
+    # 在「末任务 → 机巢」代价行上做匹配，使终点机巢进入进化搜索。
+    #   行 0..K-1     UAV → 任务 | UAV → 机巢
+    #   行 K..K+M-1   任务 → 任务 | 任务 → 机巢
+    n_nests = len(nests) if stage_cfg.end_nest_in_encoding else 0
+    uav_nest = getattr(cost_build, "uav_nest", None)
+    task_nest = getattr(cost_build, "task_nest", None)
+    has_nest_block = (
+        n_nests > 0
+        and uav_nest is not None
+        and task_nest is not None
+        and uav_nest.shape[1] == n_nests
+        and task_nest.shape[1] == n_nests
+    )
+    if has_nest_block:
+        upper = np.hstack([
+            cost_build.uav_target[part_rows, :],
+            np.asarray(uav_nest)[part_rows, :],
+        ])
+        lower = np.hstack([cost_build.task_task, np.asarray(task_nest)])
+        cm = np.vstack([upper, lower]).astype(float)
+    else:
+        # 无机巢或缺少机巢代价块：退化为原布局
+        n_nests = 0
+        cm = np.vstack([
+            cost_build.uav_target[part_rows, :],
+            cost_build.task_task,
+        ]).astype(float)
 
     evaluator = MUASAssignmentEvaluator(
         problem=problem,
@@ -915,11 +1056,15 @@ def run_selective_muas(
         n_uavs=len(participating),
         n_targets=len(task_list),
         fitness_evaluator=evaluator,
+        n_nests=n_nests,
     )
 
-    # 用最优 assignment 重建最终解（终点机巢与选择性剔除在此落地）：
-    # 终点由内层最小费用流在容量约束下精确求解（方案 A）
-    final = evaluator.build_solution(result.best_assignment)
+    # 用最优 assignment 重建最终解（端点机巢与选择性剔除在此落地）
+    # 终点取**编码给出的结果**（论文 §5(2)），容量超限时由 _choose_end_nests 兜底改派
+    best_ends = (result.extra or {}).get("best_end_nests") or None
+    final = evaluator.build_solution(
+        result.best_assignment, coded_end_nests=best_ends
+    )
     problem.evaluate(final)
 
     model_type = (
@@ -940,13 +1085,14 @@ def run_selective_muas(
             "n_tasks": len(task_list),
             "n_uav_avail": len(avail),
             "n_participating": len(participating),
-            # 方案 A：内层最小费用流实际选定的终点机巢
-            # （uav_id → nest_id，仅统计有航次的 UAV；空闲机停在原巢不计）。
-            # 供 analyze / nest_choice 图交叉校验「选巢由成本驱动」的归因证据。
-            "end_nests": {
-                str(t.uav_id): t.end_nest_id
-                for t in final.tours
-                if t.task_ids and t.end_nest_id is not None
+            "n_nests": n_nests,
+            # 终点机巢中有多少来自编码（论文 §5(2) 的可观测证据）
+            # 只统计真正由编码给出的终点（None 占位不算，方案 A 下应为 0）
+            "n_end_nests_coded": sum(
+                1 for v in (best_ends or {}).values() if v is not None
+            ),
+            "coded_end_nests": {
+                str(k): v for k, v in (best_ends or {}).items() if v is not None
             },
             "n_executed": len(final.executed_task_ids),
             "n_deferred": len(task_list) - len(final.executed_task_ids),

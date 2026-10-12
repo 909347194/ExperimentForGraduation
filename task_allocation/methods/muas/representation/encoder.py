@@ -69,6 +69,7 @@ class Individual:
 
         对于 SRP 模型，巡游基因（uav_id=-1）会被归属到
         前一个 UAV→Target 基因对应的 UAV。
+        终止基因（uav_id=-2）携带终点机巢，不属于任务分配，跳过。
         """
         result = []
         current_uav = -1
@@ -79,6 +80,7 @@ class Individual:
             elif g.uav_id == -1:
                 # 巡游基因：归属到当前 UAV
                 result.append((current_uav, g.target_id))
+            # -2 终止基因：跳过
         return result
 
     @property
@@ -92,25 +94,41 @@ class Individual:
                 routes.setdefault(current_uav, []).append(g.target_id)
             elif g.uav_id == -1:
                 routes[current_uav].append(g.target_id)
+            # -2 终止基因：不计入路线
         return routes
+
+    @property
+    def end_nests(self) -> dict[int, int | None]:
+        """每架 UAV 的终点机巢（论文 §5(2) 的 z_ub）。
+
+        Returns:
+            ``{uav_id: nest_idx | None}``；键为 UAV 局部下标。
+            无终止基因时值为 ``None``（由下游按容量感知策略兜底）。
+        """
+        # 延迟导入避免与 repair_rules 形成顶层循环依赖
+        from .repair_rules.terminal_nest import extract_end_nests
+
+        return extract_end_nests(self.genes)
 
     @property
     def cost_vector(self) -> np.ndarray:
         """提取代价值向量（用于正向映射 / DE 种群矩阵）。
 
         DE 侧采用**固定布局**，与基因在个体中的交错顺序解耦，保证差分算子
-        每个分量的语义稳定：
+        每个分量的语义稳定（修复 §5(2) 终点机巢未真正被搜索的缺陷）：
 
-            ``[0, K)``    起始基因代价（UAV i → 首个任务），按 UAV 下标升序
-            ``[K, M)``    巡游基因代价（任务 → 任务），按出现顺序
+            ``[0, K)``              起始基因代价（UAV i → 首个任务），按 UAV 下标升序
+            ``[K, M)``              巡游基因代价（任务 → 任务），按出现顺序
+            ``[M, M+K)``            终止基因代价（末任务 → 机巢），按 UAV 下标升序
 
-        ``K`` = UAV 数、``M`` = 任务数，基因总数恒为 ``M``。方案 A 口径：
-        终点机巢不进编码（由解码后内层最小费用流精确求解，返航代价进 F2），
-        因此没有终止基因段；「终点进编码」的联合变体在 pro 分支实现。
+        ``K`` = UAV 数、``M`` = 任务数、``M+K`` = 基因总数。该布局与
+        :func:`inverse_mapper._select_end_nests` 读取终点代价值的下标约定严格一致，
+        使 ``z_ub`` 真正随 ``cost_vector`` 被 DE 差分搜索，而非退化为最近机巢贪心。
         """
         starts = [g.cost for g in self.genes if g.uav_id >= 0]
         tours = [g.cost for g in self.genes if g.uav_id == -1]
-        return np.array(starts + tours, dtype=float)
+        terms = [g.cost for g in self.genes if g.uav_id == -2]
+        return np.array(starts + tours + terms, dtype=float)
 
     def copy(self) -> "Individual":
         """深拷贝。"""
@@ -144,15 +162,18 @@ class PopulationEncoder:
         cost_matrix: np.ndarray,
         n_uavs: int,
         n_targets: int,
+        n_nests: int = 0,
     ) -> None:
         """Args:
-            cost_matrix: 代价矩阵 ``(K+M, M)``（方案 A：列只有任务，无机巢列）。
+            cost_matrix: ``(K+M, M+B)`` 扩展代价矩阵；``B=0`` 时退化为 ``(K+M, M)``。
             n_uavs:     UAV 数 K。
             n_targets:  任务数 M。
+            n_nests:    机巢数 B；``>0`` 时每个航次段末尾生成终止基因。
         """
         self._cm = cost_matrix
         self._n = n_uavs
         self._m = n_targets
+        self._b = max(int(n_nests), 0)
 
     @property
     def model_type(self) -> str:
@@ -259,6 +280,12 @@ class PopulationEncoder:
                     prev_tgt = ordered[seq - 1]
                     cost = float(self._cm[self._n + prev_tgt, tgt_id])
                     genes.append(Gene(uav_id=-1, target_id=tgt_id, cost=cost))
+
+            # 终止基因：末任务 -> 机巢（论文 §5(2)，终点机巢作为航次特殊终止节点）
+            if self._b > 0:
+                b = random.randrange(self._b)
+                cost = float(self._cm[self._n + ordered[-1], self._m + b])
+                genes.append(Gene(uav_id=-2, target_id=b, cost=cost))
 
         return Individual(genes=genes, model_type="srp")
 
