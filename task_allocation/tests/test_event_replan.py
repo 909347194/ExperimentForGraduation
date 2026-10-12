@@ -115,7 +115,7 @@ def _make_horizon(n_tasks=10, n_uavs=24, n_nests=8, nest_capacity=4, event_repla
     fleet = UAVFleet(uavs, current_time=0.0)
 
     stage_config = MUASStageConfig(
-        prune_unprofitable=True, end_nest_in_encoding=True, lamarckian=True,
+        prune_unprofitable=True, lamarckian=True,
     )
     horizon_config = HorizonConfig(
         n_cycles=1, cycle_length=600.0, complete_after_cycle=True,

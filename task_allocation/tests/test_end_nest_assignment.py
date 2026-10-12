@@ -9,7 +9,8 @@
 3. **起飞让名额**：参与规划的 UAV 从当前归属巢让出泊位后可「原地不动」；
 4. **候选过滤**：禁用 / 不可用 / 不可达（inf 代价）的机巢不被选中；
 5. **溢出兜底**：泊位被非规划 UAV 占满时仍返回分配，由 check_nest_capacity 计罚；
-6. **默认配置**：``MUASStageConfig.end_nest_in_encoding`` 默认 False（方案 A）；
+6. **方案口径**：master 分支恒为方案 A——终点机巢由本求解器在解码后精确
+   求解，「终点进编码」的联合变体已移至 pro 分支；
 7. **陷阱规避**：返航代价必须进入标量适应度（同路线不同终点 → 适应度不同）；
 8. **漏洞可见化**：非空航次 end_nest_id=None → 计违约，而非返航零成本静默漏计。
 """
@@ -18,6 +19,7 @@ from __future__ import annotations
 
 import itertools
 
+import numpy as np
 import pytest
 
 from task_allocation.common.types import AllocationSolution, Nest, Task, UAV, UAVTour
@@ -30,6 +32,7 @@ from task_allocation.methods.muas.problem import (
     MUASProblemConfig,
     SelectiveMUASProblem,
 )
+from task_allocation.methods.muas.representation.encoder import PopulationEncoder
 from task_allocation.methods.muas.solvers.muas_stage import MUASStageConfig
 
 
@@ -183,12 +186,23 @@ def test_overflow_fallback_when_full():
 
 
 # ---------------------------------------------------------------------------
-# 6. 默认配置：方案 A
+# 6. 方案口径：master 恒为方案 A（终点机巢不进编码）
 # ---------------------------------------------------------------------------
 
 
 def test_default_config_is_plan_a():
-    assert MUASStageConfig().end_nest_in_encoding is False
+    """方案 A 结构契约：终点机巢不进编码，由内层最小费用流解码后精确求解。
+
+    master 分支不再提供 ``end_nest_in_encoding`` 开关；SRP 基因总数恒为
+    ``M``（无终止基因），``cost_vector`` 长度同为 ``M``。「终点进编码」
+    的联合变体在 pro 分支实现。
+    """
+    assert not hasattr(MUASStageConfig(), "end_nest_in_encoding")
+    cm = np.zeros((3 + 5, 5))
+    ind = PopulationEncoder(cm, 3, 5).generate(1, seed=0)[0]
+    assert len(ind.genes) == 5
+    assert all(g.uav_id >= -1 for g in ind.genes)  # 无 -2 终止基因
+    assert len(ind.cost_vector) == 5
 
 
 # ---------------------------------------------------------------------------
