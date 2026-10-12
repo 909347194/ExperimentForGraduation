@@ -10,8 +10,13 @@
 > - **方案 A（默认）**：DMDE 只搜任务分配与访问顺序；终点机巢由内层子问题
 >   `constraints.solve_end_nest_assignment` 精确求解（容量约束下最优终点分配，
 >   最小费用流）；返航代价经完整成本评价间接影响进化搜索。`end_nest_in_encoding` 默认 `False`。
-> - **方案 B（增强/消融，见 `pro` 分支）**：终点机巢作为终止基因进入 DMDE 联合编码
+> - **方案 B（推迟至 `pro` 分支）**：终点机巢作为终止基因进入 DMDE 联合编码
 >   （论文 §5(1)(2)），`end_nest_in_encoding=True` 启用，编码优先、内层精确分配兜底。
+>   **2026-10-12 用户决策：方案 B 不在当前分支实现与验证，未来在 `pro` 分支完成。**
+>   当前分支代码保留该能力但默认关闭；论文现阶段只宣称方案 A 分层求解口径，
+>   不宣称「终点进编码」；pro 分支验证通过后再评估是否升级宣称。
+>   pro 分支待办：P2-3（终点兜底按 UAV 粒度回退）、P3-3（`repair_terminal_genes`
+>   死代码接入或删除）、P3-4（注明仅 SRP 路径有终点编码）。
 > - 阶段二对比实验：固定终点 / 最近合法巢 / 贪心改派（`choose_end_nests`）/ 最优分配
 >   （`solve_end_nest_assignment`），考察总飞行成本、返航成本、可行解比例、计算时间。
 > - 注意：若容量语义含时段占用（充电位/时间窗），内层子问题需引入预计到达时间与占用时段。
@@ -137,7 +142,7 @@ K 会自然取满 `K_avail`,**不构成算法缺陷**。
 | 2.3 | `methods/muas/constraints/` 落位 | [~] 容量已拆出,其余仍在 `problem.py` |
 | 2.4 | 惩罚归一化:`f2 = 路径代价 + w_penalty × penalty`,各项同量纲 | [~] 容量用 1e4/架,其余仍为 1e3 量级 |
 | 2.5 | `UAVFleet.apply_solution` 补 `nest_id` 写点 + `reassign_nest` / `decommission` | [x] |
-| **2.6** | **终点机巢进编码(§5(1)(2))**:基因用 `uav_id=-2` 的终止基因承载终点,`inverse_phi` 与 `repair_rules` 同步支持;终点由进化搜索决定而非事后启发式 | [x] |
+| **2.6** | **终点机巢进编码(§5(1)(2))**:基因用 `uav_id=-2` 的终止基因承载终点,`inverse_phi` 与 `repair_rules` 同步支持;终点由进化搜索决定而非事后启发式 | [x]（能力已实现；当前主线默认关闭，见 §2.6 验收口径） |
 | 2.7 | 修复结果回写种群(Lamarckian):把 `_prune` / `_repair_range` 后的解编码回 `cost_vector`,使选择压力作用于修复后的解(当前进化搜的是未修复空间) | [x] |
 
 ### 2.6 验收结果(终点机巢进编码)
@@ -163,8 +168,12 @@ K 会自然取满 `K_avail`,**不构成算法缺陷**。
 | 可行性 | 三周期 `violations=[]`、`penalty=0` |
 | **消融(同 seed)** | 终点进编码 **323.2 km** vs 启发式选巢 **331.0 km**,代价降低 **2.4%** |
 
-**消融开关**:`config.yaml` 的 `muas.end_nest_in_encoding`(默认 `true`)。
-关闭后退化为「解码后再用容量感知策略挑终点」,供 `exp04_ablation` 对比。
+**消融开关**:`config.yaml` 的 `muas.end_nest_in_encoding`。**当前事实口径**:类默认
+`MUASStageConfig.end_nest_in_encoding = False`(方案 A 主线),
+`exp01_smoke/config.yaml` 亦为 `false` —— 上表消融数据(323.2 vs 331.0 km)系在
+`true`(方案 B)下测得,**当前主线默认配置复现不出该结论**。
+**2026-10-12 决策**:方案 B 不在当前分支验证(见 §0),该消融结论留待 pro 分支复核,
+论文现阶段不引用「终点进编码更优」作为主线证据。
 
 **附带修复(重要)**:`_perturb_srp_tour` 的 `reverse` / `insert` 会把
 `uav_id >= 0` 的起始基因卷进子序列,实测出现过起始顺序 `[0, 2, 1]`。
@@ -187,7 +196,8 @@ K 会自然取满 `K_avail`,**不构成算法缺陷**。
 **实现**(落点:`muas_stage.MUASAssignmentEvaluator.lamarckian_reencode` +
 `dmde_solver` 主循环;`DMDEConfig.lamarckian` / `MUASStageConfig.lamarckian` 开关):
 
-- SRP 基因契约强制「每 UAV 一段、长度恒为 `M+K`、每个任务都必须出现在基因中」,
+- SRP 基因契约强制「每 UAV 一段、长度恒定、每个任务都必须出现在基因中」
+  （终点进编码时恒为 `M+K`，方案 A 下恒为 `M`），
   直接删除被 `y_j=0` 剔除的任务会破坏该不变式、使 DE 代价矩阵错位。
   故只回写**可解码**的两条通道:
   - **起始基因**(位置 `[0,K)`):改写为修复解中该 UAV 的首任务(代价/目标同时改),
