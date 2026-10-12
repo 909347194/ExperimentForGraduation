@@ -143,7 +143,7 @@ B 组 `time_window=true` + `muas.w_violation=0.01`。产物已归档为
 | # | 问题 | 严重度 | 建议 |
 |---|---|---|---|
 | E1 | **关键约束在 exp01 里是惰性的**：24 架机 / 32 泊位 → 容量最大占用仅 4（=上限但未越界）；`recharge_at_nest` 每周期回满 + 120 km 航程 → 航程违约恒为 0；α=2.5×24=60 ≫ T_t(≤11) → Top-αK 预筛完全不生效 | 高 | 增设压力场景：`n_uavs=32`、关闭 `recharge_at_nest`、扩大 `spread_m`，让容量/航程/预筛真正咬合 |
-| E2 | **无基线、无消融**：`experiments/` 只有 exp01/exp02，而 config 注释多处承诺 `end_nest_in_encoding` / `event_replan` / `w_time` 用于 exp04 消融 | 高 | 建 exp04：三个创新点各跑一组开关对照 |
+| E2 | **无基线、无消融**：`experiments/` 只有 exp01/exp02，而 config 注释多处承诺 `event_replan` / `w_time` 用于 exp04 消融（`end_nest_in_encoding` 旋钮已随方案 B 移至 pro 分支） | 高 | 建 exp04：两个创新点各跑一组开关对照 |
 | E3 | **参与机数被 SRP 编码限制为 `min(K_avail, M-1)`**：24 架可用却只有 8 架参与，机队规模效应无法体现 | 高 | 论文明确该建模约束；或补充 K≈M 的对比场景 |
 | E4 | `w_violation=0.01` 是拍定的，未做灵敏度 | 中 | 跑 0 / 0.002 / 0.01 / 0.05，出「完成率—违约率」权衡曲线 |
 | E5 | 3 个周期太短，滞留任务是否最终执行看不到稳态 | 中 | 主实验提到 8–10 周期 |

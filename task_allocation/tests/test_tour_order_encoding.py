@@ -9,8 +9,11 @@
 历史缺陷：``_inverse_phi_srp`` 第二阶段此前只做「按任务编号顺序取任务 +
 贪心最近追加」，从不读 ``cost_vector[K, M)``；随后 ``_recalculate_srp_tour_costs``
 又把巡游基因的 cost 重算为实际前驱的真值，把这条通路彻底焊死。后果是 DE 的
-``M+K`` 维中有 ``M-K`` 维写而不读，宣称的「归属 + 顺序 + 终点统一编码」里
-顺序这一环是虚的（实测敏感性 0/200）。
+``M`` 维中有 ``M-K`` 维写而不读，宣称的「归属 + 顺序统一编码」里顺序这一环
+是虚的（实测敏感性 0/200）。
+
+方案 A 口径：基因总数恒为 ``M``（终点机巢不进编码，由解码后内层最小费用流
+精确求解），``cost_vector`` 布局为 ``[0, K)`` 起始 + ``[K, M)`` 巡游。
 """
 
 from __future__ import annotations
@@ -29,7 +32,7 @@ def _routes_of(cv: np.ndarray, cm: np.ndarray, K: int, M: int, seed: int = 0, te
         np.asarray(cv, dtype=float).copy(), cm, K, M, "srp",
         rng=np.random.default_rng(seed), temperature=temperature,
     )
-    routes, _ = split_segments(ind.genes)
+    routes = split_segments(ind.genes)
     return tuple((u, tuple(v)) for u, v in sorted(routes.items())), ind
 
 
@@ -95,7 +98,7 @@ def test_tour_segment_materially_changes_routes():
     """只改 cost_vector[K, M)，访问顺序必须高比例响应（历史 0/200 → 现应 >50%）。"""
     K, M = 3, 8
     cm = _random_cost_matrix(K, M, seed=3)
-    base_cv = np.random.default_rng(11).uniform(1.0, 150.0, size=M + K)
+    base_cv = np.random.default_rng(11).uniform(1.0, 150.0, size=M)
 
     base_routes, _ = _routes_of(base_cv, cm, K, M)
     rng = np.random.default_rng(12)
@@ -120,7 +123,7 @@ def test_distinct_tour_vectors_yield_many_distinct_routes():
     rng = np.random.default_rng(13)
     seen = set()
     for _ in range(200):
-        cv = rng.uniform(1.0, 150.0, size=M + K)
+        cv = rng.uniform(1.0, 150.0, size=M)
         routes, _ = _routes_of(cv, cm, K, M)
         seen.add(routes)
     assert len(seen) >= 20, f"200 个随机 cost_vector 只产生 {len(seen)} 种航线，多样性不足"
@@ -130,7 +133,7 @@ def test_temperature_zero_is_deterministic():
     """temperature < 0.1 时同一 cost_vector 必须解码出完全相同的结果。"""
     K, M = 3, 9
     cm = _random_cost_matrix(K, M, seed=7)
-    cv = np.random.default_rng(21).uniform(1.0, 150.0, size=M + K)
+    cv = np.random.default_rng(21).uniform(1.0, 150.0, size=M)
 
     a, _ = _routes_of(cv, cm, K, M, seed=0, temperature=0.0)
     b, _ = _routes_of(cv, cm, K, M, seed=99, temperature=0.0)
@@ -152,24 +155,24 @@ def test_invalid_tour_value_falls_back_to_cheapest_edge():
 
 
 def test_srp_invariants_hold_after_rule_2c():
-    """Rule 2(c) 不得破坏 srp 结构不变量：任务不重不漏、每机至少一段、长度 M+K。"""
-    for K, M, B in ((2, 5, 0), (3, 8, 3), (4, 9, 2)):
-        cm_full = np.full((K + M, M + B), np.inf)
-        base = _random_cost_matrix(K, M, seed=K * 10 + M)
-        cm_full[:, :M] = base
-        if B:
-            cm_full[:, M:] = np.random.default_rng(1).uniform(1.0, 100.0, size=(K + M, B))
+    """Rule 2(c) 不得破坏 srp 结构不变量：任务不重不漏、每机至少一段、长度 M。
+
+    方案 A 口径：终点机巢不进编码，代价矩阵只有任务列 ``(K+M, M)``，
+    基因总数恒为 ``M``（无终止基因）。
+    """
+    for K, M in ((2, 5), (3, 8), (4, 9)):
+        cm = _random_cost_matrix(K, M, seed=K * 10 + M)
 
         rng = np.random.default_rng(31)
         for _ in range(25):
-            cv = rng.uniform(1.0, 150.0, size=M + K)
+            cv = rng.uniform(1.0, 150.0, size=M)
             temperature = float(rng.choice([0.0, 0.4, 0.9]))
             ind = inverse_phi(
-                cv, cm_full, K, M, "srp",
+                cv, cm, K, M, "srp",
                 rng=np.random.default_rng(int(rng.integers(1 << 30))),
-                temperature=temperature, n_nests=B,
+                temperature=temperature,
             )
-            routes, _ = split_segments(ind.genes)
+            routes = split_segments(ind.genes)
             targets = [t for seg in routes.values() for t in seg]
             assert sorted(targets) == list(range(M)), (
                 f"K={K},M={M}: 任务必须恰好覆盖一次，实际 {sorted(targets)}"
@@ -177,7 +180,6 @@ def test_srp_invariants_hold_after_rule_2c():
             assert sorted(routes.keys()) == list(range(K)), (
                 f"K={K},M={M}: 每架 UAV 都应有航次段，实际 {sorted(routes.keys())}"
             )
-            expected_len = M + (K if B else 0)
-            assert len(ind.genes) == expected_len, (
-                f"K={K},M={M},B={B}: 基因数应为 {expected_len}，实际 {len(ind.genes)}"
+            assert len(ind.genes) == M, (
+                f"K={K},M={M}: 基因数应为 {M}，实际 {len(ind.genes)}"
             )

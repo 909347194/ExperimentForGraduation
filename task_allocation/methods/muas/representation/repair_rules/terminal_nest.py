@@ -1,22 +1,24 @@
 # -*- coding: utf-8 -*-
-"""terminal_nest.py — 航次终止基因（终点机巢）的编码支持
+"""terminal_nest.py — SRP 航次分段结构支持（方案 A 口径）
 
-对应论文 §5(1)(2)：统一编码需同时表达「UAV 归属 + 任务访问顺序 + 终点机巢」，
-终点机巢作为每架 UAV 航次的**特殊终止节点**，在 :math:`B_1,\\dots,B_K` 之间选择。
+master 分支 = 方案 A（分层求解）：
 
-基因类型沿用 ``uav_id`` 哨兵值，避免改动 frozen 的 :class:`Gene`：
+    DMDE 编码只表达「UAV 归属 + 任务访问顺序」；终点机巢 **不进编码**，由
+    解码后内层最小费用流（``constraints.nest_capacity.solve_end_nest_assignment``）
+    在末态容量约束下精确求解，返航代价进入完整适应度评价（F2），间接作用于
+    进化方向。
 
-    ``uav_id >= 0``   起始基因（UAV → 任务）
-    ``uav_id == -1``  巡游基因（任务 → 任务）
-    ``uav_id == -2``  终止基因（末任务 / UAV 起点 → 机巢），``target_id`` 为机巢下标
+    因此本模块不产生「终止基因」，基因序列只有两类：
 
-每个 UAV 航次段末尾至多一个终止基因；其代价值随 ``cost_vector`` 一同参与
-差分变异，因此终点机巢是**进化搜索的结果**，而非解码后的启发式补丁。
+        ``uav_id >= 0``   起始基因（UAV → 任务）
+        ``uav_id == -1``  巡游基因（任务 → 任务）
 
-代价矩阵布局（扩展后 ``(K+M, M+B)``）：
+    SRP 不变式：每机一段、每段非空、每任务恰出现一次；基因总数恒为 ``M``。
 
-    行 ``0..K-1``        UAV → 任务（前 M 列）/ UAV → 机巢（M: 列）
-    行 ``K..K+M-1``      任务 → 任务（前 M 列）/ 任务 → 机巢（M: 列）
+「终点机巢进编码」的联合变体（终止基因 ``uav_id == -2``，``target_id`` 为
+机巢下标，其代价随 ``cost_vector`` 末尾 K 个分量参与差分变异）已从 master
+分支移除，在 pro 分支实现。恢复时以 git 历史中本模块含 ``TERMINAL_UAV_ID`` /
+``repair_terminal_genes`` / ``normalize_srp_segments(n_nests=...)`` 的版本为准。
 """
 
 from __future__ import annotations
@@ -28,49 +30,38 @@ import numpy as np
 from ..encoder import Gene
 
 TOUR_UAV_ID = -1
-TERMINAL_UAV_ID = -2
 
 __all__ = [
     "TOUR_UAV_ID",
-    "TERMINAL_UAV_ID",
     "split_segments",
     "normalize_srp_segments",
-    "repair_terminal_genes",
-    "extract_end_nests",
 ]
 
 
 def split_segments(
     genes: Sequence[Gene],
-) -> tuple[dict[int, list[int]], dict[int, int | None]]:
-    """把基因序列解析为「每架 UAV 的任务序列 + 终点机巢」。
+) -> dict[int, list[int]]:
+    """把基因序列解析为「每架 UAV 的任务序列」。
 
     Args:
         genes: 基因序列（允许结构已被扰动打乱）。
 
     Returns:
-        ``(routes, ends)``；``routes`` 为 ``{uav_id: [task_idx, ...]}``，
-        ``ends`` 为 ``{uav_id: nest_idx | None}``。
+        ``{uav_id: [task_idx, ...]}``。
     """
     routes: dict[int, list[int]] = {}
-    ends: dict[int, int | None] = {}
     current: int | None = None
 
     for g in genes:
         if g.uav_id >= 0:
             current = g.uav_id
             routes.setdefault(current, []).append(g.target_id)
-            ends.setdefault(current, None)
         elif g.uav_id == TOUR_UAV_ID:
             if current is None:
                 continue  # 无归属的巡游基因，由规范化阶段回收
             routes.setdefault(current, []).append(g.target_id)
-        elif g.uav_id == TERMINAL_UAV_ID:
-            if current is None:
-                continue
-            ends[current] = g.target_id
 
-    return routes, ends
+    return routes
 
 
 def _safe_cost(cm: np.ndarray, row: int, col: int) -> float:
@@ -86,8 +77,6 @@ def normalize_srp_segments(
     cost_matrix: np.ndarray,
     n_uavs: int,
     n_targets: int,
-    n_nests: int = 0,
-    ends_override: dict[int, int] | None = None,
 ) -> list[Gene]:
     """把基因序列规范化为严格的航次分段结构。
 
@@ -97,28 +86,25 @@ def normalize_srp_segments(
 
     1. 每架 UAV 恰好一个起始基因，且按 UAV 编号升序排列；
     2. 巡游基因紧跟其所属 UAV 的起始基因；
-    3. 每个航次段末尾至多一个终止基因（``n_nests > 0`` 时）；
-    4. **不丢失任何任务**（孤立任务回收到任务数最少的段）。
+    3. **不丢失任何任务**（孤立任务回收到任务数最少的段）。
+
+    方案 A 口径：不生成终止基因（终点机巢由解码后的内层最小费用流求解），
+    基因总数恒为 ``M``。
 
     Args:
         genes:       待规范化的基因序列。
-        cost_matrix: 扩展代价矩阵 ``(K+M, M+B)``。
+        cost_matrix: 代价矩阵 ``(K+M, M)``。
         n_uavs:      UAV 数 K。
         n_targets:   任务数 M。
-        n_nests:     机巢数 B；为 0 时不生成终止基因。
-        ends_override: 外部指定的终点机巢 ``{uav_id: nest_idx}``，用于把反映射
-            阶段选定的终点写入编码；未提供时沿用基因序列中已有的终止基因。
 
     Returns:
         规范化后的新基因列表。
     """
-    routes, ends = split_segments(list(genes))
-    if ends_override:
-        ends.update(ends_override)
+    routes = split_segments(list(genes))
 
     # ---- 任务回收：防止扰动导致任务丢失 ----
     placed = {t for seg in routes.values() for t in seg}
-    all_tasks = {g.target_id for g in genes if g.uav_id != TERMINAL_UAV_ID}
+    all_tasks = {g.target_id for g in genes}
     missing = sorted(all_tasks - placed)
     if missing and n_uavs > 0:
         # 挂到任务数最少的段，避免单段过长
@@ -132,18 +118,7 @@ def normalize_srp_segments(
         seg = routes.get(uav_id, [])
 
         if not seg:
-            # 空航次（允许 n_u = 0）：仍可为 UAV 指定终点机巢
-            if n_nests > 0:
-                b = ends.get(uav_id)
-                if b is None or b >= n_nests:
-                    b = 0
-                out.append(
-                    Gene(
-                        uav_id=TERMINAL_UAV_ID,
-                        target_id=int(b),
-                        cost=_safe_cost(cost_matrix, uav_id, n_targets + b),
-                    )
-                )
+            # 空航次（允许 n_u = 0）：方案 A 下不产生任何基因
             continue
 
         # 起始基因：UAV → 首个任务
@@ -163,124 +138,5 @@ def normalize_srp_segments(
                     cost=_safe_cost(cost_matrix, n_uavs + seg[j - 1], seg[j]),
                 )
             )
-        # 终止基因：末任务 → 机巢
-        if n_nests > 0:
-            b = ends.get(uav_id)
-            if b is None or b >= n_nests:
-                b = 0
-            out.append(
-                Gene(
-                    uav_id=TERMINAL_UAV_ID,
-                    target_id=int(b),
-                    cost=_safe_cost(
-                        cost_matrix, n_uavs + seg[-1], n_targets + b
-                    ),
-                )
-            )
 
-    return out
-
-
-def repair_terminal_genes(
-    genes: list[Gene],
-    cost_matrix: np.ndarray,
-    n_uavs: int,
-    n_targets: int,
-    n_nests: int,
-    rng: np.random.Generator | None = None,
-) -> list[Gene]:
-    """修补终止基因的合法性（机巢下标越界 / 缺失 / 重复）。
-
-    - 下标越界或缺失：随机或取该航次代价最小的可用机巢；
-    - 一段内重复出现多个终止基因：只保留最后一个。
-
-    Args:
-        genes:       基因序列（假定段结构已规范化）。
-        cost_matrix: 扩展代价矩阵 ``(K+M, M+B)``。
-        n_uavs:      UAV 数 K。
-        n_targets:   任务数 M。
-        n_nests:     机巢数 B。
-        rng:         随机数生成器（可选）。
-
-    Returns:
-        修补后的新基因列表。
-    """
-    if n_nests <= 0:
-        return [g for g in genes if g.uav_id != TERMINAL_UAV_ID]
-
-    out: list[Gene] = []
-    seen_segment = False  # 当前段是否已有终止基因
-    for g in genes:
-        if g.uav_id != TERMINAL_UAV_ID:
-            if g.uav_id >= 0:
-                seen_segment = False
-            out.append(g)
-            continue
-
-        if seen_segment:
-            continue  # 段内重复，丢弃
-        seen_segment = True
-
-        b = g.target_id
-        if b < 0 or b >= n_nests:
-            b = _cheapest_nest(genes, out, cost_matrix, n_uavs, n_targets, n_nests, rng)
-        out.append(
-            Gene(
-                uav_id=TERMINAL_UAV_ID,
-                target_id=int(b),
-                cost=float(g.cost),
-            )
-        )
-    return out
-
-
-def _cheapest_nest(
-    genes_all: list[Gene],
-    genes_so_far: list[Gene],
-    cost_matrix: np.ndarray,
-    n_uavs: int,
-    n_targets: int,
-    n_nests: int,
-    rng: np.random.Generator | None,
-) -> int:
-    """为当前航次挑一个代价最小的机巢（前驱为段内最后一个任务）。
-
-    无前驱任务（空航次）时退化为最小可用机巢下标。
-    """
-    prev_task: int | None = None
-    for g in reversed(genes_so_far):
-        if g.uav_id >= 0 or g.uav_id == TOUR_UAV_ID:
-            prev_task = g.target_id
-            break
-
-    if prev_task is None:
-        return int(rng.integers(n_nests)) if rng is not None else 0
-
-    row = n_uavs + prev_task
-    costs = [
-        _safe_cost(cost_matrix, row, n_targets + b) for b in range(n_nests)
-    ]
-    return int(np.argmin(costs))
-
-
-def extract_end_nests(
-    genes: Sequence[Gene],
-    uav_index_to_id: Sequence[int] | None = None,
-) -> dict[int, int | None]:
-    """从基因序列提取每架 UAV 的终点机巢。
-
-    Args:
-        genes:            基因序列（段结构应已规范化）。
-        uav_index_to_id:  局部 UAV 下标 → 真实 uav_id 的映射；省略时返回下标键。
-
-    Returns:
-        ``{uav_id: nest_idx | None}``。
-    """
-    routes, ends = split_segments(list(genes))
-    out: dict[int, int | None] = {}
-    for uav_idx, b in ends.items():
-        key = uav_index_to_id[uav_idx] if (
-            uav_index_to_id is not None and uav_idx < len(uav_index_to_id)
-        ) else uav_idx
-        out[key] = b
     return out
