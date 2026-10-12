@@ -38,8 +38,7 @@ def main(path: str) -> None:
                 feas_f += 1
             for v in m.get("violations", []):
                 (tw if v.startswith("tw_") else other)[v] += 1
-            # 方案 A：内层最小费用流实际选定的终点机巢（diagnostics.end_nests）
-            flown = [n for n in m.get("end_nests", {}).values() if n is not None]
+            flown = [n for n in m.get("coded_end_nests", {}).values() if n is not None]
             for n in flown:
                 nest_dist[n] += 1
             per_cycle_div.append(f"{len(set(flown))}/{len(flown)}")
