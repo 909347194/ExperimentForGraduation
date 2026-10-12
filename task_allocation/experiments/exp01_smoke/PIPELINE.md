@@ -130,6 +130,7 @@ B 组 `time_window=true` + `muas.w_violation=0.01`。产物已归档为
 | M6 | 第一阶段可达性用欧氏距离、`_cost_hint` 把 `inf` 兜成 1e6，未用三维代价 | 中 | prefilter 接入 3D 代价 |
 | M7 | `end_nest_reachability` 与 `range` 双重计罚（末段 `inf` 必然同时触发航程违约） | 低 | 论文说明冗余关系，或只保留其一 |
 | M8 | 禁飞区未实现（`vertical_section` 只有最小离地余量） | 已知 TODO | 按用户决定挂起 |
+| M9 | **合并—删任务链路吞任务**：`_consolidate` 只看代价不查航程 → 合并出超航程航次 → `_repair_range` 删任务且不回流（exp01 周期 1：12 个全可行任务被延期 8 个） | 高 | **已修**：合并加结构性航程门 + 修复回流（改派优先、证明性暂缓）；完成率 40%→65%，`test_repair_reflow.py` 3 项对抗测试锁定 |
 
 ### 实验侧（exp01）
 
