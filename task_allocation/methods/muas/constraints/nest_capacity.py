@@ -364,13 +364,22 @@ def solve_end_nest_assignment(
     起飞让名额：参与规划的 UAV 先从当前归属巢让出泊位，再统一按终点占位——
     与容量判定的 ``occupied_after = now - departures + arrivals`` 口径严格等价。
 
-    实现：最小费用流（源 → 航次节点 → 机巢节点 → 汇）。容量为**软约束**：
-    每个机巢除正常泊位边外另有一条溢出边，单位代价 ``overflow_penalty``
-    （默认与 :data:`DEFAULT_CAPACITY_UNIT_PENALTY` 同量纲）。因此：
+    实现：最小费用流（源 → 航次节点 → 机巢节点 → 汇）。溢出边带**结构性
+    保底**（不再依赖罚则权重选择）：
 
-    - 存在容量可行解时，返回值即硬约束下的**全局最优**终点分配；
-    - 全部超容时，返回值即「返航代价 + 罚」意义下的最优解，
-      由 :func:`check_nest_capacity` 计罚兜底（设计文档 §7 ②）。
+        溢出代价 = overflow_penalty + (p · c_max + 1)
+
+    其中 c_max 为最大候选返航代价、p 为航次数。保底项 > 任意容量可行分
+    配的总代价上界（p 条边 × c_max），因此：
+
+    - **存在容量可行解时，MCF 必不使用溢出边**，返回值即硬约束下的
+      **全局最优**终点分配（"容量可行最优"结构性成立）；
+    - 全部超容时溢出不可避免，返回值即「溢出数优先 → 返航代价次之」
+      字典序最优，由 :func:`check_nest_capacity` 计罚兜底（设计文档 §7 ②）。
+
+    注：``overflow_penalty`` 仍须与容量判定同量纲（供测试与报告口径对齐），
+    但不再是可行性的唯一防线；落地期 :func:`check_nest_capacity` 硬校验
+    （``strict_capacity``）为最终闸门。
 
     Args:
         uavs:              全部无人机（占用从 ``nest_id`` 推导）。
@@ -443,6 +452,12 @@ def solve_end_nest_assignment(
     src, sink = 0, 1 + p + b_count
     mcf = _MinCostFlow(sink + 1)
 
+    # 结构性保底：溢出单价 > 任意可行分配总代价上界（p × c_max）
+    c_max = max(
+        (c for cs in candidates.values() for c in cs.values()), default=0.0
+    )
+    overflow_cost = float(overflow_penalty) + p * c_max + 1.0
+
     for i, uid in enumerate(solvable):
         mcf.add_edge(src, 1 + i, 1, 0.0)
         for b, c in sorted(candidates[uid].items()):
@@ -453,8 +468,9 @@ def solve_end_nest_assignment(
         slots = max(0, n.capacity - occ.get(n.id, 0))
         if slots > 0:
             mcf.add_edge(node, sink, slots, 0.0)
-        # 溢出边：容量软化，单位代价与 check_nest_capacity 罚则同量纲
-        mcf.add_edge(node, sink, p, float(overflow_penalty))
+        # 溢出边：结构性保底代价（见 docstring）——只要存在容量可行解，
+        # 任何含溢出的解总代价都劣于它，"容量可行最优"不依赖罚则权重。
+        mcf.add_edge(node, sink, p, overflow_cost)
 
     mcf.min_cost_flow(src, sink, p)
 
