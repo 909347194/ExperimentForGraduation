@@ -11,7 +11,9 @@
 5. **溢出兜底**：泊位被非规划 UAV 占满时仍返回分配，由 check_nest_capacity 计罚；
 6. **默认配置**：``MUASStageConfig.end_nest_in_encoding`` 默认 False（方案 A）；
 7. **陷阱规避**：返航代价必须进入标量适应度（同路线不同终点 → 适应度不同）；
-8. **漏洞可见化**：非空航次 end_nest_id=None → 计违约，而非返航零成本静默漏计。
+8. **漏洞可见化**：非空航次 end_nest_id=None → 计违约，而非返航零成本静默漏计；
+9. **结构性可行**：存在容量可行解时绝不溢出（远处空巢 vs 近处满巢的对抗），
+   "容量可行最优"不依赖罚则权重。
 """
 
 from __future__ import annotations
@@ -41,7 +43,11 @@ def _uav(uid: int, nest_id: int | None) -> UAV:
 def _penalized_cost(assign: dict[int, int | None],
                     costs: dict[int, dict[int, float]],
                     uavs: list[UAV], nests: list[Nest]) -> float:
-    """目标值 = Σ 返航代价 + check_nest_capacity 的容量罚（与求解器同量纲）。"""
+    """目标值 = Σ 返航代价 + check_nest_capacity 的容量罚。
+
+    注：求解器溢出边另有结构性保底（不改变本目标的最优解——两者都是
+    "溢出数优先、返航代价次之"的字典序），本函数仅用于对齐报告口径。
+    """
     total = 0.0
     for uid, b in assign.items():
         if b is not None:
@@ -189,6 +195,29 @@ def test_overflow_fallback_when_full():
 
 def test_default_config_is_plan_a():
     assert MUASStageConfig().end_nest_in_encoding is False
+
+
+# ---------------------------------------------------------------------------
+# 9. 结构性可行：存在容量可行解时绝不溢出（对抗性）
+# ---------------------------------------------------------------------------
+
+
+def test_feasible_far_nest_beats_overflow_near_nest():
+    """远处空巢 vs 近处满巢：必须选容量可行解，不得被罚则权重击穿。
+
+    返航代价差 2e4 − 100 > 溢出罚 1e4：纯罚则权重下 MCF 会宁可把机挤进
+    已满的近巢（100 + 1e4 < 2e4）；但落地期硬校验会拒绝该解 → 回池 churn。
+    结构性保底后必须选远处空巢（容量可行最优结构性成立）。
+    """
+    nests = [Nest(id=0, x=0.0, y=0.0, z=0.0, capacity=1),
+             Nest(id=1, x=20000.0, y=0.0, z=0.0, capacity=1)]
+    # 巢 0 的唯一泊位被非规划 UAV9 占满；UAV0 无归属、需选终点
+    uavs = [_uav(9, nest_id=0), _uav(0, nest_id=None)]
+    costs = {0: {0: 100.0, 1: 20000.0}}
+    got = solve_end_nest_assignment(uavs, nests, costs, planning_uav_ids=[0])
+    assert got == {0: 1}, f"必须选容量可行的远巢，得到 {got}"
+    rep = check_nest_capacity(uavs, nests, got)
+    assert rep.violations == [] and rep.penalty == 0.0
 
 
 # ---------------------------------------------------------------------------
