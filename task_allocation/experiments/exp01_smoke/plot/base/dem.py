@@ -1,0 +1,289 @@
+# -*- coding: utf-8 -*-
+"""exp01_smoke 绘图底座：**DEM 高程底图**（取数 → 补洞 → 晕渲 → 铺底）。
+
+与 ``base/geo.py`` 的分工：
+
+    ``base/dem.py``   **数据**：从哪里取高程（真实 ASTER 瓦片 / solution 里的降采样栅格）、
+                      瓦片外的 NaN 怎么补、怎么平滑、怎么分页——一句话：**拿到一张能画的
+                      高程矩阵 + 视图范围**（``_get_elevation`` / ``_dem_view_extent``）
+    ``base/geo.py``   **绘制**：图标、图例、图层与排版
+
+地形并非随手一张jpg：隐含的前提是**地形真的参与代价估算**（见 config 的 ``cost`` 段，
+坡度/爬升能耗），所以底图必须如实反映真实地形，而不是装饰。取不到真实瓦片时退回
+``solution.json`` 里的降采样 dem，图依然成立，只是精度下降。
+
+做法参照 matplotlib 官方 *topographic hillshading* 示例，并对高原场景做了三处适配：
+
+    1. 自定分层设色 ``_HYPSO``：避开原生 ``terrain`` 低段的"水蓝/鲜绿"——在
+       3500–5700 m 高原，鲜绿会被误读成植被/水系；
+    2. ``LightSource`` 的 dx/dy 取**真实米制格距**，``vert_exag`` 才对应真实坡度；
+    3. 2%–98% 分位拉伸，避免极值把色带两端压扁。
+"""
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+from matplotlib.colors import LightSource, LinearSegmentedColormap, Normalize
+
+from ..theme import plt
+
+__all__ = [
+    "_HYPSO",
+    "_draw_dem",
+    "_get_elevation",
+    "_dem_view_extent",
+]
+
+
+# 高原分层设色（hypsometric tint，低→高）：灰橄榄谷地 → 橄榄卡其 → 卡其黄 →
+# 暖沙黄 → 赭石 → 棕 → 深棕 → 近白峰顶。刻意避开 matplotlib 原生 ``terrain``/
+# ``gist_earth`` 的低段"水蓝/鲜绿"——在 3500–5700 m 高原，鲜绿会被误读成
+# 植被/水系，且高饱和谷地喧宾夺主；这里整体保持低饱和的大地色系，
+# 只在峰顶提亮到近白，保证任意高程都有可辨识色调与立体感。
+_HYPSO = LinearSegmentedColormap.from_list(
+    "hypso_plateau",
+    [
+        (0.00, "#77784b"),   # 谷底（最低）：灰橄榄
+        (0.15, "#98945a"),   # 低坡：橄榄卡其
+        (0.32, "#b3a05f"),   # 山麓：卡其黄
+        (0.50, "#c7a35f"),   # 缓坡：暖沙黄
+        (0.66, "#b57f3e"),   # 中坡：赭石
+        (0.82, "#8f5a2c"),   # 陡坡：棕
+        (0.93, "#6e4523"),   # 高坡：深棕
+        (1.00, "#efe7d6"),   # 峰顶：近白
+    ],
+)
+
+
+# ---------------------------------------------------------------------------
+# 真实 DEM 瓦片（ASTER GDEM v3）采样：优先用原始 tif 作底图
+# ---------------------------------------------------------------------------
+
+def _find_dem_tif() -> "Path | None":
+    """向上查找 ASTER GDEM 瓦片（task_allocation/data/ASTGTMV003_N29E091_dem.tif）。"""
+    base = Path(__file__).resolve()
+    for p in [base, *base.parents]:
+        direct = p / "data" / "ASTGTMV003_N29E091_dem.tif"
+        if direct.is_file():
+            return direct
+        data_dir = p / "data"
+        if data_dir.is_dir():
+            hits = sorted(data_dir.glob("ASTGTMV*_dem.tif"))
+            if hits:
+                return hits[0]
+    return None
+
+
+def _nearest_fill_1d(a: np.ndarray) -> np.ndarray:
+    """一维最近邻填充：每个 NaN 取左右最近的有效值（两侧等距取左）。"""
+    n = a.size
+    valid = np.isfinite(a)
+    if not valid.any() or valid.all():
+        return a
+    idx = np.where(valid, np.arange(n), -1)
+    fwd = np.maximum.accumulate(idx)                     # 左侧最近有效下标
+    bwd = np.minimum.accumulate(np.where(idx >= 0, idx, n)[::-1])[::-1]
+    bwd = np.where(bwd == n, -1, bwd)                    # 右侧最近有效下标
+    ar = np.arange(n)
+    d_fwd = np.where(fwd >= 0, ar - fwd, n)
+    d_bwd = np.where(bwd >= 0, bwd - ar, n)
+    pick = np.where(d_bwd < d_fwd, bwd, fwd)
+    out = a[np.clip(pick, 0, n - 1)]
+    return np.where(valid, a, out)
+
+
+def _fill_nan(elev: np.ndarray) -> np.ndarray:
+    """把越界（瓦片外）NaN 用最近有效高程延拓填充，让边界地形自然延伸。
+
+    先沿行填充（覆盖西/东边缘的越界条带），再沿列兜底（南/北边缘），
+    避免"填最低值"造成的整片死色边框。
+    """
+    out = np.array(elev, dtype=float, copy=True)
+    if np.isfinite(out).all() or not np.isfinite(out).any():
+        return out
+    for i in range(out.shape[0]):                        # 行方向
+        row = out[i]
+        if not np.isfinite(row).all() and np.isfinite(row).any():
+            out[i] = _nearest_fill_1d(row)
+    if (~np.isfinite(out)).any():                        # 列方向兜底
+        for j in range(out.shape[1]):
+            col = out[:, j]
+            if not np.isfinite(col).all() and np.isfinite(col).any():
+                out[:, j] = _nearest_fill_1d(col)
+    out[~np.isfinite(out)] = 0.0                         # 极端兜底（不应发生）
+    return out
+
+
+_DEM_SAMPLE_CACHE: "dict[tuple, Any]" = {}
+
+
+def _box3(a: np.ndarray) -> np.ndarray:
+    """3x3 盒滤波（边缘复制填充），用于轻微平滑填充区。"""
+    p = np.pad(a, 1, mode="edge")
+    return (
+        p[:-2, :-2] + p[:-2, 1:-1] + p[:-2, 2:]
+        + p[1:-1, :-2] + p[1:-1, 1:-1] + p[1:-1, 2:]
+        + p[2:, :-2] + p[2:, 1:-1] + p[2:, 2:]
+    ) / 9.0
+
+
+def _smooth_filled(elev: np.ndarray, valid: np.ndarray, iters: int = 10) -> np.ndarray:
+    """只平滑瓦片外的填充区（有效区保持原值），消除最近邻延拓的条带感。"""
+    smooth = elev.copy()
+    for _ in range(iters):
+        smooth = _box3(smooth)
+    return np.where(valid, elev, smooth)
+
+
+def _sample_real_dem(dem: dict[str, Any], solution: dict[str, Any] | None):
+    """若可用，直接从真实 ASTER 瓦片裁剪采样（~150 m 格网），返回 (elev, extent)。
+
+    视图取「场景包围盒 ∩ 瓦片实际覆盖范围」并外扩约 2.5 km（保证贴近瓦片
+    边缘的机巢/任务完整可见），瓦片外仅剩窄条，用最近邻延拓 + 轻度平滑补齐，
+    **不渲染**瓦片覆盖不到的大片虚构地形。返回的 ``extent`` 为 imshow 约定的
+    ``(left, right, bottom, top)``。
+
+    否则返回 None，由 ``_draw_dem`` 回退到 solution.json 里的降采样 dem。
+    做法参照 matplotlib 官方 *topographic hillshading* 示例：用真实栅格 +
+    ``LightSource`` 山体阴影，dx/dy 取与高程同单位的米制格距。
+    """
+    if not dem or not dem.get("bounds"):
+        return None
+    lf_info = (solution or {}).get("local_frame") or {}
+    if "lat0" not in lf_info or "lon0" not in lf_info:
+        return None
+    tif = _find_dem_tif()
+    if tif is None:
+        return None
+    try:
+        from task_allocation.methods.utils import GeoTIFFDEM, LocalFrame
+    except Exception:
+        return None
+
+    left, bottom, right, top = (float(v) for v in dem["bounds"])
+    try:
+        lf = LocalFrame(float(lf_info["lat0"]), float(lf_info["lon0"]))
+        gt = GeoTIFFDEM(str(tif))
+    except Exception:
+        return None
+
+    # 瓦片四角 -> 米制 ENU 包络
+    tl, tb, tr, tt = gt.bounds  # (left, bottom, right, top)，单位：度
+    corner_lat = np.array([tb, tb, tt, tt])
+    corner_lon = np.array([tl, tr, tl, tr])
+    enu = lf.to_enu(corner_lat, corner_lon, 0.0)
+    tx0, tx1 = float(enu[..., 0].min()), float(enu[..., 0].max())
+    ty0, ty1 = float(enu[..., 1].min()), float(enu[..., 1].max())
+
+    # 视图 = 场景 ∩ 瓦片包络，外扩 2.5 km 且仍夹在场景内
+    margin = 2500.0
+    vx0 = max(left, tx0 - margin)
+    vx1 = min(right, tx1 + margin)
+    vy0 = max(bottom, ty0 - margin)
+    vy1 = min(top, ty1 + margin)
+    if vx1 - vx0 < 1000.0 or vy1 - vy0 < 1000.0:
+        return None  # 场景与瓦片几乎不相交，退回降采样 dem
+
+    width_m, height_m = vx1 - vx0, vy1 - vy0
+    # 目标格网 ~150 m，最长边封顶 1000 px（兼顾地形细节与渲染速度）
+    px = max(240, min(1000, int(round(width_m / 150.0))))
+    py = max(240, min(1000, int(round(height_m / 150.0))))
+    xs = np.linspace(vx0, vx1, px)
+    ys = np.linspace(vy1, vy0, py)  # 行序北→南，与 imshow origin="upper" 一致
+    gx, gy = np.meshgrid(xs, ys)
+    try:
+        la, lo, _ = lf.to_geodetic(gx, gy, 0.0)
+        elev = np.asarray(gt.sample_elevation(la, lo, bilinear=True), dtype=float)
+    except Exception:
+        return None
+
+    valid = np.isfinite(elev)
+    if not valid.any():
+        return None
+    elev = _smooth_filled(_fill_nan(elev), valid)
+    extent = (vx0, vx1, vy0, vy1)
+    return elev, extent
+
+
+def _get_elevation(dem, solution):
+    """取底图高程：优先真实瓦片采样（带进程内缓存），失败回退 solution dem。"""
+    key = tuple(round(float(v), 1) for v in dem["bounds"]) if dem else None
+    if key in _DEM_SAMPLE_CACHE:
+        return _DEM_SAMPLE_CACHE[key]
+    result = _sample_real_dem(dem, solution)
+    _DEM_SAMPLE_CACHE[key] = result
+    return result
+
+
+def _dem_view_extent(dem, solution):
+    """底图视图范围（imshow 约定 ``(left, right, bottom, top)``）。
+
+    与 ``_get_elevation`` 共用同一份缓存，保证 DEM 图像与视图范围严格一致
+    （满幅铺底，不露底色）；拿不到真实瓦片时退回 solution dem 包围盒。
+    """
+    result = _get_elevation(dem, solution) if dem else None
+    if result is not None:
+        return result[1]
+    if dem and dem.get("bounds"):
+        left, bottom, right, top = (float(v) for v in dem["bounds"])
+        return (left, right, bottom, top)
+    return None
+
+def _draw_dem(ax, dem: dict[str, Any] | None, solution: dict[str, Any] | None = None):
+    """画 2D 平面 DEM 底图：真实 ASTER 高程 + 山体阴影晕渲。
+
+    优先用真实 GeoTIFF 瓦片（按场景裁剪、~150 m 格网）作底图，
+    退化为 solution.json 里的降采样 dem。返回 ``ScalarMappable`` 供色条使用；
+    DEM 缺失时返回 None。
+
+    做法参照 matplotlib 官方 *topographic hillshading* 示例：
+    ``LightSource(azdeg=315, altdeg=45)`` 山体阴影，dx/dy 取与高程同单位的
+    米制格距，使 ``vert_exag`` 反映真实坡度；再叠加高原分层设色（``_HYPSO``）。
+    """
+    if not dem or not dem.get("elevation"):
+        return None
+
+    sampled = _get_elevation(dem, solution) if solution is not None else None
+    if sampled is not None:
+        elev, extent = sampled
+    else:
+        left, bottom, right, top = (float(v) for v in dem["bounds"])
+        extent = (left, right, bottom, top)
+        elev = np.asarray(dem["elevation"], dtype=float)
+    if elev.size == 0 or not np.isfinite(elev).any():
+        return None
+
+    n_rows, n_cols = elev.shape
+    dx = max((extent[1] - extent[0]) / max(n_cols - 1, 1), 1e-6)
+    dy = max((extent[3] - extent[2]) / max(n_rows - 1, 1), 1e-6)
+    # 2%–98% 分位拉伸，避免极值把色带两端压扁
+    vmin, vmax = np.nanpercentile(elev, [2.0, 98.0])
+    if not np.isfinite(vmin) or vmax <= vmin:
+        vmin, vmax = float(np.nanmin(elev)), float(np.nanmax(elev))
+    norm = Normalize(vmin=float(vmin), vmax=float(vmax))
+
+    # 西北 45° 光照；dx/dy 为真实米制格距，vert_exag 据此反映真实坡度。
+    # 高高原水平跨度大、相对起伏缓，vert_exag≈1.8 即可显出立体感。
+    try:
+        ls = LightSource(azdeg=315, altdeg=45)
+        shaded = ls.shade(
+            elev, cmap=_HYPSO, norm=norm,
+            blend_mode="soft", vert_exag=1.8, dx=dx, dy=dy,
+        )
+        ax.imshow(
+            shaded, extent=extent, origin="upper",
+            aspect="auto", zorder=0, interpolation="bilinear",
+        )
+    except Exception:
+        # 兜底：无法晕渲时退回普通分层设色
+        ax.imshow(
+            elev, extent=extent, origin="upper", cmap=_HYPSO, norm=norm,
+            aspect="auto", zorder=0, alpha=0.95,
+        )
+
+    ax.set_facecolor("#77784b")  # 谷底色；万一越界未填也不露白洞
+    ax.grid(False)               # 关闭全局网格线，避免压在地形上
+    return plt.cm.ScalarMappable(norm=norm, cmap=_HYPSO)

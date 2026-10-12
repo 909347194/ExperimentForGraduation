@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
-"""exp01_smoke 图 1：周期指标面板 ``cycle_metrics``。
+"""图 ``cycle_metrics``——周期指标面板：滚动闭环是否在按预期推进。
+
+【process 层 · 运行过程观测】
 
 2×2 四联图，回答「滚动闭环是否按预期推进」：
 
@@ -8,7 +10,11 @@
     (c) 机巢泊位占用      —— 周期 × 机巢 热力图，验证始终不超容
     (d) 求解开销          —— 求解耗时（柱）与适应度评估次数（折线，右轴）
 
-数据来源：``results/metrics.json`` 的 ``cycles[]`` / ``problem`` / ``nests``。
+数据来源：``results/metrics.json`` 的 ``cycles[]`` / ``problem`` / ``nests``
+（**不需要** ``solution.json``）。
+
+统一签名（见 ``plot/registry.py``）：即使本图用不到 ``solution``，也按
+``(metrics, solution, out_dir, formats, *, dpi)`` 收参，好让调度端一处通用。
 """
 
 from __future__ import annotations
@@ -18,7 +24,7 @@ from typing import Any, Sequence
 
 import numpy as np
 
-from .theme import PALETTE, plt, save_figure, style_axes
+from ..theme import PALETTE, plt, save_figure, style_axes
 
 __all__ = ["plot_cycle_metrics"]
 
@@ -29,6 +35,7 @@ def _series(cycles: Sequence[dict[str, Any]], getter) -> list[float]:
 
 def plot_cycle_metrics(
     metrics: dict[str, Any],
+    solution: dict[str, Any],
     out_dir: Path,
     formats: Sequence[str] = ("png",),
     *,

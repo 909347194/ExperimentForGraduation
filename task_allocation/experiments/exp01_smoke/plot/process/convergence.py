@@ -1,10 +1,15 @@
 # -*- coding: utf-8 -*-
-"""exp01_smoke 图 4：DMDE 收敛曲线 ``convergence``。
+"""图 ``convergence``——DMDE 收敛曲线：求解器在每个周期里怎么收敛。
+
+【process 层 · 运行过程观测】
 
 左：各滚动周期的每代最优适应度（DMDE 最小化 ``-F1 + λ·F2 + penalty``，越低越好）；
 右：归一化收敛（相对初代的改进百分比），用于比较不同周期的收敛速度是否一致。
 
 数据来源：``results/solution.json`` 的 ``cycles[].cost_history``。
+
+统一签名（见 ``plot/registry.py``）：即使本图用不到 ``metrics``，也按
+``(metrics, solution, out_dir, formats, *, dpi)`` 收参，好让调度端一处通用。
 
 呈现约定（针对小规模滚动周期的真实收敛形态）：
 
@@ -28,7 +33,7 @@ from typing import Any, Sequence
 
 import numpy as np
 
-from .theme import cycle_colors, plt, save_figure, style_axes
+from ..theme import cycle_colors, plt, save_figure, style_axes
 
 __all__ = ["plot_convergence"]
 
@@ -43,6 +48,7 @@ def _last_change_index(hist: list[float]) -> int:
 
 
 def plot_convergence(
+    metrics: dict[str, Any],
     solution: dict[str, Any],
     out_dir: Path,
     formats: Sequence[str] = ("png",),

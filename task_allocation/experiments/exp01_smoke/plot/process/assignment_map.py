@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
-"""exp01_smoke 图 4：机巢—任务—航次空间分配图 ``assignment_map``。
+"""图 ``assignment_map``——机巢—任务—航次空间分配图。
+
+【process 层 · 运行过程观测】
 
 每个滚动周期**一行**（全场景约 90 km × 90 km，横排会被压扁看不清），
 共享坐标，把分配结果落在地理底图上：
@@ -24,52 +26,69 @@ from typing import Any, Sequence
 
 from matplotlib.lines import Line2D
 
-from .theme import PALETTE, plt, save_figure
+from ..base.geo import (
+    _G_DRONE,
+    _HALO,
+    _arrow,
+    _label_offset,
+    _task_size,
+    uav_color,
+)
+from ..theme import MONO_ZH, PALETTE, plt, save_figure
 
 __all__ = ["plot_assignment_map"]
 
-#: 与 allocation_gantt 保持一致：按 UAV 稳定着色（tab20 前 20 色循环）
-UAV_PALETTE = (
-    "#4c78a8", "#f58518", "#54a24b", "#e45756", "#72b7b2",
-    "#b279a2", "#ff9da6", "#9d755d", "#8c6bb1", "#2ca02c",
-    "#d62728", "#17becf", "#8c564b", "#e377c2", "#7f7f7f",
-    "#bcbd22", "#393b79", "#637939", "#843c39", "#5254a3",
-)
 
+def _cycle_summary(ax, cyc: dict[str, Any], mc: dict[str, Any],
+                   owner: dict[int, int], task_by_id: dict[int, Any],
+                   nest_by_id: dict[int, Any], uavs: list[int]) -> None:
+    """在右侧面板写本周期的数值摘要：漏斗 / 机队 / 目标 / 求解 / 航次明细。"""
+    muas = mc.get("muas") or {}
+    sel = mc.get("selection") or {}
+    n_avail = int(muas.get("n_uav_avail") or 0)
+    n_coded = int(muas.get("n_participating") or 0)
+    feasible = bool(muas.get("feasible", True))
+    solve_s = float(muas.get("solve_seconds") or 0.0)
+    evals = int(muas.get("n_evals") or 0)
+    deferred = [int(i) for i in (mc.get("deferred_ids") or [])]
 
-def uav_color(uav_id: int):
-    return UAV_PALETTE[int(uav_id) % len(UAV_PALETTE)]
+    lines = [
+        f"周期 {cyc.get('cycle')}   @ t={float(cyc.get('current_time', 0.0)):.0f}s",
+        "─" * 34,
+        f"漏斗   T_t={sel.get('n_tasks_in', 0)}"
+        f" → T_sel={sel.get('n_selected', 0)}"
+        f" → T_exec={len(owner)}",
+        f"机队   可用 {n_avail} · 编码参与 {n_coded} · 实际出动 {len(uavs)}",
+        f"目标   F1={float(muas.get('f1_reward') or 0.0):.1f}"
+        f"   F2={float(muas.get('f2_cost') or 0.0) / 1000.0:.1f} km",
+        f"求解   {solve_s:.2f} s · {evals} evals · "
+        f"{'可行' if feasible else '不可行'}",
+        "─" * 34,
+        "航次明细（UAV → 任务串 → 起→降巢）：",
+    ]
+    for tour in cyc.get("tours") or []:
+        uid = int(tour.get("uav_id", -1))
+        chain = " → ".join(f"T{int(t)}" for t in (tour.get("task_ids") or []))
+        s_nest = tour.get("start_nest_id")
+        e_nest = tour.get("end_nest_id")
+        if not chain:
+            continue
+        lines.append(
+            f"  UAV {uid:<3d} {chain}   巢{s_nest}→巢{e_nest}")
+    if not any(cyc.get("tours") or []):
+        lines.append("  （本周无航次）")
+    lines.append("─" * 34)
+    if deferred:
+        shown = " ".join(f"T{i}" for i in deferred[:12])
+        more = f" …(+{len(deferred) - 12})" if len(deferred) > 12 else ""
+        lines.append(f"滞留 {len(deferred)}：{shown}{more}")
+    else:
+        lines.append("滞留 0：池内任务全部处理完毕")
 
-
-def _task_size(reward: float) -> float:
-    return 22.0 + 11.0 * float(reward)
-
-
-#: 标签避让：按 id 轮转偏移，避免同一机巢簇内标签堆在一起
-_LABEL_OFFSETS = (
-    (0, -13), (12, 7), (-12, 7), (11, -9), (-11, -9),
-    (0, 14), (15, 0), (-15, 0), (10, 12), (-10, -13),
-)
-
-
-def _label_offset(key: int):
-    return _LABEL_OFFSETS[int(key) % len(_LABEL_OFFSETS)]
-
-
-#: 标签统一加白色衬底，压在航线/圆点上也能读
-_HALO = dict(boxstyle="round,pad=0.16", fc="white", ec="none", alpha=0.72)
-
-
-def _arrow(ax, p_from, p_to, color: str, *, lw: float = 2.1) -> None:
-    """画一段有向航段（箭头不压住端点标记）。"""
-    ax.annotate(
-        "", xy=p_to, xytext=p_from,
-        arrowprops=dict(
-            arrowstyle="-|>", color=color, linewidth=lw,
-            shrinkA=2.0, shrinkB=8.0, mutation_scale=26, alpha=0.95,
-        ),
-        zorder=3,
-    )
+    ax.text(0.0, 1.0, "\n".join(lines), transform=ax.transAxes,
+            ha="left", va="top", fontsize=8.2, family=MONO_ZH, color="0.2",
+            bbox=dict(boxstyle="round,pad=0.5", facecolor="#f4f6f8",
+                      edgecolor="0.8", linewidth=0.8))
 
 
 def plot_assignment_map(
@@ -104,11 +123,10 @@ def plot_assignment_map(
     xlim = (min(xs) - pad_x, max(xs) + pad_x)
     ylim = (min(ys) - pad_y, max(ys) + pad_y)
 
-    fig, axes = plt.subplots(
-        n_cycles, 1, figsize=(11.0, 4.4 * n_cycles),
-        squeeze=False, sharex=True, sharey=True,
-    )
-    axes = axes.ravel()
+    fig = plt.figure(figsize=(11.5, 4.6 * n_cycles), layout="constrained")
+    gs = fig.add_gridspec(n_cycles, 2, width_ratios=[1.85, 1.0])
+    axes = [fig.add_subplot(gs[i, 0]) for i in range(n_cycles)]
+    panels = [fig.add_subplot(gs[i, 1]) for i in range(n_cycles)]
 
     cycle_uavs: list[set[int]] = []
 
@@ -227,12 +245,14 @@ def plot_assignment_map(
                    markeredgecolor="#2d3748", markersize=10, label="终点机巢"),
         ]
         ax.legend(
-            handles=handles, loc="upper left", bbox_to_anchor=(1.008, 1.0),
-            fontsize=7.4, title=f"周期 {cyc.get('cycle')} 航次", title_fontsize=7.8,
+            handles=handles, loc="upper left", fontsize=7.4,
+            title=f"周期 {cyc.get('cycle')} 航次", title_fontsize=7.8,
+            framealpha=0.94,
         )
 
-        muas = metric_by_cycle.get(int(cyc.get("cycle", -1)), {}).get("muas", {})
-        sel = metric_by_cycle.get(int(cyc.get("cycle", -1)), {}).get("selection", {})
+        mc = metric_by_cycle.get(int(cyc.get("cycle", -1)), {})
+        muas = mc.get("muas") or {}
+        sel = mc.get("selection") or {}
         ax.set_title(
             f"周期 {cyc.get('cycle')}   @ t={float(cyc.get('current_time', 0.0)):.0f}s"
             f"      T_t={sel.get('n_tasks_in', 0)}"
@@ -245,8 +265,17 @@ def plot_assignment_map(
         ax.set_xlim(*xlim)
         ax.set_ylim(*ylim)
         ax.set_aspect("equal", adjustable="box")
-        ax.set_xlabel("东向 x (m)")
-        ax.set_ylabel("北向 y (m)")
+        if idx == n_cycles - 1:
+            ax.set_xlabel("东向 x (m)")
+        if idx == 0:
+            ax.set_ylabel("北向 y (m)")
+        ax.tick_params(labelsize=7.5)
+
+        # ── 右侧：本周期摘要面板（数值不看图也能读懂这一周期）──────
+        panel = panels[idx]
+        panel.axis("off")
+        _cycle_summary(panel, cyc, mc, owner, task_by_id, nest_by_id,
+                       sorted(cycle_uavs[idx]))
 
     # ── 全局图例（跨周期共享的语义元素） ──────────────────────────
     common = [
@@ -257,12 +286,11 @@ def plot_assignment_map(
                label="任务（本周期执行，按承运 UAV 着色）"),
     ]
     fig.legend(
-        handles=common, loc="lower center", bbox_to_anchor=(0.5, -0.005),
+        handles=common, loc="outside lower center",
         ncol=2, fontsize=8,
     )
 
-    fig.suptitle("exp01_smoke：机巢—任务—航次空间分配图", fontsize=13)
-    fig.tight_layout(rect=(0, 0, 0.90, 0.96))
+    fig.suptitle("机巢—任务—航次空间分配图：谁做什么、在哪发生", fontsize=12.5)
 
     stem = Path(out_dir) / "assignment_map"
     return save_figure(fig, stem, formats, dpi=dpi)

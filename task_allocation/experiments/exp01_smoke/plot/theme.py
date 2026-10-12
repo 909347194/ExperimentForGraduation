@@ -22,6 +22,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 __all__ = [
     "plt",
     "PALETTE",
+    "MONO_ZH",
     "setup_style",
     "save_figure",
     "cycle_colors",
@@ -36,6 +37,12 @@ _CJK_CANDIDATES = (
     "PingFang SC",
     "SimHei",
 )
+
+#: 中文等宽字体链——用于「参数/明细表」类文本面板。
+#: matplotlib ≥3.6 支持按字形回退：ASCII（数字、列对齐）走 DejaVu Sans Mono，
+#: 中文字形自动回退到 Microsoft YaHei。直接写 ``family="monospace"`` 会落到
+#: DejaVu Sans Mono 一种字体上，中文全部缺字（豆腐块）。
+MONO_ZH = ["DejaVu Sans Mono", "Microsoft YaHei"]
 
 #: 统一配色：数据系列与语义色
 PALETTE = {

@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
-"""exp01_smoke 图 6：多 seed 复现一致性 ``seed_summary``。
+"""图 ``seed_summary``——多 seed 复现一致性：结论是否稳健。
+
+【report 层 · 结论与论文插图】
 
 当实验以多个随机种子重复（``experiment.seeds``）时，本图给出关键指标的
 **逐种子柱状 + 均值线 + ±标准差带**，直观回答「结果是否稳健」：
@@ -12,6 +14,9 @@
 （与 ``results/metrics.json`` 的 ``seed_summary`` 一致）。单 seed 实验无此图。
 
 数据来源：``results/metrics.json`` 的 ``per_seed`` / ``seed_summary`` / ``seeds``。
+
+统一签名（见 ``plot/registry.py``）：即使本图用不到 ``solution``，也按
+``(metrics, solution, out_dir, formats, *, dpi)`` 收参，好让调度端一处通用。
 """
 
 from __future__ import annotations
@@ -21,7 +26,7 @@ from typing import Any, Sequence
 
 import numpy as np
 
-from .theme import cycle_colors, plt, save_figure, style_axes
+from ..theme import cycle_colors, plt, save_figure, style_axes
 
 __all__ = ["plot_seed_summary"]
 
@@ -35,6 +40,7 @@ _PANELS = (
 
 def plot_seed_summary(
     metrics: dict[str, Any],
+    solution: dict[str, Any],
     out_dir: Path,
     formats: Sequence[str] = ("png",),
     *,
@@ -50,7 +56,7 @@ def plot_seed_summary(
     colors = cycle_colors(len(seeds))
     x = np.arange(len(seeds))
 
-    fig, axes = plt.subplots(1, len(_PANELS), figsize=(4.6 * len(_PANELS), 4.0))
+    fig, axes = plt.subplots(1, len(_PANELS), figsize=(11.5, 4.2))
 
     for ax, (key, name, scale, ylabel) in zip(axes, _PANELS):
         vals = np.array(
