@@ -41,15 +41,16 @@
 | 基础优先级预筛选(Top-αK) | `selection/priority.top_alpha_preselect` | [x] | 候选数 = min(⌈α·K_avail⌉, cap(t))，α∈[2,3] |
 | **能力驱动规模 cap(t)** | `methods/selection/capability.py` | [x] | **新增(能力解耦)**：cap = max(min_cap, ⌊B(t)/c̃⌋)，B = budget_scale·budget_factor·Σ剩余航程；候选数与边际选择数同受其约束，规模跟着机队能力走而非只跟机数；`capability.enabled=False` 退纯机数名额(消融) |
 | 边际收益增量选择 | `methods/selection/marginal_gain.py` | [x] | `insert_delta_cost` 已实现 3D 插入式 `ΔC_i ≈ C_ai + C_ib − C_ab` |
-| 快速可行性检查 | `methods/selection/feasibility.py` | [x] | prefilter / postcheck |
-| 选择性多机巢 MUAS 模型(§4) | `methods/muas/problem.py` | [x] | 决策变量 y/x/π/z、双目标 F1/F2;已含机巢容量约束 |
+| 快速可行性检查 | `methods/selection/feasibility.py` | [x] | prefilter / postcheck；行进代价统一口径（三维 cost_hint 优先、欧氏回退），ETA 与航程检查同 travel |
+| 选择性多机巢 MUAS 模型(§4) | `methods/muas/problem.py` | [x] | 决策变量 y/x/π/z、双目标 F1/F2 **字典序标量化**(big-M：收益优先、成本次之，`lexicographic=False` 退历史加权和供消融)；已含机巢容量约束 |
+| **终点机巢内层 MCF(§5(2))** | `constraints/nest_capacity.solve_end_nest_assignment` | [x] | 最小费用流精确求解 + 溢出边**结构性保底**(存在容量可行解必不溢出)；起飞让名额与容量判定同口径 |
 | 三维地理代价 `C_ij^3D`(§5(5)) | `methods/muas/cost/*` | [x] | DEM + 垂直切面 + 代价矩阵,已与真实 DEM 打通 |
 | 统一编码 / 映射 / 逆映射(§5(1)(2)(3)) | `methods/muas/representation/*` | [x] | 基因用 `uav_id` 哨兵值区分两类:`≥0` 起始 / `-1` 巡游;编码只表达「UAV 归属 + 访问顺序」,基因总数恒 `M`(方案 A);「终点进编码」的终止基因(`-2`)已移至 pro 分支(见 §0 技术决策) |
 | 进化算子 | `methods/muas/operators/*` | [x] | crossover / mutation / extinction / scale_factor |
 | 约束处理(§5(4)) | `methods/muas/constraints/` | [~] | `nest_capacity.py` 已落地(两道校验共用判定);其余约束仍在 `problem.check_feasible` |
 | 改进 DMDE 求解器(§5) | `methods/muas/solvers/dmde_solver.py` | [x] | 可导入、可求解 |
-| **DMDE ↔ 选择性 MUAS 桥接** | `methods/muas/solvers/muas_stage.py` | [x] | **新增**:assignment → π/y/z、选择性剔除、航程修复 |
-| 动态滚动与闭环(§6) | `methods/rolling/` | [x] | `horizon.py` 单周期编排 + 多周期推进;`event_trigger.py` 事件识别 |
+| **DMDE ↔ 选择性 MUAS 桥接** | `methods/muas/solvers/muas_stage.py` | [x] | **新增**:assignment → π/y/z、可行性修复(航程)、**合并修复**(任务少时并入更少机、闲置合法)、字典序下经济性剔除自动关闭 |
+| 动态滚动与闭环(§6) | `methods/rolling/` | [x] | `horizon.py` 单周期编排 + 多周期推进 + 完成反馈可行性闸门 + 不可用机巢改降;`event_trigger.py` 事件识别 |
 | 对照方法 | `baselines/*` | [ ] | greedy / random_assign 仅规范注释占位 |
 | 场景与数据 | `common/scenario.py`、`common/task_scenario.py` | [x] | 机巢 CSV + DEM + 坐标转换;合成任务复用同一链路 |
 | 实验 | `experiments/exp01_smoke` | [x] | **端到端已跑通**(两阶段 + 3 周期滚动) |
