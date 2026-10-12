@@ -7,3 +7,7 @@ venv/
 
 # 工具自身的内部笔记，不属于论文代码
 .workbuddy/
+
+
+# 结果图片
+figures/

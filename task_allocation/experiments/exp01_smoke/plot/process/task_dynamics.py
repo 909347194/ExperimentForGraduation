@@ -1,25 +1,26 @@
 # -*- coding: utf-8 -*-
-"""图 ``task_flow``——任务状态随周期变化：存量 / 流量 / 个体轨迹。
+"""图 ``task_dynamics``——任务命运：存量 / 流量 / 状态矩阵 / 等待与滞留。
 
-【process 层 · 运行过程观测】
+【process 层 · 求解过程 ④】
 
-回答「任务在滚动闭环里怎么变」——既有**存量**、也有**流量**，还有**个体轨迹**：
+回答「任务在滚动闭环里怎么变」——既有**存量**、也有**流量**、还有**个体轨迹**，
+外加「任务到底在等什么」。由原 ``task_flow`` + ``task_wait`` 合并而来，
+``geo_task_lifecycle`` 的空间快照与 ``cycle_metrics(a)`` 的池水位由本图
+数值面板覆盖、空间演化见 ``allocation`` 图，面板信息不丢失。
 
-    (a) 周期末任务存量   —— 累计完成 / 延期滞留 / 未到达 / 过期释放 的堆叠构成
-    (b) 每周期任务流量   —— 新到 / 选中 / 完成 / 延期 / 过期释放 分组柱
-    (c) 任务 × 周期矩阵  —— 每个任务在每个周期处于什么状态（个体轨迹）
-    (d) 累计进度         —— 累计到达 vs 累计完成（阶梯）与累计完成率
+六联面板::
 
-与 ``cycle_metrics`` 的分工：后者看**求解侧**（水位、双目标、泊位、开销），
-本图看**任务侧**（每个任务的来龙去脉），二者同源但视角互补。
+    (a) 周期末任务存量    累计完成 / 延期滞留 / 未到达 / 过期释放 的堆叠构成
+    (b) 每周期任务流量    新到 / 选中 / 完成 / 延期 / 过期释放 分组柱
+    (c) 任务 × 周期矩阵   每个任务在每个周期处于什么状态（个体轨迹）
+    (d) 累计到达 / 完成   阶梯曲线 + 累计完成率（右轴）
+    (e) 每任务等待时间    已完成（实测）/ 未完成（右删失 ≥，斜纹）
+    (f) 滞留轮次分布      被延期几次才完成 / 仍未完成
 
 数据来源：``metrics.json`` 的 ``cycles[]``（``pool_counts`` / ``selection`` /
-``*_ids``）与 ``solution.json`` 的 ``tasks[]``（到达时刻、完成时刻、终态）。
-
-口径提示：**到达**以「该任务首次进入待办池的周期」计（即首次出现在某周期
-``executed_ids ∪ deferred_ids`` 中），而非 ``solution.json`` 的 ``arrival_time``
-——后者是任务生成时刻，处在周期边界上的任务会顺延到下个周期入池，
-两者直接混用会让 (d) 的累计到达曲线虚高。
+``*_ids`` / ``completed_ids`` / ``deferred_ids``）与 ``solution.json`` 的
+``tasks[]``（到达 / 完成 / 终态）。到达口径以「首次入池周期」计，与
+``pool_counts.n_new`` 一致，避免与 ``arrival_time`` 生成时刻混用导致 (d) 虚高。
 """
 
 from __future__ import annotations
@@ -31,9 +32,9 @@ import numpy as np
 from matplotlib.colors import BoundaryNorm, ListedColormap
 from matplotlib.patches import Patch
 
-from ..theme import PALETTE, plt, save_figure, style_axes
+from ..theme import FS, PALETTE, footnote, plt, save_figure, style_axes
 
-__all__ = ["plot_task_flow"]
+__all__ = ["plot_task_dynamics"]
 
 #: 任务状态编码（矩阵图的离散色标，顺序即图例顺序）
 _STATES = (
@@ -77,7 +78,7 @@ def _arrival_cycles(tasks: Sequence[dict[str, Any]],
     """每个任务的**入池周期**（0 基），与 ``pool_counts.n_new`` 口径一致。
 
     ``solution.json`` 的 ``arrival_time`` 是任务生成时刻，与「第几个周期进入
-    待办池」并不等价（边界上的任务会顺延到下个周期）。因此这里以**池内成员资格**
+    待办池」并不等价（边界上的任务会顺延到下个周期）。因此以**池内成员资格**
     为准：首次出现在某周期 ``executed_ids ∪ deferred_ids`` 里的周期即其入池周期；
     从未出现过（例如被事件剔除）才退回 ``arrival_time`` 阈值判定。
     """
@@ -140,13 +141,22 @@ def _state_grid(tasks: Sequence[dict[str, Any]],
     return grid
 
 
-def plot_task_flow(
+def _defer_rounds(metrics: dict[str, Any]) -> dict[int, int]:
+    """每个任务被延期的轮次总数（出现在几个周期的 deferred_ids）。"""
+    rounds: dict[int, int] = {}
+    for c in metrics.get("cycles") or []:
+        for tid in c.get("deferred_ids") or []:
+            rounds[int(tid)] = rounds.get(int(tid), 0) + 1
+    return rounds
+
+
+def plot_task_dynamics(
     metrics: dict[str, Any],
     solution: dict[str, Any],
     out_dir: Path,
     formats: Sequence[str] = ("png",),
     *,
-    dpi: int = 200,
+    dpi: int = 300,
 ) -> list[Path]:
     cycles = list(metrics.get("cycles") or [])
     if not cycles:
@@ -156,14 +166,14 @@ def plot_task_flow(
     labels = [f"周期 {c.get('cycle')}" for c in cycles]
     x = np.arange(len(cycles))
 
-    # ── 累计序列（到达口径与 (c) 矩阵一致：以入池周期计）──────────
+    # ── 累计序列（到达口径与矩阵一致：以入池周期计）──────────────
     if tasks:
         arrival = _arrival_cycles(tasks, cycles)
         arrived_cum = [
             float(sum(1 for a in arrival if a <= k)) for k in range(len(cycles))
         ]
         n_total = float(len(tasks))
-    else:  # 无任务表时退回「每周期新到」的累计（口径一致，只是少了个体信息）
+    else:
         arrival = []
         arrived_cum = _cumsum(
             [_num((c.get("pool_counts") or {}).get("n_new")) for c in cycles]
@@ -179,8 +189,8 @@ def plot_task_flow(
     deferred = [_num(c.get("n_deferred")) for c in cycles]
     unarrived = [max(n_total - a, 0.0) for a in arrived_cum]
 
-    fig, axes = plt.subplots(2, 2, figsize=(11.5, 7.8))
-    ax_stock, ax_flow, ax_grid, ax_prog = axes.ravel()
+    fig, axes = plt.subplots(2, 3, figsize=(11.8, 7.4))
+    ax_stock, ax_flow, ax_grid, ax_prog, ax_wait, ax_rounds = axes.ravel()
 
     # ── (a) 周期末任务存量 ──────────────────────────────────────
     layers = (
@@ -192,18 +202,17 @@ def plot_task_flow(
     bottom = np.zeros(len(cycles))
     for name, values, color in layers:
         vals = np.asarray(values, dtype=float)
-        # 全 0 的层不进图例，避免图例里出现无意义的条目
         ax_stock.bar(x, vals, 0.55, bottom=bottom, color=color,
                      label=name if vals.max() > 0 else None)
         bottom = bottom + vals
     style_axes(
         ax_stock,
-        title=f"(a) 周期末任务存量构成（全集 {n_total:.0f} 个，柱高恒定）",
+        title="(a) 周期末任务存量构成（全集 %.0f 个，柱高恒定）" % n_total,
         ylabel="任务数",
     )
     ax_stock.set_xticks(x, labels)
-    ax_stock.set_ylim(0, max(bottom.max(), 1.0) * 1.16)
-    ax_stock.legend(ncol=2, loc="upper right")
+    ax_stock.set_ylim(0, max(bottom.max(), 1.0) * 1.30)
+    ax_stock.legend(ncol=2, loc="upper left", fontsize=FS["legend"])
 
     # ── (b) 每周期任务流量 ──────────────────────────────────────
     series = [(name, [_num(getter(c)) for c in cycles], color)
@@ -215,9 +224,10 @@ def plot_task_flow(
         ax_flow.bar(x + offset, values, width * 0.92, color=color, label=name)
     style_axes(ax_flow, title="(b) 每周期任务流量", ylabel="任务数")
     ax_flow.set_xticks(x, labels)
-    ax_flow.set_ylim(0, max(max(v, default=0.0) for _, v, _ in series) * 1.45 + 0.5
+    ax_flow.set_ylim(0, max(max(v, default=0.0) for _, v, _ in series) * 1.42 + 0.5
                      if series else 1.0)
-    ax_flow.legend(ncol=3, loc="upper right")
+    ax_flow.legend(ncol=2, loc="upper left", fontsize=FS["legend"],
+                   columnspacing=0.9, handlelength=1.2, labelspacing=0.35)
 
     # ── (c) 任务 × 周期 状态矩阵 ────────────────────────────────
     if tasks:
@@ -232,7 +242,6 @@ def plot_task_flow(
         ax_grid.set_yticks(rows[::step], [str(t.get("id")) for t in tasks][::step])
         ax_grid.grid(False)
         ax_grid.set_ylim(len(tasks) - 0.5, -0.5)
-        # 图例只列矩阵里真实出现过的状态
         handles = [
             Patch(facecolor=color, edgecolor="0.75", linewidth=0.6, label=name)
             for idx, (name, color) in enumerate(_STATES)
@@ -241,11 +250,11 @@ def plot_task_flow(
         style_axes(ax_grid, title="(c) 任务 × 周期 状态矩阵",
                    xlabel="滚动周期", ylabel="任务 id")
         ax_grid.legend(handles=handles, loc="upper left",
-                       bbox_to_anchor=(1.01, 1.0), fontsize=8)
+                       bbox_to_anchor=(1.01, 1.0), fontsize=FS["legend"])
     else:
         ax_grid.axis("off")
         ax_grid.text(0.5, 0.5, "无任务级数据（solution.json 缺 tasks）",
-                     ha="center", va="center", fontsize=10, color="0.45",
+                     ha="center", va="center", fontsize=FS["base"], color="0.45",
                      transform=ax_grid.transAxes)
 
     # ── (d) 累计进度 ────────────────────────────────────────────
@@ -268,10 +277,92 @@ def plot_task_flow(
 
     h1, l1 = ax_prog.get_legend_handles_labels()
     h2, l2 = ax_rate.get_legend_handles_labels()
-    ax_prog.legend(h1 + h2, l1 + l2, loc="upper left")
+    ax_prog.legend(h1 + h2, l1 + l2, loc="upper left", ncol=2,
+                   fontsize=FS["legend"], columnspacing=1.0,
+                   handlelength=1.4, labelspacing=0.35)
 
-    fig.suptitle("exp01_smoke：任务状态随周期变化", fontsize=13)
-    fig.tight_layout(rect=(0, 0, 1, 0.97))
+    # ── (e) 每任务等待时间（右删失） ─────────────────────────────
+    wait_tasks = [t for t in tasks
+                  if t.get("arrival_time") is not None and t.get("completed_at") is not None
+                  or (t.get("arrival_time") is not None and t.get("status") != "done")]
+    horizon = max(
+        [float(c.get("current_time") or 0.0) for c in cycles]
+        + [float(t.get("completed_at") or 0.0)
+           for t in tasks if t.get("completed_at") is not None],
+        default=0.0,
+    )
+    if wait_tasks:
+        wids = [int(t["id"]) for t in wait_tasks]
+        wdone = [str(t.get("status")) == "done" for t in wait_tasks]
+        wend = [float(t["completed_at"]) if t.get("completed_at") is not None
+                else horizon for t in wait_tasks]
+        wait = [e - float(t["arrival_time"]) for e, t in zip(wend, wait_tasks)]
+        wx = np.arange(len(wait_tasks))
+        wcolors = [PALETTE["executed"] if d else PALETTE["deferred"] for d in wdone]
+        bars = ax_wait.bar(wx, wait, 0.62, color=wcolors, edgecolor="white",
+                           linewidth=0.6)
+        for b, d in zip(bars, wdone):
+            if not d:
+                b.set_hatch("//")
+                b.set_alpha(0.75)
+        done_waits = [w for w, d in zip(wait, wdone) if d]
+        if done_waits:
+            mean_w = float(np.mean(done_waits))
+            ax_wait.axhline(mean_w, color="0.4", linewidth=0.9, linestyle="--", zorder=0)
+        ax_wait.set_xticks(wx, [str(i) for i in wids], fontsize=FS["tick"])
+        ax_wait.set_ylim(0, max(wait) * 1.22 + horizon * 0.05)
+        style_axes(ax_wait,
+                   title="(e) 每任务等待时间（斜纹 = 未完成，右删失下界）",
+                   xlabel="任务 id", ylabel="等待 (s)")
+        if done_waits:
+            ax_wait.text(0.98, 0.97, f"已完成者均值 {mean_w:.0f}s（虚线）",
+                         transform=ax_wait.transAxes, ha="right", va="top",
+                         fontsize=FS["footnote"], color="0.4",
+                         bbox=dict(boxstyle="round,pad=0.25", fc="white",
+                                   ec="none", alpha=0.85))
+    else:
+        ax_wait.axis("off")
+        ax_wait.text(0.5, 0.5, "无任务级数据", ha="center", va="center",
+                     fontsize=FS["base"], color="0.45", transform=ax_wait.transAxes)
 
-    stem = Path(out_dir) / "task_flow"
-    return save_figure(fig, stem, formats, dpi=dpi)
+    # ── (f) 滞留轮次分布 ──────────────────────────────────────────
+    rounds = _defer_rounds(metrics)
+    if tasks:
+        fids = [int(t["id"]) for t in tasks]
+        fdone = [str(t.get("status")) == "done" for t in tasks]
+        r_vals = [rounds.get(i, 0) for i in fids]
+        counts: dict[int, dict[str, int]] = {}
+        for r, d in zip(r_vals, fdone):
+            counts.setdefault(r, {"done": 0, "pending": 0})
+            counts[r]["done" if d else "pending"] += 1
+        rr = sorted(counts)
+        ax_rounds.bar([r - 0.19 for r in rr], [counts[r]["done"] for r in rr], 0.36,
+                      color=PALETTE["executed"], edgecolor="white", linewidth=0.6,
+                      label="最终完成")
+        ax_rounds.bar([r + 0.19 for r in rr], [counts[r]["pending"] for r in rr], 0.36,
+                      color=PALETTE["deferred"], edgecolor="white", linewidth=0.6,
+                      hatch="//", alpha=0.8, label="仍未完成")
+        for r in rr:
+            tot = counts[r]["done"] + counts[r]["pending"]
+            ax_rounds.text(r, tot + 0.06, f"{tot}", ha="center", fontsize=FS["tick"],
+                          color="0.3")
+        ax_rounds.set_xticks(rr)
+        ax_rounds.xaxis.set_major_locator(plt.MaxNLocator(integer=True))
+        ax_rounds.yaxis.set_major_locator(plt.MaxNLocator(integer=True))
+        ax_rounds.set_ylim(0, max(sum(counts[r].values()) for r in rr) * 1.2 + 0.4)
+        style_axes(ax_rounds, title="(f) 滞留轮次分布（被延期几次）",
+                  xlabel="滞留轮次", ylabel="任务数")
+        ax_rounds.legend(loc="upper left", fontsize=FS["legend"],
+                         labelspacing=0.35, handlelength=1.2)
+    else:
+        ax_rounds.axis("off")
+        ax_rounds.text(0.5, 0.5, "无任务级数据", ha="center", va="center",
+                      fontsize=FS["base"], color="0.45", transform=ax_rounds.transAxes)
+
+    fig.suptitle("exp01_smoke：任务命运（存量 · 流量 · 状态矩阵 · 等待与滞留）",
+                 fontsize=FS["suptitle"])
+    fig.tight_layout(rect=(0, 0.03, 1, 0.95))
+    footnote(fig, "口径：到达以「首次入池周期」计（与 pool_counts.n_new 一致），"
+                  "非 arrival_time 生成时刻；(e) 未完成任务的等待为右删失下界 ≥；"
+                  "空间生命周期快照见 allocation 图的 DEM 演化面板。")
+    return save_figure(fig, Path(out_dir) / "task_dynamics", formats, dpi=dpi)

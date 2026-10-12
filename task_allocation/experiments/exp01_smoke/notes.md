@@ -18,41 +18,34 @@ exp01_smoke/
 ├── metrics.py    # 指标汇总、运行元信息、分配结果、终端报表
 ├── paths.py      # 目录布局与 sys.path 引导
 ├── config.yaml   # 全部可调参数
-├── plot/         # 可视化模块(代码)——按“看图目的”分三层
+├── plot/         # 可视化模块(代码)——按“看图目的”分四层(论文叙事线)
 │   ├── __init__.py    # make_plots() 调度 + 从 results/ 直接重画
-│   ├── registry.py    # ★ 图清单(唯一事实来源):新增图 = 加一行
-│   ├── theme.py       # 全局样式、中文字体、保存约定(唯一 import pyplot 处)
+│   ├── registry.py    # ★ 图清单(唯一事实来源):11 张图,新增 = 加一行
+│   ├── theme.py       # 学术绘图样式、中文字体、保存约定(唯一 import pyplot 处)
 │   ├── base/          # 被图依赖但自己不是图的绘制件
-│   │   ├── dem.py     #   DEM 取数(真实瓦片/降采样栅格)、补洞、晕渲、分层设色
+│   │   ├── dem.py     #   DEM 取数/晕渲/分层设色
 │   │   └── geo.py     #   图标图例、UAV 配色与航段、行式排版(_row_figsize)
-│   ├── scene/         # ① 环境与初始配置(一次性、与求解无关)
-│   │   └── geo_overview.py
-│   ├── process/       # ② 运行过程观测(逐周期演化与诊断)
-│   │   ├── cycle_metrics.py        # 任务池水位/双目标/泊位/开销
-│   │   ├── task_flow.py            # 任务状态随周期变化
-│   │   ├── task_wait.py            # 每任务等待/批次倒挂/滞留轮次/窗口余量
-│   │   ├── selection_funnel.py     # 两阶段选择漏斗
-│   │   ├── selection_detail.py     # 预选参数是否咬合/池守恒/强制入选
-│   │   ├── fleet_utilization.py    # 可用/编码参与/实际出动三口径 + 机巢压力
-│   │   ├── nest_choice.py          # 机巢选择归因:按成本选定 vs 容量(反事实)
-│   │   ├── time_window.py          # 任务时间窗 vs 实际完成
-│   │   ├── constraint_audit.py     # 预筛拦截/可行状态/罚项量纲/闸门归因
-│   │   ├── allocation_gantt.py     # 谁做什么·什么顺序·降哪个巢
-│   │   ├── assignment_map.py       # 这件事发生在哪(+ 右侧周期摘要面板)
-│   │   ├── geo_evolution.py        # 逐周期航次回放
-│   │   ├── geo_task_lifecycle.py   # 谁到了/谁在等/谁做完了
-│   │   ├── geo_fleet_transition.py # 机队迁移与周期末占用
-│   │   └── convergence.py          # DMDE 收敛
-│   └── report/        # ③ 结论与论文插图(可跨 seed / 多配置汇总)
-│       ├── ab_compare.py           # time_window 开/关两组配置对照
+│   ├── setup/         # ① 实验设置:问题规模/算法超参/约束开关(参数即图)
+│   │   └── setup_params.py        # 实验设定总览(5 联)
+│   ├── initial/       # ② 初始状态:地形/机巢/初始机队/首批任务(与算法无关)
+│   │   └── geo_overview.py        # 2D DEM 初始态势
+│   ├── process/       # ③ 求解过程:滚动闭环逐周期“发生了什么”(6 张)
+│   │   ├── task_selection.py       # 动态任务选择漏斗/保留率/预选咬合/池守恒
+│   │   ├── dmde_search.py          # DMDE:动态交叉率 CR/探索—开发/收敛/开销
+│   │   ├── allocation.py           # 单周期分配:甘特 + 空间分配 + 逐周期 DEM 演化
+│   │   ├── task_dynamics.py        # 任务命运:存量/流量/状态矩阵/等待与滞留
+│   │   ├── fleet_state.py          # 机队与机巢:三口径出动/占用热力/选巢归因
+│   │   └── constraint_state.py     # 约束与时限:预筛归因/约束状态/罚项量纲/时间窗
+│   └── report/        # ④ 结果分析:跨 seed 结论与配置对照(可直接进论文)
+│       ├── outcome_summary.py      # 结果总览(完成率轨迹/终局构成/双目标)
 │       ├── seed_summary.py         # 多 seed 复现一致性(mean±σ)
-│       └── seed_distribution.py    # 跨 seed 分布(个体散点+演化+明细表)
+│       └── ab_compare.py           # 两组配置对照(time_window 开/关等)
 └── results/      # 数值产物(入库)
     ├── metrics.json    # 数值指标(不含分配结构)
     ├── metrics_tw_{off,on}.json    # A/B 两组配置的完整指标(供 ab_compare)
     ├── run_meta.json   # seed / 时间戳 / 配置路径 / DEM 网格
     ├── solution.json   # 任务表 + 机巢表 + 各周期航次与收敛轨迹 + 地理底图(dem) + 初始无人机(uavs)
-    └── figures/        # 图产物:19 张 × {png, pdf}(pdf 为矢量, --pdf 或显式 formats 产出)
+    └── figures/        # 图产物:11 张 × {png, pdf}(pdf 为矢量, --pdf 或显式 formats 产出)
 ```
 
 **拆分原则**:`run.py` 只做编排,不堆细节;任何文件都不超过 ~250 行。
@@ -100,24 +93,26 @@ from plot import render_from_results as r; r('task_allocation/experiments/exp01_
 > `results/archive_nest_anchored/`(同口径重跑为 68.2%±5.8%)。两者不可直接比较:
 > 见 §11「任务撒点域改为 DEM 全域」。
 
-- 机巢占用始终 ≤ capacity(4),无超容(`capacity_violations` 为空,见图 1(c) 热力图)
+- 机巢占用始终 ≤ capacity(4),无超容(`capacity_violations` 为空,见 `fleet_state` 图(c) 占用热力图)
 - 时间窗约束**真实生效**:远处/短窗任务被第一阶段可行性预筛正确丢弃,闭环内偶有
   `tw_task_*` 软违反(惩罚计入适应度,不致命),体现真实选择性压力
-- 多 seed 的 ±σ 来自到达 Poisson 抖动 + 求解器随机性,是论文稳健性证据(见图 6)
+- 多 seed 的 ±σ 来自到达 Poisson 抖动 + 求解器随机性,是论文稳健性证据(见 `seed_summary` 图)
 
 ### 图产物(results/figures/)
 
-| 文件 | 内容 |
-|---|---|
-| `cycle_metrics` | 2×2:任务池水位与流转 / 双目标值 / 机巢泊位热力图 / 求解开销 |
-| `nest_choice` | **机巢选择归因**:容量背景 / 返航巢反事实(末任务→各巢距离) / 距离排名 vs 随机 / 容量反证(选中巢从不是最空) |
-| `selection_funnel` | 逐级筛选任务数 + 各级保留率(T_t → T_sel → T_exec) |
-| `allocation_gantt` | **分配甘特图**:谁做什么 · 什么顺序 · 降哪个巢(异巢终止标橙) |
-| `assignment_map` | **空间分配图**:每周期一行,有向箭头 + 任务按承运 UAV 着色 |
-| `geo_overview` | **2D DEM 初始态势**:高程伪彩底图 + 机巢 + 全量初始无人机分布 + 全部任务 |
-| `geo_evolution` | **逐周期空间演化**:每周期一行,DEM 底图上叠加本周期航次、执行的任务按承运 UAV 着色、背景任务灰显 |
-| `convergence` | DMDE 每代最优适应度 + 归一化收敛;x 轴截断到有效改进窗口(平尾注释说明),初代即最优的周期在右面板注释而非画 0% 平线 |
-| `seed_summary` | 多 seed 一致性:完成率(×100)/总代价(÷1000)/总收益 三面板,各 seed 柱 + 均值虚线 + ±σ 阴影带 |
+| 层 | 图 id | 内容 | 数据来源 |
+|---|---|---|---|
+| setup | `setup_params` | 实验设定总览：问题规模 / DMDE 超参 / 选择机制 / 约束开关 / 滚动设定 | `config.yaml` 全段 + `solution.json` 的 nests / tasks / uavs |
+| initial | `geo_overview` | 初始态势：地形 · 机巢 · 初始机队 · 任务散布 | `solution.json` 的 dem / nests / tasks / uavs |
+| process | `task_selection` | 动态任务选择：漏斗逐级收敛 / 保留率 / 能力上限 / 池守恒 | `metrics.json` 的 cycles[].selection 全字段 / muas.n_selected |
+| process | `dmde_search` | DMDE 搜索机制：动态交叉率 CR(公式 3-9) / 探索—开发平衡 / 收敛曲线 / 求解开销 | `solution.json` 的 cycles[].cost_history + `config.yaml` 的 solver.zeta |
+| process | `allocation` | 单周期分配结构：UAV—任务甘特 / 空间分配图 / 逐周期 DEM 演化 | `solution.json` 的 cycles[].tours + tasks[] / nests[] / dem |
+| process | `task_dynamics` | 任务命运：池水位 / 流量 / 状态矩阵 / 等待与滞留 | `metrics.json` 的 cycles[].pool_counts / completed_ids / deferred_ids + `solution.json` 的 tasks[] |
+| process | `fleet_state` | 机队与机巢：三口径出动 / 占用热力图 / 选巢归因 | `metrics.json` 的 cycles[].muas / nest_occupancy + `solution.json` 的 tours / nests |
+| process | `constraint_state` | 约束与时限：预筛归因 / 约束状态 / 罚项量纲 / 时间窗满足度 | `metrics.json` 的 cycles[].selection.filter_reasons / muas + `solution.json` 的 tasks[] |
+| report | `outcome_summary` | 结果总览：完成率 CR 轨迹 / 未完成任务终局构成 / 双目标 / 关键指标 | `metrics.json` 的 cycles[] / summary + per_seed |
+| report | `seed_summary` | 跨 seed 稳健性：三指标均值±σ / 分布箱线 / 逐 seed 演化 | `metrics.json` 的 per_seed / seed_summary(仅多 seed 运行) |
+| report | `ab_compare` | 两组配置对照：完成率 / 收益—代价 / 权衡 / Δ% | `results/metrics_<tag>.json`(需 ≥2 组对照) |
 
 每张图同时出 `png`(预览)与 `pdf`(矢量,直接进 LaTeX);中文字体 Noto Sans CJK SC。
 
@@ -190,6 +185,9 @@ from plot import render_from_results as r; r('task_allocation/experiments/exp01_
   - **`assignment_map` 重画**:改竖排三行(11 英寸宽)、有向箭头标出执行顺序、
     任务按**承运 UAV** 着色(一眼看出分组)、终点机巢套同色圆环标异巢终止、
     标签加白底衬底 + 按 id 轮转偏移避让、每周期独立小图例。
+  - 注：`allocation_gantt` 与 `assignment_map` 在 2026-10-12 的 20→11 重组中已
+    合并为单张 `process/allocation.py`（真甘特 + 逐周期空间演化 1×N 横排），
+    并去掉了右侧三列（口径改由 footnote 说明）。
 - **修掉一处版式撞车**:甘特图右侧标注原放轴外 `x=1.02`,色条贴轴右缘,
   导致部分行起始机巢被色条遮住(PDF 文本完整但视觉不可读)。
   改为右侧三列画在**轴内留白区**、色条留轴外,彻底不重叠。
@@ -269,13 +267,13 @@ f(s) = -F1 + λ·F2 + w_time · F3 ,   F3 = max_k T_k
 论文主实验量级。
 
 **新增 2D 地理示意图**(当时写在 `plot/geo_map.py`,现已按“看图目的”拆到
-`scene/geo_overview.py` 与 `process/geo_evolution.py` 等,公共件进 `plot/base/dem.py`
+`initial/geo_overview.py` 与 `process/allocation.py`（含逐周期 DEM 演化面板）等,公共件进 `plot/base/dem.py`
 + `plot/base/geo.py`;读 `solution.json` 的 `dem`/`uavs`)：
 
 - `geo_overview`(**图5a 初始态势**):DEM **彩色晕渲**底图(高程配色 + 山体阴影)
-  + 机巢(**房屋图标**,面积∝容量,标签左右交替防重叠,并标注初始无人机数)
+  + 机巢(**三角图标**,面积∝容量,标签左右交替防重叠,并标注初始无人机数)
   + 全部任务(圆点,灰显)。回答「场景地形什么样、无人机一开始在哪」。
-- `geo_evolution`(**图5b 逐周期演化**):每个滚动周期一行(共享坐标),DEM 底图上叠加
+- `allocation` 的 **(b) 逐周期 DEM 演化**面板:每个滚动周期一列(共享坐标,1×N 横排),DEM 底图上叠加
   本周期航次(起点**四旋翼图标**→任务→终点机巢,有向箭头,任务按承运 UAV 着色)、
   背景任务灰显、终点机巢套同色圆环。UAV 图例合并到全图底部一行,不再压地图。
   直观呈现「每一周期后的变化」。
@@ -283,7 +281,8 @@ f(s) = -F1 + λ·F2 + w_time · F3 ,   F3 = max_k T_k
 **现代图标与图例规范**(2026-10-10 定稿,四张 geo 图统一)：
 
 - **矢量字形图标**(`_house_path`/`_drone_path`/`_dot_path`,matplotlib `Path` 多子路径):
-  机巢=房屋、无人机=四旋翼(机身+四旋翼+十字机臂)、任务=圆点;地图点与图例
+  机巢=正三角(克制不花哨,2026-10-12 由房屋改三角,函数名 `_house_path` 沿用)、
+  无人机=四旋翼(机身+四旋翼+十字机臂)、任务=圆点;地图点与图例
   共用同一份字形,语义直观。
 - **图标化图例**:`_IconPatch`(携带字形的 `Patch` 代理) + `_IconHandler`
   (注册 `handler_map`,在图例框内按原字形绘制),图例不再用抽象几何 marker;
@@ -344,7 +343,7 @@ f(s) = -F1 + λ·F2 + w_time · F3 ,   F3 = max_k T_k
   CR 轨迹/单调性/ζ 语义、F 的取值域与两分支判据、混合差分行为、GMR 单调性与
   早晚期灭绝率分布,共 25 项断言,全过。
 
-### 9. 收敛曲线呈现规范(plot/convergence.py)
+### 9. 收敛曲线呈现规范(现并入 process/dmde_search.py)
 
 **现象**:首批结果里周期 2/3 的 `cost_history` 501 代全程恒定(`n_unique=1`),
 周期 1 也只在前 ~19 代改进 4 次,若把 500 代全画进 x 轴,有效信息挤在最左侧几个像素,
