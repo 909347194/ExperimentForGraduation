@@ -15,9 +15,12 @@ import paths  # noqa: F401  # sys.path 引导：挂载仓库根，供 task_alloc
 
 from task_allocation.common.scenario import build_nest_scenario
 from task_allocation.common.task_scenario import (
+    DOMAIN_DEM_EXTENT,
+    DOMAIN_NEST_ANCHORED,
     SyntheticTaskConfig,
     build_synthetic_tasks,
     build_task_batches,
+    dem_planar_extent,
 )
 from task_allocation.common.types import Nest, Task, UAV
 from task_allocation.methods.muas.cost.dem_terrain import DEMTerrain
@@ -91,8 +94,12 @@ def build_scenario(
 def build_terrain(scenario: Any, cfg: Mapping[str, Any]) -> DEMTerrain | None:
     """把经纬度 DEM 重采样成局部米制网格，供垂直切面代价估算使用。
 
-    网格范围 = 机巢包围盒 + ``cost.dem_margin_m``，需覆盖任务散布范围，
-    否则代价估算会退化到网格边界值。
+    网格范围 = （机巢包围盒 ∪ 任务域包络）+ ``cost.dem_margin_m``。
+
+    任务域必须显式并进来：``tasks.domain=dem_extent`` 时任务撒在 DEM 全域，
+    而 DEM 相对机巢包围盒最大外扩可达 23 km（本仓数据实测东边界差 3.0 km，
+    约 2.9% 的 DEM 内任务会落在"仅按机巢包围盒"的网格之外），
+    那时三维代价会退化到网格边界值。
     """
     if scenario is None or scenario.dem is None:
         return None
@@ -103,7 +110,17 @@ def build_terrain(scenario: Any, cfg: Mapping[str, Any]) -> DEMTerrain | None:
 
     xs = [n.x for n in scenario.nests]
     ys = [n.y for n in scenario.nests]
-    extent = (min(xs) - margin, min(ys) - margin, max(xs) + margin, max(ys) + margin)
+    x0, y0, x1, y1 = min(xs), min(ys), max(xs), max(ys)
+
+    tasks_cfg = cfg.get("tasks", {}) or {}
+    domain = str(tasks_cfg.get("domain", DOMAIN_NEST_ANCHORED) or "").strip().lower()
+    if domain == DOMAIN_DEM_EXTENT:
+        inset = float(tasks_cfg.get("dem_inset_m", 0.0))
+        dx0, dy0, dx1, dy1 = dem_planar_extent(scenario.dem, scenario.frame, inset)
+        x0, y0 = min(x0, dx0), min(y0, dy0)
+        x1, y1 = max(x1, dx1), max(y1, dy1)
+
+    extent = (x0 - margin, y0 - margin, x1 + margin, y1 + margin)
     return scenario.dem.to_metric_terrain(scenario.frame, step_m=step_m, extent=extent)
 
 
@@ -156,6 +173,12 @@ def build_task_config(cfg: Mapping[str, Any], seed: int) -> SyntheticTaskConfig:
     return SyntheticTaskConfig(
         n_tasks=int(t.get("n_tasks", 10)),
         seed=int(seed),
+        # 撒点域：dem_extent（DEM 全域，需求不确定）| nest_anchored（锚定机巢，消融对照）
+        # 缺省保持 nest_anchored，与 SyntheticTaskConfig 默认值一致——
+        # 切换全域必须在 yaml 里显式写，避免悄悄改变其它实验的口径。
+        domain=str(t.get("domain", DOMAIN_NEST_ANCHORED)).strip().lower(),
+        dem_inset_m=float(t.get("dem_inset_m", 0.0)),
+        max_reject_trials=int(t.get("max_reject_trials", 8)),
         spread_m=float(t.get("spread_m", 12000.0)),
         reward_min=float(t.get("reward_min", 1.0)),
         reward_max=float(t.get("reward_max", 10.0)),

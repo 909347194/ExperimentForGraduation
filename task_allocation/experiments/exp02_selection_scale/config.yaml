@@ -35,6 +35,9 @@ stage:
 
 tasks:
   source: synthetic
+  # 撒点域显式声明：exp02 为「规模可扩展性」实验，沿用锚定机巢口径；
+  # 全域撒点（dem_extent）是 exp01 的需求不确定性设定，别处另做消融。
+  domain: nest_anchored
   spread_m: 25000.0
   reward_min: 1.0
   reward_max: 10.0

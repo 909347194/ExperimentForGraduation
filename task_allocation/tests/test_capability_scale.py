@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""能力驱动规模（论文 3.3 的 min{αK, cap(t)}）聚焦测试。
+"""能力驱动规模（论文 3.3）聚焦测试。
 
 背景（第一阶段规模决策的能力解耦）：
 
@@ -8,8 +8,10 @@
 
     cap(t) = max(min_cap, ⌊B(t) / c̃⌋)
     B(t)   = budget_scale · budget_factor · Σ remaining_range(可用机)
-    候选数 = min(⌈α·K_avail⌉, cap(t))
-    选择数 = min(⌈max_ratio·K_avail⌉, cap(t))
+
+  名额与 cap(t) 的合成有两种 mode（capability.effective_cap）：
+    - intersect（默认）：min{名额, cap(t)} —— 能力只能收紧，绝不超名额
+    - primary          ：cap(t) 为主、名额兜底 —— 充裕时允许超名额
 
   以及三条配套语义：
     - capability.enabled=False 时退回纯机数名额（消融开关）
@@ -21,6 +23,8 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]  # task_allocation/
 REPO = ROOT.parent
@@ -37,6 +41,7 @@ from task_allocation.methods.selection.capability import (  # noqa: E402
     CapabilityScaleConfig,
     capability_task_cap,
     coarse_task_costs,
+    effective_cap,
     fleet_range_budget,
     merge_caps,
 )
@@ -307,3 +312,92 @@ def test_forced_tasks_bypass_capability_cap():
     assert d["n_after_priority"] == 4  # cap(3) + 强制纳入(1)
     by_id = {s.task.id: s for s in result.scored}
     assert by_id[4].filter_reason != "not_in_top_alpha"
+
+
+# ---------------------------------------------------------------------------
+# effective_cap：机数名额与 cap(t) 的合成（intersect / primary）
+# ---------------------------------------------------------------------------
+
+
+def test_effective_cap_intersect_only_tightens():
+    """intersect（默认）：能力只能收紧；充裕时仍受名额，绝不超名额。"""
+    cfg = CapabilityScaleConfig(mode="intersect")
+    assert effective_cap(5, 3, cfg) == 3  # 紧张 → 收编
+    assert effective_cap(5, 100, cfg) == 5  # 充裕 → 仍受名额（不超名额）
+    assert effective_cap(5, None, cfg) == 5  # 能力未启用 → 名额兜底
+
+
+def test_effective_cap_primary_expands_and_shrinks():
+    """primary：cap(t) 为主 —— 紧张收编、充裕允许超名额（双向）。"""
+    cfg = CapabilityScaleConfig(mode="primary")
+    assert effective_cap(5, 3, cfg) == 3
+    assert effective_cap(5, 100, cfg) == 100
+    assert effective_cap(5, None, cfg) == 5
+
+
+def test_effective_cap_primary_max_expand_factor_clamps():
+    cfg = CapabilityScaleConfig(mode="primary", max_expand_factor=2.0)
+    assert effective_cap(5, 100, cfg) == 10  # ⌈2.0×5⌉ 封顶
+    assert effective_cap(5, 7, cfg) == 7  # 未触顶 → 按 cap
+
+
+def test_effective_cap_rejects_unknown_mode():
+    """mode 拼写/大小写错误必须显式报错，而非静默降级成 intersect。"""
+    cfg = CapabilityScaleConfig(mode="Primary")
+    with pytest.raises(ValueError):
+        effective_cap(5, 3, cfg)
+
+
+# ---------------------------------------------------------------------------
+# primary 模式端到端：能力充裕时候选/选择数可超过 ⌈αK⌉ 名额
+# ---------------------------------------------------------------------------
+
+
+def _many_tasks_setup(n: int = 12, rng_each: float = 1e6):
+    """2 机 @原点、n 个任务散布 500~610m（粗代价中位 ≈ 555）。
+
+    名额 ⌈2.5×2⌉ = 5 < n，便于区分「被名额截住」与「按能力扩容」。
+    """
+    uavs = [_uav(0, rng_each), _uav(1, rng_each)]
+    tasks = [_task(i, 500.0 + 10.0 * i, 0.0) for i in range(n)]
+    return tasks, uavs
+
+
+def test_pipeline_intersect_never_exceeds_alpha_quota():
+    """默认 intersect：任务再多也只取 ⌈αK⌉ = 5（名额是硬天花板）。"""
+    tasks, uavs = _many_tasks_setup()
+    result = run(tasks, uavs, SelectionConfig())
+    assert result.diagnostics["n_after_priority"] == 5
+
+
+def test_pipeline_primary_expands_beyond_alpha_quota():
+    """primary + 充裕预算：候选数扩容到全部 12 个（超过名额 5）。"""
+    tasks, uavs = _many_tasks_setup()
+    cfg = SelectionConfig()
+    cfg.capability.mode = "primary"
+    result = run(tasks, uavs, cfg)
+    d = result.diagnostics
+    assert d["capability_cap"] >= 12
+    assert d["capability_preselect_k"] >= 12
+    assert d["n_after_priority"] == 12  # 名额 5 → primary 下扩容
+
+
+def test_pipeline_primary_max_expand_factor_clamps_expansion():
+    """primary + max_expand_factor=2.0：最多扩到 ⌈2.0×5⌉ = 10。"""
+    tasks, uavs = _many_tasks_setup()
+    cfg = SelectionConfig()
+    cfg.capability.mode = "primary"
+    cfg.capability.max_expand_factor = 2.0
+    result = run(tasks, uavs, cfg)
+    assert result.diagnostics["n_after_priority"] == 10
+
+
+def test_pipeline_primary_still_shrinks_when_tight():
+    """primary 下预算紧张仍按 cap(t) 收编（与 intersect 同向，不失控）。"""
+    tasks, uavs = _many_tasks_setup(rng_each=1000.0)  # B=2000, c̃≈555 → cap=3
+    cfg = SelectionConfig()
+    cfg.capability.mode = "primary"
+    result = run(tasks, uavs, cfg)
+    d = result.diagnostics
+    assert d["capability_cap"] == 3
+    assert d["n_after_priority"] == 3

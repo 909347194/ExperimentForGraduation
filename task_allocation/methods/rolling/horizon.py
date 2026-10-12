@@ -705,6 +705,12 @@ class RollingHorizon:
                 None if cap_d.get("max_participating_uavs") is None
                 else int(cap_d["max_participating_uavs"])
             ),
+            mode=str(cap_d.get("mode", "intersect")),
+            max_expand_factor=(
+                None
+                if cap_d.get("max_expand_factor") is None
+                else float(cap_d["max_expand_factor"])
+            ),
         )
         return SelectionConfig(
             priority=priority, feasibility=feasibility, marginal=marginal,
