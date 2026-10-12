@@ -142,7 +142,7 @@ def _bottleneck_problem(w_time: float = 0.0):
     uavs = [_uav(0, remaining=10000.0, speed=10.0, nest_id=0)]
     nests = [Nest(id=0, x=0.0, y=0.0, z=0.0, capacity=10)]
     pairwise = {(-1, 0): 500.0, (0, 1_000_000): 500.0}
-    cfg = MUASProblemConfig(w_time=w_time)
+    cfg = MUASProblemConfig(w_time=w_time, big_m=1.0)  # 固定字典序权重=1，锁公式口径
     return SelectiveMUASProblem.from_entities(
         tasks, uavs, nests, pairwise_cost=pairwise, config=cfg
     )

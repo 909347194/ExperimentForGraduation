@@ -41,7 +41,10 @@ from task_allocation.common.types import (
     UAV,
     UAVTour,
 )
-from task_allocation.methods.muas.constraints.nest_capacity import CapacityReport
+from task_allocation.methods.muas.constraints.nest_capacity import (
+    CapacityReport,
+    free_slots,
+)
 from task_allocation.methods.muas.cost.cost_matrix import (
     CostMatrixBuildResult,
     build_pairwise_costs,
@@ -307,6 +310,10 @@ class RollingHorizon:
         )
         record.events = [e.as_dict() for e in events]
         self._known_unavailable = {n.id for n in self.nests if not n.available}
+        # 机巢不可用 → 其**全部**归属 UAV 强制改降（含闲置机：合并修复可能
+        # 让参与机零任务停在原巢）——归属巢退出运行后不得再有 UAV 挂靠。
+        if self.hcfg.event_replan:
+            self._rehome_stranded_uavs()
 
         # 把事件解析为本期重规划上下文；replan 决定后续是否做反应式调整
         replan_ctx = summarize_events(events, self.event_cfg)
@@ -490,6 +497,34 @@ class RollingHorizon:
     # ------------------------------------------------------------------
     # 内部
     # ------------------------------------------------------------------
+
+    def _rehome_stranded_uavs(self) -> None:
+        """把归属在不可用机巢的 UAV 强制改归属到其它可用机巢（改降）。
+
+        覆盖全部挂靠 UAV（在途的由终点机巢剔除强制异巢终止，闲置的由本
+        函数改归属）；归属写点唯一（design_nest_state.md §5），此处只调
+        ``reassign_nest``。目标选择：最近的可用机巢（优先有空泊位者）。
+        物理转场代价在本模型的周期粒度下忽略（与"执行推进瞬时到位"同一近似）。
+        """
+        dead = {n.id for n in self.nests if not n.available}
+        if not dead:
+            return
+        alive = [n for n in self.nests if n.available]
+        if not alive:
+            return
+        occ = self.fleet.nest_occupancy(self.nests)
+        free = free_slots(alive, occ)
+        for uav in self.fleet.all():
+            if uav.nest_id not in dead:
+                continue
+            with_slot = [n for n in alive if free.get(n.id, 0) > 0]
+            pool = with_slot or alive
+            target = min(
+                pool,
+                key=lambda n: (n.x - uav.x) ** 2 + (n.y - uav.y) ** 2 + (n.z - uav.z) ** 2,
+            )
+            self.fleet.reassign_nest(uav.id, target.id)
+            free[target.id] = free.get(target.id, 0) - 1
 
     def _inject_faults(self, cycle: int, record: CycleRecord) -> None:
         """执行中注入 UAV 故障，把其未完成任务释放回任务池。
