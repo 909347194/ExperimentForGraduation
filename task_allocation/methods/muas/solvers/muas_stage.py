@@ -644,7 +644,8 @@ class MUASAssignmentEvaluator:
         - 合并后供体航次置空 → 该 UAV 本轮闲置（U_exec ⊆ U_avail），
           空航次不计返航义务、不起飞让位（与 _repair_range 同语义）；
         - 不删任务（区别于 _prune 的 y_j=0 暂缓），只改派；
-        - 航程可行性交由其后的 _repair_range 按剩余航程硬约束处理。
+        - 合并带**结构性航程门**：合并后航次超受体航程预算则不合并，
+          从源头杜绝"合并制造不可行、修复再删任务"的吞任务链路。
         """
         work: dict[int, list[int]] = {k: list(v) for k, v in routes.items()}
         ends: dict[int, int | None] = dict(end_nests)
@@ -665,7 +666,13 @@ class MUASAssignmentEvaluator:
                     old_cost = self._tour_cost(
                         dst, work[dst], ends.get(dst)
                     ) + self._tour_cost(src, work[src], ends.get(src))
-                    if new_cost < old_cost - 1e-9:
+                    # 结构性航程门（可行性不依赖事后修复）：合并后的航次必须
+                    # 落入受体航程预算，否则不合并——合并修复不得制造超航程航次，
+                    # 否则下游 _repair_range 只能靠删任务擦除，吞掉本可执行的任务。
+                    if (
+                        new_cost < old_cost - 1e-9
+                        and new_cost <= self._range_limit(dst) + 1e-6
+                    ):
                         gain = old_cost - new_cost
                         if best is None or gain > best[0]:
                             best = (gain, dst, merged)
@@ -711,7 +718,7 @@ class MUASAssignmentEvaluator:
         work: dict[int, list[int]] = {k: list(v) for k, v in routes.items()}
         ends: dict[int, int | None] = dict(end_nests)
 
-        for uav_id in list(work):
+        for uav_id in sorted(work):
             uav = self._uav_by_id.get(uav_id)
             if uav is None:
                 continue
@@ -730,12 +737,61 @@ class MUASAssignmentEvaluator:
                         best_pos = pos
                 if best_pos is None:
                     break
-                work[uav_id].pop(best_pos)
+                tid = work[uav_id].pop(best_pos)
+                # 只改派不删任务：先回流到其它可行位置（现有航次 / 闲置机
+                # 单任务航次），全部不可行才本轮暂缓（y_j=0，证明性暂缓）。
+                self._reflow_task(tid, work, ends)
 
             if not work[uav_id]:
                 ends[uav_id] = None
 
         return work, ends
+
+    def _range_limit(self, uav_id: int) -> float:
+        """UAV 航程预算；未知 UAV 返回 +inf（不设限）。"""
+        uav = self._uav_by_id.get(uav_id)
+        return float(uav.remaining_range) if uav is not None else float("inf")
+
+    def _reflow_task(
+        self,
+        task_id: int,
+        work: dict[int, list[int]],
+        ends: dict[int, int | None],
+    ) -> bool:
+        """把从超限航次移除的任务改派到其它可行位置；全部不可行才暂缓。
+
+        顺序与字典序评价同构——**可行性优先、代价次之**：
+
+        1. 插入现有航次的最优可行位置（插入后航次 ≤ 该机航程预算）；
+        2. 给闲置参与 UAV 开单任务航次（闲置合法，U_exec ⊆ U_avail）；
+        3. 均不可行 → 返回 False：任务本轮 y_j=0，属**证明性暂缓**，
+           而非旧实现的"顺手删除"（任务物理可行却因邻座航次装不下而被吞）。
+
+        全程确定性（无随机、按 id 升序遍历），评估缓存安全。
+        """
+        # 1) 插入现有航次（含原航次——换个位置能装下就不用暂缓）
+        best: tuple[float, int, list[int]] | None = None
+        for uid in sorted(work):
+            if not work[uid]:
+                continue
+            limit = self._range_limit(uid)
+            base = work[uid]
+            for pos in range(len(base) + 1):
+                cand = base[:pos] + [task_id] + base[pos:]
+                c = self._tour_cost(uid, cand, ends.get(uid))
+                if c <= limit + 1e-6 and (best is None or c < best[0] - 1e-9):
+                    best = (c, uid, cand)
+        if best is not None:
+            work[best[1]] = best[2]
+            return True
+        # 2) 闲置 UAV 单任务航次
+        for u in sorted(self.participating, key=lambda x: x.id):
+            if work.get(u.id):
+                continue
+            if self._tour_cost(u.id, [task_id], ends.get(u.id)) <= self._range_limit(u.id) + 1e-6:
+                work[u.id] = [task_id]
+                return True
+        return False
 
     def _removal_saving(
         self,
