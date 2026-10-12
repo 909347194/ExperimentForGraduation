@@ -679,10 +679,12 @@ class SelectiveMUASProblem:
             )
             if w_pen > 0:
                 report.add_window(w_tags, cons.w_window * w_pen)
-                tw_ids = {int(t.split("_")[-1]) for t in w_tags}
-                for tour in solution.tours:
-                    if any(tid in tw_ids for tid in tour.task_ids):
-                        tour.feasible = False
+                # 【任务级时间窗不可行 · 2026-10-12 改造】
+                # 不再把「含迟到任务的整条 tour」置 feasible=False。
+                # tw_task_* 标签已写入 violations（add_window），horizon._violated_task_ids
+                # 对其走任务级归因（仅迟到任务自身被拦），同 tour 的准时任务照常完成。
+                # 整 tour 兜底（horizon 中 tour.feasible==False 分支）仅对 range/endurance/
+                # 终点机巢等真正「飞行不可行」的情形触发，时间窗违约只影响迟到任务本身。
         if cons.sequence:
             s_pen, s_tags = check_sequence_constraint(solution.tours, self.task_by_id)
             if s_pen > 0:

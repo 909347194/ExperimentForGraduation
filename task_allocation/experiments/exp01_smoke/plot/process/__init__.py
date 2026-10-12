@@ -1,39 +1,17 @@
 # -*- coding: utf-8 -*-
-"""exp01_smoke 图组：**process 层——运行过程的观测与演化**。
+"""exp01_smoke 图组：**process 层——求解过程观测**。
 
-放进本层的判断标准：**随滚动闭环推进而变化**，用来回答「这一轮是怎么回事」。
-离开了具体的这一次运行，这些图就失去意义（这正是与 ``scene`` 层的分界）。
+回答「滚动闭环到底怎么跑的」：逐周期、按顺序把一轮分配发生的事讲清楚。
+与算法强相关，是方法调试与诊断的主要观察窗口。
 
-层内按 topic 可再细分为四小类（见 ``plot/registry.py`` 的 ``TOPICS``）：
+六张图按一个周期内发生的先后顺序排列::
 
-    mechanism   机制与水位诊断 —— cycle_metrics / task_flow / selection_funnel
-    allocation  单周期分配结果 —— allocation_gantt（结构）/ assignment_map（空间）
-    spatial     逐周期空间演化 —— geo_evolution / geo_task_lifecycle /
-                                  geo_fleet_transition
-    solver      求解器内部行为 —— convergence
+    task_selection   动态任务选择：漏斗收敛 / 保留率 / 预选咬合 / 池守恒
+    dmde_search      DMDE 搜索机制：动态交叉率 CR / 探索—开发 / 收敛 / 开销
+    allocation       单周期分配结构：UAV—任务甘特 / 空间分配 / 逐周期 DEM 演化
+    task_dynamics    任务命运：存量 / 流量 / 状态矩阵 / 等待与滞留
+    fleet_state      机队与机巢：三口径出动 / 占用热力 / 选巢归因
+    constraint_state 约束与时限：预筛归因 / 约束状态 / 罚项量纲 / 时间窗
 
-这四类是**语义标签而非目录**：它们共用同一套地理/数值底座，再拆一层目录只会
-让 import 路径变长而没有收益。
+ registry.FIGURES 是事实来源；本层各模块导出 ``plot_<id>`` 统一签名函数。
 """
-
-from .allocation_gantt import plot_allocation_gantt
-from .assignment_map import plot_assignment_map
-from .convergence import plot_convergence
-from .cycle_metrics import plot_cycle_metrics
-from .geo_evolution import plot_geo_evolution
-from .geo_fleet_transition import plot_geo_fleet_transition
-from .geo_task_lifecycle import plot_geo_task_lifecycle
-from .selection_funnel import plot_selection_funnel
-from .task_flow import plot_task_flow
-
-__all__ = [
-    "plot_allocation_gantt",
-    "plot_assignment_map",
-    "plot_convergence",
-    "plot_cycle_metrics",
-    "plot_geo_evolution",
-    "plot_geo_fleet_transition",
-    "plot_geo_task_lifecycle",
-    "plot_selection_funnel",
-    "plot_task_flow",
-]

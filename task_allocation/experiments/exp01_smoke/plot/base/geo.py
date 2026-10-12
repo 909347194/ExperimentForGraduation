@@ -61,7 +61,7 @@ __all__ = [
 # 共享样式：UAV 稳定着色与航段绘制
 # ---------------------------------------------------------------------------
 
-#: 与 allocation_gantt 保持一致：按 UAV 稳定着色（tab20 前 20 色循环）
+#: 与 allocation 保持一致：按 UAV 稳定着色（tab20 前 20 色循环）
 UAV_PALETTE = (
     "#4c78a8", "#f58518", "#54a24b", "#e45756", "#72b7b2",
     "#b279a2", "#ff9da6", "#9d755d", "#8c6bb1", "#2ca02c",
@@ -142,18 +142,14 @@ def _rect(cx: float, cy: float, w: float, h: float):
 
 
 def _house_path() -> mpath.Path:
-    """机巢图标：屋顶三角 + 方形屋身（可辨识的「基地/家」语义）。"""
+    """机巢图标：正三角（学术标记语言里的「基地/站点」，克制不花哨）。"""
     verts = np.array([
-        (0.00, 1.00),   # 屋脊
-        (-0.85, 0.15),  # 左屋檐
-        (-0.62, 0.15),  # 左墙顶
-        (-0.62, -0.80), # 左墙底
-        (0.62, -0.80),  # 右墙底
-        (0.62, 0.15),   # 右墙顶
-        (0.85, 0.15),   # 右屋檐
-        (0.00, 1.00),
+        (0.00, 0.95),   # 顶点
+        (-0.90, -0.65), # 左底
+        (0.90, -0.65),  # 右底
+        (0.00, 0.95),
     ], float)
-    codes = [mpath.Path.MOVETO] + [mpath.Path.LINETO] * 6 + [mpath.Path.CLOSEPOLY]
+    codes = [mpath.Path.MOVETO] + [mpath.Path.LINETO] * 2 + [mpath.Path.CLOSEPOLY]
     return _center_path(mpath.Path(verts, codes))
 
 
@@ -225,16 +221,16 @@ def _strip_axes(ax) -> None:
         spine.set_visible(False)
 
 
-def _panel_title(ax, text: str) -> None:
+def _panel_title(ax, text: str, *, fontsize: float = 8.5) -> None:
     """把行标题画进地图内部左上角（圆角半透明底），替代面板外长标题。
 
     好处：多行图不再被「标题比地图宽」撑出大片留白，画面更紧凑现代。
     """
     ax.text(
-        0.025, 0.975, text,
+        0.03, 0.97, text,
         transform=ax.transAxes, ha="left", va="top",
-        fontsize=9.5, color="#1f2933", fontweight="bold", zorder=10,
-        bbox=dict(boxstyle="round,pad=0.32", fc="white", ec="none", alpha=0.82),
+        fontsize=fontsize, color="#1f2933", zorder=10,
+        bbox=dict(boxstyle="round,pad=0.30", fc="white", ec="none", alpha=0.82),
     )
 
 
@@ -287,22 +283,21 @@ def _draw_nests(
     ax.scatter(
         [float(n["x"]) for n in nests],
         [float(n["y"]) for n in nests],
-        s=[150.0 + 26.0 * float(n.get("capacity", 1)) for n in nests],
+        s=[120.0 + 22.0 * float(n.get("capacity", 1)) for n in nests],
         marker=_G_HOUSE, color=PALETTE["nest"], edgecolors="white",
-        linewidths=1.4, zorder=zorder,
+        linewidths=1.2, zorder=zorder,
     )
     for n in nests:
         # 相邻机巢标签左右交替，避免纵向相邻的巢 5/巢 6 之类互相压字
         to_left = int(n["id"]) % 2 == 1
-        label = f"巢 {n['id']}"
+        label = f"巢{n['id']}"
         if counts:
             label += f"\n{int(counts.get(int(n['id']), 0))} 架"
         ax.annotate(
             label, (float(n["x"]), float(n["y"])),
-            textcoords="offset points", xytext=(-15 if to_left else 15, 12),
+            textcoords="offset points", xytext=(-13 if to_left else 13, 10),
             ha="right" if to_left else "left",
-            fontsize=8.5, color="#0b2545",
-            fontweight="bold", zorder=zorder + 1, bbox=_HALO,
+            fontsize=7.6, color="#0b2545", zorder=zorder + 1, bbox=_HALO,
         )
 
 
