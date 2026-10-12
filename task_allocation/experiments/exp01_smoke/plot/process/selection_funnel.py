@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
-"""exp01_smoke 图 2：动态任务选择漏斗 ``selection_funnel``。
+"""图 ``selection_funnel``——动态任务选择漏斗：候选如何被逐级收敛。
+
+【process 层 · 运行过程观测】
 
 左：各周期逐级筛选的任务数（T_t → 优先级 → 预筛选 → 边际收益 → T_sel → T_exec）；
 右：各级相对 T_t 的保留率。
@@ -8,6 +10,9 @@
 边际收益阶段继续收敛、且 T_t^exec ⊆ T_t^sel ⊆ T_t。
 
 数据来源：``results/metrics.json`` 的 ``cycles[].selection`` 与 ``cycles[].muas``。
+
+统一签名（见 ``plot/registry.py``）：即使本图用不到 ``solution``，也按
+``(metrics, solution, out_dir, formats, *, dpi)`` 收参，好让调度端一处通用。
 """
 
 from __future__ import annotations
@@ -17,7 +22,7 @@ from typing import Any, Sequence
 
 import numpy as np
 
-from .theme import PALETTE, cycle_colors, plt, save_figure, style_axes
+from ..theme import PALETTE, cycle_colors, plt, save_figure, style_axes
 
 __all__ = ["plot_selection_funnel"]
 
@@ -40,6 +45,7 @@ def _stage_value(cycle: dict[str, Any], key: str, section: str) -> float:
 
 def plot_selection_funnel(
     metrics: dict[str, Any],
+    solution: dict[str, Any],
     out_dir: Path,
     formats: Sequence[str] = ("png",),
     *,

@@ -18,21 +18,41 @@ exp01_smoke/
 ├── metrics.py    # 指标汇总、运行元信息、分配结果、终端报表
 ├── paths.py      # 目录布局与 sys.path 引导
 ├── config.yaml   # 全部可调参数
-├── plot/         # 可视化模块(代码)
+├── plot/         # 可视化模块(代码)——按“看图目的”分三层
 │   ├── __init__.py    # make_plots() 调度 + 从 results/ 直接重画
-│   ├── theme.py       # 全局样式、中文字体、保存约定
-│   ├── cycles.py      # 图1 周期指标面板
-│   ├── selection.py   # 图2 选择漏斗
-│   ├── allocation.py  # 图3 分配甘特图
-│   ├── assignment.py  # 图4 机巢-任务-航次空间分配图
-│   ├── geo_map.py     # 图5 2D DEM 地理示意图(初始态势 + 逐周期演化)
-│   ├── convergence.py # 图6 DMDE 收敛
-│   ├── seed_summary.py # 图7 多 seed 一致性(误差棒)
-│   └── figures/       # 图产物(入库)
+│   ├── registry.py    # ★ 图清单(唯一事实来源):新增图 = 加一行
+│   ├── theme.py       # 全局样式、中文字体、保存约定(唯一 import pyplot 处)
+│   ├── base/          # 被图依赖但自己不是图的绘制件
+│   │   ├── dem.py     #   DEM 取数(真实瓦片/降采样栅格)、补洞、晕渲、分层设色
+│   │   └── geo.py     #   图标图例、UAV 配色与航段、行式排版(_row_figsize)
+│   ├── scene/         # ① 环境与初始配置(一次性、与求解无关)
+│   │   └── geo_overview.py
+│   ├── process/       # ② 运行过程观测(逐周期演化与诊断)
+│   │   ├── cycle_metrics.py        # 任务池水位/双目标/泊位/开销
+│   │   ├── task_flow.py            # 任务状态随周期变化
+│   │   ├── task_wait.py            # 每任务等待/批次倒挂/滞留轮次/窗口余量
+│   │   ├── selection_funnel.py     # 两阶段选择漏斗
+│   │   ├── selection_detail.py     # 预选参数是否咬合/池守恒/强制入选
+│   │   ├── fleet_utilization.py    # 可用/编码参与/实际出动三口径 + 机巢压力
+│   │   ├── nest_choice.py          # 机巢选择归因:按成本选定 vs 容量(反事实)
+│   │   ├── time_window.py          # 任务时间窗 vs 实际完成
+│   │   ├── constraint_audit.py     # 预筛拦截/可行状态/罚项量纲/闸门归因
+│   │   ├── allocation_gantt.py     # 谁做什么·什么顺序·降哪个巢
+│   │   ├── assignment_map.py       # 这件事发生在哪(+ 右侧周期摘要面板)
+│   │   ├── geo_evolution.py        # 逐周期航次回放
+│   │   ├── geo_task_lifecycle.py   # 谁到了/谁在等/谁做完了
+│   │   ├── geo_fleet_transition.py # 机队迁移与周期末占用
+│   │   └── convergence.py          # DMDE 收敛
+│   └── report/        # ③ 结论与论文插图(可跨 seed / 多配置汇总)
+│       ├── ab_compare.py           # time_window 开/关两组配置对照
+│       ├── seed_summary.py         # 多 seed 复现一致性(mean±σ)
+│       └── seed_distribution.py    # 跨 seed 分布(个体散点+演化+明细表)
 └── results/      # 数值产物(入库)
     ├── metrics.json    # 数值指标(不含分配结构)
+    ├── metrics_tw_{off,on}.json    # A/B 两组配置的完整指标(供 ab_compare)
     ├── run_meta.json   # seed / 时间戳 / 配置路径 / DEM 网格
-    └── solution.json   # 任务表 + 机巢表 + 各周期航次与收敛轨迹 + 地理底图(dem) + 初始无人机(uavs)
+    ├── solution.json   # 任务表 + 机巢表 + 各周期航次与收敛轨迹 + 地理底图(dem) + 初始无人机(uavs)
+    └── figures/        # 图产物:19 张 × {png, pdf}(pdf 为矢量, --pdf 或显式 formats 产出)
 ```
 
 **拆分原则**:`run.py` 只做编排,不堆细节;任何文件都不超过 ~250 行。
@@ -61,19 +81,24 @@ from plot import render_from_results as r; r('task_allocation/experiments/exp01_
 > 下面「代表运行」取 seed=42,「多 seed 汇总」为 5 次均值±标准差(ddof=0)。
 
 ```
-场景:8 机巢,容量 4,DEM 已接入,frame=(29.522202, 91.479331)
+场景:8 机巢,容量 4,10 架机,DEM 已接入,frame=(29.522202, 91.479331)
 任务到达:初始 10 个 + Poisson(λ=5)/周期(第 2 周期起),代表运行实际到达 18 个
-时间窗:周期相关 latest = 到达时刻 + U(1.5,4.0)×600s(≈900~2400s)
+撒点域:tasks.domain=dem_extent(DEM 全域均匀撒点,约 97.5×110.9 km)
+时间窗:周期相关 latest = 到达时刻 + U(3.5,7.0)×600s(≈2100~4200s)
 
 代表运行( seed=42 ):
-周期 1 @t= 600s | T_t=10(remain0/new10) K_avail=24 | T_sel=9 → T_exec=6(保留4) | F1=36.47 F2=187536m | 1.14s
-周期 2 @t=1200s | T_t= 8(remain3/new 5) K_avail=24 | T_sel=5 → T_exec=4(保留4) | F1=21.65 F2= 91361m | 0.31s
-周期 3 @t=1800s | T_t= 4(remain1/new 3) K_avail=24 | T_sel=4 → T_exec=4(保留0) | F1=24.28 F2= 69052m | 0.27s
+周期 1 @t= 600s | T_t=10(remain0/new10) K_avail=10 | T_sel=9 → T_exec=5(保留4) | F1=41.75 F2=138798m
+周期 2 @t=1200s | T_t=10(remain5/new 5) K_avail=10 | T_sel=8 → T_exec=3(保留5) | F1=23.42 F2= 97350m
+周期 3 @t=1800s | T_t=10(remain7/new 3) K_avail=10 | T_sel=7 → T_exec=3(保留4) | F1=15.33 F2= 84254m
 
-代表汇总:完成 14/18(77.8%),平均等待 643s,总收益 82.4,总代价 348 km,求解 1720ms
-多 seed 汇总(5 次):完成 13.4±1.7/18.8(71.3%±6.5%),平均等待 633±32s,
-              总收益 81.0±14.5,总代价 286±57 km,求解 1818±357ms
+代表汇总:完成 11/18(61.1%),平均等待 690s,总收益 67.1
+多 seed 汇总(5 次):完成 11.6±2.0/18(61.3%±6.2%),平均等待 674±48s,
+              总收益 79.6,总代价 353±59 km,求解 22738±5546ms
 ```
+
+> 上一版(锚定机巢 12 km + 1.5~4.0 周期窗口 + 24 机)的 71.3% 已归档到
+> `results/archive_nest_anchored/`(同口径重跑为 68.2%±5.8%)。两者不可直接比较:
+> 见 §11「任务撒点域改为 DEM 全域」。
 
 - 机巢占用始终 ≤ capacity(4),无超容(`capacity_violations` 为空,见图 1(c) 热力图)
 - 时间窗约束**真实生效**:远处/短窗任务被第一阶段可行性预筛正确丢弃,闭环内偶有
@@ -85,6 +110,7 @@ from plot import render_from_results as r; r('task_allocation/experiments/exp01_
 | 文件 | 内容 |
 |---|---|
 | `cycle_metrics` | 2×2:任务池水位与流转 / 双目标值 / 机巢泊位热力图 / 求解开销 |
+| `nest_choice` | **机巢选择归因**:容量背景 / 返航巢反事实(末任务→各巢距离) / 距离排名 vs 随机 / 容量反证(选中巢从不是最空) |
 | `selection_funnel` | 逐级筛选任务数 + 各级保留率(T_t → T_sel → T_exec) |
 | `allocation_gantt` | **分配甘特图**:谁做什么 · 什么顺序 · 降哪个巢(异巢终止标橙) |
 | `assignment_map` | **空间分配图**:每周期一行,有向箭头 + 任务按承运 UAV 着色 |
@@ -242,7 +268,9 @@ f(s) = -F1 + λ·F2 + w_time · F3 ,   F3 = max_k T_k
 求解时间显著上升(见下方结果),但收敛更稳定、多 seed 下标准差更小,更适合作为
 论文主实验量级。
 
-**新增 2D 地理示意图**(`plot/geo_map.py`,两张图,读 `solution.json` 的 `dem`/`uavs`)：
+**新增 2D 地理示意图**(当时写在 `plot/geo_map.py`,现已按“看图目的”拆到
+`scene/geo_overview.py` 与 `process/geo_evolution.py` 等,公共件进 `plot/base/dem.py`
++ `plot/base/geo.py`;读 `solution.json` 的 `dem`/`uavs`)：
 
 - `geo_overview`(**图5a 初始态势**):DEM **彩色晕渲**底图(高程配色 + 山体阴影)
   + 机巢(**房屋图标**,面积∝容量,标签左右交替防重叠,并标注初始无人机数)
@@ -387,6 +415,47 @@ f(s) = -F1 + λ·F2 + w_time · F3 ,   F3 = max_k T_k
 (均进 `_SEED_AGG_KEYS`,跨 seed 出 mean±std);新增
 `tests/test_completion_gate.py`(闸门开/关/UAV 级归因 + 量纲解耦数学)与
 `tests/test_constraint_switches.py`,全套 27 项通过。
+
+### 11. 任务撒点域改为 DEM 全域(2026-10-11)
+
+**动机**:任务需求不由机巢位置决定。旧实现把任务锚在机巢 12 km 内,
+只覆盖约 26% 的 DEM 面积,盘内任务几乎一定可达 ⇒ 可行性预筛与任务选择
+机制没有压力可测,等于人为缩小问题。全域撒点才对应"需求在空间上不确定",
+落在能力约束之外的任务本就该被预筛判掉。
+
+**改动**:
+- `common/task_scenario.py`:新增 `SyntheticTaskConfig.domain`
+  (`dem_extent` 全域 / `nest_anchored` 旧行为,后者保留作消融对照)、
+  `dem_inset_m`、`max_reject_trials`;新增 `dem_planar_extent()`
+  (DEM 四角 → 局部平面包络)与拒绝重采 `_reject_outside_dem()`
+  (经纬度矩形投到 ENU 是梯形,包络约 0.59% 落在 DEM 外)。
+  `build_task_batches` 未动,下游零改动。
+- `build.py::build_terrain`:网格 extent 改为「机巢包围盒 ∪ 任务域包络 + margin」。
+  旧口径只按机巢包围盒,DEM 相对它东向多出 3.0 km ⇒ 约 2.9% 的 DEM 内任务
+  会落到网格外、三维代价退化到边界值。`dem_margin_m` 由 20000 降到 2000
+  (全域域已由 DEM 包络界定),网格反而从 108×127 km 缩到 102×115 km。
+- `methods/selection/pipeline.py`:`diagnostics` 增 `filter_reasons` 淘汰原因
+  直方图,用于把「物理不可达」与「算法主动放弃」分开统计。
+
+**实证(5 seed)**:
+
+| 配置 | 完成率 | 收益 | 总代价 |
+|---|---|---|---|
+| nest_anchored(旧,归档) | 68.2%±5.8% | 81.0 | 193 km |
+| dem_extent + 1.5~4.0 周期窗 | 27.4%±6.3% | 38.1 | 129 km |
+| dem_extent + 2.5~5.0 | 43.2%±7.9% | 62.4 | 242 km |
+| **dem_extent + 3.5~7.0(当前)** | **61.3%±6.2%** | **79.6** | **353 km** |
+| dem_extent + 5.0~10.0 | 66.7%±7.1% | 83.0 | 374 km |
+
+- 航程约束**从不 binding**:全域到最近机巢最大 41.7 km,单任务往返 83.4 km
+  < 120 km 满电航程 ⇒ 淘汰原因 100% 是 `miss_time_window`,无一例
+  `exceed_remaining_range`。
+- 1.5~4.0 周期窗(900~2400 s)下 60~90% 的任务被判不可达,这不是"任务难",
+  而是**窗口尺度标定错误**:全域典型航时中位 17.8 km/15 m/s ≈ 1190 s ≈ 2 个周期,
+  窗口必须 ≥ 典型航时才谈得上"选择性"。故重标定为 3.5~7.0 周期(2100~4200 s),
+  此时每周期仅 1~3 个任务因时间窗被判掉,压力真实但不泛滥。
+- 产物:旧口径 `results/archive_nest_anchored/`;窗口扫描
+  `results/scan_deadline_cycles/scan_dc_*.json`。
 
 ## 已知问题与待办
 

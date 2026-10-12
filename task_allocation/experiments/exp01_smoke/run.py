@@ -132,6 +132,16 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--pdf", action="store_true", help="额外输出 PDF 矢量图（默认仅 PNG）"
     )
+    parser.add_argument(
+        "--group", action="append", dest="groups", metavar="LAYER",
+        choices=("scene", "process", "report"),
+        help="只出某一层的图：scene=环境初始配置 / process=运行过程 / "
+             "report=结论插图；可重复指定，省略则出全部",
+    )
+    parser.add_argument(
+        "--figure", action="append", dest="figures", metavar="ID",
+        help="只出指定图（图 id，如 geo_overview）；可重复指定",
+    )
     return parser.parse_args(argv)
 
 
@@ -228,6 +238,8 @@ def main(argv: list[str] | None = None) -> int:
             figures_dir,
             formats=formats,
             dpi=int(plot_cfg.get("dpi", 200)),
+            names=args.figures,
+            groups=args.groups,
         )
 
     return 0

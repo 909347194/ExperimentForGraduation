@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
-"""exp01_smoke 图 3：UAV—任务 分配甘特图 ``allocation_gantt``。
+"""图 ``allocation_gantt``——UAV—任务 分配甘特图：谁做什么、什么顺序、降哪个巢。
+
+【process 层 · 运行过程观测】
 
 把「分配」这件事直接摊开看，不依赖地理直觉：
 
@@ -24,7 +26,7 @@ from typing import Any, Sequence
 
 import numpy as np
 
-from .theme import plt, save_figure, style_axes
+from ..theme import plt, save_figure, style_axes
 
 __all__ = ["plot_allocation_gantt"]
 

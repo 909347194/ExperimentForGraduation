@@ -36,9 +36,13 @@ task_allocation/
     │   ├── build.py         # 可选拆分：场景 / 实体装配
     │   ├── metrics.py       # 可选拆分：指标汇总与产物组装
     │   ├── plot/            # 可视化模块（只负责绘制，纯代码）
-    │   │   ├── __init__.py  #   make_plots() 调度入口
+    │   │   ├── __init__.py  #   make_plots() / render_from_results() 调度入口
+    │   │   ├── registry.py  #   ★ 图清单（唯一事实来源）
     │   │   ├── theme.py     #   全局样式与保存约定
-    │   │   └── *.py         #   每张图一个模块
+    │   │   ├── base/        #   被图依赖、但自己不是图的共享绘制件
+    │   │   ├── scene/       #   ① 环境与初始配置（与求解无关）
+    │   │   ├── process/     #   ② 运行过程观测（逐周期演化与诊断）
+    │   │   └── report/      #   ③ 结论与论文插图（跨 seed / 多配置）
     │   ├── results/         # 数值结果、日志、中间数据、图（入库）
     │   │   ├── figures/     #   图产物
     │   │   └── .gitkeep
@@ -116,8 +120,30 @@ run:
 ### `plot/`（可视化模块，只负责绘制）
 
 - **只放绘图代码**：`__init__.py` 提供 `make_plots(metrics, solution, out_dir)` 调度入口，
-  全局样式集中在 `theme.py`，**每张图一个模块**（如 `cycles.py` / `selection.py` /
-  `allocation.py` / `assignment.py` / `convergence.py`），避免单文件臃肿
+  全局样式集中在 `theme.py`，**每张图一个模块**
+- 图按「**看图目的**」分三层（命名见下），不要摊平成一堆 `*.py`：
+
+  | 层 | 回答什么 | 例子 |
+  |---|---|---|
+  | `scene/` | 实验长什么样（一次性、与求解无关） | 初始态势、机巢分布、任务散布 |
+  | `process/` | 这一轮怎么跑的（随周期演化） | 逐周期演化、水位诊断、收敛曲线 |
+  | `report/` | 实验说明什么（可直接进论文） | 多 seed 误差棒、配置对照 |
+
+  `base/` 放**被图依赖但自己不是图**的共享绘制件（判据：至少两张图用得上，
+  且不产出任何图文件）
+
+- **`registry.py` 是图清单的唯一事实来源**：每张图登记 `id / group / topic / title /
+  needs / source / func`。新增一张图 = 在 `FIGURES` 里加一行；`make_plots` 按表调度，
+  并支持 `groups=` / `names=` 只出一部分（凑论文插图时很省事）
+- **命名约定（四者同名）**：
+
+  ```
+  模块名 ≡ 图 id ≡ 输出文件名 ≡ 绘制函数名去掉 plot_
+  plot/scene/geo_overview.py  →  plot_geo_overview  →  geo_overview.png
+  ```
+
+  绘制函数统一签名 `(metrics, solution, out_dir, formats=("png",), *, dpi=200)`，
+  即使用不到某个入参也照收，好让调度端一处通用
 - **图产物不在这里**——落在 `results/figures/`（由 `experiment.figures_dir` 指定），
   只放 `png` / `pdf` / `svg`；`plot/` 保持纯代码，便于审阅与跨实验复用
 - 不放原始数值表（表在 `results/`）；绘图只读已落盘的 `results/` 产物，**改图不必重跑实验**
