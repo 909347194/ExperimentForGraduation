@@ -70,7 +70,7 @@ __all__ = [
 # 参与 UAV 的选择策略
 POLICY_CHEAPEST = "cheapest"     # 按「到最近任务的最小代价」升序取前 K 架
 POLICY_FIRST = "first"           # 按登记顺序取前 K 架（便于复现）
-POLICY_MARGINAL = "marginal"     # 边际出动决策：覆盖代价边际下降 ≤ 出动代价即停
+POLICY_MARGINAL = "marginal"     # 边际出动决策：覆盖代价边际下降 ≤ 出动代价则跳过该机（非停机）
 
 
 @dataclass
@@ -87,6 +87,15 @@ class MUASStageConfig:
     # 三者都缺省时退化为旧规则（尽量多派，上界 M-1）。
     sortie_budget: int | None = None
     participation_cost: float = 0.0
+    # marginal 估计器的单机服务容量：一架机一次出动最多串几个任务。
+    #   None（默认）= 按航程自动推导 cap = max(1, ⌊min_u 剩余航程 / 平均单程代价⌋ − 1)
+    #     （串 c 个任务的航程 ≈ (c+1)×平均单程，含返航；推导不出时退化为无容量）；
+    #   显式整数 = 固定容量（实验/消融用）。
+    # 为什么需要它：旧估计器 est(j)=Σ_t min_{u∈前j架} C(u,t) 把每架机当成能
+    # 「同时」覆盖全部任务，完全不含航程/时间窗容量——gain 度量的是纯覆盖代价
+    # 下降，与「多派一架的真实服务能力」脱节（γ 因此从不咬合）。加容量后未覆盖
+    # 任务记往返惩罚，gain 才反映真实边际贡献。详见 _select_by_marginal_takeoff。
+    marginal_tour_cap: int | None = None
     # 选择性：剔除「执行代价超过收益」的任务（y_j = 0，保留到下一周期）
     prune_unprofitable: bool = True
     prune_max_rounds: int = 8
@@ -121,6 +130,8 @@ class MUASStageConfig:
     def __post_init__(self) -> None:
         if self.max_participating_uavs is not None and self.max_participating_uavs < 1:
             raise ValueError("max_participating_uavs 必须 >= 1 或为 None")
+        if self.marginal_tour_cap is not None and self.marginal_tour_cap < 1:
+            raise ValueError("marginal_tour_cap 必须 >= 1 或为 None（None=按航程自动推导）")
         if self.participating_policy not in (POLICY_CHEAPEST, POLICY_FIRST, POLICY_MARGINAL):
             raise ValueError(f"未知的参与 UAV 选择策略：{self.participating_policy}")
 
@@ -168,9 +179,10 @@ def select_participating_uavs(
        不裁显式值，``K≥M`` 会走进 balanced/overloaded 路径；
     2. **运营预算**：``sortie_budget``（出动架次上限）与
        ``max_participating_uavs``（硬上限），与 M 无关地压低 K；
-    3. **出动经济性**（``participating_policy="marginal"``）：按代价升序
-       逐个纳入，第 j 架带来的「任务覆盖代价」边际下降 ≤
-       ``participation_cost`` γ 时停止增派。
+    3. **出动经济性**（``participating_policy="marginal"``）：按「该机是几个
+       任务的最近机」降序逐个纳入，第 j 架带来的「容量受限覆盖代价」边际下降
+       ≤ ``participation_cost`` γ 时**跳过该机继续试下一架**（不是停机——
+       gain 非单调，零增益机之后仍可能有正增益机）。
 
     旧 auto 规则在机队充裕时总是顶格 ``K=M-1``，使 ``M-K`` 塌缩为常数、
     巡游顺序搜索维度名存实亡；解耦后 K 可显著小于 M-1，支撑 M≫K 的
@@ -208,7 +220,23 @@ def select_participating_uavs(
                 return float("inf")
             return float(np.min(uav_target[row]))
 
-        ordered = sorted(avail, key=lambda u: (cheapest_cost(u), u.id))[:k]
+        if config.participating_policy == POLICY_MARGINAL:
+            # marginal 的排序键必须与边际贡献对齐：按「该机是几个任务的
+            # 最近机」降序。旧键 cheapest_cost = min_t C(u,t) 度量的是「离
+            # 我最近那个任务有多近」——一架机可以只因某个任务恰好在旁就排到
+            # 前列，却对任何任务都不是最近机（gain≡0），把真正能贡献的机挤到
+            # 后面（实测：0/20 argmin 的机排 #2，6/20 的机排 #5）。
+            share = _argmin_share(uav_target, n_tasks)
+
+            def marginal_key(u: UAV) -> tuple[int, float, int]:
+                row = row_of_uav.get(u.id) if row_of_uav else None
+                if row is None or row >= uav_target.shape[0]:
+                    return (0, float("inf"), u.id)  # 无代价行 → 排最后
+                return (-int(share[row]), cheapest_cost(u), u.id)
+
+            ordered = sorted(avail, key=marginal_key)[:k]
+        else:
+            ordered = sorted(avail, key=lambda u: (cheapest_cost(u), u.id))[:k]
 
     # 3) 出动经济性：边际收益递减停机
     if (
@@ -222,8 +250,80 @@ def select_participating_uavs(
             uav_target,
             row_of_uav,
             n_tasks,
+            config.marginal_tour_cap,
         )
     return ordered
+
+
+def _argmin_share(uav_target: np.ndarray, n_tasks: int) -> np.ndarray:
+    """每行（UAV）是几个任务的「最近机」（代价最小的行），长度 = 行数。
+
+    marginal 排序键用：``gain_j > 0`` 当且仅当新机对某个任务比已选机都近，
+    即它必须是某任务的 argmin 行。按 argmin 份额降序可把「真有贡献」的机排到
+    前面，避免零贡献机占位（详见 ``select_participating_uavs`` 的排序分支）。
+    """
+    if uav_target.size == 0 or n_tasks <= 0:
+        return np.zeros(uav_target.shape[0], dtype=int)
+    arg = np.argmin(uav_target[:, :n_tasks], axis=0)
+    return np.bincount(arg, minlength=uav_target.shape[0]).astype(int)
+
+
+def _resolve_tour_cap(
+    ordered: Sequence[UAV],
+    uav_target: np.ndarray,
+    n_tasks: int,
+    tour_cap: int | None,
+) -> int | None:
+    """解析 marginal 估计器的单机服务容量（None = 无容量 = 旧口径）。
+
+    显式配置优先；否则按航程自动推导：串 c 个任务的航程 ≈ (c+1)×平均单程
+    （含返航），故 ``cap = max(1, ⌊min_u 剩余航程 / 平均单程代价⌋ − 1)``。
+    取机队内最小剩余航程（最弱成员决定有效容量）；推导不出（无航程信息或
+    代价矩阵为空）时返回 None，估计器退化为无容量。
+    """
+    if tour_cap is not None:
+        return max(1, int(tour_cap))
+    if uav_target.size == 0 or n_tasks <= 0 or not ordered:
+        return None
+    ranges = [float(getattr(u, "remaining_range", 0.0) or 0.0) for u in ordered]
+    rng = min(ranges) if ranges else 0.0
+    mean_leg = float(np.mean(uav_target[:, :n_tasks]))
+    if rng <= 0.0 or mean_leg <= 0.0:
+        return None
+    return max(1, int(rng / mean_leg) - 1)
+
+
+def _covering_cost(sub: np.ndarray, n_tasks: int, cap: int | None) -> float:
+    """j 架机（``sub`` 的行）覆盖 ``n_tasks`` 个任务的最小总代价。
+
+    ``cap=None``：退化为无容量口径 ``Σ_t min_u C(u,t)``（每架机可「同时」
+    覆盖全部任务）。
+
+    ``cap=k``：每架机至多串 k 个任务——按代价升序贪心分配（便宜的先占位），
+    装不下的任务按「需另派机」记往返惩罚 ``2×min_u C(u,t)``。这样估计器才
+    反映航程/时间窗约束下的真实服务能力。
+    """
+    if cap is None:
+        return float(np.min(sub[:, :n_tasks], axis=0).sum())
+    j = sub.shape[0]
+    if j == 0 or n_tasks <= 0:
+        return 0.0
+    pairs = sorted(
+        (float(sub[u, t]), u, t) for u in range(j) for t in range(n_tasks)
+    )
+    load = [0] * j
+    done = [False] * n_tasks
+    total = 0.0
+    for c, u, t in pairs:
+        if done[t] or load[u] >= cap:
+            continue
+        done[t] = True
+        load[u] += 1
+        total += c
+    for t in range(n_tasks):
+        if not done[t]:
+            total += float(np.min(sub[:, t])) * 2.0
+    return total
 
 
 def _select_by_marginal_takeoff(
@@ -232,13 +332,26 @@ def _select_by_marginal_takeoff(
     uav_target: np.ndarray,
     row_of_uav: Mapping[int, int] | None,
     n_tasks: int,
+    tour_cap: int | None = None,
 ) -> list[UAV]:
-    """边际出动决策：覆盖代价的边际下降决定出动架次。
+    """边际出动决策：容量受限覆盖代价的边际下降决定出动架次。
 
-    估计器与选择层的插入式粗估同源思路：``est(j) = Σ_t min_{u∈前j架} C(u,t)``，
-    第 j 架的边际贡献 ``gain_j = est(j-1) - est(j)``（单调非增）。仅当
-    ``gain_j > γ``（每架固定出动代价）才继续增派；第一架无条件纳入（保证非空）。
+    估计器 ``est(j)`` = 「j 架机、每架至多 ``cap`` 个任务」的最小总覆盖代价
+    （见 ``_covering_cost``），第 j 架的边际贡献 ``gain_j = est(j-1) − est(j)``。
+
+    **停机规则**：``gain_j ≤ γ`` 时**跳过该机、继续试下一架**（不是 break）。
+    依据：``est(j)`` 单调非增只保证 ``gain_j ≥ 0``，并**不**保证 gain 单调——
+    一架零增益机（对任何任务都不比已选机近）之后仍可能有正增益机。旧实现用
+    break 并在 docstring 里断言 gain「单调非增」，该断言不成立，导致在第一个
+    零增益机处过早停机（实测 K 塌到 1~3、完成率 100%→48.7%）。
+
+    **容量**：``tour_cap`` 为单机服务容量（None=按航程自动推导，见
+    ``_resolve_tour_cap``）。无容量的旧口径把每架机当成能同时覆盖全部任务，
+    gain 与「多派一架的真实收益」脱节，γ 因此从不咬合。
+
+    第一架无条件纳入（保证非空）。
     """
+    cap = _resolve_tour_cap(ordered, uav_target, n_tasks, tour_cap)
     picked: list[UAV] = []
     rows: list[int] = []
     prev = 0.0
@@ -249,11 +362,11 @@ def _select_by_marginal_takeoff(
         if not picked:
             picked.append(u)
             rows.append(row)
-            prev = float(np.min(uav_target[rows][:, :n_tasks], axis=0).sum())
+            prev = _covering_cost(uav_target[rows][:, :n_tasks], n_tasks, cap)
             continue
-        cur = float(np.min(uav_target[rows + [row]][:, :n_tasks], axis=0).sum())
+        cur = _covering_cost(uav_target[rows + [row]][:, :n_tasks], n_tasks, cap)
         if prev - cur <= gamma:
-            break
+            continue  # 零/低增益机：跳过继续，不是停机
         picked.append(u)
         rows.append(row)
         prev = cur

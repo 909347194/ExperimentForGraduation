@@ -134,17 +134,24 @@ def top_alpha_preselect(
     n_avail_uavs: int,
     alpha: float = 2.5,
     hard_cap: int | None = None,
+    k_override: int | None = None,
 ) -> list[ScoredTask]:
     """Top-αK 候选预筛选（论文 3.3）。
 
     Args:
         hard_cap: 能力预算可承载数 cap(t)（:func:`capability.capability_task_cap`）。
-            非 None 时候选数取 ``min(⌈α·K_avail⌉, hard_cap)``，实现"规模跟着
-            机队能力走"；None 时退回纯机数名额。
+            非 None 时候选数取 ``min(⌈α·K_avail⌉, hard_cap)``（intersect 口径，
+            能力只能收紧）；None 时退回纯机数名额。
+        k_override: 直接指定候选数 k，优先级高于 ``alpha`` 与 ``hard_cap``。
+            供 :func:`capability.effective_cap` 在 ``mode="primary"`` 下使用，
+            使规模得以**超过**机数名额（解决"能力充裕时欠选"）。
     """
     if n_avail_uavs <= 0 or not scored:
         return []
-    k = max(1, int(np.ceil(alpha * n_avail_uavs)))
-    if hard_cap is not None:
-        k = max(1, min(k, int(hard_cap)))
+    if k_override is not None:
+        k = max(1, int(k_override))
+    else:
+        k = max(1, int(np.ceil(alpha * n_avail_uavs)))
+        if hard_cap is not None:
+            k = max(1, min(k, int(hard_cap)))
     return scored[: min(k, len(scored))]

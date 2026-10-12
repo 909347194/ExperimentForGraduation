@@ -1,15 +1,25 @@
 # -*- coding: utf-8 -*-
 """pipeline.py — 动态任务选择流水线。
 
-顺序：基础优先级 → 候选预筛选（min{αK, 能力承载数}）→ 初步可行性过滤
-      → 边际收益选择（同一能力上界）→ 候选集检查
+顺序：基础优先级 → 能力上界计算 cap(t) → 候选预筛选 → [事件驱动强制纳入]
+      → 初步可行性过滤 → 边际收益选择 → 候选集检查 → 淘汰原因诊断
 
-规模决策原则：候选/选择规模同时受"机数名额"与"机队能力预算可承载数"约束
-（:mod:`.capability`），能力充裕时可超名额多选，能力紧缺时提前收编。
+规模决策原则：候选/选择规模 = 合成(机数名额, 机队能力预算可承载数 cap(t))，
+合成方式由 :mod:`.capability` 的 ``mode`` 决定（:func:`.capability.effective_cap`）：
+
+    intersect（默认）：min{名额, cap(t)} —— 能力只能**收紧**，绝不超名额。
+        航程紧张时按 cap(t) 提前收编；航程充裕时仍以机数名额为硬天花板，
+        "欠选"问题依旧存在。
+    primary：以 cap(t) 为主定规模、名额降为兜底（可按 max_expand_factor 封顶）。
+        紧张时收编、充裕时允许**超名额**多选，双向失真同时修正。
+
+名额定义：候选数 = ⌈α·K_avail⌉；选择数 = ⌈max_ratio·K_avail⌉（或 max_selected）。
+注意：事件驱动强制纳入（``forced_task_ids``）会**绕过**上述规模上界追加候选。
 """
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -18,6 +28,7 @@ from task_allocation.methods.selection.capability import (
     CapabilityScaleConfig,
     capability_task_cap,
     coarse_task_costs,
+    effective_cap,
     fleet_range_budget,
 )
 from task_allocation.methods.selection.feasibility import (
@@ -86,11 +97,19 @@ def run(
         diagnostics["capability_cap"] = capability_cap
     diagnostics["capability_enabled"] = cfg.capability.enabled
 
+    # 候选数 = 合成(机数名额 ⌈α·K⌉, 能力上界 cap(t))；两种 mode 见 capability.effective_cap
+    alpha_quota = (
+        max(1, int(math.ceil(cfg.priority.alpha * n_avail))) if n_avail > 0 else 0
+    )
+    preselect_k = effective_cap(alpha_quota, capability_cap, cfg.capability)
+    diagnostics["capability_preselect_k"] = preselect_k
+
     preselected = top_alpha_preselect(
         scored_all,
         n_avail_uavs=n_avail,
         alpha=cfg.priority.alpha,
         hard_cap=capability_cap,
+        k_override=preselect_k,
     )
 
     # 事件驱动重规划：强制纳入紧急 / 故障释放任务（绕过 Top-αK 预筛上限）
@@ -117,18 +136,39 @@ def run(
     diagnostics["n_after_prefilter"] = len(passed)
     diagnostics["n_rejected_prefilter"] = len(rejected_pre)
 
+    # 选择数 = 合成(机数名额 max_selected 或 ⌈max_ratio·K⌉, 能力上界 cap(t))
+    if cfg.marginal.max_selected is not None:
+        marginal_quota = int(cfg.marginal.max_selected)
+    else:
+        marginal_quota = (
+            max(1, int(math.ceil(cfg.marginal.max_ratio * n_avail))) if n_avail > 0 else 0
+        )
+    marginal_limit = effective_cap(marginal_quota, capability_cap, cfg.capability)
+    diagnostics["capability_marginal_limit"] = marginal_limit
+
     chosen = select_by_marginal_gain(
         passed,
         uavs,
         cfg.marginal,
         pairwise_cost=pairwise_cost,
         capability_cap=capability_cap,
+        limit_override=marginal_limit,
     )
     diagnostics["n_after_marginal"] = len(chosen)
 
     final_kept, dropped_post = postcheck(chosen, uavs, cfg.feasibility, cost_hint=cost_hint)
     diagnostics["n_selected"] = len(final_kept)
     diagnostics["n_dropped_postcheck"] = len(dropped_post)
+
+    # 淘汰原因直方图：用于把「物理上不可能完成」与「算法主动放弃」分开统计。
+    # 全域撒点后会出现一批 miss_time_window / exceed_remaining_range 的结构性
+    # 不可达任务，完成率下降必须能被这张表解释清楚，否则会被质疑数据合理性。
+    rejected_reasons: dict[str, int] = {}
+    for s in scored_all:
+        if s.filter_reason:
+            rejected_reasons[s.filter_reason] = rejected_reasons.get(s.filter_reason, 0) + 1
+    if rejected_reasons:
+        diagnostics["filter_reasons"] = dict(sorted(rejected_reasons.items()))
 
     selected_tasks = [s.task for s in final_kept]
     for s in final_kept:

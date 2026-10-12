@@ -15,12 +15,26 @@
     c̃     = 粗代价的 quantile 分位数（默认中位数）
     cap(t) = max(min_cap, ⌊B(t) / c̃⌋)
 
-最终规模取两者的交：
+名额与 cap(t) 的合成方式由 ``CapabilityScaleConfig.mode`` 决定（两种）：
 
-    候选数   k     = min(⌈α · K_avail⌉, cap(t))
-    选择数   limit = min(⌈max_ratio · K_avail⌉, cap(t))
+  * ``intersect``（默认，保守）：取交集，能力只能**收紧**
 
-即"机数名额"与"能力承载数"同时约束，能力只在【规模】这一维生效；
+        k     = min(⌈α · K_avail⌉,         cap(t))
+        limit = min(⌈max_ratio · K_avail⌉, cap(t))
+
+    只治"过筛"（航程紧张时提前收编）；航程充裕时仍以机数名额为硬天花板，
+    **不会超名额**，"欠选"问题依旧存在。
+
+  * ``primary``（能力为主）：cap(t) 直接定规模，名额降为兜底
+
+        k     = cap(t)，并按 max_expand_factor · ⌈α · K_avail⌉ 封顶（未设则不封顶）
+        limit = 同理（相对 ⌈max_ratio · K_avail⌉）
+
+    航程紧张时按 cap(t) 收编、航程充裕时允许**超过名额**多选，
+    两个方向的失真同时被修正。``max_expand_factor`` 防止 c̃ 过小时规模失控。
+
+合成统一由 :func:`effective_cap` 负责，候选预筛选与边际选择共用同一口径。
+两种模式下能力都只在【规模】这一维生效；
 单任务可达性（prefilter）与机群预算硬闸门（postcheck）仍由 feasibility 负责，
 本模块不重复其职责。
 
@@ -58,6 +72,7 @@ __all__ = [
     "fleet_range_budget",
     "capability_task_cap",
     "merge_caps",
+    "effective_cap",
 ]
 
 
@@ -83,6 +98,13 @@ class CapabilityScaleConfig:
     sortie_budget: int | None = None
     # ③ 参与机数硬上限：同上，与②取交（None=不限）
     max_participating_uavs: int | None = None
+    # 机数名额与 cap(t) 的合成方式：
+    #   "intersect"（默认）取交集 min{名额, cap(t)}：能力只能收紧，绝不超名额；
+    #   "primary"  以 cap(t) 为主定规模、名额降为兜底：充裕时允许超名额。
+    mode: str = "intersect"
+    # 仅 mode="primary" 生效：相对机数名额的最大扩张倍数，防止 c̃ 过小时规模失控。
+    # None = 不设扩张上限（规模完全由 cap(t) 决定）。
+    max_expand_factor: float | None = None
 
 
 def coarse_task_costs(
@@ -179,3 +201,44 @@ def capability_task_cap(
         c_ref = 1.0
     cap = int(np.floor(max(float(budget), 0.0) / c_ref))
     return max(int(cfg.min_cap), cap)
+
+
+def effective_cap(
+    quota: int,
+    cap: int | None,
+    config: CapabilityScaleConfig | None = None,
+) -> int:
+    """把「机数名额 quota」与「能力承载数 cap(t)」合成为最终规模上界。
+
+    候选预筛选（名额 = ⌈α·K⌉）与边际选择（名额 = ⌈max_ratio·K⌉）共用本函数，
+    保证两处口径一致。
+
+    Args:
+        quota: 机数名额（⌈α·K_avail⌉ 或 ⌈max_ratio·K_avail⌉ / ``max_selected``）。
+        cap:   :func:`capability_task_cap` 的能力承载数；``None`` 表示能力未启用。
+        config: 旋钮；``mode`` 决定合成方式。
+
+    Returns:
+        ``mode="intersect"``：``max(1, min(quota, cap))`` —— 能力只能收紧。
+        ``mode="primary"``  ：``max(1, cap)``，并按
+            ``max_expand_factor × quota`` 封顶（``max_expand_factor`` 为 None 不封顶）。
+
+    Raises:
+        ValueError: ``mode`` 非 ``intersect`` / ``primary``（防配置拼写错误静默降级）。
+    """
+    cfg = config or CapabilityScaleConfig()
+    mode = str(cfg.mode)
+    if mode not in ("intersect", "primary"):
+        raise ValueError(
+            f"unknown capability mode {mode!r}; expect 'intersect' or 'primary'"
+        )
+    quota = max(1, int(quota))
+    if cap is None:
+        return quota
+    cap = max(1, int(cap))
+    if mode == "primary":
+        k = cap
+        if cfg.max_expand_factor is not None:
+            k = min(k, int(np.ceil(float(cfg.max_expand_factor) * quota)))
+        return max(1, k)
+    return max(1, min(quota, cap))

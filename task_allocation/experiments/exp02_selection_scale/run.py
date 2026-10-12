@@ -127,6 +127,12 @@ def main() -> int:
         prune_margin=float(s.get("prune_margin", 0.0)),
         prune_wait_bonus=float(s.get("prune_wait_bonus", 1.0)),
         wait_scale=float(s.get("wait_scale", 3600.0)),
+        participating_policy=str(s.get("participating_policy", "cheapest")),
+        participation_cost=float(s.get("participation_cost", 0.0)),
+        marginal_tour_cap=(
+            None if s.get("marginal_tour_cap") is None
+            else int(s["marginal_tour_cap"])
+        ),
     )
     baseline_scales = set(cfg["run"].get("full_muas_baseline_scales") or [])
 
@@ -139,6 +145,8 @@ def main() -> int:
         tcfg = SyntheticTaskConfig(
             n_tasks=n_tasks,
             seed=int(cfg["experiment"].get("seed", 42)) + n_tasks,
+            # 撒点域显式接线（默认 nest_anchored；dem_extent 为 exp01 设定）
+            domain=str(cfg["tasks"].get("domain", "nest_anchored")).strip().lower(),
             spread_m=float(cfg["tasks"].get("spread_m", 25000.0)),
             reward_min=float(cfg["tasks"].get("reward_min", 1.0)),
             reward_max=float(cfg["tasks"].get("reward_max", 10.0)),

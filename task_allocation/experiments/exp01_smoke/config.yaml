@@ -36,19 +36,35 @@ problem:
 # 只需替换生成函数，本节参数可平移）
 tasks:
     source: synthetic
+    # 撒点域：dem_extent = 在 DEM 有效范围内全域均匀撒点（需求不确定的现实口径，默认）；
+    # nest_anchored = 绕机巢 spread_m 半径内撒点（人为缩小问题，仅作消融对照）。
+    # 全域撒点后约 30% 任务因违反时间窗而天然不可达（航程 100% 可达），
+    # 这是约束的真实选择性压力，见 common/task_scenario.py 模块文档里的实测数据。
+    domain: dem_extent
+    dem_inset_m: 0.0 # DEM 包络内缩（m）；>0 可避开边缘半像素/插值外推区
+    max_reject_trials: 8 # 落点出 DEM 时的拒绝采样重试轮数
     n_tasks: 10 # 第 1 周期到达的初始任务数
-    spread_m: 12000.0 # 相对锚点机巢的散布半径（m）
+    spread_m: 12000.0 # 相对锚点机巢的散布半径（m）；仅 domain=nest_anchored 生效
     reward_min: 1.0
     reward_max: 10.0
     # 时间窗改为「周期相关」：latest = 到达时刻 + U(deadline_cycles_min,
-    # deadline_cycles_max) × cycle_length，使紧迫度尺度与滚动时域对齐
-    # （cycle_length=600s → 窗口约 900~2400s ≈ 0.5~1.3× 总时域 1800s，
-    # 远低于旧配置的绝对秒数 3600~14400s=6~24 周期；远处/短窗任务会被
-    # 第一阶段可行性预筛正确丢弃，体现时间窗约束的真实选择性压力）。
+    # deadline_cycles_max) × cycle_length，使紧迫度尺度与滚动时域对齐。
     # 不使用周期相关时退回绝对秒数 deadline_min/deadline_max（见 task_scenario.py）。
-    deadline_cycles_min: 1.5
-    deadline_cycles_max: 4.0
-    anchor_to_nests: true
+    #
+    # 【domain=dem_extent 后的重新标定】窗口尺度必须与「典型任务航时」同量级，
+    # 否则时间窗不是在筛选任务，而是在把大多数任务判成物理上不可能：
+    #   全域撒点后到最近机巢中位 17.8 km @ 15 m/s ≈ 1190 s ≈ 2 个周期，
+    #   p90 29.5 km ≈ 1970 s ≈ 3.3 周期。
+    # 实测 5 seed 扫描（见 results/scan_deadline_cycles/）：
+    #   1.5~4.0 周期 (900~2400 s) → 完成率 27.4%±6.3%，淘汰原因 100% miss_time_window
+    #   2.5~5.0 周期 (1500~3000)  → 43.2%±7.9%
+    #   3.5~7.0 周期 (2100~4200)  → 61.3%±6.2%   ← 当前默认：仍有选择性压力，
+    #                                              且不至于让多数任务先天不可达
+    #   5.0~10.0 周期(3000~6000)  → 66.7%±7.1%（接近锚定机巢基线的 68.2%，此时时间窗基本失效）
+    # 锚定机巢基线的 68.2% 是「人为缩小问题」的上限，不作为目标值。
+    deadline_cycles_min: 3.5
+    deadline_cycles_max: 7.0
+    anchor_to_nests: true # 遗留别名，仅 domain=nest_anchored 时生效
 
 # 算法开关（对齐 Chapter3_README §8 技术路线）
 method:
@@ -76,6 +92,17 @@ selection:
         max_selected: null # null → 由 max_ratio × K_avail 决定
         max_ratio: 2.0
         min_marginal_ratio: 0.0
+    capability:
+        enabled: true # false → 退回纯机数名额（消融对照口径）
+        # 机数名额与能力上界 cap(t) 的合成方式：
+        #   intersect（默认）min{名额, cap(t)} —— 能力只能收紧，绝不超名额（只治"过筛"）
+        #   primary          cap(t) 为主、名额降为兜底 —— 紧张收编、充裕允许"超名额"（双向）
+        mode: intersect
+        # 仅 mode=primary 生效：相对机数名额的最大扩张倍数，防 c̃ 过小时规模失控
+        max_expand_factor: null
+        budget_scale: 1.0 # 预算额外折扣（与 budget_factor 相乘）；<1 给未来紧急任务留余量
+        quantile: 0.5 # 粗代价分位数：调低→cap 更宽松，调高→更保守
+        min_cap: 1 # cap 下限（保证总能评出一个候选）
 
 # ── 第二阶段：选择性多机巢 MUAS（论文 §4-§5）─────────────────────
 muas:
@@ -104,7 +131,15 @@ muas:
     #   仅在 participating_policy=marginal 时生效：
     #   γ=0（默认）→ 只要加一架机能降一点代价就继续派，不早停（只剔纯冗余机）；
     #   γ>0       → 新增一架机的覆盖代价下降 ≤ γ 即停，按「边际收益 vs 出动成本」经济性早停。
+    #   ⚠️ γ 与估计器 gain 同为「代价(米)」量纲，但 gain 大小由任务簇几何决定、
+    #      与「每架固定成本」无可比性——实测 γ=0/20/60km 三档结果逐位相同。
+    #      要让它真正咬合，需先把 gain 改定义为与 γ 同单位的量（奖励和/路径增量）。
     participation_cost: 0.0
+    # marginal_tour_cap：估计器的单机服务容量（一架机一次出动最多串几个任务）。
+    #   null → 按航程自动推导 cap = max(1, ⌊min 剩余航程 / 平均单程代价⌋ − 1)；
+    #   给整数则固定（消融用）。无容量旧口径把每架机当成能同时覆盖全部任务，
+    #   gain 与真实服务能力脱节；加容量后 gain 才反映航程/时间窗下的边际贡献。
+    marginal_tour_cap: null
     prune_unprofitable: true # 剔除执行代价高于收益的任务（y_j = 0）
     prune_margin: 0.0 # 剔除判据裕度：λ·节省 > R·(1+margin) 才剔除
     prune_max_rounds: 8
@@ -168,7 +203,10 @@ solver:
 # ── 三维地理代价（论文 §5(5)）─────────────────────────────────────
 cost:
     dem_step_m: 200.0 # DEM 重采样网格间距（m），越小越精细越慢
-    dem_margin_m: 20000.0 # 网格范围相对机巢包围盒的外扩（m）
+    # 网格范围相对「机巢包围盒 ∪ 任务域包络」的外扩（m）。
+    # tasks.domain=dem_extent 时任务恒在 DEM 包络内，20 km 外扩已无必要，
+    # 只留 2 km 插值光环即可（网格从 108×127 km 降到 102×115 km，更快）。
+    dem_margin_m: 2000.0
     min_clearance: 50.0 # 最小离地余量（m）
     max_clearance: 300.0 # 巡航离地高度上限（m）
     climb_rate: 0.15 # 爬升/下降斜率（相对水平距离）

@@ -74,21 +74,32 @@ def select_by_marginal_gain(
     config: MarginalConfig | None = None,
     pairwise_cost: dict[tuple[int, int], float] | None = None,
     capability_cap: int | None = None,
+    limit_override: int | None = None,
 ) -> list[ScoredTask]:
     """边际收益增量选择（论文 3.4）。
 
     Args:
         capability_cap: 能力预算可承载数 cap(t)（:mod:`.capability`）。
-            非 None 时选择数上限取 ``min(⌈max_ratio·K_avail⌉, capability_cap)``，
-            与候选预筛选同口径——规模跟着机队能力走，而不是只跟机数走。
+            非 None 时选择数上限取 ``min(⌈max_ratio·K_avail⌉, capability_cap)``
+            （intersect 口径），与候选预筛选同口径——规模跟着机队能力走。
+        limit_override: 直接指定选择数上限，优先级高于 ``max_selected`` 与
+            ``capability_cap``。供 :func:`capability.effective_cap` 在
+            ``mode="primary"`` 下使用，使规模得以**超过**机数名额。
     """
     cfg = config or MarginalConfig()
     n_avail = sum(1 for u in uavs if u.is_available)
-    limit = cfg.max_selected
-    if limit is None:
-        limit = max(1, int(np.ceil(cfg.max_ratio * max(n_avail, 1)))) if n_avail > 0 else 0
-    if capability_cap is not None and limit > 0:
-        limit = max(1, min(limit, int(capability_cap)))
+    if limit_override is not None:
+        limit = max(1, int(limit_override))
+    else:
+        limit = cfg.max_selected
+        if limit is None:
+            limit = (
+                max(1, int(np.ceil(cfg.max_ratio * max(n_avail, 1))))
+                if n_avail > 0
+                else 0
+            )
+        if capability_cap is not None and limit > 0:
+            limit = max(1, min(limit, int(capability_cap)))
     if limit <= 0 or not candidates:
         for s in candidates:
             s.selected = False
