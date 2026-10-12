@@ -91,7 +91,10 @@ class MUASStageConfig:
     # 下降，与「多派一架的真实服务能力」脱节（γ 因此从不咬合）。加容量后未覆盖
     # 任务记往返惩罚，gain 才反映真实边际贡献。详见 _select_by_marginal_takeoff。
     marginal_tour_cap: int | None = None
-    # 选择性：剔除「执行代价超过收益」的任务（y_j = 0，保留到下一周期）
+    # 选择性：剔除「执行代价超过收益」的任务（y_j = 0，保留到下一周期）。
+    # 注意：字典序（lexicographic=True，默认）下经济性剔除与"收益优先"目标
+    # 冲突（丢正收益任务必降 F1），自动关闭——任务暂缓仅由可行性修复产生；
+    # 本开关仅在 legacy 加权和（lexicographic=False）下生效（消融对比口径）。
     prune_unprofitable: bool = True
     prune_max_rounds: int = 8
     # 剔除判据的裕度：仅当 λ·节省 > 收益 × (1 + margin) 时才剔除
@@ -448,8 +451,16 @@ class MUASAssignmentEvaluator:
         # 航程修复，被清空的航次实际并未起飞，让出的名额是虚的 → 落地期超卖。
         end_nests: dict[int, int | None] = {}
         prev_state = None
+        # 字典序（收益优先）下经济性剔除与目标冲突（丢正收益任务必降 F1），
+        # 自动关闭；任务暂缓仅由可行性修复产生。legacy 加权和保留选择性剔除
+        # （论文 §5(3) y_j=0 的消融对比口径）。
+        economic_prune = self.config.prune_unprofitable and not getattr(
+            self.problem.config, "lexicographic", True
+        )
         for _ in range(6):
-            if self.config.prune_unprofitable:
+            # 合并修复：任务少时向更少机合并（闲置合法，U_exec ⊆ U_avail）
+            routes, end_nests = self._consolidate(routes, end_nests)
+            if economic_prune:
                 routes, end_nests = self._prune(routes, end_nests)
             routes, end_nests = self._repair_range(routes, end_nests)
             end_nests = self._choose_end_nests(routes)
@@ -615,6 +626,76 @@ class MUASAssignmentEvaluator:
         if tids:
             total += self._return_leg_cost(tids[-1], end_nest_id)
         return float(total)
+
+    def _consolidate(
+        self,
+        routes: Mapping[int, Sequence[int]],
+        end_nests: Mapping[int, int | None],
+    ) -> tuple[dict[int, list[int]], dict[int, int | None]]:
+        """合并修复：任务少时把航次并入更少的机（闲置合法化，解码端表达）。
+
+        背景：编码层「每架参与 UAV 至少一个任务」是 DE 映射的布局不变量
+        （cost_vector 的 K 个起始槽位，见 ``_inverse_phi_srp``）；而"任务少时
+        少派更省"要求解能表达闲置。本修复在解码端补上该表达（方案原文：
+        "在编码**或解码**中增加'不参与本轮任务'的表达方式"）：
+
+        - 整航次迁移：把供体航次的任务逐个插入受体航次的最优位置，
+          仅当「起始腿 + 任务链 + 返航腿（近似）」总代价下降时合并；
+        - 合并后供体航次置空 → 该 UAV 本轮闲置（U_exec ⊆ U_avail），
+          空航次不计返航义务、不起飞让位（与 _repair_range 同语义）；
+        - 不删任务（区别于 _prune 的 y_j=0 暂缓），只改派；
+        - 航程可行性交由其后的 _repair_range 按剩余航程硬约束处理。
+        """
+        work: dict[int, list[int]] = {k: list(v) for k, v in routes.items()}
+        ends: dict[int, int | None] = dict(end_nests)
+
+        improved = True
+        while improved:
+            improved = False
+            carriers = [u for u, t in work.items() if t]
+            for src in carriers:
+                best: tuple[float, int, list[int]] | None = None
+                for dst in carriers:
+                    if dst == src or not work[dst]:
+                        continue
+                    merged = self._cheapest_insertion(
+                        dst, work[dst], work[src], ends.get(dst)
+                    )
+                    new_cost = self._tour_cost(dst, merged, ends.get(dst))
+                    old_cost = self._tour_cost(
+                        dst, work[dst], ends.get(dst)
+                    ) + self._tour_cost(src, work[src], ends.get(src))
+                    if new_cost < old_cost - 1e-9:
+                        gain = old_cost - new_cost
+                        if best is None or gain > best[0]:
+                            best = (gain, dst, merged)
+                if best is not None:
+                    _gain, dst, merged = best
+                    work[dst] = merged
+                    work[src] = []
+                    ends[src] = None
+                    improved = True
+                    break  # 受体已变，重算下一轮
+        return work, ends
+
+    def _cheapest_insertion(
+        self,
+        uav_id: int,
+        base: Sequence[int],
+        extra: Sequence[int],
+        end_nest_id: int | None,
+    ) -> list[int]:
+        """把 ``extra`` 的任务逐个按最优位置插入 ``base``（航次代价贪心）。"""
+        merged = list(base)
+        for tid in extra:
+            best_pos, best_cost = 0, float("inf")
+            for pos in range(len(merged) + 1):
+                cand = merged[:pos] + [tid] + merged[pos:]
+                c = self._tour_cost(uav_id, cand, end_nest_id)
+                if c < best_cost:
+                    best_cost, best_pos = c, pos
+            merged.insert(best_pos, tid)
+        return merged
 
     def _repair_range(
         self,

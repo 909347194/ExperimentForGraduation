@@ -230,7 +230,14 @@ class PopulationEncoder:
     # ---- N<M: 规则 3.3 -----------------------------------------------------
 
     def _generate_srp(self) -> Individual:
-        """规则 3.3: U 可重复（巡游），T 不重复，每个 U 至少出现一次。"""
+        """规则 3.3: U 可重复（巡游），T 不重复，每个 U 至少出现一次。
+
+        注："每个 U 至少一个目标"是 DE 映射的**布局不变量**
+        （``_inverse_phi_srp`` 按 K 个起始槽位消费 cost_vector[0..K)），
+        去掉它需重设计槽位语义。"任务少时合并到更少机"的闲置表达放在
+        解码端（``muas_stage.SelectiveMUAS._consolidate`` 合并修复），
+        与方案"在编码或解码中增加表达方式"一致。
+        """
         n, m = self._n, self._m
 
         # 将目标随机分配给 UAV（每个 UAV 至少一个目标）

@@ -108,7 +108,13 @@ selection:
 muas:
     allow_unassigned: true # 允许 y_j = 0（任务保留至下一周期）
     allow_idle_uav: true # 允许 n_u = 0（UAV 本周期空闲）
-    lambda_cost: 1.0e-4 # 标量化权重：-F1 + λ·F2（收益当量/米）
+    # 双目标标量化口径（方案 B 主线）：字典序——先最大化任务收益 F1=ΣR·y，
+    # 再在收益等价的解中最小化成本（含惩罚/最坏机时间）。
+    # big_m: null → 按问题数据自动推导支配性权重；给数值则显式固定。
+    # lexicographic: false → 历史加权和 -F1 + λ·F2（消融对比）。
+    lexicographic: true
+    big_m: null
+    lambda_cost: 1.0e-4 # 次目标权重（收益当量/米）；字典序下只裁决收益等价的解
     w_penalty: 1.0 # 约束违反惩罚总权重（历史口径：惩罚随 F2 一起乘 λ）
     # 惩罚量纲解耦：留空 null = 历史口径（惩罚进 F2 再乘 λ，秒级惩罚被压没）；
     # 给数值则惩罚不再乘 λ，直接以「奖励当量 / 惩罚单位」计入适应度。

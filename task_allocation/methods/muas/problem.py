@@ -21,7 +21,10 @@
     min F3 = max_k T_k        （最坏机航迹时间，论文 §5(3) 负载均衡/公平性项）
 
 适应度（DMDE 最小化标量）：
-    f(s) = -F1 + λ·F2 + w_time·F3
+    字典序（默认，方案 B 主线）：f(s) = -big_m·F1 + λ·F2 + w_time·F3
+      big_m 主导：任一 ≥ 最小正收益的收益优势支配任意成本差异
+      （先最大化任务收益，再在收益等价的解中最小化成本）；
+    legacy（lexicographic=False，消融对比）：f(s) = -F1 + λ·F2 + w_time·F3
 其中 F3 = max_k T_k 为各 UAV 航迹时间的最大值（瓶颈机），对应 Ming et al. 2017
 Eq.1 中的 a·max(Σ_i Σ_j t(i,j)·x(i,j)) 最坏机飞行时间项。w_time=0 时退化为
 原双目标形式，行为与重构前完全一致。
@@ -135,6 +138,17 @@ class MUASProblemConfig:
     # 若未显式给出 constraints.w_nest_capacity，则取其值。
     w_nest_capacity: float = 1.0
     lambda_cost: float = 1.0
+    # ----双目标的单标量化口径（评价规则，方案 B 主线）------------------
+    # lexicographic=True（默认）：**字典序**——先最大化任务收益 F1，再在收益
+    # 等价的解中最小化次目标（路径代价/约束惩罚/最坏机时间）。实现保持 DMDE
+    # 单适应度框架（不碰选择机制）：f = -big_m·F1 + 次目标，big_m 使任一
+    # ≥ 最小正收益的收益优势支配任意次目标差异；更细粒度的收益差视为同收益、
+    # 由成本裁决（与 Ming 2017 单标量框架的唯一区别是 F1 项的支配性权重）。
+    #   big_m=None → 按问题数据自动推导（1 + 次目标上界 / 最小正收益）；
+    #   big_m>0 → 显式给定（测试/消融用）。
+    # lexicographic=False → 历史加权和 f = -F1 + λ·F2（消融对比口径）。
+    lexicographic: bool = True
+    big_m: float | None = None
     default_service_time: float = 0.0
     # 本周期的规划时刻：时间窗游标从它起算，而不是从 0
     # （滚动时域下任务 latest 是绝对时刻，游标起点必须跟着周期走）
@@ -435,7 +449,11 @@ class SelectiveMUASProblem:
         return solution
 
     def scalar_fitness(self, solution: AllocationSolution) -> float:
-        """DMDE 最小化的标量适应度：f = -F1 + λ·F2 + w_time·F3。
+        """DMDE 最小化的标量适应度。
+
+        字典序（默认）：``f = -big_m·F1 + λ·F2' + w_time·F3``，
+        ``big_m`` 见 :meth:`f1_weight`（收益优先、成本次之）；
+        legacy（``lexicographic=False``）：``f = -F1 + λ·F2 + w_time·F3``。
 
         - F1 任务奖励（最大化 → 取负）
         - F2 路径代价 + 约束惩罚（最小化）
@@ -445,21 +463,91 @@ class SelectiveMUASProblem:
             self.evaluate(solution)
         bt = solution.meta.get("bottleneck_time", self.bottleneck_time(solution))
         wv = self.config.w_violation
+        m = self.f1_weight()
+        f1 = float(solution.f1_reward)
         if wv is None:
             # 历史口径：惩罚随 F2 一起乘 λ（量纲未解耦，秒级惩罚被压缩）
             return float(
-                -solution.f1_reward
+                -m * f1
                 + self.config.lambda_cost * solution.f2_cost
                 + self.config.w_time * bt
             )
         # 量纲解耦：路径代价仍乘 λ（米 → 奖励当量），惩罚按 w_violation
         # 直接以「奖励当量 / 惩罚单位」计入，不再被 λ 压没。
         return float(
-            -solution.f1_reward
+            -m * f1
             + self.config.lambda_cost * self.path_cost(solution)
             + float(wv) * self.violation_penalty(solution)
             + self.config.w_time * bt
         )
+
+    # ---- 字典序权重（big-M）------------------------------------------
+
+    def f1_weight(self) -> float:
+        """F1 的支配性权重 big_m（lexicographic=False 时为 1.0 = 历史加权和）。"""
+        if not self.config.lexicographic:
+            return 1.0
+        if self.config.big_m is not None:
+            return max(1.0, float(self.config.big_m))
+        cached = getattr(self, "_f1_weight_cache", None)
+        if cached is None:
+            cached = self._auto_big_m()
+            self._f1_weight_cache = cached
+        return float(cached)
+
+    def _auto_big_m(self) -> float:
+        """按问题数据推导字典序权重：``1 + 次目标上界 / 最小正收益``。
+
+        保证：任一 ≥ 最小正收益 r_min 的收益优势（即多完成 ≥1 个正收益任务）
+        支配任意次目标差异；更细粒度的收益差视为同收益、由成本裁决。
+        """
+        pos = [float(t.reward) for t in self.tasks if float(t.reward) > 0]
+        r_min = min(pos) if pos else 1.0
+        return 1.0 + self._secondary_upper_bound() / r_min
+
+    def _secondary_upper_bound(self) -> float:
+        """任一解次目标值的保守上界（λ·路径 + 惩罚项 + w_time·最坏机时间）。"""
+        cfg = self.config
+        n_t, n_u, n_b = len(self.tasks), len(self.uavs), len(self.nests)
+        # 航次腿数上界：每任务一条链边 + 每航次进/出边
+        legs = n_t + 2 * n_u + 2
+        c_bound = self._max_edge_cost() * legs
+        speed_min = min(
+            (max(float(getattr(u, "speed", 0.0) or 0.0), 1e-6) for u in self.uavs),
+            default=1.0,
+        )
+        # 原始惩罚单位含「秒」，按 1e6/条 × 条目数保守折算
+        v_bound = 1.0e6 * (n_t + n_u + n_b + 8)
+        lam = float(cfg.lambda_cost)
+        total = lam * c_bound
+        if cfg.w_violation is None:
+            total += lam * float(cfg.w_penalty) * v_bound
+        else:
+            total += float(cfg.w_violation) * v_bound
+        total += float(cfg.w_time) * (c_bound / speed_min)
+        return float(total)
+
+    def _max_edge_cost(self) -> float:
+        """有限边代价上界：pairwise 与实体包围盒对角线（欧氏兜底边）取大。"""
+        vals = [
+            abs(float(c))
+            for c in getattr(self.costs, "pairwise", {}).values()
+            if abs(float(c)) < 1e18
+        ]
+        c_max = max(vals, default=0.0)
+        pts = [p.position for p in self.tasks] + [p.position for p in self.uavs]
+        pts += [p.position for p in self.nests]
+        if pts:
+            xs = [p[0] for p in pts]
+            ys = [p[1] for p in pts]
+            zs = [p[2] for p in pts]
+            diag = (
+                (max(xs) - min(xs)) ** 2
+                + (max(ys) - min(ys)) ** 2
+                + (max(zs) - min(zs)) ** 2
+            ) ** 0.5
+            c_max = max(c_max, diag)
+        return max(c_max, 1.0)
 
     def check_feasible(
         self, solution: AllocationSolution

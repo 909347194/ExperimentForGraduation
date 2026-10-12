@@ -201,7 +201,8 @@ def _problem(w_violation):
         nests=nests,
         costs=build_cost_provider(tasks, nests, uavs),
         config=MUASProblemConfig(
-            lambda_cost=1e-4, w_penalty=1.0, w_violation=w_violation
+            lambda_cost=1e-4, w_penalty=1.0, w_violation=w_violation,
+            big_m=1.0,  # 固定字典序权重=1，锁公式的数值口径
         ),
     )
 
