@@ -331,16 +331,34 @@ def _inverse_phi_srp(
             if not available:
                 tgt = rng.integers(n_targets)
             else:
-                diffs = np.abs(cm_work[row, available] - cv)
-                if temperature < 0.1 or len(available) == 1:
-                    tgt = available[int(np.argmin(diffs))]
+                # 不可达（inf/nan）候选必须先排除出采样，与
+                # ``nearest_match_adaptive`` 的 inf 防护同口径：
+                # |inf - cv| = inf → logits = -inf；当该 UAV 对**所有**未分配
+                # 任务都不可达时 logits.max() = -inf，(-inf) - (-inf) = nan
+                # → probs 全 NaN → rng.choice 抛 "Probabilities contain NaN"。
+                # 全不可达时健壮兜底（随机挑一个），由解码端 _repair_range
+                # 改派给可达机——可达性裁决在解码端，不在采样端。
+                reach = [t for t in available if np.isfinite(cm_work[row, t])]
+                if not reach:
+                    tgt = int(available[rng.integers(len(available))])
                 else:
-                    tau = max(0.01, temperature * 2.0)
-                    logits = -diffs / (diffs.std() + 1e-8) / tau
-                    logits -= logits.max()
-                    probs = np.exp(logits)
-                    probs /= probs.sum()
-                    tgt = available[rng.choice(len(available), p=probs)]
+                    diffs = np.abs(
+                        np.asarray([cm_work[row, t] for t in reach], dtype=float) - cv
+                    )
+                    if temperature < 0.1 or len(reach) == 1:
+                        tgt = reach[int(np.argmin(diffs))]
+                    else:
+                        tau = max(0.01, temperature * 2.0)
+                        spread = float(np.std(diffs))
+                        if not np.isfinite(spread) or spread <= 1e-8:
+                            # 零方差/异常方差：退化为纯开发，避免污染 softmax
+                            tgt = reach[int(np.argmin(diffs))]
+                        else:
+                            logits = -diffs / spread / tau
+                            logits -= logits.max()
+                            probs = np.exp(logits)
+                            probs /= probs.sum()
+                            tgt = reach[int(rng.choice(len(reach), p=probs))]
 
         cost = float(cm_work[i, tgt])
         genes.append(Gene(uav_id=i, target_id=tgt, cost=cost))

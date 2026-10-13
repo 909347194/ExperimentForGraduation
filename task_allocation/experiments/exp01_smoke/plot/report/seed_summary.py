@@ -86,5 +86,5 @@ def plot_seed_summary(
     )
     fig.tight_layout(rect=(0, 0, 1, 0.95))
 
-    stem = Path(out_dir) / "seed_summary"
+    stem = Path(out_dir) / "R02_seed_summary"
     return save_figure(fig, stem, formats, dpi=dpi)

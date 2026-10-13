@@ -10,6 +10,21 @@
     Step5  航迹长度 L 作为航程；代价 D = L * weight
 
 不在此做完整三维可飞性/禁飞区搜索，仅提供组合优化用的近似代价。
+
+【为什么不用「DEM 网格路径搜索」代替垂直切面近似】(2026-10-13 实测)
+    曾实现过 16 邻域 A* + 视线拉直的 DEM 曲面最短路径，在 exp01 真实
+    DEM（575×508 网格、20 节点、190 对）上实测：
+        垂直切面   0.37 ms/对，190 对 0.07 s，平均 55 279 m
+        网格 A*  517.4 ms/对，190 对 98.3 s，平均 56 633 m（差 +2.4%）
+    慢 1400 倍、精度只 +2.4%（A* 平均展开 1.25 万节点/对）。原因是 UAV 在
+    离地 50 m 巡航面飞行、航程 20~50 km，地形起伏对航迹总长几乎无影响，
+    「绕开山峰」几乎不发生。故保留垂直切面近似作为唯一距离口径。
+
+【统一口径】(2026-10-13)
+    本估算器的 ``distance`` 是仓内**唯一**的地形距离定义，评价端航迹时间、
+    时间窗 ETA、预筛 travel、边际收益插入代价都必须由它派生，不得再用
+    ``math.dist`` / 欧氏直线（旧代码里 ETA 用直线 ⇒ 系统性低估飞行时间）。
+    由 :func:`make_distance_fn` 生成带记忆化的注入函数。
 """
 
 from __future__ import annotations
@@ -133,6 +148,14 @@ class VerticalSectionCostEstimator:
         dz = np.diff(zs)
         return float(np.sum(np.sqrt(dx**2 + dz**2)))
 
+    def distance(
+        self,
+        start: tuple[float, float, float],
+        end: tuple[float, float, float],
+    ) -> float:
+        """统一口径的三维航程距离（米），= :meth:`estimate` 的 ``distance``。"""
+        return float(self.estimate(start, end).distance)
+
     @staticmethod
     def _fill_nan(arr: np.ndarray) -> np.ndarray:
         result = np.asarray(arr, dtype=np.float64).copy()
@@ -145,3 +168,64 @@ class VerticalSectionCostEstimator:
         nan_idx = np.where(nans)[0]
         result[nan_idx] = np.interp(nan_idx, valid_idx, result[valid_idx])
         return result
+
+
+def make_distance_fn(
+    estimator: VerticalSectionCostEstimator | None,
+    cache: dict[tuple[tuple[float, float, float], tuple[float, float, float]], float]
+    | None = None,
+):
+    """由代价估算器生成**带记忆化**的三维距离函数（统一口径的注入载体）。
+
+    为什么必须缓存：DMDE 单次求解要 evaluate 上万次，每次评价要逐航次逐段
+    算飞行时间（时间窗 / F3 瓶颈时间）。垂直切面估算 0.37 ms/段，不缓存会把
+    单周期求解从秒级拖到分钟级；而一个滚动周期内节点位置固定，段长不会变，
+    故按坐标量化（0.1 m）记忆化后命中即退化为字典查找。
+
+    Args:
+        estimator: DEM 代价估算器；``None`` 时返回纯欧氏距离函数（无 DEM 场景）。
+        cache: 外部缓存字典。跨周期/跨 seed 传同一个可复用已算过的段长
+            （任务与机巢位置固定时命中率极高）。
+
+    Returns:
+        ``distance_fn(a, b) -> float``，并带 ``.cache`` 属性便于检视/清空。
+    """
+    memo: dict[tuple[tuple[float, float, float], tuple[float, float, float]], float] = (
+        {} if cache is None else cache
+    )
+
+    def _key(p) -> tuple[float, float, float]:
+        arr = np.asarray(p, dtype=np.float64)
+        return (
+            round(float(arr[0]), 1),
+            round(float(arr[1]), 1),
+            round(float(arr[2]) if arr.size > 2 else 0.0, 1),
+        )
+
+    if estimator is None:
+
+        def distance_fn(a, b) -> float:  # 无 DEM：三维直线（与旧回退口径一致）
+            ka, kb = _key(a), _key(b)
+            key = (ka, kb) if ka <= kb else (kb, ka)
+            hit = memo.get(key)
+            if hit is not None:
+                return hit
+            pa, pb = np.asarray(ka, dtype=np.float64), np.asarray(kb, dtype=np.float64)
+            val = float(np.linalg.norm(pb - pa))
+            memo[key] = val
+            return val
+
+    else:
+
+        def distance_fn(a, b) -> float:
+            ka, kb = _key(a), _key(b)
+            key = (ka, kb) if ka <= kb else (kb, ka)
+            hit = memo.get(key)
+            if hit is not None:
+                return hit
+            val = float(estimator.estimate(ka, kb).distance)
+            memo[key] = val
+            return val
+
+    distance_fn.cache = memo  # type: ignore[attr-defined]
+    return distance_fn

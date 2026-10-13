@@ -105,6 +105,11 @@ class CapabilityScaleConfig:
     # 仅 mode="primary" 生效：相对机数名额的最大扩张倍数，防止 c̃ 过小时规模失控。
     # None = 不设扩张上限（规模完全由 cap(t) 决定）。
     max_expand_factor: float | None = None
+    # Fix③：即便本模块 ``enabled=False``，也按吞吐上界
+    #   cap(t)=⌊Σ remaining_range / 单任务中位代价⌋
+    # 收敛候选规模，避免 "2.5×机数" 永远不瓶颈、aging 排序失效。
+    # 默认 False —— 仅显式开启时改变（关闭能力模块的）消融路径行为。
+    fallback_when_disabled: bool = False
 
 
 def coarse_task_costs(

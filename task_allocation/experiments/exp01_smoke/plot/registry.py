@@ -3,13 +3,14 @@
 
 新增一张图 = 在 ``FIGURES`` 里加一行。改标题 / 调顺序 / 换分组，都只动这里。
 
-命名与查找规则（四者同名）::
+命名与查找规则（四者同名，文件名另带「分类+编号」前缀）::
 
-    模块名 ≡ 图 id ≡ 输出文件名 ≡ 绘制函数名去掉 ``plot_``
+    模块名 ≡ 图 id ≡ 绘制函数名去掉 ``plot_``；输出文件名 = 分类编号前缀 + 图 id
+    分类：S=setup(①) / I=initial(②) / P=process(③) / R=report(④)，组内序号即叙事序
+    例：plot/process/task_selection.py → plot_task_selection → P01_task_selection.png
 
-    plot/process/task_selection.py  → def plot_task_selection  → task_selection.png
-
-即**看到图文件名就能定位代码，看到代码就知道图叫什么**。
+即**看到图文件名就能定位代码，看到代码就知道图叫什么**，且文件名按
+``S/I/P/R + 两位序号`` 排序，figures 目录天然有序不乱。
 
 分层（按「论文叙事线」划分——读者从设定读到结论的顺序）::
 
@@ -46,6 +47,11 @@ from typing import Callable, Iterable, Sequence
 
 from .initial.geo_overview import plot_geo_overview
 from .process.allocation import plot_allocation
+from .process.allocation_gantt import plot_allocation_gantt
+from .process.allocation_map import plot_allocation_map
+from .process.allocation_anim import plot_allocation_anim
+from .process.allocation_anim_map import plot_allocation_anim_map
+from .process.allocation_status import plot_allocation_status
 from .process.constraint_state import plot_constraint_state
 from .process.dmde_search import plot_dmde_search
 from .process.fleet_state import plot_fleet_state
@@ -89,6 +95,29 @@ TOPICS: dict[str, str] = {
     "outcome": "总体结果与完成率",
 }
 
+#: 输出文件名「分类+编号」前缀映射（单一事实来源；与 FIGURES 顺序一致）。
+#: 分类：S=setup / I=initial / P=process / R=report；组内序号 = 叙事顺序。
+#: 各 plot_* 模块里的保存文件名已同步为 ``{前缀}{id}``（见各文件 ``gif_name``
+#: / ``stem``），本字典只用于文档与排查，不参与出图。
+FIGURE_STEMS_PREFIX: dict[str, str] = {
+    "setup_params":       "S01",
+    "geo_overview":       "I01",
+    "task_selection":     "P01",
+    "dmde_search":        "P02",
+    "allocation":         "P03",
+    "allocation_gantt":   "P04",
+    "allocation_map":     "P05",
+    "allocation_anim":    "P06",
+    "allocation_status":  "P07",
+    "allocation_anim_map":"P08",
+    "task_dynamics":      "P09",
+    "fleet_state":        "P10",
+    "constraint_state":   "P11",
+    "outcome_summary":    "R01",
+    "seed_summary":       "R02",
+    "ab_compare":         "R03",
+}
+
 
 @dataclass(frozen=True)
 class Figure:
@@ -102,6 +131,9 @@ class Figure:
         needs:   绘制所需产物，``("metrics",)`` 或 ``("metrics", "solution")``
         source:  数据来源说明（写到文档里，便于写论文图注）
         func:    绘制函数，统一签名 ``(metrics, solution, out_dir, formats, *, dpi)``
+        animated: 是否为动画图。只有动画图接受 ``gif``/``mp4`` 格式；
+                  ``make_plots`` 会把动图格式从静态图的 ``formats`` 里剔除，
+                  避免「补 gif 刷新动画」时给每张静态图都落一个单帧 GIF。
     """
 
     id: str
@@ -111,6 +143,7 @@ class Figure:
     needs: tuple[str, ...]
     source: str
     func: Callable[..., list]
+    animated: bool = False
 
 
 FIGURES: tuple[Figure, ...] = (
@@ -157,10 +190,58 @@ FIGURES: tuple[Figure, ...] = (
         id="allocation",
         group="process",
         topic="allocation",
-        title="单周期分配结构：UAV—任务甘特 / 空间分配图 / 逐周期 DEM 演化",
+        title="单周期分配结构：航迹条（线长 ∝ 航程）/ 逐周期空间演化（总览）",
         needs=("metrics", "solution"),
         source="solution.json 的 cycles[].tours + tasks[] / nests[] / dem",
         func=plot_allocation,
+    ),
+    Figure(
+        id="allocation_gantt",
+        group="process",
+        topic="allocation",
+        title="分配航迹条（从 allocation 拆出）：线长 ∝ 真实航程 · 方块=任务 · 两端起降巢",
+        needs=("metrics", "solution"),
+        source="solution.json 的 cycles[].tours（est_cost）+ tasks[] / nests[]（线长按 est_cost 标定，段间距按三维几何）",
+        func=plot_allocation_gantt,
+    ),
+    Figure(
+        id="allocation_map",
+        group="process",
+        topic="allocation",
+        title="逐周期空间演化（从 allocation 拆出）：DEM + 航次回放 1×N",
+        needs=("metrics", "solution"),
+        source="solution.json 的 cycles[].tours + tasks[] / nests[] / dem；周期里程 = 该周期 tours 的 est_cost 之和（纯 DEM 航程，不含惩罚）",
+        func=plot_allocation_map,
+    ),
+    Figure(
+        id="allocation_anim",
+        group="process",
+        topic="allocation",
+        title="分配过程动画演变：滚动闭环航迹生长 / 任务点亮 / 当前周期 DMDE 收敛（GIF）",
+        needs=("metrics", "solution"),
+        source="solution.json 的 cycles[].tours + cost_history + tasks[] / nests[] / dem",
+        func=plot_allocation_anim,
+        animated=True,
+    ),
+    Figure(
+        id="allocation_status",
+        group="process",
+        topic="fleet",
+        title="机巢驻巢无人机数随周期演化：各机巢当前驻留 UAV 数 / 容量 / 完成率（GIF）",
+        needs=("metrics", "solution"),
+        source="solution.json 的 cycles[].tours（uav_id / start_nest_id / end_nest_id）+ nests（capacity）；驻巢数按连续巢归属链逐周期累计",
+        func=plot_allocation_status,
+        animated=True,
+    ),
+    Figure(
+        id="allocation_anim_map",
+        group="process",
+        topic="allocation",
+        title="分配过程动画（仅地图 · 高清大图）：DEM + 航迹回放 / 任务点亮（GIF）",
+        needs=("metrics", "solution"),
+        source="solution.json 的 cycles[].tours + tasks[] / nests[] / dem；从 allocation_anim 左栏地图单独抽取，去掉右栏 DMDE 收敛与滚动进度，满幅满高铺底 DEM",
+        func=plot_allocation_anim_map,
+        animated=True,
     ),
     Figure(
         id="task_dynamics",

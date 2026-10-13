@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 from task_allocation.common.types import Task, UAV, UAVTour
 
@@ -64,6 +64,7 @@ def check_time_window_constraint(
     current_time: float = 0.0,
     service_time: float = 0.0,
     speed_default: float = 10.0,
+    distance_fn: Callable[[Sequence[float], Sequence[float]], float] | None = None,
 ) -> tuple[float, list[str]]:
     """时间窗约束违背量（同时返回违规标签）。
 
@@ -71,8 +72,10 @@ def check_time_window_constraint(
     （若早于 ``earliest`` 则等待至 ``earliest``），离开时累加上 ``service_time``。
     到达时刻晚于 ``latest`` 的，惩罚 = 到达 − latest，并记 ``tw_task_{tid}``。
 
-    与 ``problem.check_feasible`` 原有逻辑完全一致（欧氏段长、等待语义、+1e-6 容差），
-    仅把实现迁到约束包内，便于单测与归因。
+    段长口径（2026-10-13 统一）：默认仍为欧氏直线（保持既有单测基线），但
+    传入 ``distance_fn`` 时改走 **DEM 三维航程**——与代价矩阵、航迹时间 F3
+    同源。旧实现恒用直线 ⇒ ETA 系统性低估飞行时间（P1-1）：地形代价算出来的
+    航程比直线长，时间窗却在用直线判「来不来得及」，于是放进来不及的任务。
 
     Args:
         tours: 各 UAV 航次。
@@ -81,6 +84,7 @@ def check_time_window_constraint(
         current_time: 本周期规划起始时刻（滚动时域下必须跟随周期）。
         service_time: 单任务作业时长（秒）。
         speed_default: UAV 缺 ``speed`` 时的兜底速度。
+        distance_fn: 统一距离口径 ``f(xyz_a, xyz_b) -> 米``；None → 欧氏直线。
 
     Returns:
         ``(window_penalty, violation_tags)``；无违规时两项均为 0 / 空。
@@ -100,7 +104,10 @@ def check_time_window_constraint(
             task = tasks.get(tid)
             if task is None:
                 continue
-            dist = math.dist(prev, task.position)
+            if distance_fn is not None:
+                dist = float(distance_fn(prev, task.position))
+            else:
+                dist = math.dist(prev, task.position)
             t_cursor += dist / speed
             est, lst = _task_window(task)
             if est is not None and t_cursor < est:

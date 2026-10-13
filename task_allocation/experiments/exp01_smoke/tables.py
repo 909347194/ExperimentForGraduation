@@ -10,6 +10,10 @@
     python3 tables.py                       # 全部表 → results/tables/exp01_tables.tex
     python3 tables.py --out my_tables.tex   # 自定义输出路径
 
+本文件由 ``run.py`` 在每次运行末尾**自动调用**（``run.make_tables`` 控制，
+与 ``make_plots`` 对齐），保证 metrics.json / solution.json / 图 / 结果表
+永远同源同步；也可单独手动执行（读盘上现有 json 重制表）。
+
 表清单（本文件底部 TABLE_ORDER 维护，新增表 = 加一个 build_tabX）::
 
     tab1_config     运行配置总览
@@ -37,9 +41,10 @@ def _f(x: float, nd: int = 2) -> str:
     return f"{x:.{nd}f}" if isinstance(x, (int, float)) else str(x)
 
 
-def _load() -> tuple[dict, dict]:
-    m = json.load(open(RESULTS / "metrics.json", encoding="utf-8"))
-    s = json.load(open(RESULTS / "solution.json", encoding="utf-8"))
+def _load(results_dir: Path | None = None) -> tuple[dict, dict]:
+    base = Path(results_dir) if results_dir is not None else RESULTS
+    m = json.load(open(base / "metrics.json", encoding="utf-8"))
+    s = json.load(open(base / "solution.json", encoding="utf-8"))
     return m, s
 
 
@@ -51,20 +56,47 @@ def _rewards(s: dict) -> dict[int, float]:
 # 各表
 # ---------------------------------------------------------------------------
 
+def _tex_escape(s: str) -> str:
+    """转义 LaTeX 特殊字符（下划线/井号/百分号/与号），防止文件名破坏编译。"""
+    for ch, esc in (("\\", r"\textbackslash{}"), ("&", r"\&"), ("%", r"\%"),
+                    ("$", r"\$"), ("#", r"\#"), ("_", r"\_"),
+                    ("{", r"\{"), ("}", r"\}"), ("~", r"\textasciitilde{}"),
+                    ("^", r"\textasciicircum{}")):
+        s = s.replace(ch, esc)
+    return s
+
+
+def _dem_region(dem_file: str) -> str:
+    """DEM 区域名从文件名提取（ASTGTMV003_N29E091_dem.tif → N29E091）。
+
+    区域码格式：``[NS]`` + 2 位纬度 + ``[EW]`` + 3 位经度（共 7 字符）。
+    历史上按 6 字符匹配导致永不命中，整个文件名（含下划线）漏进 LaTeX
+    编译失败（"Missing $ inserted"），PDF 停留在旧版。
+    """
+    for token in dem_file.replace(".", "_").split("_"):
+        if len(token) == 7 and token[0] in "NS" and token[3] in "EW" \
+                and token[1:3].isdigit() and token[4:7].isdigit():
+            return token
+    return dem_file
+
+
 def build_tab1_config(m: dict, s: dict) -> str:
     prob = m.get("problem", {})
+    region = _dem_region(str(prob.get("dem_file", "未接入")))
     rows = [
         ("随机种子", str(m.get("seeds", ["?"]))),
         ("滚动周期数", str(m.get("n_cycles"))),
         ("机巢数 / 单巢容量", f"{prob.get('n_nests')} / {prob.get('nest_capacity')}"),
         ("机队规模 $K_{\\mathrm{avail}}$", str(prob.get("n_uavs"))),
-        ("无人机速度 / 满电航程", "15.0 m/s / 80.0 km"),
+        ("无人机速度 / 满电航程",
+         f"{prob.get('uav_speed', '?')} m/s / {prob.get('uav_max_range_km', '?')} km"),
         ("任务总数（首批/后续到达）",
          f"{prob.get('n_tasks_initial')} + {prob.get('n_arrived', 0) - prob.get('n_tasks_initial', 0)}"),
-        ("DMDE 种群 / 迭代代数", "50 / 100"),
-        ("目标标量化", "字典序（big-M，收益优先）"),
-        ("交付时间窗约束", "开启"),
-        ("DEM 区域 / 重采样步长", "N29E091（约 97$\\times$111 km）/ 200 m"),
+        ("DMDE 种群 / 迭代代数",
+         f"{prob.get('dmde_population', '?')} / {prob.get('dmde_max_iter', '?')}"),
+        ("目标标量化", str(prob.get("scalarization", "?"))),
+        ("交付时间窗约束", "开启" if prob.get("time_window") else "关闭"),
+        ("DEM 区域 / 重采样步长", f"{_tex_escape(region)} / {prob.get('dem_step_m', '?')} m"),
     ]
     body = "\n".join(f"{k} & {v} \\\\" for k, v in rows)
     return (
@@ -171,6 +203,10 @@ def build_tab5_outcome(m: dict, s: dict) -> str:
     comp_r = sum(rw.get(t, 0.0) for t in uniq_comp)
     plan_r = sum(c["muas"].get("f1_reward", 0.0) for c in m["cycles"])
     repeats = len(all_exec) - len(set(all_exec))
+    # 周期可行率括注按数据算（曾硬编码「0/3」，与 1/3 的实际值矛盾 → 表说谎）
+    n_cyc = len(m["cycles"])
+    n_feas = sum(1 for c in m["cycles"] if c["muas"].get("feasible"))
+    n_tw = sum(1 for c in m["cycles"] if c.get("infeasible_tags"))
     # 终点机巢使用（solution tours）
     used_nests = set()
     for c in s.get("cycles", []):
@@ -181,7 +217,9 @@ def build_tab5_outcome(m: dict, s: dict) -> str:
         ("到达任务总数 $|\\mathcal{T}|$", str(sm.get("n_arrived"))),
         ("完成任务数", f"{sm.get('n_completed')}（唯一 {len(uniq_comp)}）"),
         ("完成率", f"{sm.get('completion_rate', 0) * 100:.1f}\\%"),
-        ("周期解可行率", f"{sm.get('cycle_feasible_rate', 0) * 100:.1f}\\%（0/3，全部含时间窗违约）"),
+        ("周期解可行率",
+         f"{sm.get('cycle_feasible_rate', 0) * 100:.1f}\\%"
+         f"（{n_feas}/{n_cyc}；其中 {n_tw} 个周期含时间窗违约）"),
         ("规划口径收益 $\\sum F_1^{\\mathrm{plan}}$", _f(plan_r)),
         ("完成口径收益 $\\sum F_1^{\\mathrm{comp}}$", _f(comp_r)),
         ("核算膨胀率", f"{(plan_r / comp_r - 1) * 100:.1f}\\%（闸门拦截 + 重复出动重复计数）"),
@@ -215,11 +253,19 @@ TABLE_ORDER = [
 ]
 
 
-def render(out: Path) -> Path:
-    m, s = _load()
+def render(out: Path, results_dir: Path | None = None) -> Path:
+    """制表并写入 ``out``。
+
+    Args:
+        out: 输出 .tex 路径。
+        results_dir: 读取 metrics.json / solution.json 的目录；缺省为本实验
+            的 ``results/``。``run.py`` 传入实际输出目录，保证表与刚写盘的
+            json 同源。
+    """
+    m, s = _load(results_dir)
     parts = [
         "% exp01_smoke 实验结果表（由 tables.py 从 metrics.json / solution.json 生成）",
-        "% 编译：pdflatex tables.tex（依赖 booktabs）",
+        "% 编译：latexmk -xelatex exp01_tables.tex（ctex 需 xelatex；run.py 自动编译）",
         "\\documentclass[a4paper,11pt]{article}",
         "\\usepackage[margin=2.2cm]{geometry}",
         "\\usepackage{booktabs}",

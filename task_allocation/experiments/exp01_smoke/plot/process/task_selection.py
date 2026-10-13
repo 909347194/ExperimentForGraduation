@@ -203,4 +203,4 @@ def plot_task_selection(
     footnote(fig, "口径：n_tasks_in = 本周期入池任务（滞留+新到+释放），保留率以其为分母；"
                   "(c)(f) 预选三级（k → marginal → cap）全程未咬合，实际收敛由优先级"
                   "与时间窗驱动；(e) 图上未标注即双口径一致（本实验亦无强制入选）。")
-    return save_figure(fig, Path(out_dir) / "task_selection", formats, dpi=dpi)
+    return save_figure(fig, Path(out_dir) / "P01_task_selection", formats, dpi=dpi)

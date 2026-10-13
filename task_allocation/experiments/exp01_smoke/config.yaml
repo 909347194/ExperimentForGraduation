@@ -63,8 +63,23 @@ tasks:
     #                                              且不至于让多数任务先天不可达
     #   5.0~10.0 周期(3000~6000)  → 66.7%±7.1%（接近锚定机巢基线的 68.2%，此时时间窗基本失效）
     # 锚定机巢基线的 68.2% 是「人为缩小问题」的上限，不作为目标值。
-    deadline_cycles_min: 3.5
-    deadline_cycles_max: 7.0
+    #
+    # 【统一 DEM 三维航程口径后的重新标定（2026-10-13）】
+    # 距离口径统一后（评价端/ETA/时间窗全部走 DEM 垂直切面三维航程，见
+    # methods/muas/cost/vertical_section.py），旧窗口 3.5~7.0 完成率跌至 75%：
+    # 20 个任务直飞全部来得及（物理不可达=0），但 ETA 变长使多任务航次后段
+    # 任务迟到回池，下周期余量不足直飞时间即被预筛淘汰（链式死亡）。
+    # 按实测航时重算（seed=42，最近机巢直飞 DEM 航程 @15 m/s）：
+    #   中位 1377 s ≈ 2.29 周期；p90 ≈ 3.2 周期；最大 2274 s ≈ 3.79 周期（T10）
+    # 下界 = (最大直飞航时 + 服务 300 s) × 1.05 ≈ 2703 s ≈ 4.5 周期，
+    # 上界保持原 2:1 比例 → 9.0 周期。实测扫描（统一口径，seed=42）：
+    #   3.5~7.0 → 75%（15/20，未完成 0/7/10/15/19）
+    #   4.2~8.4 → 95%（19/20）
+    #   4.5~9.0 → 95%（19/20）  ← 当前默认：4.2~9.0 区间完成率平台期，
+    #                                  任取其中值均可；保留选择性压力（仍有淘汰）
+    #   5.0~10.0 → 100% 但零淘汰（时间窗失效），代价 +16%、求解 +57%，不取
+    deadline_cycles_min: 4.5
+    deadline_cycles_max: 9.0
     anchor_to_nests: true # 遗留别名，仅 domain=nest_anchored 时生效
 
 # 算法开关（对齐 Chapter3_README §8 技术路线）
@@ -93,6 +108,12 @@ selection:
         max_selected: null # null → 由 max_ratio × K_avail 决定
         max_ratio: 2.0
         min_marginal_ratio: 0.0
+        # Fix① 防饥饿：等待时长对终刀接受判据的乘性软加权（单位无关、有界）。
+        # eff = ratio·(1 + age_gamma·age)，age∈[0,1] 由 waited/wait_scale 得。
+        # 与下方 anti_starvation 配合：本项让"刚老了点"的任务在终刀更有机会，
+        # 而真正老透/临期的任务由 anti_starvation 强制纳入，保证不停饿。
+        age_gamma: 1.0
+        wait_scale: 3600.0 # 与 priority.wait_scale 对齐（run() 会同步）
     capability:
         enabled: true # false → 退回纯机数名额（消融对照口径）
         # 机数名额与能力上界 cap(t) 的合成方式：
@@ -104,6 +125,14 @@ selection:
         budget_scale: 1.0 # 预算额外折扣（与 budget_factor 相乘）；<1 给未来紧急任务留余量
         quantile: 0.5 # 粗代价分位数：调低→cap 更宽松，调高→更保守
         min_cap: 1 # cap 下限（保证总能评出一个候选）
+        # Fix③：即便 enabled=false 也按吞吐上界收敛候选规模（默认关，保持消融基线）
+        fallback_when_disabled: false
+    # Fix② 硬性不停饿兜底：等待超阈值或逼近 latest 的任务强制纳入候选集
+    # （绕过 Top-αK 预筛），并在终刀获强优先，保证不无限期推迟。
+    anti_starvation:
+        enabled: true
+        force_after_seconds: 1200.0 # 等待满 2 周期（2×cycle_length）即强制纳入
+        deadline_slack: 300.0 # 距 latest 不足 300s 即视为临期、强制纳入
 
 # ── 第二阶段：选择性多机巢 MUAS（论文 §4-§5）─────────────────────
 muas:
@@ -126,7 +155,30 @@ muas:
     default_service_time: 60.0 # 单任务作业时长（s）
     # 参与规划的 UAV 上限；null → 自动取 min(K_avail, M-1) 以走 srp 巡游模型
     max_participating_uavs: null
-    participating_policy: cheapest # cheapest | first | marginal
+    participating_policy: demand # cheapest | first | marginal | demand
+    # ── Fix④ 需求感知参与（policy=demand）──
+    # 贪心最大覆盖选参与机：每架覆盖「代价 ≤ 半径」的选中任务，依次挑覆盖
+    # 最多未覆盖任务者，直到全部选中任务被覆盖或达 K 上限。根治 cheapest
+    # 把机堆在稠密区、饿死北/西离群稀疏任务（后期 K 收缩致其不可达）。
+    #   demand_coverage_radius: 显式覆盖半径（米）；null → 用航程因子推导
+    #   demand_range_factor:    半径 = factor·remaining_range（默认 0.5 =
+    #                          单任务往返航程 ≤ 剩余航程的保守可达性）
+    demand_coverage_radius: null
+    demand_range_factor: 0.5
+    # ── Fix⑤ 服务能力感知 provisioning（policy=demand 生效）──
+    # 最小覆盖后按「航程预算」补机：把过载（最近机往返 > 剩余航程×裕度）任务
+    # 剥给最近空闲机，拉入参与，直接救「K 塌缩→远任务未服务」的残余瓶颈。
+    demand_provision_serving: true
+    demand_serve_margin: 0.95
+    # ── Fix⑥「可达即执行」救援池口径 ──
+    # 方法论：任务只要能力可达、不违反约束就应最终被执行，成本最小化是此前提下
+    # 的次级目标。「可达」是**存在量化**（∃ 机队中某方案可服务），不是「给定
+    # 方案内塞得进」。此前航程修复的改派救援只在参与集内找闲置机，而参与集是按
+    # 最小距离覆盖挑的子集（K 常被压到 2~5 架且多为满载），于是物理可达的任务
+    # 被误判 y_j=0（假暂缓）。
+    #   fleet（默认）：救援池扩到全可用机队，可达即执行；
+    #   participating：历史口径，仅参与集内改派（消融对照）。
+    reflow_rescue_scope: fleet # fleet | participating
     # ── K 决策扩展旋钮（与 M 解耦，实验/消融用；默认不启用）──
     # 三者（max_participating_uavs / sortie_budget / participation_cost）共同决定
     # 本周期参与机数 K；均不配置时退回旧行为 K = min(K_avail, M-1)。
@@ -253,6 +305,7 @@ rolling:
 run:
     save_results: true
     make_plots: true
+    make_tables: true # 结果 LaTeX 表（tables.py 生成 tex，并尽力编译 PDF）
     verbose: true
 
 # ── 可视化（代码在 plot/，产物落到 experiment.figures_dir）─────

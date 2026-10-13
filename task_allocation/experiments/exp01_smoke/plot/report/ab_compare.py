@@ -230,4 +230,4 @@ def plot_ab_compare(
         ha="center", fontsize=8.5, color="0.35",
     )
 
-    return save_figure(fig, Path(out_dir) / "ab_compare", formats, dpi=dpi)
+    return save_figure(fig, Path(out_dir) / "R03_ab_compare", formats, dpi=dpi)

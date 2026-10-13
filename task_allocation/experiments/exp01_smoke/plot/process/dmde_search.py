@@ -236,4 +236,4 @@ def plot_dmde_search(
                   "cost_history 为 best-so-far 序列（单调不增阶梯）；"
                   "归一化收敛以各周期自身初代为基准；"
                   "求解耗时 = muas.solve_seconds × 1000。")
-    return save_figure(fig, Path(out_dir) / "dmde_search", formats, dpi=dpi)
+    return save_figure(fig, Path(out_dir) / "P02_dmde_search", formats, dpi=dpi)

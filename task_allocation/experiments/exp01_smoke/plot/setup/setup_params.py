@@ -240,4 +240,4 @@ def plot_setup_params(
                  fontsize=FS["suptitle"])
     footnote(fig, "口径：关 = 既不判可行也不计惩罚（消融口径）；(d) 窗口与航时同量级"
                   "→ 时间窗构成真实的选择性压力。")
-    return save_figure(fig, Path(out_dir) / "setup_params", formats, dpi=dpi)
+    return save_figure(fig, Path(out_dir) / "S01_setup_params", formats, dpi=dpi)

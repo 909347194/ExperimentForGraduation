@@ -22,6 +22,7 @@
 
 from __future__ import annotations
 
+import math
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -94,14 +95,35 @@ _HALO = dict(boxstyle="round,pad=0.16", fc="white", ec="none", alpha=0.72)
 
 
 def _arrow(ax, p_from, p_to, color: str, *, lw: float = 2.1) -> None:
-    """画一段有向航段（箭头不压住端点标记）。"""
+    """画一段有向航段：整条实线 + **线段中点**的三角箭头（表示行进方向）。
+
+    箭头放在线段中点——既标明航向，又不会压住端点处的起点/任务/机巢标记。
+    箭头子段长取段长的 ~24% 并夹在 [800m, 2600m]，避免过短看不见或过长征
+    满整段；极短段（<800m）仍给固定长度，保证方向可读。
+    """
+    x0, y0 = float(p_from[0]), float(p_from[1])
+    x1, y1 = float(p_to[0]), float(p_to[1])
+    dx, dy = x1 - x0, y1 - y0
+    L = math.hypot(dx, dy)
+    # 整条线（不带端点箭头）
+    ax.plot([x0, x1], [y0, y1], "-", color=color, lw=lw, alpha=0.95,
+            solid_capstyle="round", zorder=3)
+    if L < 1e-6:
+        return
+    ux, uy = dx / L, dy / L
+    mx, my = 0.5 * (x0 + x1), 0.5 * (y0 + y1)
+    ah = min(max(L * 0.24, 800.0), 2600.0)   # 箭头子段长（米）
+    s0 = (mx - ux * ah / 2.0, my - uy * ah / 2.0)
+    s1 = (mx + ux * ah / 2.0, my + uy * ah / 2.0)
     ax.annotate(
-        "", xy=p_to, xytext=p_from,
+        "", xy=s1, xytext=s0,
         arrowprops=dict(
             arrowstyle="-|>", color=color, linewidth=lw,
-            shrinkA=2.0, shrinkB=8.0, mutation_scale=26, alpha=0.95,
+            shrinkA=0.0, shrinkB=0.0,
+            mutation_scale=max(12.0, min(22.0, lw * 11.0)),
+            alpha=0.95,
         ),
-        zorder=3,
+        zorder=4,
     )
 
 

@@ -166,11 +166,19 @@ def _euclid(
 
 @dataclass
 class CostProvider:
-    """节点间代价：pairwise 优先，否则欧氏；机巢键 = nest_offset + nest_id。"""
+    """节点间代价：pairwise 优先，否则欧氏；机巢键 = nest_offset + nest_id。
+
+    另承载 **统一距离口径** ``distance_fn``（:func:`make_distance_fn` 生成的
+    DEM 三维航程）。凡要算「飞这一段的物理长度/时间」的地方（航迹时间 F3、
+    时间窗 ETA）一律走 :meth:`travel`，不得再直接 ``_euclid`` —— 后者是直线，
+    会系统性低估飞行时间（docs/full_review_20261012.md P1-1）。
+    """
 
     pairwise: dict[tuple[int, int], float] = field(default_factory=dict)
     positions: dict[int, tuple[float, float, float]] = field(default_factory=dict)
     nest_offset: int = 1_000_000
+    # 统一距离口径：``f(xyz_a, xyz_b) -> 米``；None → 回退欧氏（无 DEM 场景）
+    distance_fn: Callable[[Sequence[float], Sequence[float]], float] | None = None
 
     def nest_key(self, nest_id: int) -> int:
         return self.nest_offset + nest_id
@@ -186,6 +194,20 @@ class CostProvider:
             return _euclid(pa, pb)
         return 1e6
 
+    def travel(self, a: Sequence[float], b: Sequence[float]) -> float:
+        """两点间的**物理航程**（米），统一口径：DEM 三维航程优先。
+
+        与 :meth:`cost` 的区别：``cost`` 查的是节点 id → id 的**代价**（可含
+        收益加权等模型化口径），``travel`` 是纯粹的空间长度，用于把距离换算成
+        飞行时间（ETA / F3）。两者同源（都由同一个 DEM 估算器派生）。
+        """
+        if self.distance_fn is not None:
+            try:
+                return float(self.distance_fn(a, b))
+            except Exception:  # 防御：估算器异常不得让求解崩，退回直线
+                pass
+        return _euclid(tuple(a[:3]), tuple(b[:3]))
+
 
 def build_cost_provider(
     tasks: Sequence[Task],
@@ -193,6 +215,7 @@ def build_cost_provider(
     uavs: Sequence[UAV],
     pairwise: Mapping[tuple[int, int], float] | None = None,
     nest_offset: int = 1_000_000,
+    distance_fn: Callable[[Sequence[float], Sequence[float]], float] | None = None,
 ) -> CostProvider:
     positions: dict[int, tuple[float, float, float]] = {}
     for t in tasks:
@@ -205,6 +228,7 @@ def build_cost_provider(
         pairwise=dict(pairwise or {}),
         positions=positions,
         nest_offset=nest_offset,
+        distance_fn=distance_fn,
     )
 
 
@@ -386,6 +410,10 @@ class SelectiveMUASProblem:
         离开时累加上 ``default_service_time``，末段返巢到终点机巢。
         返回相对 ``current_time`` 的航迹时长（秒）。
 
+        段长口径：**统一走 DEM 三维航程**（``costs.travel``），不用欧氏直线——
+        此前 F3 用直线而代价矩阵用地形代价，同一航次两套长度，F3 与 ETA 系统性
+        低估（P1-1）。
+
         对应 Ming et al. 2017 Eq.1 的 Σ_i Σ_j t(i,j)·x(i,j) 单 UAV 飞行时间；
         F3 = max_k T_k 即其中的 a·max(·) 最坏机项。
         """
@@ -401,7 +429,7 @@ class SelectiveMUASProblem:
             task = self.task_by_id.get(tid)
             if task is None:
                 continue
-            dist = _euclid(prev, task.position)
+            dist = self.costs.travel(prev, task.position)
             t_cursor += dist / speed
             if task.earliest is not None and t_cursor < task.earliest:
                 t_cursor = task.earliest
@@ -410,7 +438,7 @@ class SelectiveMUASProblem:
         if tour.end_nest_id is not None:
             nest = self.nest_by_id.get(tour.end_nest_id)
             if nest is not None:
-                dist = _euclid(prev, nest.position)
+                dist = self.costs.travel(prev, nest.position)
                 t_cursor += dist / speed
         return float(t_cursor - self.config.current_time)
 
@@ -676,6 +704,7 @@ class SelectiveMUASProblem:
                 self.uav_by_id,
                 current_time=float(self.config.current_time),
                 service_time=float(self.config.default_service_time),
+                distance_fn=self.costs.travel,
             )
             if w_pen > 0:
                 report.add_window(w_tags, cons.w_window * w_pen)
@@ -705,16 +734,21 @@ class SelectiveMUASProblem:
         pairwise_cost: Mapping[tuple[int, int], float] | None = None,
         config: MUASProblemConfig | None = None,
         fleet_uavs: Sequence[UAV] | None = None,
+        distance_fn: Callable[[Sequence[float], Sequence[float]], float] | None = None,
     ) -> SelectiveMUASProblem:
         """组装问题实例。
 
         Args:
             fleet_uavs: 全部无人机（含非空闲），用于推导机巢占用；
                         省略时退化为 ``uavs`` 本身。
+            distance_fn: 统一距离口径（DEM 三维航程）。由滚动层从代价估算器
+                生成并注入；省略 → 评价端 ETA 退回欧氏直线（仅无 DEM 场景）。
         """
         avail = [u for u in uavs if u.is_available]
         nest_list = list(nests or [])
-        costs = build_cost_provider(tasks, nest_list, avail, pairwise=pairwise_cost)
+        costs = build_cost_provider(
+            tasks, nest_list, avail, pairwise=pairwise_cost, distance_fn=distance_fn
+        )
         return cls(
             tasks=list(tasks),
             uavs=avail,

@@ -11,3 +11,16 @@ venv/
 
 # 结果图片
 figures/
+
+# 实验结果（由 run.py 端到端重新生成，非源码）
+**/results/solution.json
+**/results/metrics.json
+**/results/run_meta.json
+
+# LaTeX 编译中间产物与成品
+**/results/tables/*.aux
+**/results/tables/*.fdb_latexmk
+**/results/tables/*.fls
+**/results/tables/*.log
+**/results/tables/*.xdv
+**/results/tables/*.pdf

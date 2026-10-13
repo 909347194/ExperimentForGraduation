@@ -183,4 +183,4 @@ def plot_outcome_summary(
                   "轨迹终点与 summary.completion_rate 同口径）；滞留 = 实验结束时"
                   "仍在任务池；闸门拦回 = 违约任务不顺延完成、解绑回池（事件次数）。"
                   "F1 = 任务收益和，F2 = 三维路径代价；红色数值为调试期回归信号。")
-    return save_figure(fig, Path(out_dir) / "outcome_summary", formats, dpi=dpi)
+    return save_figure(fig, Path(out_dir) / "R01_outcome_summary", formats, dpi=dpi)
