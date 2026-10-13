@@ -18,6 +18,8 @@ import numpy as np
 from task_allocation.methods.muas.operators.crossover import (
     dynamic_crossover_rate,
     hybrid_differential_population,
+    mutate_best_1,
+    mutate_rand_1,
 )
 from task_allocation.methods.muas.operators.extinction import gmr_rate, should_extinct
 from task_allocation.methods.muas.operators.scale_factor import (
@@ -29,11 +31,19 @@ FAILS: list[str] = []
 
 
 def check(name: str, cond: bool, detail: str = "") -> None:
+    """核对一项契约。
+
+    失败时**必须抛出**，不能只打印：pytest 收集的是 ``test_*`` 函数，
+    ``main()`` 不会被自动执行，若此处仅打印则断言失败也只会表现为
+    ``passed`` —— 契约等于没被锁住（历史缺陷：本文件 4 个测试曾全部空转）。
+    """
     if cond:
         print(f"  [OK] {name}")
-    else:
-        print(f"  [FAIL] {name} {detail}")
-        FAILS.append(name)
+        return
+    msg = f"{name} {detail}".strip()
+    print(f"  [FAIL] {name} {detail}")
+    FAILS.append(name)
+    raise AssertionError(msg)
 
 
 def test_cr_formula() -> None:
@@ -108,6 +118,37 @@ def test_hybrid_differential() -> None:
           float(np.std(out_rand - pop.mean(axis=0))) < 5.0 * float(np.std(pop)))
 
 
+def test_small_population_never_hangs() -> None:
+    """小种群下差分变异不得挂起/抛错（死循环回归）。
+
+    历史缺陷：``hybrid_differential_population`` 原实现为
+    ``rng.choice(pop_size, size=4, replace=False)`` 后接
+    ``while i in indices`` 重试。当 ``pop_size == 4`` 时无放回抽全部必然
+    命中 ``i``，重试条件恒真 → **死循环**（进程无提示挂起）；
+    ``pop_size < 4`` 时 ``choice`` 直接抛 ValueError。
+    ``mutate_rand_1`` / ``mutate_best_1`` 分别在 ``pop_size == 3`` / ``== 2``
+    有同样的死循环。
+
+    修复口径：先从「不含 i」的候选池抽取（互异且排除自身天然成立），
+    可用个体不足时缺失差分项用首个可用向量补齐（差分退化，不挂起）。
+    """
+    print("\n=== 小种群差分变异（不得挂起）===")
+    for ps in (1, 2, 3, 4, 5, 6, 10):
+        pop = np.random.default_rng(0).uniform(0.0, 100.0, size=(ps, 6))
+        fv = np.full(ps, 0.5)
+        out = hybrid_differential_population(
+            pop, 0, fv, 0.5, rng=np.random.default_rng(1)
+        )
+        check(f"hybrid pop_size={ps} 同形且有限",
+              out.shape == pop.shape and bool(np.all(np.isfinite(out))))
+        out_r1 = mutate_rand_1(pop, 0, fv, 0.5, rng=np.random.default_rng(2))
+        check(f"rand/1 pop_size={ps} 同形且有限",
+              out_r1.shape == pop.shape and bool(np.all(np.isfinite(out_r1))))
+        out_b1 = mutate_best_1(pop, 0, fv, 0.5, rng=np.random.default_rng(3))
+        check(f"best/1 pop_size={ps} 同形且有限",
+              out_b1.shape == pop.shape and bool(np.all(np.isfinite(out_b1))))
+
+
 def test_gmr_formula() -> None:
     """式 (3-12)：GMR = 1 - CR（默认无 δ 门限）"""
     print("\n=== 式 (3-12) GMR 灭绝率 ===")
@@ -143,6 +184,7 @@ def main() -> None:
     test_cr_formula()
     test_f_formula()
     test_hybrid_differential()
+    test_small_population_never_hangs()
     test_gmr_formula()
     print()
     if FAILS:

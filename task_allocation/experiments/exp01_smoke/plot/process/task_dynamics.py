@@ -365,4 +365,4 @@ def plot_task_dynamics(
     footnote(fig, "口径：到达以「首次入池周期」计（与 pool_counts.n_new 一致），"
                   "非 arrival_time 生成时刻；(e) 未完成任务的等待为右删失下界 ≥；"
                   "空间生命周期快照见 allocation 图的 DEM 演化面板。")
-    return save_figure(fig, Path(out_dir) / "task_dynamics", formats, dpi=dpi)
+    return save_figure(fig, Path(out_dir) / "P09_task_dynamics", formats, dpi=dpi)

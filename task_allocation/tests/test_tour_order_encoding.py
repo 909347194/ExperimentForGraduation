@@ -183,3 +183,73 @@ def test_srp_invariants_hold_after_rule_2c():
             assert len(ind.genes) == M, (
                 f"K={K},M={M}: 基因数应为 {M}，实际 {len(ind.genes)}"
             )
+
+
+# ── 不可达（inf）候选：不得污染 softmax、不得崩溃 ──────────────────────
+
+def test_unreachable_targets_never_crash_softmax():
+    """某 UAV 对**所有**未分配任务都不可达时，第一阶段 softmax 不得产生 NaN。
+
+    历史缺陷：``_inverse_phi_srp`` 第一阶段直接对 ``|cm[row, available] - cv|``
+    做 softmax。若该行全为 ``inf``，则 ``logits`` 全 ``-inf``，
+    ``logits.max() = -inf`` → ``(-inf) - (-inf) = nan`` → 概率全 NaN →
+    ``rng.choice`` 抛 ``ValueError: Probabilities contain NaN``。
+
+    同族缺陷在 ``nearest_match_adaptive`` 中已有 inf 防护（standard 路径），
+    SRP 第一阶段此前漏掉 —— 本测试锁住两处口径一致。
+
+    可达性的裁决权在解码/修复端（``_match_tour_edge`` 的 finite 过滤与
+    ``muas_stage._repair_range`` 改派），采样端只须健壮兜底、不崩。
+    """
+    K, M = 2, 4
+    cm = np.array(
+        [
+            [100.0, 200.0, 300.0, 400.0],  # UAV0 → t0..t3（全可达）
+            [np.inf] * M,                   # UAV1 对全部任务不可达
+            [0.0, 10.0, 20.0, 30.0],       # 任务行 t0..t3
+            [10.0, 0.0, 15.0, 25.0],
+            [20.0, 15.0, 0.0, 5.0],
+            [30.0, 25.0, 5.0, 0.0],
+        ]
+    )
+    cv = np.array([150.0, 150.0, 12.0, 8.0])
+    for temperature in (0.9, 0.5, 0.2, 0.05):
+        ind = inverse_phi(
+            cv.copy(), cm, K, M, "srp",
+            rng=np.random.default_rng(3), temperature=temperature,
+        )
+        routes = split_segments(ind.genes)
+        targets = [t for seg in routes.values() for t in seg]
+        assert sorted(targets) == list(range(M)), (
+            f"temperature={temperature}: 任务必须恰好覆盖一次，实际 {sorted(targets)}"
+        )
+        assert len(ind.genes) == M
+
+
+def test_unreachable_targets_excluded_from_sampling():
+    """可达任务必须优先于不可达任务被选中（不可达不得因代价 0 而受偏爱）。
+
+    UAV0 到 t0 不可达（inf）、到 t1/t2/t3 可达且 t1 最近。
+    ``cv`` 取 t1 的代价 → 必须选中可达的 t1，不得被 inf 污染成 NaN 或误选 t0。
+    """
+    K, M = 1, 4
+    cm = np.array(
+        [
+            [np.inf, 100.0, 500.0, 900.0],  # UAV0：t0 不可达，t1 最近
+            [0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0],
+        ]
+    )
+    cv = np.array([100.0, 0.0, 0.0, 0.0])  # cv[0]=100 → 最近的是 t1
+    for seed in range(12):
+        ind = inverse_phi(
+            cv.copy(), cm, K, M, "srp",
+            rng=np.random.default_rng(seed), temperature=0.8,
+        )
+        starts = [g.target_id for g in ind.genes if g.uav_id >= 0]
+        assert starts, "至少应有一个起始基因"
+        assert starts[0] != 0, (
+            f"seed={seed}: UAV0 对 t0 不可达，起始任务不得选 t0，实际 {starts}"
+        )

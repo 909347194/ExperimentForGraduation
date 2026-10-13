@@ -21,9 +21,10 @@
     ├── process/        ③ 运行过程观测：滚动闭环怎么跑（逐周期演化与诊断）
     └── report/         ④ 结果分析：可以直接引用的成图（稳健性 / 对照）
 
-命名约定（**四者同名**，见 ``registry.py`` 顶部说明）::
+命名约定（**四者同名 + 分类编号前缀**，见 ``registry.py`` 顶部说明）::
 
-    模块名 ≡ 图 id ≡ 输出文件名 ≡ 绘制函数名去掉 ``plot_``
+    模块名 ≡ 图 id ≡ 绘制函数名去掉 ``plot_``；输出文件名 = 分类编号前缀 + 图 id
+    （S/I/P/R + 两位序号，按叙事线排序，figures 目录天然有序不乱）
 
 常用方式::
 
@@ -135,7 +136,12 @@ def make_plots(
         kwargs: dict[str, Any] = {}
         if extras is not None and "extras" in inspect.signature(fig.func).parameters:
             kwargs["extras"] = extras
-        produced = fig.func(metrics, solution, out_dir, formats, dpi=dpi, **kwargs)
+        # 动图格式（gif/mp4）只发给动画图：run.py 为刷新 allocation_anim 会把
+        # gif 补进 formats，若不过滤，每张静态图都会顺带落一个单帧 GIF。
+        fig_formats = formats if fig.animated else tuple(
+            f for f in formats if str(f).lower().lstrip(".") not in {"gif", "mp4"}
+        )
+        produced = fig.func(metrics, solution, out_dir, fig_formats, dpi=dpi, **kwargs)
         if produced:
             written += produced
         else:

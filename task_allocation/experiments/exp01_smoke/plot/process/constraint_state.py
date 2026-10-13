@@ -357,4 +357,4 @@ def plot_constraint_state(
                   "「约束未咬合」；时间窗 earliest 恒为 0（窗口自实验起算，非画错），"
                   "(e) 灰虚线 = 周期边界；"
                   f"{slack_note}。")
-    return save_figure(fig, Path(out_dir) / "constraint_state", formats, dpi=dpi)
+    return save_figure(fig, Path(out_dir) / "P11_constraint_state", formats, dpi=dpi)

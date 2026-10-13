@@ -46,6 +46,29 @@ def dynamic_crossover_rate(
     return 1.0 - (np.log(current_gen) / np.log(total_gens)) ** zeta
 
 
+def _pick_distinct(
+    pop_size: int,
+    exclude: int,
+    need: int,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    """从 ``[0, pop_size)`` 中无放回抽 ``need`` 个互异下标，且排除 ``exclude``。
+
+    标准 DE 要求参与差分的个体互异且不包含目标个体自身。本函数用「先剔除
+    自身、再从候选池抽取」替代「抽取后重试直到不含自身」：后者在
+    ``pop_size == need + 1`` 时命中概率为 1，重试条件恒真 → **死循环**
+    （进程无提示挂起）；``pop_size < need`` 时 ``rng.choice`` 直接抛错。
+
+    Returns:
+        下标数组；可用候选不足时长度小于 ``need``（调用方负责补齐/降级）。
+    """
+    pool = np.delete(np.arange(pop_size), exclude)
+    k = int(min(need, pool.size))
+    if k <= 0:
+        return np.array([], dtype=int)
+    return rng.choice(pool, size=k, replace=False)
+
+
 def hybrid_differential_population(
     cost_vectors: np.ndarray,
     best_idx: int,
@@ -72,18 +95,36 @@ def hybrid_differential_population(
     trials = np.empty_like(cost_vectors)
 
     for i in range(pop_size):
-        # 选择 4 个不同的随机个体
-        indices = rng.choice(pop_size, size=4, replace=False)
-        while i in indices:
+        # 选择 4 个互异个体，且必须排除自身 i（标准 DE 约束）。
+        if pop_size >= 5:
+            # 主流路径：保留原有**拒绝采样**口径（抽 4 个、不含 i 则重试）。
+            # 与候选池直接抽取的分布相同，但 rng 消费序列不同 —— DE 是随机
+            # 搜索算法，序列一变就落到不同局部最优（实测 exp01 完成率
+            # 95% vs 75%，差异显著）。故主流规模下**不改动**，以守住既有
+            # 实验基线的可复现性；仅对会死循环的规模启用安全路径。
             indices = rng.choice(pop_size, size=4, replace=False)
-        r1, r2, r3, r4 = indices
+            while i in indices:
+                indices = rng.choice(pop_size, size=4, replace=False)
+            xs = [cost_vectors[int(k)] for k in indices]
+        else:
+            # 小种群（pop_size <= 4）：无放回抽全部必然命中 i，重试条件恒真
+            # → **死循环**（进程无提示挂起）；pop_size < 4 时 choice 直接抛错。
+            # 改用候选池抽取 + 差分退化。
+            idxs = _pick_distinct(pop_size, i, 4, rng)
+            if idxs.size == 0:
+                # 种群退化为单个个体：无可差分对象，原样保留
+                trials[i] = cost_vectors[i]
+                continue
+            xs = [cost_vectors[int(k)] for k in idxs]
+        # 小种群（pop_size <= 4）下可用个体不足 4 个：缺失的差分项用首个
+        # 可用向量补齐，使差分自然退化（如 x_r4=x_r1 时 best/2 → best/1），
+        # 既不挂起也不抛错。
+        while len(xs) < 4:
+            xs.append(xs[0])
+        x_r1, x_r2, x_r3, x_r4 = xs
 
         f = f_values[i]
         best = cost_vectors[best_idx]
-        x_r1 = cost_vectors[r1]
-        x_r2 = cost_vectors[r2]
-        x_r3 = cost_vectors[r3]
-        x_r4 = cost_vectors[r4]
 
         # 每个基因位独立判断
         rand_vals = rng.random(gene_len)
@@ -116,10 +157,23 @@ def mutate_rand_1(
     trials = np.empty_like(cost_vectors)
 
     for i in range(pop_size):
-        indices = rng.choice(pop_size, size=3, replace=False)
-        while i in indices:
+        if pop_size >= 4:
+            # 主流路径：保留原有拒绝采样口径（见 hybrid 同款说明），
+            # 不改变 rng 消费序列与实验基线。
             indices = rng.choice(pop_size, size=3, replace=False)
-        r1, r2, r3 = indices
+            while i in indices:
+                indices = rng.choice(pop_size, size=3, replace=False)
+            r1, r2, r3 = indices
+        else:
+            # pop_size == 3 时拒绝采样必然命中 i → 死循环，改用候选池
+            idxs = _pick_distinct(pop_size, i, 3, rng)
+            if idxs.size < 3:
+                pad = [idxs[0]] * (3 - idxs.size) if idxs.size else []
+                idxs = np.concatenate([idxs, np.asarray(pad, dtype=int)])
+            if idxs.size < 3:
+                trials[i] = cost_vectors[i]
+                continue
+            r1, r2, r3 = idxs
 
         f = f_values[i]
         mutant = cost_vectors[r1] + f * (cost_vectors[r2] - cost_vectors[r3])
@@ -152,10 +206,21 @@ def mutate_best_1(
     trials = np.empty_like(cost_vectors)
 
     for i in range(pop_size):
-        indices = rng.choice(pop_size, size=2, replace=False)
-        while i in indices:
+        if pop_size >= 3:
+            # 主流路径：保留原有拒绝采样口径（见 hybrid 同款说明）
             indices = rng.choice(pop_size, size=2, replace=False)
-        r1, r2 = indices
+            while i in indices:
+                indices = rng.choice(pop_size, size=2, replace=False)
+            r1, r2 = indices
+        else:
+            # pop_size == 2 时拒绝采样必然命中 i → 死循环，改用候选池
+            idxs = _pick_distinct(pop_size, i, 2, rng)
+            if idxs.size < 2:
+                if idxs.size == 0:
+                    trials[i] = cost_vectors[i]
+                    continue
+                idxs = np.concatenate([idxs, idxs[:1]])
+            r1, r2 = idxs
 
         f = f_values[i]
         best = cost_vectors[best_idx]

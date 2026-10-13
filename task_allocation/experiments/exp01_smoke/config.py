@@ -134,6 +134,11 @@ class ConfigBundle:
         return bool(self.run.get("make_plots", True))
 
     @property
+    def make_tables(self) -> bool:
+        """结果 LaTeX 表格（tex + 尽力而为的 PDF 编译）开关，与 make_plots 对齐。"""
+        return bool(self.run.get("make_tables", True))
+
+    @property
     def save_results(self) -> bool:
         return bool(self.run.get("save_results", True))
 
@@ -177,6 +182,16 @@ def build_config_bundle(cfg: Mapping[str, Any]) -> ConfigBundle:
         sortie_budget=(None if m.get("sortie_budget") is None else int(m["sortie_budget"])),
         participation_cost=float(m.get("participation_cost", 0.0)),
         participating_policy=str(m.get("participating_policy", "cheapest")),
+        # Fix④ 需求感知参与：demand 策略的覆盖半径（米）与航程因子
+        demand_coverage_radius=(
+            None if m.get("demand_coverage_radius") is None
+            else float(m["demand_coverage_radius"])
+        ),
+        demand_range_factor=float(m.get("demand_range_factor", 0.5)),
+        # Fix⑤ 服务能力感知 provisioning：覆盖后按航程预算补机，救远任务
+        demand_provision_serving=bool(m.get("demand_provision_serving", True)),
+        demand_serve_margin=float(m.get("demand_serve_margin", 0.95)),
+        reflow_rescue_scope=str(m.get("reflow_rescue_scope", "fleet")),
         marginal_tour_cap=(
             None if m.get("marginal_tour_cap") is None
             else int(m["marginal_tour_cap"])

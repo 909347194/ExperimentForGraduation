@@ -65,7 +65,23 @@ def split_segments(
 
 
 def _safe_cost(cm: np.ndarray, row: int, col: int) -> float:
-    """带边界检查的代价读取；越界时返回 0.0 而不是抛异常。"""
+    """带边界检查的代价读取；越界或不可达（inf/nan）时返回 0.0。
+
+    **返回 0.0 是有意的工程取舍，不是"不可达即零代价"的语义声明**：
+
+    * 本函数的返回值会进入 ``Individual.cost_vector`` 参与 DE 差分变异。
+      若在此保留 ``inf``，``x_r1 + F·(x_r2 - x_r3)`` 会出现 ``inf - inf = nan``，
+      nan 随即污染**整个**试验向量的所有分量，进化直接瘫痪。
+    * 改用大哨兵值（如 1e9）虽能避开 nan，却会把该基因位的搜索目标拉向
+      "代价最大"的方向，即**主动引导解码去选最远的任务** —— 比 0.0 更糟。
+    * 取 0.0 时该位的目标值最小，解码端 :func:`_inverse_phi_srp` /
+      :func:`_match_tour_edge` 会就近匹配，实际引导方向是"趋向最近可达任务"，
+      且与它们内部的 ``np.isfinite`` 防护一致。
+
+    **可达性的裁决权在解码/修复端**（``_match_tour_edge`` 的 finite 过滤、
+    ``muas_stage._repair_range`` 的改派），编码层只负责不产生 nan。
+    因此这里的 0.0 仅表示"该边在编码层不携带可用代价信息"。
+    """
     if row < 0 or col < 0 or row >= cm.shape[0] or col >= cm.shape[1]:
         return 0.0
     v = float(cm[row, col])

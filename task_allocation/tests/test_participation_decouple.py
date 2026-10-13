@@ -31,6 +31,7 @@ import pytest
 from task_allocation.common.types import UAV
 from task_allocation.methods.muas.solvers.muas_stage import (
     POLICY_CHEAPEST,
+    POLICY_DEMAND,
     POLICY_FIRST,
     POLICY_MARGINAL,
     MUASStageConfig,
@@ -195,3 +196,146 @@ def test_marginal_tour_cap_validation():
     """marginal_tour_cap 必须 >= 1 或为 None。"""
     with pytest.raises(ValueError):
         MUASStageConfig(marginal_tour_cap=0)
+
+
+# ---------------------------------------------------------------------------
+# Fix④ 需求感知参与（policy="demand"）回归
+# ---------------------------------------------------------------------------
+
+# 4 机 / 4 任务：t0,t1,t2 在南簇（u0/u1/u2 近），t3 在最北离群、仅 u3 可达。
+# cheapest 按「全局最小代价」排序会取 [0,1,2]（u3 因离簇远被挤出），t3 无近参与机；
+# demand 贪心最大覆盖会纳入 u3（覆盖 t3）并丢弃一个冗余簇内机 u1。
+_DM = np.array([
+    [10.0, 10.0, 100.0, 500.0],   # u0：覆盖 t0,t1
+    [10.0, 10.0, 100.0, 500.0],   # u1：覆盖 t0,t1（与 u0 冗余）
+    [100.0, 100.0, 10.0, 500.0],  # u2：覆盖 t2
+    [500.0, 500.0, 500.0, 10.0],  # u3：覆盖 t3（北角离群任务）
+])
+_DROWS = {i: i for i in range(4)}
+
+
+def _demand(k: int, **kw) -> list[int]:
+    # 显式覆盖半径 50m：_DM 中 10/100/500 三档里只有 10 算可达，
+    # 从而真实体现「北角离群任务 t3 仅 u3 可达」的覆盖差异（默认
+    # factor·range=5e5 会把所有代价都当成可达、覆盖全开，测不出区分度）。
+    cfg = MUASStageConfig(
+        participating_policy=POLICY_DEMAND, demand_coverage_radius=50.0, **kw
+    )
+    got = select_participating_uavs(
+        _uavs(4), n_tasks=4, config=cfg, uav_target=_DM, row_of_uav=_DROWS,
+    )
+    assert len(got) <= k
+    return [u.id for u in got]
+
+
+def test_demand_covers_sparse_task_uav():
+    """需求感知：宁可纳入离群任务的最近机 u3，也不保留冗余簇内机 u1。"""
+    got = _demand(k=3)
+    assert 3 in got, "北角离群任务 t3 的最近机 u3 必须被纳入"
+    assert 0 in got and 2 in got  # 簇内仍各保留一架覆盖 t0/t1 与 t2
+
+
+def test_demand_beats_cheapest_on_coverage():
+    """对照 cheapest：同 K=3 下 cheapest 漏掉离群任务机。"""
+    cheap = MUASStageConfig(participating_policy=POLICY_CHEAPEST)
+    cheap_ids = [
+        u.id for u in select_participating_uavs(
+            _uavs(4), n_tasks=4, config=cheap, uav_target=_DM, row_of_uav=_DROWS,
+        )
+    ][:3]
+    assert 3 not in cheap_ids  # cheapest 把 u3 挤出
+    assert 3 in _demand(k=3)   # demand 保住 u3
+
+
+def test_demand_respects_k_cap():
+    """参与机数不超过 K 上限（SRP 不变式 + 运营预算）。"""
+    cfg = MUASStageConfig(participating_policy=POLICY_DEMAND, max_participating_uavs=2)
+    got = select_participating_uavs(
+        _uavs(4), n_tasks=4, config=cfg, uav_target=_DM, row_of_uav=_DROWS,
+    )
+    assert len(got) <= 2
+
+
+def test_demand_skips_zero_coverage_when_covered():
+    """所有任务已被覆盖后，不再塞零覆盖的冗余机。"""
+    # 把 u0/u1 设为全覆盖（阈值放宽到覆盖全部），u2/u3 高代价不可达
+    m = np.array([
+        [1.0, 1.0, 1.0, 1.0],
+        [1.0, 1.0, 1.0, 1.0],
+        [999.0, 999.0, 999.0, 999.0],
+        [999.0, 999.0, 999.0, 999.0],
+    ])
+    cfg = MUASStageConfig(
+        participating_policy=POLICY_DEMAND, demand_coverage_radius=50.0,
+    )
+    got = select_participating_uavs(
+        _uavs(4), n_tasks=4, config=cfg, uav_target=m, row_of_uav={i: i for i in range(4)},
+    )
+    # u0/u1 已覆盖全部任务，u2/u3 零覆盖 → 只纳入一架
+    assert [u.id for u in got] == [0]
+
+
+def test_demand_explicit_radius_overrides_factor():
+    """显式 demand_coverage_radius 优先于 factor·remaining_range。
+
+    矩阵代价仅 3.0 / 100.0 两档；半径=5 时只认 3.0 的任务。若误用了
+    factor·range=5e5，则 100.0 也会被当作可达，u0 能同时覆盖 t0,t1，
+    只需 1 架即可，与「半径=5 需 2 架」矛盾。
+    """
+    m = np.array([
+        [3.0, 100.0],
+        [100.0, 3.0],
+    ])
+    rows = {i: i for i in range(2)}
+    # 显式半径=5：u0 只覆盖 t0、u1 只覆盖 t1 → 需 2 架
+    cfg_r = MUASStageConfig(
+        participating_policy=POLICY_DEMAND, demand_coverage_radius=5.0,
+    )
+    got_r = select_participating_uavs(
+        _uavs(2), n_tasks=4, config=cfg_r, uav_target=m, row_of_uav=rows,
+    )
+    assert len(got_r) == 2  # 各覆盖一个对角任务，缺一不可
+    # 退化到 factor·range=5e5（默认）：u0 同时覆盖 t0,t1 → 1 架即够
+    cfg_f = MUASStageConfig(participating_policy=POLICY_DEMAND)
+    got_f = select_participating_uavs(
+        _uavs(2), n_tasks=4, config=cfg_f, uav_target=m, row_of_uav=rows,
+    )
+    assert len(got_f) == 1
+
+
+def test_demand_provision_serving_adds_uav_for_far_task():
+    """Fix⑤：最小覆盖已完成、但单机架航程不足以同时服务多远任务时，补专属机。
+
+    3 任务 / 3 机：t0 远北（仅 u0、u2 可达，各 30），t1、t2 居中（u0、u1 各 10）。
+    u0 最小覆盖即覆盖全部 3 任务；但其往返代价 100 > 70×0.95=66.5 → 过载，
+    把最远任务 t0 剥给最近空闲机 u2（到 t0=30），使各任务有可行航程。
+    provisioning 关 → 只派 1 架（最小覆盖）；开 → 派 2 架（补 1 架专属机）。
+    """
+    m = np.array([
+        [30.0, 10.0, 10.0],   # u0：t0=30, t1=10, t2=10
+        [999.0, 10.0, 10.0],  # u1：t1=10, t2=10
+        [30.0, 999.0, 999.0], # u2：t0=30（远北专属）
+    ])
+    rows = {i: i for i in range(3)}
+    uavs = [
+        UAV(id=0, x=0.0, y=0.0, z=0.0, remaining_range=70.0, speed=10.0, nest_id=0),
+        UAV(id=1, x=0.0, y=0.0, z=0.0, remaining_range=70.0, speed=10.0, nest_id=1),
+        UAV(id=2, x=0.0, y=0.0, z=0.0, remaining_range=70.0, speed=10.0, nest_id=2),
+    ]
+    cfg_off = MUASStageConfig(
+        participating_policy=POLICY_DEMAND, demand_coverage_radius=50.0,
+        demand_provision_serving=False,
+    )
+    got_off = select_participating_uavs(
+        uavs, n_tasks=3, config=cfg_off, uav_target=m, row_of_uav=rows,
+    )
+    cfg_on = MUASStageConfig(
+        participating_policy=POLICY_DEMAND, demand_coverage_radius=50.0,
+        demand_provision_serving=True, demand_serve_margin=0.95,
+    )
+    got_on = select_participating_uavs(
+        uavs, n_tasks=3, config=cfg_on, uav_target=m, row_of_uav=rows,
+    )
+    assert [u.id for u in got_off] == [0]       # 最小覆盖：1 架
+    assert [u.id for u in got_on] == [0, 2]    # Fix⑤：补 1 架专属机（u2）
+

@@ -33,6 +33,7 @@ import copy
 import argparse
 import sys
 import time
+from pathlib import Path
 
 from paths import DATA_DIR, EXP_DIR, ROOT
 
@@ -59,6 +60,34 @@ from metrics import (
 from task_allocation.methods.rolling.horizon import RollingHorizon
 from task_allocation.methods.task_pool import TaskPool
 from task_allocation.methods.uav_state import UAVFleet
+
+
+def _compile_tables(tables_dir: Path, *, verbose: bool) -> None:
+    """编译结果表 PDF（ctex 需 xelatex，经 latexmk 驱动）。
+
+    无 LaTeX 引擎或编译失败只警告、不阻断主流程——.tex 已是完整产物，
+    PDF 只是方便直览。
+    """
+    import shutil
+    import subprocess
+
+    if shutil.which("latexmk") is None:
+        print("[exp01] 未找到 latexmk，跳过表格 PDF 编译（.tex 已生成）")
+        return
+    try:
+        proc = subprocess.run(
+            ["latexmk", "-xelatex", "-interaction=nonstopmode",
+             "-halt-on-error", "exp01_tables.tex"],
+            cwd=tables_dir, capture_output=True, text=True, timeout=300,
+        )
+    except Exception as exc:  # 超时/启动失败等
+        print(f"[exp01] 表格 PDF 编译异常（不影响主结果）：{exc}")
+        return
+    if proc.returncode != 0:
+        print(f"[exp01] 表格 PDF 编译失败（详见 {tables_dir / 'exp01_tables.log'}），"
+              f".tex 已生成")
+    elif verbose:
+        print(f"[exp01] 表格 PDF 已编译：{tables_dir / 'exp01_tables.pdf'}")
 
 
 def _run_once(
@@ -232,6 +261,15 @@ def main(argv: list[str] | None = None) -> int:
         formats = tuple(plot_cfg.get("formats") or ("png",))
         if args.pdf and "pdf" not in {str(f).lower().lstrip(".") for f in formats}:
             formats = (*formats, "pdf")
+        # 动画图需 gif/mp4 才出。只要本次图集包含任意 animated 图（默认全部图
+        # 即包含 allocation_anim / allocation_status），就自动补 gif——否则 GIF
+        # 会停留在早年一次显式运行，与 json/PNG/表格全部脱节（2026-10-13 审查：
+        # GIF 曾 stale 12 小时）。只想出静态图时用 --groups/--figures 排除动画图即可。
+        from plot.registry import resolve as _resolve_figures
+        if any(f.animated
+               for f in _resolve_figures(names=args.figures, groups=args.groups)):
+            if not ({"gif", "mp4"} & {str(f).lower().lstrip(".") for f in formats}):
+                formats = (*formats, "gif")
         make_plots(
             final_metrics,
             rep_solution,
@@ -241,6 +279,23 @@ def main(argv: list[str] | None = None) -> int:
             names=args.figures,
             groups=args.groups,
         )
+
+    # ── 结果表（tables.py 只读 json、只制表；与 plot 同哲学）──────────
+    # 必须放在 write_json 之后：tables.py 从盘上读刚写出的 metrics/solution，
+    # 保证「数值产物 / 图 / 表」三者同源同步，不再需要手动跑 tables.py。
+    if bundle0.save_results and bundle0.make_tables:
+        try:
+            from tables import render as render_tables  # 延迟导入
+
+            tables_dir = out_dir / "tables"
+            tex_path = render_tables(
+                tables_dir / "exp01_tables.tex", results_dir=out_dir
+            )
+            if verbose:
+                print(f"[exp01] 结果表已生成：{tex_path}")
+            _compile_tables(tables_dir, verbose=verbose)
+        except Exception as exc:  # 表格失败不阻断主结果
+            print(f"[exp01] 结果表生成失败（不影响主结果）：{exc}")
 
     return 0
 

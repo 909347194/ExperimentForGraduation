@@ -142,6 +142,18 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
             "n_uavs": len(f.uavs),
             "n_nests": len(f.nests),
             "nest_capacity": f.nests[0].capacity if f.nests else None,
+            # —— 以下字段供结果表 tab1 直读：配置改动后表自动跟着变，不说谎 ——
+            "uav_speed": float(f.bundle.problem.get("uav_speed", 0.0)),
+            "uav_max_range_km": float(f.bundle.problem.get("uav_max_range", 0.0)) / 1000.0,
+            "dmde_population": int(f.bundle.solver.pop_size),
+            "dmde_max_iter": int(f.bundle.solver.max_generations),
+            "scalarization": (
+                "字典序（big-M，收益优先）"
+                if f.bundle.problem_model.lexicographic else "加权和 −F1+λ·F2"
+            ),
+            "time_window": bool(f.bundle.problem_model.constraints.time_window),
+            "dem_file": str(f.bundle.data.get("dem") or "未接入"),
+            "dem_step_m": float(f.bundle.cost.get("dem_step_m", 0.0)),
         },
         "local_frame": {
             "lat0": f.scenario.frame.lat0,

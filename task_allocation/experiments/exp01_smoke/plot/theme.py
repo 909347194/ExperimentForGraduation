@@ -25,6 +25,7 @@ PDF 输出用 TrueType（fonttype 42），保证嵌入与文本可搜索。
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from typing import Iterable
 
@@ -45,6 +46,9 @@ __all__ = [
     "FS",
     "setup_style",
     "save_figure",
+    "robust_savefig",
+    "robust_pil_save",
+    "build_gif_palette",
     "cycle_colors",
     "style_axes",
     "footnote",
@@ -185,10 +189,71 @@ def save_figure(
         if not ext:
             continue
         out = stem.with_suffix(f".{ext}")
-        fig.savefig(out, dpi=dpi, bbox_inches="tight", facecolor="white")
+        robust_savefig(fig, out, dpi=dpi, bbox_inches="tight", facecolor="white")
         written.append(out)
     plt.close(fig)
     return written
+
+
+def robust_savefig(fig, path: Path | str, *, dpi: int = 300,
+                   max_retries: int = 8, **kwargs) -> None:
+    """``fig.savefig`` 的**带重试**封装。
+
+    覆盖 Windows 下「预览/杀毒/索引器短暂锁定正在覆盖的 PNG」导致的
+    ``OSError: [Errno 22] Invalid argument``——退避重试通常几百毫秒内解锁。
+    """
+    last: Exception | None = None
+    for attempt in range(max_retries):
+        try:
+            fig.savefig(str(path), dpi=dpi, **kwargs)
+            return
+        except OSError as exc:  # 文件被外部进程短暂锁定时重试
+            last = exc
+            time.sleep(0.25 * (attempt + 1))
+    raise last if last is not None else RuntimeError("robust_savefig: 未知失败")
+
+
+def robust_pil_save(img, path: Path | str, *,
+                    max_retries: int = 8, **kwargs) -> None:
+    """Pillow ``Image.save`` 的**带重试**封装（同 ``robust_savefig`` 的锁容忍）。"""
+    last: Exception | None = None
+    for attempt in range(max_retries):
+        try:
+            img.save(str(path), **kwargs)
+            return
+        except OSError as exc:
+            last = exc
+            time.sleep(0.25 * (attempt + 1))
+    raise last if last is not None else RuntimeError("robust_pil_save: 未知失败")
+
+
+def build_gif_palette(frames_rgb: list, extra_colors: Iterable[str] = ()):
+    """为动图构建**全局调色板**（末帧 MEDIANCUT + 显式追加关键语义色）。
+
+    为什么不能只按末帧 MEDIANCUT：该算法按像素数量分箱，DEM 地形的大面积
+    暖色会吞掉小而饱和的语义色——待执行红点、UAV 珊瑚色等整幅仅数百像素，
+    实测全部被压成同一个棕橙 ``(165,93,48)``，图例里再亮的红在 GIF 里也是
+    土棕。把关键色**显式追加**进调色板后，逐帧最近邻映射即保真。
+    """
+    from PIL import Image
+
+    base = frames_rgb[-1].quantize(colors=216, method=Image.MEDIANCUT)
+    pal = base.getpalette() or []
+    cols: list[tuple[int, int, int]] = []
+    for i in range(min(216, len(pal) // 3)):
+        cols.append((int(pal[i * 3]), int(pal[i * 3 + 1]), int(pal[i * 3 + 2])))
+    for c in extra_colors:
+        s = str(c).lstrip("#")
+        c8 = (int(s[0:2], 16), int(s[2:4], 16), int(s[4:6], 16))
+        if c8 not in cols:
+            cols.append(c8)
+    cols = cols[:255]
+    pal_img = Image.new("P", (16, 16))
+    data = [v for c in cols for v in c]
+    data += [0] * (256 * 3 - len(data))
+    pal_img.putpalette(data)
+    pal_img.putdata(list(range(256)))
+    return pal_img
 
 
 def style_axes(ax, *, title: str | None = None, xlabel: str | None = None,

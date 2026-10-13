@@ -9,14 +9,16 @@
 
 版面（2026-10-12 依「少文字、大地图」重排）：
 
-    (a) 甘特：行 = 周期×UAV 航次，块 = 任务（颜色 ∝ 收益，块内只写任务号），
-        行尾一列「返航巢」；删去原逐块的 R= 与航程/收益明细列（信息在
-        颜色条与 fleet_state / outcome_summary 中都有）。
+    (a) 航迹条：行 = 周期×UAV 航次，一条 UAV 色航线（长度 ∝ 真实航程），
+        任务按真实位置落点画方框（上标号、下收益），两端标起飞/返航巢；
+        替代原「收益着色顺序条」，直接读出谁飞多远、任务沿航线怎么分布。
     (b) 逐周期 DEM 演化：横排 1×3（不再是窄列 3 行），每图只留
         「周期 c · 里程」短标题；未执行任务只画空心点、不标号。
 
-数据来源：``solution.json`` 的 ``cycles[].tours`` + ``tasks`` / ``nests`` / ``dem``，
-叠加 ``metrics.json`` 的 selection / muas 计数。
+数据来源：``solution.json`` 的 ``cycles[].tours``（含 ``est_cost``）+ ``tasks`` /
+``nests`` / ``dem``。``metrics`` 入参仅为统一签名保留——本图全部读数均取
+solution（甘特条按 est_cost 标定、周期里程按 est_cost 求和），避免与 metrics 的
+``f2_cost``（含惩罚项）混口径。
 """
 
 from __future__ import annotations
@@ -64,76 +66,143 @@ def _collect_rows(solution: dict[str, Any]) -> list[dict[str, Any]]:
                     "task_ids": [int(t) for t in tour["task_ids"]],
                     "start_nest_id": tour.get("start_nest_id"),
                     "end_nest_id": tour.get("end_nest_id"),
+                    "est_cost": float(tour.get("est_cost") or 0.0),
                 }
             )
     return rows
 
 
+def _arrival_cycle_map(solution: dict[str, Any]) -> dict[int, int]:
+    """任务 id -> 到达周期号（供图面标注 ``T#·Ck``，Ck=到达周期）。
+
+    exp01 任务分批动态到达：``arrival_time`` 等于 ``(c-1)·Δt``（Δt=周期时长）。
+    据此把到达时刻映射到周期序号，直观区分「执行周期」与「到达周期」——
+    解释在线滚动下为何不能跨周期合并任务（如 C2 的 T15 与 C3 的 T19）。
+    """
+    cycles = list(solution.get("cycles") or [])
+    if len(cycles) >= 2:
+        dt = float(cycles[1].get("current_time", 0.0)) - float(cycles[0].get("current_time", 0.0))
+    else:
+        dt = 600.0
+    if dt <= 0:
+        dt = 600.0
+    out: dict[int, int] = {}
+    for t in (solution.get("tasks") or []):
+        at = float(t.get("arrival_time", 0.0))
+        out[int(t["id"])] = int(round(at / dt)) + 1
+    return out
+
+
 def _draw_gantt(ax, rows: list[dict[str, Any]],
-                tasks: dict[int, dict[str, Any]]):
-    """甘特面板：行 = 航次，块 = 任务（色 ∝ 收益），行尾 = 返航巢。"""
-    rewards = [float(tasks.get(tid, {}).get("reward", 0.0))
-               for r in rows for tid in r["task_ids"]]
-    vmin = min(rewards) if rewards else 0.0
-    vmax = max(rewards) if rewards else 1.0
-    if abs(vmax - vmin) < 1e-9:
-        vmax = vmin + 1.0
-    mid = (vmin + vmax) / 2.0
+                task_by_id: dict[int, dict[str, Any]],
+                nest_by_id: dict[int, dict[str, Any]],
+                arrival_cycle: dict[int, int] | None = None, *,
+                title: str | None = None):
+    """航程比例航迹条（替代原「收益着色顺序条」）。
 
-    cmap = plt.get_cmap("viridis")
-    norm = plt.Normalize(vmin=vmin, vmax=vmax)
+    每行 = 一个航次（周期×UAV）；画一条 **UAV 色**航线，其**长度 ∝ 真实飞行
+    距离**（起飞巢 → 各任务 → 返航巢，单位 km）。段间距按三维几何比例落点，
+    **总量按该航次 est_cost（DEM 垂直切面航程，求解器真实代价）标定**——
+    与 metrics 的 f2_cost、allocation_anim 的里程读数同口径。
+    任务按真实位置落点画方框并标号，航线两端分别标「起飞巢 / 返航巢」。
+    这样一眼能看出：哪架 UAV 飞了多远、任务沿航线怎么分布、是否异巢终止。
+    """
+    import math
 
-    max_len = max(len(r["task_ids"]) for r in rows)
+    paths: list[dict[str, Any]] = []
+    max_dist = 0.0
+    for r in rows:
+        pts: list[tuple[float, float, float]] = []
+        s_nest = nest_by_id.get(int(r["start_nest_id"])) if r["start_nest_id"] is not None else None
+        e_nest = nest_by_id.get(int(r["end_nest_id"])) if r["end_nest_id"] is not None else None
+        if s_nest is not None:
+            pts.append((float(s_nest["x"]), float(s_nest["y"]), float(s_nest["z"])))
+        for tid in r["task_ids"]:
+            t = task_by_id.get(int(tid))
+            if t is not None:
+                pts.append((float(t["x"]), float(t["y"]), float(t["z"])))
+        if e_nest is not None:
+            pts.append((float(e_nest["x"]), float(e_nest["y"]), float(e_nest["z"])))
+        cum = [0.0]
+        for a, b in zip(pts, pts[1:]):
+            d = math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2)
+            cum.append(cum[-1] + d)
+        cum_km = [c / 1000.0 for c in cum]
+        # 总量按 DEM 航程（est_cost，求解器真实代价 = 垂直切面三维航程）标定：
+        # 段间距保留三维几何比例，整条缩放到 est_cost，使线长与 metrics 的
+        # f2_cost、anim 的里程读数同口径（曾直接用三维直线，总量少报 ~2%，
+        # 与同图 (b) 面板 / allocation_anim 里程对不上——2026-10-13 审查修复）。
+        est_km = float(r.get("est_cost") or 0.0) / 1000.0
+        if est_km > 0.0 and cum_km[-1] > 0.0:
+            scale = est_km / cum_km[-1]
+            cum_km = [c * scale for c in cum_km]
+        max_dist = max(max_dist, cum_km[-1])
+        paths.append({
+            "uav": int(r["uav_id"]),
+            "task_ids": [int(t) for t in r["task_ids"]],
+            "rewards": [float(task_by_id.get(int(t), {}).get("reward", 0.0)) for t in r["task_ids"]],
+            "s": r["start_nest_id"], "e": r["end_nest_id"],
+            "cum": cum_km,
+        })
+
     n = len(rows)
-    x_nest = max_len + 1.15
-    x_max = x_nest + 2.1
-
     ys = np.arange(n)[::-1]
-    for y, row in zip(ys, rows):
-        ax.barh(y, max_len + 0.5, left=0.5, height=0.72,
-                color="#f3f5f8", edgecolor="none", zorder=1)
-        for pos, tid in enumerate(row["task_ids"], start=1):
-            reward = float(tasks.get(tid, {}).get("reward", 0.0))
-            ax.barh(y, 0.86, left=pos - 0.43, height=0.64,
-                    color=cmap(norm(reward)), edgecolor="white",
-                    linewidth=0.9, zorder=2)
-            ink = "white" if reward < mid else "#132238"
-            ax.text(pos, y, f"T{tid}", ha="center", va="center",
-                    fontsize=FS["tick"], color=ink, zorder=3)
-
-        s, e = row["start_nest_id"], row["end_nest_id"]
-        relocated = s is not None and e is not None and s != e
-        label = f"巢{s} → 巢{e}" if relocated else f"巢{s}"
-        ax.text(x_nest, y, label, ha="left", va="center",
-                fontsize=FS["tick"],
-                color=_RELOCATED_COLOR if relocated else "#5b6472",
-                zorder=3)
+    for y, r, p in zip(ys, rows, paths):
+        color = uav_color(p["uav"])
+        cum = p["cum"]
+        if cum[-1] > 0:
+            ax.plot([0.0, cum[-1]], [y, y], color=color, lw=2.4,
+                    zorder=2, solid_capstyle="round")
+        for i, tid in enumerate(p["task_ids"], start=1):
+            x = cum[i]
+            ax.scatter([x], [y], s=125, color=color, edgecolors="white",
+                       linewidths=1.1, marker="s", zorder=5)
+            label = f"T{tid}"
+            if arrival_cycle and int(tid) in arrival_cycle:
+                label += f"·C{arrival_cycle[int(tid)]}"
+            ax.annotate(label, (x, y), textcoords="offset points",
+                        xytext=(0, 9), ha="center", fontsize=FS["tick"],
+                        color="#1f2933", zorder=7, bbox=_HALO)
+            ax.annotate(f"{p['rewards'][i - 1]:.1f}", (x, y),
+                        textcoords="offset points", xytext=(0, -13),
+                        ha="center", fontsize=6.0, color="#8a95a1", zorder=7)
+        # 起飞巢（左端，实心屋形）
+        ax.scatter([0.0], [y], marker=_G_HOUSE, s=150, color=PALETTE["nest"],
+                   edgecolors="white", linewidths=1.0, zorder=6)
+        if p["s"] is not None:
+            ax.annotate(f"巢{p['s']}", (0.0, y), textcoords="offset points",
+                        xytext=(0, -15), ha="center", fontsize=6.4,
+                        color="#5b6472", zorder=7)
+        # 返航巢（右端，UAV 色空心圈）
+        if cum[-1] > 0:
+            ax.scatter([cum[-1]], [y], s=175, facecolors="none",
+                       edgecolors=color, linewidths=1.6, marker="o", zorder=5)
+        relocated = p["s"] is not None and p["e"] is not None and p["s"] != p["e"]
+        if p["e"] is not None:
+            ax.annotate(f"巢{p['e']}", (cum[-1], y), textcoords="offset points",
+                        xytext=(0, -15), ha="center", fontsize=6.4,
+                        color=_RELOCATED_COLOR if relocated else "#5b6472", zorder=7)
 
     for i in range(n - 1):
         if rows[i]["cycle"] != rows[i + 1]["cycle"]:
             ax.axhline((ys[i] + ys[i + 1]) / 2.0, color="#c3cbd4",
                        linewidth=0.9, linestyle=(0, (4, 3)), zorder=0)
 
-    ax.text(x_nest, n - 0.32, "返航巢", ha="left", va="bottom",
-            fontsize=FS["tick"], color="#7b8794", zorder=3)
     ax.set_yticks(ys, [f"C{r['cycle']}·U{r['uav_id']}" for r in rows],
                   fontsize=FS["tick"])
-    ax.set_xticks(np.arange(1, max_len + 1))
-    ax.set_xlim(0.35, x_max)
+    ax.set_xlim(-max_dist * 0.03, max_dist * 1.06)
     ax.set_ylim(-0.7, n + 0.3)
-    style_axes(ax, title="(a) 分配甘特：谁 · 顺序 · 返航巢（块色 ∝ 任务收益）")
+    style_axes(ax, title=title or
+               "(a) 分配航迹条：线长 ∝ 真实航程 · 方块=任务 · 两端=起/降巢（按 UAV 着色）")
     ax.grid(axis="x", alpha=0.15)
     ax.grid(axis="y", visible=False)
-    ax.set_xlabel("任务顺位（左 → 右）")
-
-    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
-    sm.set_array([])
-    return sm
+    ax.set_xlabel("累计航程 (km，起飞巢起算；段间距按三维几何比例、总量按 DEM 航程 est_cost 标定)")
 
 
 def _draw_cycle_tours(ax, cyc: dict[str, Any],
                       task_by_id: dict[int, dict[str, Any]],
-                      nest_by_id: dict[int, dict[str, Any]]) -> set[int]:
+                      nest_by_id: dict[int, dict[str, Any]],
+                      arrival_cycle: dict[int, int] | None = None) -> set[int]:
     """画单周期航次：起点 → 任务 → 终点巢；任务点按承运 UAV 着色。
 
     未执行任务只画空心灰点（不再逐点标号，文字减半）。
@@ -187,7 +256,10 @@ def _draw_cycle_tours(ax, cyc: dict[str, Any],
         ax.scatter([float(t["x"])], [float(t["y"])], s=_task_size(t["reward"]),
                    color=uav_color(u), edgecolors="white", linewidths=0.9,
                    zorder=6)
-        ax.annotate(f"T{tid}", (float(t["x"]), float(t["y"])),
+        label = f"T{tid}"
+        if arrival_cycle and int(tid) in arrival_cycle:
+            label += f"·C{arrival_cycle[int(tid)]}"
+        ax.annotate(label, (float(t["x"]), float(t["y"])),
                     textcoords="offset points", xytext=_label_offset(tid),
                     ha="center", fontsize=6.8, color="#1f2933",
                     zorder=8, bbox=_HALO)
@@ -211,8 +283,7 @@ def plot_allocation(
 
     task_by_id = {int(t["id"]): t for t in tasks}
     nest_by_id = {int(n["id"]): n for n in nests}
-    metric_by_cycle = {int(c.get("cycle", -1)): c
-                       for c in (metrics.get("cycles") or [])}
+    arrival_cycle = _arrival_cycle_map(solution)
 
     n_rows = len(rows)
     gantt_h = max(2.8, 0.42 * n_rows + 1.5)
@@ -220,12 +291,10 @@ def plot_allocation(
     fig = plt.figure(figsize=(11.8, gantt_h + 4.55))
     gs = fig.add_gridspec(
         2, 1, height_ratios=[gantt_h, 4.0], hspace=0.30,
-        left=0.055, right=0.90, top=0.94, bottom=0.105,
+        left=0.055, right=0.93, top=0.94, bottom=0.105,
     )
     ax_gantt = fig.add_subplot(gs[0])
-    sm = _draw_gantt(ax_gantt, rows, task_by_id)
-    fig.colorbar(sm, ax=ax_gantt, fraction=0.024, pad=0.012,
-                 label="任务收益 R_j")
+    _draw_gantt(ax_gantt, rows, task_by_id, nest_by_id, arrival_cycle=arrival_cycle)
 
     # ── (b) 逐周期 DEM 演化：横排 1×N，共享范围 ───────────────────
     n_cyc = len(cycles)
@@ -240,11 +309,15 @@ def plot_allocation(
         smx = _draw_dem(ax, solution.get("dem"), solution)
         if idx == 0:
             sm0 = smx
-        uavs_used = _draw_cycle_tours(ax, cyc, task_by_id, nest_by_id)
+        uavs_used = _draw_cycle_tours(ax, cyc, task_by_id, nest_by_id,
+                                       arrival_cycle=arrival_cycle)
         all_uavs_used |= uavs_used
         _draw_nests(ax, nests)
-        muas = metric_by_cycle.get(int(cyc.get("cycle", -1)), {}).get("muas", {})
-        km = float(muas.get("f2_cost", 0.0)) / 1000.0
+        # 周期里程 = 该周期各航次 est_cost 之和（纯 DEM 航程）。不用 metrics 的
+        # f2_cost——它另含 w_penalty×惩罚（量纲不同），曾使 (b) 面板里程与
+        # (a) 甘特条总长、anim 里程读数对不上（2026-10-13 审查统一）。
+        tours_c = [t for t in (cyc.get("tours") or []) if t.get("task_ids")]
+        km = sum(float(t.get("est_cost") or 0.0) for t in tours_c) / 1000.0
         _panel_title(ax, f"周期 {cyc.get('cycle')} · {km:.0f} km")
         _strip_axes(ax)
 
@@ -275,6 +348,11 @@ def plot_allocation(
 
     fig.suptitle("exp01_smoke：分配结构与逐周期空间演化",
                  fontsize=FS["suptitle"])
-    footnote(fig, "口径：甘特只画真被分配任务的航次；块色 ∝ 收益 R_j（数值见颜色条）；"
-                  "琥珀色 = 异巢终止（起飞巢 ≠ 返航巢）；地图未执行任务仅画空心点。")
-    return save_figure(fig, Path(out_dir) / "allocation", formats, dpi=dpi)
+    footnote(fig, "口径：航迹条（a）行=航次，UAV 色线长 ∝ 真实航程（段间距按三维"
+                  "几何比例、总量按 DEM 航程 est_cost 标定），方框=任务"
+                  "（上标号 T#·Ck，Ck=到达周期；下收益 R_j），两端标起/降巢，"
+                  "琥珀=异巢终止；地图（b）未执行任务仅画空心点，周期标题里程 = "
+                  "该周期各航次 est_cost 之和（纯 DEM 航程，不含约束惩罚）。"
+                  "Ck 标出任务到达周期，区分「到达」与「执行」——在线滚动下"
+                  "晚到任务（如 T19·C3）无法并入早周期航次。")
+    return save_figure(fig, Path(out_dir) / "P03_allocation", formats, dpi=dpi)

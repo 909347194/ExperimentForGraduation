@@ -50,7 +50,10 @@ from task_allocation.methods.muas.cost.cost_matrix import (
     build_pairwise_costs,
 )
 from task_allocation.methods.muas.cost.dem_terrain import DEMTerrain
-from task_allocation.methods.muas.cost.vertical_section import VerticalSectionCostEstimator
+from task_allocation.methods.muas.cost.vertical_section import (
+    VerticalSectionCostEstimator,
+    make_distance_fn,
+)
 from task_allocation.methods.muas.problem import MUASProblemConfig
 from task_allocation.methods.muas.solvers.dmde_solver import DMDEConfig
 from task_allocation.methods.muas.solvers.muas_stage import (
@@ -64,7 +67,10 @@ from task_allocation.methods.rolling.event_trigger import (
     should_replan,
     summarize_events,
 )
-from task_allocation.methods.selection.pipeline import run as run_selection
+from task_allocation.methods.selection.pipeline import (
+    AntiStarvationConfig,
+    run as run_selection,
+)
 from task_allocation.methods.selection.capability import (
     CapabilityScaleConfig,
     merge_caps,
@@ -217,6 +223,7 @@ def _subset_cost_build(
             task_nest=np.zeros((0, getattr(cb, "n_nests", 0))),
             uav_nest=getattr(cb, "uav_nest", np.zeros((0, 0))),
             n_nests=getattr(cb, "n_nests", 0),
+            distance_fn=getattr(cb, "distance_fn", None),
         )
     pos = {t.id: i for i, t in enumerate(all_tasks)}
     rows = [pos[t.id] for t in selected]
@@ -227,6 +234,7 @@ def _subset_cost_build(
         task_nest=cb.task_nest[rows, :] if cb.task_nest.shape[0] else cb.task_nest,
         uav_nest=cb.uav_nest,
         n_nests=cb.n_nests,
+        distance_fn=getattr(cb, "distance_fn", None),
     )
 
 
@@ -267,6 +275,11 @@ class RollingHorizon:
         self.solver_cfg = solver_config or DMDEConfig()
         self.event_cfg = event_config or EventTriggerConfig()
         self.nest_offset = nest_offset
+        # 统一距离口径（DEM 三维航程）：整场运行**共用一个记忆化缓存**——
+        # 任务与机巢位置固定，跨周期、跨阶段重复查同一条边时直接命中，
+        # 避免每周期重算 O(n²) 段长（垂直切面 0.37 ms/段，不复用会线性放大）。
+        self._distance_cache: dict = {}
+        self._distance_fn = make_distance_fn(self.estimator, cache=self._distance_cache)
 
         self._nest_by_id = {n.id: n for n in self.nests}
         self._time = float(pool.current_time)
@@ -352,6 +365,7 @@ class RollingHorizon:
             dem=self.dem,
             estimator=self.estimator,
             nest_offset=self.nest_offset,
+            distance_fn=self._distance_fn,
         )
 
         # 6) 第一阶段：动态任务选择 → T_t^sel
@@ -385,6 +399,8 @@ class RollingHorizon:
             config=sel_config,
             cost_hint=cost_hint,
             pairwise_cost=cb.provider.pairwise,
+            # 统一距离口径：第一阶段用与代价矩阵/ETA 同一把 DEM 尺子
+            distance_fn=cb.distance_fn,
         )
         record.selection = dict(sel.diagnostics)
         record.selection["replan"] = replan
@@ -725,6 +741,10 @@ class RollingHorizon:
             max_selected=marg_d.get("max_selected", None),
             max_ratio=float(marg_d.get("max_ratio", 2.0)),
             min_marginal_ratio=float(marg_d.get("min_marginal_ratio", 0.0)),
+            # Fix① 防饥饿软加权：等待时长 → 终刀接受判据的乘性加权。
+            # 此前遗漏接线 → yaml 写了 age_gamma 却静默退回 0.0（机制失效）。
+            age_gamma=float(marg_d.get("age_gamma", 0.0)),
+            wait_scale=float(marg_d.get("wait_scale", 3600.0)),
         )
         cap_d = dict(d.get("capability", {}) or {})
         capability = CapabilityScaleConfig(
@@ -746,8 +766,18 @@ class RollingHorizon:
                 if cap_d.get("max_expand_factor") is None
                 else float(cap_d["max_expand_factor"])
             ),
+            # Fix③：即便 enabled=False 也按吞吐上界收敛候选规模（默认关）
+            fallback_when_disabled=bool(cap_d.get("fallback_when_disabled", False)),
+        )
+        # Fix② 硬性不停饿兜底：此前遗漏接线 → yaml 写了 enabled=true 却静默
+        # 退回 False，防饥饿机制从未真正生效（老化/临期任务拿不到强制优先）。
+        asv_d = dict(d.get("anti_starvation", {}) or {})
+        anti_starvation = AntiStarvationConfig(
+            enabled=bool(asv_d.get("enabled", False)),
+            force_after_seconds=float(asv_d.get("force_after_seconds", 1200.0)),
+            deadline_slack=float(asv_d.get("deadline_slack", 300.0)),
         )
         return SelectionConfig(
             priority=priority, feasibility=feasibility, marginal=marginal,
-            capability=capability,
+            capability=capability, anti_starvation=anti_starvation,
         )

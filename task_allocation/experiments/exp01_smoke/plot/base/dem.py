@@ -141,10 +141,11 @@ def _smooth_filled(elev: np.ndarray, valid: np.ndarray, iters: int = 10) -> np.n
 def _sample_real_dem(dem: dict[str, Any], solution: dict[str, Any] | None):
     """若可用，直接从真实 ASTER 瓦片裁剪采样（~150 m 格网），返回 (elev, extent)。
 
-    视图取「场景包围盒 ∩ 瓦片实际覆盖范围」并外扩约 2.5 km（保证贴近瓦片
-    边缘的机巢/任务完整可见），瓦片外仅剩窄条，用最近邻延拓 + 轻度平滑补齐，
-    **不渲染**瓦片覆盖不到的大片虚构地形。返回的 ``extent`` 为 imshow 约定的
-    ``(left, right, bottom, top)``。
+    视图 = **瓦片真实覆盖范围（ENU 包络）**，满幅铺底到真实地形边界——
+    不再与「场景包围盒」相交并外扩夹紧。exp01 场景盒比瓦片略大（约 2 km/边），
+    旧逻辑在瓦片四周留下一圈「最近邻延拓 + 10 次盒滤波」补洞带，观感模糊且
+    已非真实 ASTER 地形；本图要求「完全按瓦片范围画」，故直接取瓦片四角包络。
+    返回的 ``extent`` 为 imshow 约定的 ``(left, right, bottom, top)``。
 
     否则返回 None，由 ``_draw_dem`` 回退到 solution.json 里的降采样 dem。
     做法参照 matplotlib 官方 *topographic hillshading* 示例：用真实栅格 +
@@ -163,7 +164,6 @@ def _sample_real_dem(dem: dict[str, Any], solution: dict[str, Any] | None):
     except Exception:
         return None
 
-    left, bottom, right, top = (float(v) for v in dem["bounds"])
     try:
         lf = LocalFrame(float(lf_info["lat0"]), float(lf_info["lon0"]))
         gt = GeoTIFFDEM(str(tif))
@@ -178,14 +178,14 @@ def _sample_real_dem(dem: dict[str, Any], solution: dict[str, Any] | None):
     tx0, tx1 = float(enu[..., 0].min()), float(enu[..., 0].max())
     ty0, ty1 = float(enu[..., 1].min()), float(enu[..., 1].max())
 
-    # 视图 = 场景 ∩ 瓦片包络，外扩 2.5 km 且仍夹在场景内
-    margin = 2500.0
-    vx0 = max(left, tx0 - margin)
-    vx1 = min(right, tx1 + margin)
-    vy0 = max(bottom, ty0 - margin)
-    vy1 = min(top, ty1 + margin)
+    # 视图 = 瓦片真实覆盖范围（ENU 包络），满幅铺底到真实地形边界。
+    # 不再与「场景盒」相交并外扩夹紧：exp01 场景盒比瓦片略大，旧逻辑在瓦片
+    # 四周留下约 2 km 的「最近邻延拓 + 10 次盒滤波」补洞带，观感模糊且已非
+    # 真实 ASTER 地形。任务/机巢全部落在瓦片内，全幅瓦片即可完整容纳并留边。
+    vx0, vx1 = tx0, tx1
+    vy0, vy1 = ty0, ty1
     if vx1 - vx0 < 1000.0 or vy1 - vy0 < 1000.0:
-        return None  # 场景与瓦片几乎不相交，退回降采样 dem
+        return None  # 瓦片过窄，退回降采样 dem
 
     width_m, height_m = vx1 - vx0, vy1 - vy0
     # 目标格网 ~150 m，最长边封顶 1000 px（兼顾地形细节与渲染速度）

@@ -137,3 +137,76 @@ def test_defers_only_genuinely_infeasible():
     assert executed == {0}, f"真不可行任务不应被执行或误改派：executed={executed}"
     # 可行的 t0 仍应保留（不因邻座不可行被连坐）
     assert any(t.task_ids == [0] for t in sol.tours)
+
+
+# ---------------------------------------------------------------------------
+# 4. Fix⑥「可达即执行」：救援池扩到全可用机队
+# ---------------------------------------------------------------------------
+
+
+def _evaluator_scoped(tasks, uavs, nests, participating_ids, available, scope):
+    """构造「参与集 ⊂ 可用机队」的 evaluator（Fix⑥ 救援池口径对照）。"""
+    problem = SelectiveMUASProblem.from_entities(
+        tasks, uavs, nests,
+        pairwise_cost=_pairwise(tasks, uavs, nests),
+        config=MUASProblemConfig(w_time=0.0),
+    )
+    part = [u for u in uavs if u.id in participating_ids]
+    return MUASAssignmentEvaluator(
+        problem=problem,
+        participating=part,
+        tasks=list(tasks),
+        nests=list(nests),
+        fleet_uavs=list(uavs),
+        config=MUASStageConfig(reflow_rescue_scope=scope),
+        available_uavs=list(available),
+    )
+
+
+def test_reflow_rescues_with_idle_uav_outside_participating_set():
+    """Fix⑥：参与集外的闲置机应能救援可达任务（可达性＝存在量化）。
+
+    几何：机巢与两架机同在原点；t0/t1 各距原点 30km（单任务航次 60km），
+    两任务相距约 42.4km，故合并航次 ≈ 102.4km。
+      u0 航程 70km → 装得下单个（60 ≤ 70）、装不下两个（102.4 > 70），
+                     且它是**唯一**参与机；
+      u1 航程 80km → 装得下（60 ≤ 80），但**不在**参与集（闲置可用）。
+    历史口径（participating）只在参与集内找闲置机 → 唯一参与机已占用 → 假暂缓；
+    Fix⑥（fleet）扩到全可用机队 → u1 接手 → 两任务均执行。
+    这正是 exp01 中 T10 的处境（非参与闲置机 67.3/71.0/76.1km 均 ≤80km）。
+    """
+    tasks = [_task(0, 30_000.0, 0.0), _task(1, 0.0, 30_000.0)]
+    uavs = [_uav(0, remaining_range=70_000.0), _uav(1, remaining_range=RANGE)]
+    nests = [Nest(id=0, x=0.0, y=0.0, z=0.0, capacity=10)]
+
+    ev_old = _evaluator_scoped(tasks, uavs, nests, {0}, uavs, "participating")
+    sol_old = ev_old.build_solution([(0, 0), (0, 1)])
+    assert len(set(sol_old.executed_task_ids)) == 1, (
+        f"历史口径只在参与集内救援，应有 1 个被暂缓：{sol_old.executed_task_ids}"
+    )
+
+    ev_new = _evaluator_scoped(tasks, uavs, nests, {0}, uavs, "fleet")
+    sol_new = ev_new.build_solution([(0, 0), (0, 1)])
+    assert set(sol_new.executed_task_ids) == {0, 1}, (
+        f"可达任务应被执行（存在量化）：{sol_new.executed_task_ids}"
+    )
+    assert any(t.uav_id == 1 and t.task_ids for t in sol_new.tours), (
+        f"应由参与集外的闲置机 u1 接手："
+        f"{[(t.uav_id, t.task_ids) for t in sol_new.tours]}"
+    )
+
+
+def test_reflow_fleet_scope_still_defers_infeasible():
+    """Fix⑥ 不得把真不可达任务硬塞进来：救援池扩大仍需过航程门。
+
+    t1 在 400km 外（单任务航次 800km），即便把全机队都当救援池也装不下 →
+    应只执行 t0。保证「可达即执行」不会退化成「无条件执行」。
+    """
+    tasks = [_task(0, 30_000.0, 0.0), _task(1, 400_000.0, 0.0)]
+    uavs = [_uav(0, remaining_range=70_000.0), _uav(1, remaining_range=RANGE)]
+    nests = [Nest(id=0, x=0.0, y=0.0, z=0.0, capacity=10)]
+    ev = _evaluator_scoped(tasks, uavs, nests, {0}, uavs, "fleet")
+    sol = ev.build_solution([(0, 0), (0, 1)])
+    assert set(sol.executed_task_ids) == {0}, (
+        f"真不可达任务不应因救援池扩大而被执行：{sol.executed_task_ids}"
+    )

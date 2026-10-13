@@ -8,7 +8,7 @@ UAV 起点虚拟键：-(1+uav_id)；机巢键：nest_offset + nest_id
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Mapping, Sequence
+from typing import Callable, Mapping, Sequence
 
 import numpy as np
 
@@ -17,6 +17,7 @@ from task_allocation.methods.muas.cost.dem_terrain import DEMTerrain
 from task_allocation.methods.muas.cost.vertical_section import (
     CostEstimationResult,
     VerticalSectionCostEstimator,
+    make_distance_fn,
 )
 from task_allocation.methods.muas.problem import CostProvider, build_cost_provider
 
@@ -31,6 +32,10 @@ class CostMatrixBuildResult:
     uav_nest: np.ndarray = field(default_factory=lambda: np.zeros((0, 0)))  # (n_uavs, n_nests)
     n_nests: int = 0
     details: dict[tuple[int, int], CostEstimationResult] = field(default_factory=dict)
+    # 统一距离口径：由同一个估算器派生的 DEM 三维航程（带记忆化）。
+    # 评价端航迹时间 F3、时间窗 ETA、第一阶段 travel/插入代价都从它取长度，
+    # 杜绝「代价矩阵走地形、ETA 走直线」的口径分裂（P1-1）。
+    distance_fn: Callable[[Sequence[float], Sequence[float]], float] | None = None
 
 
 def build_pairwise_costs(
@@ -42,11 +47,19 @@ def build_pairwise_costs(
     nest_offset: int = 1_000_000,
     store_details: bool = False,
     task_weight_from_reward: bool = False,
+    distance_fn: Callable[[Sequence[float], Sequence[float]], float] | None = None,
 ) -> CostMatrixBuildResult:
-    """用垂直切面估算填充 pairwise，并返回 CostProvider。"""
+    """用垂直切面估算填充 pairwise，并返回 CostProvider。
+
+    Args:
+        distance_fn: 统一距离口径。缺省时由 ``estimator`` 派生（带记忆化），
+            保证 pairwise 代价与 ETA / F3 同源；无 DEM 时退化为三维直线。
+    """
     nests = list(nests or [])
     avail = [u for u in uavs if u.is_available]
     est = estimator or VerticalSectionCostEstimator(dem_terrain=dem)
+    if distance_fn is None:
+        distance_fn = make_distance_fn(est)
 
     pairwise: dict[tuple[int, int], float] = {}
     details: dict[tuple[int, int], CostEstimationResult] = {}
@@ -107,7 +120,12 @@ def build_pairwise_costs(
                 details[(u_key, n_key)] = res
 
     provider = build_cost_provider(
-        tasks, nests, avail, pairwise=pairwise, nest_offset=nest_offset
+        tasks,
+        nests,
+        avail,
+        pairwise=pairwise,
+        nest_offset=nest_offset,
+        distance_fn=distance_fn,
     )
     # 用估算 pairwise 覆盖
     provider.pairwise = pairwise
@@ -119,4 +137,5 @@ def build_pairwise_costs(
         uav_nest=uav_nest,
         n_nests=n_b,
         details=details,
+        distance_fn=distance_fn,
     )

@@ -100,5 +100,5 @@ def plot_geo_overview(
     _strip_axes(ax)
     ax.set_title("初始态势 · 机巢 / 任务 / DEM 地形", fontsize=13, fontweight="bold", color="#1f2933")
 
-    stem = Path(out_dir) / "geo_overview"
+    stem = Path(out_dir) / "I01_geo_overview"
     return save_figure(fig, stem, formats, dpi=dpi)

@@ -338,4 +338,4 @@ def plot_fleet_state(
     footnote(fig, "口径：实际出动 = tours 按 uav_id 去重；空闲泊位 = 容量 − 周期末占用；"
                   "距离为三维直线代理（真代价为地形剖面代价，计入 F2）；"
                   f"{cap_note}{rank_note}；换巢明细见 allocation 图返航巢列。")
-    return save_figure(fig, Path(out_dir) / "fleet_state", formats, dpi=dpi)
+    return save_figure(fig, Path(out_dir) / "P10_fleet_state", formats, dpi=dpi)
