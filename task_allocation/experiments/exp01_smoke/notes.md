@@ -125,14 +125,16 @@ from plot import render_from_results as r; r('task_allocation/experiments/exp01_
 | 任务规模、散布、收益、时间窗 | `config.yaml` 的 `tasks:` | 任务当前为合成,后续换 CSV 时参数可平移;`deadline_cycles_min/max` 把绝对秒数时间窗改为周期相关 |
 | 第一阶段权重与阈值 | `config.yaml` 的 `selection:` | 做 α / 五项权重灵敏度时只改这里 |
 | 第二阶段模型与剔除策略 | `config.yaml` 的 `muas:` | λ、选择性剔除、等待补偿、终点进编码、Lamarckian 回写 |
-| DMDE 超参 | `config.yaml` 的 `solver:` | 种群、代数、ζ;`delta` 留空 = 论文式 3-12 原式 |
+| DMDE 超参 | `config.yaml` 的 `solver:` | 种群、代数、ζ;`delta` 留空 = 论文式 3-12 原式。代数当前 500（2026-10-14 按 Ming 2017 收敛标定由 100 上调，依据见 yaml 注释） |
 | 三维代价 / DEM 网格步长 | `config.yaml` 的 `cost:` | 网格步长直接决定一次性开销 |
-| 滚动周期、到达、故障注入 | `config.yaml` 的 `rolling:` | `arrivals: {mode: poisson\|uniform\|fixed, …}` 随机到达流;含 `strict_capacity` 硬校验开关 |
+| 滚动周期、到达、故障注入 | `config.yaml` 的 `rolling:` | `arrivals: {mode: poisson\|uniform\|fixed, …}` 随机到达流;含 `strict_capacity` 硬校验开关。**长程协议（2026-10-14）**：`n_cycles: 24` + `arrivals.mode: poisson, lambda: 5.0`——完成率不是目标，主指标为正确执行吞吐/正确执行率（见 metrics summary 新字段）。注意 `fixed` 的 counts 长度必须 = n_cycles−1，否则延长周期只补 0 到达空转 |
 | 多 seed 复现 | `config.yaml` 的 `experiment.seeds` | 多次随机重复取均值±标准差(论文稳健性证据);仅 1 个元素时退化为单 seed |
+| 命令行覆盖(不改 yaml) | `run.py --seeds 42 43 44` / `42-46`(区间)/ `42,43`(逗号,可混用);`--no-plots` / `--no-tables` | 多种子长跑的调试入口:覆盖 seeds、跳过图表(只落 json);区间展开 `--seeds 42-51` 即 10 seed |
 | 图格式、分辨率 | `config.yaml` 的 `plot:` | 代码在 `plot/`,产物路径在 `experiment.figures_dir` |
 | 约束开关与惩罚权重 | `config.yaml` 的 `constraints:` | 11 个开关 + 9 个权重,置 false 即该约束既不判可行也不计惩罚(消融/口径取舍) |
 | 惩罚量纲解耦 | `config.yaml` 的 `muas.w_violation` | null = 历史口径(惩罚随 F2 乘 λ);给数值则惩罚以「奖励当量/惩罚单位」直接计入 |
-| 完成反馈闸门 | `config.yaml` 的 `rolling.completion_feasibility_gate` | true = 违约任务不顺延完成、回池重选(完成率不说谎);false = 历史行为 |
+| 完成反馈闸门 | `config.yaml` 的 `rolling.completion_feasibility_gate` | true = **物理不可行**任务不顺延完成、回池重选（迟到交付正常完成，2026-10-15「迟到不是废飞」协议）;false = 历史行为（一律标完成） |
+| 迟到奖励折减 | `config.yaml` 的 `muas.late_reward_decay_seconds` | 晚到任务有效奖励 `eff = R × max(0, 1 − L/W)`；须与 `selection.feasibility.late_tolerance_seconds` 同值；null = 关闭（历史口径） |
 
 **原则**:`methods/` 不读配置、不写死数值;所有数值由 `config.py` 从 yaml 取出后传入。
 
@@ -401,19 +403,35 @@ f(s) = -F1 + λ·F2 + w_time · F3 ,   F3 = max_k T_k
 原 `_advance_execution` 对所有绑定任务无条件 `pool.complete()`,既不读
 `solution.feasible` 也不看违约标签 → 迟到任务照样计入完成率。现按违约标签
 归因到任务(`tw_task_*` 任务级、`range_uav_*`/`time_uav_*` UAV 级、
-`nest_*`/`end_nest_unreachable_*` 机巢级、`tour.feasible=False` 兜底),违约任务:
+`nest_*`/`end_nest_unreachable_*` 机巢级、`tour.feasible=False` 兜底)。
 
-- 不计完成、不计奖励 → 完成率不再说谎;
-- `fleet.unbind_tasks` 解绑 + `pool.release` 回池,下周期按 RELEASE 重新参与选择;
-- 记入 `record.infeasible_ids` / `infeasible_tags`,并汇入 metrics 的
-  `summary.n_infeasible_delivery`(跨 seed 聚合)。
+**2026-10-15 协议纠正「迟到不是废飞」**(用户裁定):时间窗违约(`tw_task_*`)
+不再是硬违约——它本来就是 `notes §98` 定义的「软违反(惩罚计入适应度,不致命)」,
+硬闸门把软违反变成了致命,且与被弹回任务下周期可再选、再赚一次 F1 的奖励口径
+自相矛盾。现闸门**只拦物理不可行**(`range_uav_*`/`time_uav_*`/`tour_infeasible_*`/
+`unknown_task_*`/机巢与结构类):
 
-置 false 即回到历史行为,用于消融对比。
+- 迟到交付:正常 `pool.complete()`,计入完成与吞吐;迟到秒数记入
+  `task.meta["lateness_seconds"]`、`record.late_ids`/`lateness_by_task`;
+- 有效奖励按迟到线性折减 `eff = R × max(0, 1 − L/W)`
+  (`muas.late_reward_decay_seconds`,W=600s),与 `w_violation` 同向压实按时服务;
+- 选择期预筛同步放宽(`selection.feasibility.late_tolerance_seconds`,同值 W):
+  只拦「最近机直飞到达 > latest + W」的结构性不可达,「紧但可能迟到」的任务
+  交给适应度裁决;
+- 物理不可行交付:仍 `fleet.unbind_tasks` + `pool.release` 回池,下周期按
+  RELEASE 重新参与选择;记入 `record.infeasible_ids`/`infeasible_tags`,
+  汇入 metrics 的 `summary.n_infeasible_delivery`(**废飞只剩这一类**);
+- 同一任务同时带 tw 与硬性标签时,硬性优先(仍弹回)。
 
-**配套**:`metrics.py` 新增 `cycle_feasible_rate` 与 `n_infeasible_delivery`
-(均进 `_SEED_AGG_KEYS`,跨 seed 出 mean±std);新增
-`tests/test_completion_gate.py`(闸门开/关/UAV 级归因 + 量纲解耦数学)与
-`tests/test_constraint_switches.py`,全套 27 项通过。
+置 false 即回到历史行为(一律标完成),用于消融对比。
+
+**配套**:`metrics.py` 的 `summary` 新增 `n_late`/`on_time_rate`/`avg_lateness_s`/
+`max_lateness_s`(均进 `_SEED_AGG_KEYS`);`correct_exec_rate` 口径改为
+「按时出动/总出动」(迟到与物理不可行都不算正确,但迟到计入完成);
+`check_time_window_constraint` 返回三元组 `(penalty, tags, lateness)`;
+`ConstraintReport.as_details()` 透出 `lateness` 表;新增
+`tests/test_late_reward_and_prefilter.py`(折减数值/预筛容忍边界),
+`tests/test_completion_gate.py` 翻转旧语义并加混合标签用例。
 
 ### 11. 任务撒点域改为 DEM 全域(2026-10-11)
 
@@ -484,3 +502,34 @@ f(s) = -F1 + λ·F2 + w_time · F3 ,   F3 = max_k T_k
   配合 `rolling.strict_capacity: true` 可验证落地期硬校验不误杀可行解。
 - **λ 灵敏度**:`muas.lambda_cost` 决定收益与代价的折算比,直接体现为完成率。
 - 对照方法(baselines)就位后,本实验可扩成 exp05 的对比入口。
+
+## 「迟到不是废飞」新协议（2026-10-15 用户裁定 + 2×2 复跑完成）
+
+- 三项决策落地：迟到=完成+奖励折减（W=600s，`problem.py::f1_reward` 读 lateness）；
+  物理不可行（range/tour_infeasible/结构）才弹回计废飞（`horizon._advance_execution`
+  按 `_HARD_TAGS` 分流）；预筛放宽到 `eta > latest + W`（`late_tolerance_seconds`
+  强制与 W 同值）。回归 195 passed。
+- 2×2 复跑结论（详见 `ANALYSIS_longhorizon_2026-10-15.md` 附节）：
+  废飞 15/9/13/10 → **全 0**；完成 +3~4、淘汰 −3、吞吐 +1.7~3.1%；
+  收益 −13~15%（迟到折减 + 放弃弹回重试）；旧协议"100 代全面占优"主要是
+  硬闸门假象，新协议下 500 vs 100 打平。
+- 新遗留：T52 仍超期淘汰（防饥饿兜底够不着）；迟到压哨现象明显
+  （预筛阈值=衰减窗，求解器贴边压哨），W 需做敏感性扫描。
+
+## 物理口径修正（2026-10-15 深夜，用户原则：「任务不被完成只有物理约束被违反」）
+
+- 全路径审计：预筛单程航程漏返程、时间预筛=非物理拒绝（违规）、超期淘汰对
+  物理不可达任务=分类错误。T52 实证 DEM 往返 81,096m > 80km 真不可达，
+  但旧系统空转 8 周期记「淘汰」。
+- 实施（211 passed）：① 预筛往返口径 + margin 默认 1.0（与硬闸门同口径，
+  0.95 会误杀 T105/T119——往返 79.9/77.8km 仅剩 135m/2.2km 余量）；
+  ② 时间窗预筛默认关（迟到由适应度定价）；③ static_unreachable +
+  mark_unreachable + horizon._screen_unreachable；④ metrics n_unreachable，
+  恒等式 arrived=done+unreach+elim+remain。
+- 结果：淘汰 1/2→0、不可达 1(T52)、g100 完成 132→133；g500 周期 23 出现
+  2 次废飞（UAV1 航次 80,986m 越限 985m，闸门拦下弹回、周期 24 完成，
+  净损为零；暴露修复链对边际越界航次的缺口）。
+- max_iter 结论强化：100 代全面占优（按时率/迟到深度/废飞/等待/求解），
+  完成持平。建议论文主口径 max_iter=100，500 代作敏感性对照。
+- 详见 ANALYSIS_longhorizon_2026-10-15.md 附二；复跑目录 results_phys、
+  results_phys_g100；compare_protocols.py 现含 10 组对比。

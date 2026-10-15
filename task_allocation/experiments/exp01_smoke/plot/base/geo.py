@@ -23,7 +23,6 @@
 from __future__ import annotations
 
 import math
-from pathlib import Path
 from typing import Any, Sequence
 
 import numpy as np
@@ -32,7 +31,7 @@ import matplotlib.patches as mpatches
 from matplotlib.patches import PathPatch
 from matplotlib.legend_handler import HandlerBase
 
-from ..theme import PALETTE, plt
+from ..theme import PALETTE
 
 __all__ = [
     # 共享样式
@@ -100,16 +99,18 @@ def _arrow(ax, p_from, p_to, color: str, *, lw: float = 2.1) -> None:
     箭头放在线段中点——既标明航向，又不会压住端点处的起点/任务/机巢标记。
     箭头子段长取段长的 ~24% 并夹在 [800m, 2600m]，避免过短看不见或过长征
     满整段；极短段（<800m）仍给固定长度，保证方向可读。
+    零长航段（起终点重合）直接跳过——否则 ``solid_capstyle="round"`` 会画出
+    一个多余的圆点，盖住本来要表达的任务/机巢标记。
     """
     x0, y0 = float(p_from[0]), float(p_from[1])
     x1, y1 = float(p_to[0]), float(p_to[1])
     dx, dy = x1 - x0, y1 - y0
     L = math.hypot(dx, dy)
+    if L < 1e-6:
+        return
     # 整条线（不带端点箭头）
     ax.plot([x0, x1], [y0, y1], "-", color=color, lw=lw, alpha=0.95,
             solid_capstyle="round", zorder=3)
-    if L < 1e-6:
-        return
     ux, uy = dx / L, dy / L
     mx, my = 0.5 * (x0 + x1), 0.5 * (y0 + y1)
     ah = min(max(L * 0.24, 800.0), 2600.0)   # 箭头子段长（米）
@@ -215,9 +216,11 @@ class _IconHandler(HandlerBase):
     def create_artists(self, legend, orig_handle, x0, y0, width, height, fontsize, trans):
         path = orig_handle.icon_path
         verts = np.asarray(path.vertices, dtype=float)
-        c = (verts.min(axis=0) + verts.max(axis=0)) / 2.0
-        span = float((verts.max(axis=0) - verts.min(axis=0)).max())
-        s = (min(width, height) * 0.80) / (span / 2.0)
+        lo, hi = verts.min(axis=0), verts.max(axis=0)
+        c = (lo + hi) / 2.0
+        span = float((hi - lo).max())
+        # span 极小时给下限，防止除零/放大到天文数字
+        s = (min(width, height) * 0.80) / max(span / 2.0, 1e-9)
         new_verts = (verts - c) * s + np.array([x0 + width / 2.0, y0 + height / 2.0])
         patch = PathPatch(
             mpath.Path(new_verts, path.codes),
@@ -313,7 +316,7 @@ def _draw_nests(
         # 相邻机巢标签左右交替，避免纵向相邻的巢 5/巢 6 之类互相压字
         to_left = int(n["id"]) % 2 == 1
         label = f"巢{n['id']}"
-        if counts:
+        if counts is not None:
             label += f"\n{int(counts.get(int(n['id']), 0))} 架"
         ax.annotate(
             label, (float(n["x"]), float(n["y"])),
@@ -342,8 +345,9 @@ def _set_scene_lim(
         ax.set_xlim(l, r)
         ax.set_ylim(b, tp)
         return
-    if dem and dem.get("bounds"):
-        l, b, r, tp = (float(v) for v in dem["bounds"])
+    bounds = (dem or {}).get("bounds")
+    if bounds:
+        l, b, r, tp = (float(v) for v in bounds)
         ax.set_xlim(l, r)
         ax.set_ylim(b, tp)
         return

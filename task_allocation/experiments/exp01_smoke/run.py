@@ -25,6 +25,14 @@
     完成反馈 ──► t+1（未执行的任务保留在池中，下周期以 REMAIN 重新参与）
 
 所有可调参数均在 ``config.yaml``；本文件不写死任何数值。
+
+命令行覆盖（不改 yaml 的调试入口，详见 ``_parse_args``）：
+
+- ``--seeds``      覆盖 ``experiment.seeds``。支持 ``42``、``42,43,44``、
+  ``42 43 44``、``42-46``（区间展开，去重保序）；缺省时按 yaml 走
+  （``seeds`` 缺失或单元素 → 单 seed）。
+- ``--no-plots`` / ``--no-tables``  跳过出图 / 结果表。多种子 × 多代数的
+  长跑调试时只关心 json 数值，不必每次等 16 张图 + LaTeX。
 """
 
 from __future__ import annotations
@@ -124,6 +132,12 @@ def _run_once(
     pool = TaskPool(current_time=0.0)
     fleet = UAVFleet(uavs, current_time=0.0)
 
+    # t=0 初始驻留快照：UAVFleet 在滚动求解中原位修改 UAV 对象的
+    # x/y/z/nest_id/status，不先快照的话 solution.json 的 uavs 表落盘的
+    # 就是终态位置（周期 1 的起点巢被周期 1 的落点覆盖），而该表按契约
+    # 是「初始分布（t=0）」，geo_overview 的「初始机队」层也据此绘制。
+    initial_uavs = copy.deepcopy(uavs)
+
     horizon = RollingHorizon(
         pool,
         fleet,
@@ -146,6 +160,7 @@ def _run_once(
         nests=nests,
         terrain=terrain,
         uavs=uavs,
+        initial_uavs=initial_uavs,
         batch=batch,
         records=records,
         pool=pool,
@@ -155,9 +170,60 @@ def _run_once(
     return facts, build_metrics(facts), build_solution(facts)
 
 
+def _parse_seed_list(tokens: list[str]) -> list[int]:
+    """解析 ``--seeds`` 的 token 列表为种子列表（去重保序）。
+
+    支持三种写法（可混用）：
+
+    - 单个：``--seeds 42``
+    - 逗号：``--seeds 42,43,44``
+    - 区间：``--seeds 42-46`` → ``[42, 43, 44, 45, 46]``
+
+    区间专为「多种子稳健性统计」设计：``--seeds 42-51`` 即跑 10 个种子，
+    不必在 yaml 里手写一列。空 token 跳过；非法输入抛 ``argparse`` 错误。
+    """
+    seeds: list[int] = []
+    for tok in tokens:
+        for part in str(tok).split(","):
+            part = part.strip()
+            if not part:
+                continue
+            if "-" in part[1:]:  # 从第 2 字符起找 '-'，容忍前导符号
+                lo_s, hi_s = part.split("-", 1)
+                lo, hi = int(lo_s), int(hi_s)
+                if lo > hi:
+                    lo, hi = hi, lo
+                seeds.extend(range(lo, hi + 1))
+            else:
+                seeds.append(int(part))
+    if not seeds:
+        raise argparse.ArgumentTypeError("--seeds 解析结果为空")
+    seen: set[int] = set()
+    out: list[int] = []
+    for s in seeds:
+        if s not in seen:
+            seen.add(s)
+            out.append(s)
+    return out
+
+
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """解析实验入口参数；PDF 只在本次运行显式开启。"""
     parser = argparse.ArgumentParser(description="运行 exp01_smoke 端到端实验")
+    parser.add_argument(
+        "--seeds", nargs="+", metavar="SEED",
+        help="覆盖 config.yaml 的 experiment.seeds：多种子稳健性运行的调试入口。"
+             "支持 42 / 42,43,44 / 42-46（区间展开）等写法，可混用；"
+             "去重保序。省略则按 yaml（单元素退化为单 seed）",
+    )
+    parser.add_argument(
+        "--no-plots", action="store_true",
+        help="跳过出图（多种子长跑调试用；json 数值产物仍落盘）",
+    )
+    parser.add_argument(
+        "--no-tables", action="store_true",
+        help="跳过结果 LaTeX 表与 PDF 编译（多种子长跑调试用）",
+    )
     parser.add_argument(
         "--pdf", action="store_true", help="额外输出 PDF 矢量图（默认仅 PNG）"
     )
@@ -178,6 +244,9 @@ def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     cfg_path = EXP_DIR / "config.yaml"
     raw_cfg = load_config(cfg_path)
+    # 命令行覆盖：--seeds 优先于 yaml 的 experiment.seeds（调试/长跑入口）
+    if args.seeds:
+        raw_cfg.setdefault("experiment", {})["seeds"] = _parse_seed_list(args.seeds)
     bundle0 = build_config_bundle(raw_cfg)
 
     out_dir = EXP_DIR / str(bundle0.experiment.get("output_dir", "results"))
@@ -254,7 +323,9 @@ def main(argv: list[str] | None = None) -> int:
         print_summary(final_metrics, n_arrived, out_dir)
 
     # ── 出图（plot/ 只负责绘制，产物落 figures_dir）────────────
-    if bundle0.make_plots:
+    # --no-plots 只跳绘制，不影响已落盘的 json / solution。
+    make_plots = bundle0.make_plots and not args.no_plots
+    if make_plots:
         from plot import make_plots  # 延迟导入：不出图时不引 matplotlib
 
         plot_cfg = bundle0.plot
@@ -283,7 +354,10 @@ def main(argv: list[str] | None = None) -> int:
     # ── 结果表（tables.py 只读 json、只制表；与 plot 同哲学）──────────
     # 必须放在 write_json 之后：tables.py 从盘上读刚写出的 metrics/solution，
     # 保证「数值产物 / 图 / 表」三者同源同步，不再需要手动跑 tables.py。
-    if bundle0.save_results and bundle0.make_tables:
+    make_tables = (
+        bundle0.save_results and bundle0.make_tables and not args.no_tables
+    )
+    if make_tables:
         try:
             from tables import render as render_tables  # 延迟导入
 

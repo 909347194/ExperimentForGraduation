@@ -75,7 +75,10 @@ from task_allocation.methods.selection.capability import (
     CapabilityScaleConfig,
     merge_caps,
 )
-from task_allocation.methods.selection.feasibility import FeasibilityConfig
+from task_allocation.methods.selection.feasibility import (
+    FeasibilityConfig,
+    static_unreachable,
+)
 from task_allocation.methods.selection.marginal_gain import MarginalConfig
 from task_allocation.methods.selection.priority import PriorityConfig, PriorityWeights
 from task_allocation.methods.selection.pipeline import SelectionConfig
@@ -109,9 +112,13 @@ class HorizonConfig:
     # 落地期容量硬校验：True 时超容直接抛异常
     strict_capacity: bool = False
     # 完成反馈的可行性闸门（论文 §6 完成反馈的判据）：
-    # True 时，周期末只把「本周期解中未违约」的任务判为完成；被 ``check_feasible``
-    # 判为违约的任务（时间窗 / 航程 / 续航 / 终点机巢不可达等）不顺延完成，
-    # 而是解绑回任务池、下一周期重新纳入选择，并记入 ``record.infeasible_ids``。
+    # True 时，周期末只把「本周期解中未**物理**违约」的任务判为完成；
+    # 被 ``check_feasible`` 判为物理不可行（航程 / 续航 / 终点机巢不可达 /
+    # 结构类）的任务不顺延完成，而是解绑回任务池、下一周期重新纳入选择，
+    # 并记入 ``record.infeasible_ids``（废飞指标只统计这一类）。
+    # 2026-10-15 协议纠正「迟到不是废飞」：时间窗违约（tw_task）不再是硬
+    # 违约——晚到任务正常完成（计入完成/吞吐，有效奖励已在适应度里按
+    # 迟到折减），迟到秒数记入 ``record.late_ids`` / ``lateness_by_task``。
     # 置 False 则回到历史行为（一律标完成），用于消融对比。
     completion_feasibility_gate: bool = True
     # 事件驱动重规划：检测到 UAV 故障 / 突发高优先级任务 / 机巢不可用时，
@@ -165,11 +172,22 @@ class CycleRecord:
     replan_context: dict[str, Any] = field(default_factory=dict)
     # 本周期因 UAV 故障释放回任务池的任务（供下一周期强制纳入选择）
     released_by_fault: list[int] = field(default_factory=list)
-    # 完成闸门拦截的违约交付：解被判不可行、本周期未真正交付的任务。
-    # 不顺延完成，解绑回任务池并在下一周期重新选择（区别于 completed_ids）。
+    # 完成闸门拦截的违约交付：解被判**物理不可行**（航程/续航/终点机巢/
+    # 结构类），本周期未真正交付的任务。不顺延完成，解绑回任务池并在
+    # 下一周期重新选择（区别于 completed_ids）。
+    # 2026-10-15 协议纠正：迟到（tw_task）不再是硬违约——晚到任务正常
+    # 完成（奖励已在适应度里按迟到折减），只有物理不可行才弹回。
     infeasible_ids: list[int] = field(default_factory=list)
     # 违约任务的归因标签：{task_id: [violation_tag, ...]}，供指标与论文取数
     infeasible_tags: dict[str, list[str]] = field(default_factory=dict)
+    # 迟到交付：本周期完成但到达晚于 latest 的任务及迟到秒数。
+    # 「迟到不是废飞」——计入完成与吞吐，按时率/平均迟到单独统计。
+    late_ids: list[int] = field(default_factory=list)
+    lateness_by_task: dict[str, float] = field(default_factory=dict)
+    # 静态物理不可达（「过于偏远」）：所有机巢往返航程都超过满电可及
+    # 范围，入池判定一次性出池。用户原则（2026-10-15）下唯一合法的
+    # 未完成原因，单列计数，不混入超期淘汰。
+    unreachable_ids: list[int] = field(default_factory=list)
     # 分配结构与求解轨迹：不进 as_dict()/metrics.json（数值指标保持精简），
     # 由实验编排写入 results/solution.json，供分配图 / 收敛图取用。
     tours: list[dict[str, Any]] = field(default_factory=list)
@@ -200,6 +218,11 @@ class CycleRecord:
             "n_infeasible": len(self.infeasible_ids),
             "infeasible_ids": self.infeasible_ids,
             "infeasible_tags": self.infeasible_tags,
+            "n_late": len(self.late_ids),
+            "late_ids": self.late_ids,
+            "lateness_by_task": self.lateness_by_task,
+            "n_unreachable": len(self.unreachable_ids),
+            "unreachable_ids": self.unreachable_ids,
         }
 
 
@@ -290,6 +313,31 @@ class RollingHorizon:
     # 单周期
     # ------------------------------------------------------------------
 
+    def _screen_unreachable(self, tasks: Sequence[Task]) -> list[Task]:
+        """静态物理不可达筛选：往返航程超满电可及范围的任务出池。
+
+        判据用 ``hcfg.uav_max_range``（与 ``recharge_at_nest`` 恢复的满电
+        航程同源；本实验机队同构，满电值唯一）。margin 取**物理上限 1.0**
+        （与完成闸门同口径）——规划保守度（range_margin）是 stage 内部
+        的参与/provisioning 决策，用作静态边界会误杀物理可达的远站任务。
+        距离走运行级记忆化的 DEM 三维 ``_distance_fn``，跨周期命中缓存。
+        """
+        if not tasks:
+            return []
+        hit = [
+            t
+            for t in tasks
+            if static_unreachable(
+                t,
+                self.nests,
+                self.hcfg.uav_max_range,
+                distance_fn=self._distance_fn,
+            )
+        ]
+        if hit:
+            self.pool.mark_unreachable([t.id for t in hit])
+        return hit
+
     def run_cycle(
         self,
         new_tasks: Sequence[Task] | None = None,
@@ -311,6 +359,17 @@ class RollingHorizon:
             pool_counts=dict(snap.counts),
             expired_ids=list(snap.expired_ids),
         )
+
+        # 2.5) 静态物理不可达筛选（用户原则 2026-10-15：任务不被完成
+        # 只有物理约束被违反）。任务/巢位固定 + 每周期满电 ⇒ 判定与周期
+        # 状态无关：所有机巢往返航程都超过满电可及范围的任务一次性出池
+        # （UNREACHABLE），不留在池里空转——否则它每周期进选择、被规划器
+        # 丢弃、直到超期，把「过于偏远」误导记成「淘汰」。
+        unreachable = self._screen_unreachable(tasks)
+        if unreachable:
+            record.unreachable_ids = [t.id for t in unreachable]
+            dropped = {t.id for t in unreachable}
+            tasks = [t for t in tasks if t.id not in dropped]
 
         # 2) 事件检测 + 事件驱动重规划决策（论文 §6）
         events = detect_events(
@@ -389,6 +448,10 @@ class RollingHorizon:
             feasibility=self.sel_cfg.feasibility,
             marginal=self.sel_cfg.marginal,
             capability=cap_cfg,
+            # Fix②b：anti_starvation 必须随每周期重建透传——漏传则静默退回
+            # 默认的 enabled=False，yaml 里开了防饥饿也不生效（2026-10-15 长程
+            # 实验发现：24 周期 n_forced_in 全为 0，老化任务直接饿死到超期）。
+            anti_starvation=self.sel_cfg.anti_starvation,
             current_time=self._time,
             forced_task_ids=forced_ids,
         )
@@ -668,12 +731,24 @@ class RollingHorizon:
         if not cfg.complete_after_cycle:
             return
 
-        # 完成闸门：本周期解被判违约的任务不顺延完成（默认开启）
+        # 完成闸门：仅**物理不可行**的违约任务不顺延完成（默认开启）。
+        # 2026-10-15 协议纠正「迟到不是废飞」：tw_task（迟到）不再是硬
+        # 违约——晚到任务正常完成、计入吞吐，有效奖励已在适应度里按
+        # 迟到折减（late_reward_decay_seconds），此处只把「飞不到」
+        # （航程/续航/终点机巢/结构类）解绑弹回。
         violated = (
             self._violated_task_ids(solution)
             if cfg.completion_feasibility_gate
             else {}
         )
+        hard_violated = {
+            tid: tags
+            for tid, tags in violated.items()
+            if any(not str(tag).startswith("tw_task_") for tag in tags)
+        }
+        lateness_map = (solution.meta.get("feasibility", {}) or {}).get(
+            "lateness", {}
+        ) or {}
 
         for tour in solution.tours:
             if not tour.task_ids:
@@ -682,10 +757,11 @@ class RollingHorizon:
             if not bound:
                 continue
 
-            bad = [int(t) for t in bound if int(t) in violated]
-            ok = [int(t) for t in bound if int(t) not in violated]
+            bad = [int(t) for t in bound if int(t) in hard_violated]
+            ok = [int(t) for t in bound if int(t) not in hard_violated]
 
-            # ① 违约交付：解绑回任务池，下一周期重新纳入选择（不计完成、不计奖励）
+            # ① 物理不可行交付：解绑回任务池，下一周期重新纳入选择
+            #    （不计完成、不计奖励；废飞指标只统计这一类）
             if bad:
                 self.fleet.unbind_tasks(tour.uav_id, bad)
                 self.pool.release(bad, reason="infeasible_delivery")
@@ -701,11 +777,17 @@ class RollingHorizon:
 
             if not ok:
                 continue
-            # ② 正常交付：记录完成时刻，供 avg_wait 等指标使用
+            # ② 正常交付（含迟到交付）：记录完成时刻与迟到秒数，
+            #    供 avg_wait / 按时率 / 平均迟到等指标使用
             for tid in ok:
                 task = self.pool.find(int(tid))
                 if task is not None:
                     task.meta["completed_at"] = float(self._time)
+                    late = float(lateness_map.get(int(tid), 0.0) or 0.0)
+                    if late > 1e-9:
+                        task.meta["lateness_seconds"] = late
+                        record.late_ids.append(int(tid))
+                        record.lateness_by_task[str(int(tid))] = late
             self.fleet.complete_tasks(tour.uav_id, ok)
             self.pool.complete(ok)
             record.completed_ids.extend(int(t) for t in ok)
@@ -731,9 +813,16 @@ class RollingHorizon:
         )
         feas_d = dict(d.get("feasibility", {}) or {})
         feasibility = FeasibilityConfig(
-            range_margin=float(feas_d.get("range_margin", 0.95)),
-            check_time_window=bool(feas_d.get("check_time_window", True)),
+            # 往返口径的航程裕度：1.0 = 物理上限（与完成闸门同口径）。
+            # 旧单程口径的 0.95 不可直接迁移（会把可达半径腰斩）。
+            range_margin=float(feas_d.get("range_margin", 1.0)),
+            # 默认 False（2026-10-15 用户原则「任务不被完成只有物理约束被
+            # 违反」）：时间窗不是参选资格，迟到由适应度折减定价。仅消融
+            # 对照（验证时间预筛的代价）时显式开启。
+            check_time_window=bool(feas_d.get("check_time_window", False)),
             budget_factor=float(feas_d.get("budget_factor", 1.0)),
+            # 消融口径专用：check_time_window=True 时的迟到容忍 W（秒）。
+            late_tolerance_seconds=float(feas_d.get("late_tolerance_seconds", 0.0)),
         )
         marg_d = dict(d.get("marginal", {}) or {})
         marginal = MarginalConfig(

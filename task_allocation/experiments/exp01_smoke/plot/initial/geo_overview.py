@@ -17,6 +17,30 @@ scene 层回答「实验是怎么摆的」：**一次绘制、与算法无关**�
 
 from __future__ import annotations
 
+# ── 独立运行自举：支持直接 `python plot/.../xxx.py`（脚本方式）──
+# 脚本方式运行时 __package__ 为空，模块内相对导入不可用；此处转以 -m 语义
+# 重跑自身（runpy 会正确设置包上下文），再触发文件末尾的 __main__ 守卫出图。
+if __name__ == "__main__" and __package__ in (None, ""):
+    import sys, runpy
+    from pathlib import Path as _P
+    _here = _P(__file__).resolve()
+    _root = _here.parents[2]   # 实验根 = plot 的上两级（使 `plot` 包可导入）
+    if str(_root) not in sys.path:
+        sys.path.insert(0, str(_root))
+    # 同时把项目根（含 task_allocation 包）加入路径：否则 plotting 内
+    # `from task_allocation.methods.utils import GeoTIFFDEM` 会因找不到包而
+    # 静默回退到 solution.json 的降采样 DEM（115x101px），地图被放大 10~24 倍变糊。
+    _proj = _here
+    while not (_proj / "task_allocation" / "__init__.py").is_file() and _proj.parent != _proj:
+        _proj = _proj.parent
+    if (_proj / "task_allocation" / "__init__.py").is_file() and str(_proj) not in sys.path:
+        sys.path.insert(0, str(_proj))
+    _rel = _here.relative_to(_root / "plot")
+    _mod = "plot." + ".".join(_rel.with_suffix("").parts)
+    runpy.run_module(_mod, run_name="__main__", alter_sys=True)
+    raise SystemExit(0)
+
+
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -47,7 +71,7 @@ def plot_geo_overview(
     out_dir: Path,
     formats: Sequence[str] = ("png",),
     *,
-    dpi: int = 200,
+    dpi: int = 300,
 ) -> list[Path]:
     """初始态势：DEM 底图 + 机巢（标注初始无人机数）+ 全部任务。"""
     from collections import Counter
@@ -62,18 +86,19 @@ def plot_geo_overview(
     # 初始无人机本就停在各自机巢：按 nest_id 计数，直接在巢上标数量
     count_by_nest = Counter(int(u.get("nest_id", -1)) for u in uavs)
     n_initial = len(uavs)
+    n_tasks = len(tasks)                       # ← 任务总数
 
     fig, ax = plt.subplots(figsize=(10.5, 9.0), layout="constrained")
     sm = _draw_dem(ax, dem, solution)
 
-    # 全部任务（灰显，作为背景）
+    # 全部任务（鲜红，作为背景）
     if tasks:
         ax.scatter(
             [float(t["x"]) for t in tasks],
             [float(t["y"]) for t in tasks],
             s=[_task_size(t["reward"]) for t in tasks],
-            color="#9aa5b1", edgecolors="white", linewidths=0.8, zorder=6,
-            label="任务（全部）",
+            color="#E53935", edgecolors="white", linewidths=0.8, zorder=6,
+            label=f"任务（全部 {n_tasks} 个）",
         )
 
     _draw_nests(ax, nests, counts=count_by_nest)
@@ -86,7 +111,8 @@ def plot_geo_overview(
     handles = [
         _IconPatch(_G_HOUSE, fc=PALETTE["nest"], ec="white", lw=1.2,
                    label=f"机巢（含初始无人机 {n_initial} 架）"),
-        _IconPatch(_G_DOT, fc="#9aa5b1", ec="white", lw=1.0, label="任务（全部）"),
+        _IconPatch(_G_DOT, fc="#E53935", ec="white", lw=1.0,
+                   label=f"任务（全部 {n_tasks} 个）"),
     ]
     ax.legend(
         handles=handles, loc="upper right", fontsize=9.5,
@@ -98,7 +124,15 @@ def plot_geo_overview(
     _set_scene_lim(ax, nests, tasks, uavs, dem, extent=_dem_view_extent(dem, solution))
     ax.set_aspect("equal", adjustable="box")
     _strip_axes(ax)
-    ax.set_title("初始态势 · 机巢 / 任务 / DEM 地形", fontsize=13, fontweight="bold", color="#1f2933")
 
     stem = Path(out_dir) / "I01_geo_overview"
     return save_figure(fig, stem, formats, dpi=dpi)
+
+if __name__ == "__main__":
+    import sys
+    from pathlib import Path as _P
+    _r = _P(__file__).resolve().parents[2]   # 实验根 = plot 的上两级
+    if str(_r) not in sys.path:
+        sys.path.insert(0, str(_r))
+    from plot import run_script
+    run_script(_P(__file__).stem, sys.argv[1:])

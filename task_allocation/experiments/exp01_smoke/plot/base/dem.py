@@ -62,6 +62,43 @@ _HYPSO = LinearSegmentedColormap.from_list(
 # 真实 DEM 瓦片（ASTER GDEM v3）采样：优先用原始 tif 作底图
 # ---------------------------------------------------------------------------
 
+def _ensure_project_root() -> bool:
+    """把**项目根**（含 ``task_allocation`` 包的目录）加入 ``sys.path``。
+
+    这是「DEM 突然变糊」的根因防线。``_sample_real_dem`` 里
+    ``from task_allocation.methods.utils import GeoTIFFDEM`` 依赖项目根在
+    ``sys.path`` 上；而这一条件**只在从项目根启动时才成立**（``python run.py``、
+    ``python -m pytest``）。一旦换成
+
+        python -c "from plot import render_from_results; ..."   # cwd=实验目录
+        cd 实验目录 && python 其它脚本
+
+    之类入口，``sys.path[0]`` 是实验目录而非项目根，import 抛
+    ``ModuleNotFoundError``，被 ``except Exception: return None`` 静默吞掉 ——>
+    底图回退到 ``solution.json`` 里 115x101 的降采样栅格（约 880 m/格），
+    在 1200~2800 px 的画布上被放大 10~24 倍，观感就是「DEM 又变模糊了」。
+
+    与其要求每个入口都记得加路径，**在真正需要 import 的这里兜底**：向上找
+    含 ``task_allocation/__init__.py`` 的目录并插入。返回是否成功。
+    """
+    import sys as _sys
+
+    try:
+        import task_allocation  # noqa: F401  已可导入就不动 sys.path
+        return True
+    except Exception:
+        pass
+    here = Path(__file__).resolve()
+    proj = here
+    while proj.parent != proj:
+        if (proj / "task_allocation" / "__init__.py").is_file():
+            if str(proj) not in _sys.path:
+                _sys.path.insert(0, str(proj))
+            return True
+        proj = proj.parent
+    return False
+
+
 def _find_dem_tif() -> "Path | None":
     """向上查找 ASTER GDEM 瓦片（task_allocation/data/ASTGTMV003_N29E091_dem.tif）。"""
     base = Path(__file__).resolve()
@@ -113,11 +150,31 @@ def _fill_nan(elev: np.ndarray) -> np.ndarray:
             col = out[:, j]
             if not np.isfinite(col).all() and np.isfinite(col).any():
                 out[:, j] = _nearest_fill_1d(col)
-    out[~np.isfinite(out)] = 0.0                         # 极端兜底（不应发生）
+    # 数学上到不了这一步：整行全 NaN 会被列方向补掉，整列全 NaN 意味着全矩阵
+    # 全 NaN（已提前返回）。留一个安全网，换成全局最小值比 0 更不像"假地形"。
+    if (~np.isfinite(out)).any():
+        out[~np.isfinite(out)] = float(np.nanmin(out))
     return out
 
 
-_DEM_SAMPLE_CACHE: "dict[tuple, Any]" = {}
+_DEM_SAMPLE_CACHE: "dict[tuple | None, Any]" = {}
+_WARNED_REASONS: "set[str]" = set()
+
+
+def _warn_fallback(reason: str) -> None:
+    """底图回退到降采样栅格时**大声报警**（同原因每进程只报一次）。
+
+    历史教训：回退曾经完全静默，表现为「图能出，但 DEM 糊了」——115x101 的
+    solution 栅格被放大 10~24 倍。任何回退都必须留下可检索的痕迹。
+    """
+    if reason in _WARNED_REASONS:
+        return
+    _WARNED_REASONS.add(reason)
+    print(
+        f"[exp01][DEM][warn] 底图回退到 solution.json 的降采样栅格"
+        f"（约 880 m/格，放大后发糊）。原因：{reason}",
+        flush=True,
+    )
 
 
 def _box3(a: np.ndarray) -> np.ndarray:
@@ -158,16 +215,22 @@ def _sample_real_dem(dem: dict[str, Any], solution: dict[str, Any] | None):
         return None
     tif = _find_dem_tif()
     if tif is None:
+        _warn_fallback("未找到 ASTER 瓦片 tif")
+        return None
+    if not _ensure_project_root():
+        _warn_fallback("项目根不在 sys.path（task_allocation 不可导入）")
         return None
     try:
         from task_allocation.methods.utils import GeoTIFFDEM, LocalFrame
-    except Exception:
+    except Exception as exc:                                # pragma: no cover
+        _warn_fallback(f"导入 GeoTIFFDEM 失败：{type(exc).__name__}: {exc}")
         return None
 
     try:
         lf = LocalFrame(float(lf_info["lat0"]), float(lf_info["lon0"]))
         gt = GeoTIFFDEM(str(tif))
-    except Exception:
+    except Exception as exc:                                # pragma: no cover
+        _warn_fallback(f"打开瓦片失败：{type(exc).__name__}: {exc}")
         return None
 
     # 瓦片四角 -> 米制 ENU 包络
@@ -188,9 +251,11 @@ def _sample_real_dem(dem: dict[str, Any], solution: dict[str, Any] | None):
         return None  # 瓦片过窄，退回降采样 dem
 
     width_m, height_m = vx1 - vx0, vy1 - vy0
-    # 目标格网 ~150 m，最长边封顶 1000 px（兼顾地形细节与渲染速度）
-    px = max(240, min(1000, int(round(width_m / 150.0))))
-    py = max(240, min(1000, int(round(height_m / 150.0))))
+    # 目标格网 ~40 m，最长边封顶 2500 px：exp01 场景约 100 km，~2500 px 与满幅
+    # 动图显示宽（~2800 px）近 1:1，DEM 不再被双线性放大糊化；此前的 150 m/1000px
+    # 上限只产出 ~640x740 源栅格，在 1200~2800 px 显示区被放大 2~4 倍而发糊。
+    px = max(240, min(2500, int(round(width_m / 40.0))))
+    py = max(240, min(2500, int(round(height_m / 40.0))))
     xs = np.linspace(vx0, vx1, px)
     ys = np.linspace(vy1, vy0, py)  # 行序北→南，与 imshow origin="upper" 一致
     gx, gy = np.meshgrid(xs, ys)
@@ -208,9 +273,28 @@ def _sample_real_dem(dem: dict[str, Any], solution: dict[str, Any] | None):
     return elev, extent
 
 
+def _elevation_cache_key(dem, solution) -> "tuple | None":
+    """采样缓存键：包围盒 + 局部坐标系原点。
+
+    只按 bounds 缓存不够：``solution`` 的 local_frame 决定米制坐标的落位，
+    同一个 bounds 换个原点就是另一套 ENU；且「取数失败」也要缓存对，
+    否则一次 solution=None 的失败结果会把后续正常 solution 的结果挡在缓存外。
+    无 bounds 时返回 None（``_sample_real_dem`` 必然返回 None，可安全缓存）。
+    """
+    bounds = (dem or {}).get("bounds")
+    if not bounds:
+        return None
+    lf_info = (solution or {}).get("local_frame") or {}
+    return (
+        *(round(float(v), 1) for v in bounds),
+        round(float(lf_info.get("lat0", 0.0)), 4),
+        round(float(lf_info.get("lon0", 0.0)), 4),
+    )
+
+
 def _get_elevation(dem, solution):
     """取底图高程：优先真实瓦片采样（带进程内缓存），失败回退 solution dem。"""
-    key = tuple(round(float(v), 1) for v in dem["bounds"]) if dem else None
+    key = _elevation_cache_key(dem, solution)
     if key in _DEM_SAMPLE_CACHE:
         return _DEM_SAMPLE_CACHE[key]
     result = _sample_real_dem(dem, solution)
@@ -227,10 +311,12 @@ def _dem_view_extent(dem, solution):
     result = _get_elevation(dem, solution) if dem else None
     if result is not None:
         return result[1]
-    if dem and dem.get("bounds"):
-        left, bottom, right, top = (float(v) for v in dem["bounds"])
+    bounds = (dem or {}).get("bounds")
+    if bounds:
+        left, bottom, right, top = (float(v) for v in bounds)
         return (left, right, bottom, top)
     return None
+
 
 def _draw_dem(ax, dem: dict[str, Any] | None, solution: dict[str, Any] | None = None):
     """画 2D 平面 DEM 底图：真实 ASTER 高程 + 山体阴影晕渲。
@@ -243,16 +329,21 @@ def _draw_dem(ax, dem: dict[str, Any] | None, solution: dict[str, Any] | None = 
     ``LightSource(azdeg=315, altdeg=45)`` 山体阴影，dx/dy 取与高程同单位的
     米制格距，使 ``vert_exag`` 反映真实坡度；再叠加高原分层设色（``_HYPSO``）。
     """
-    if not dem or not dem.get("elevation"):
+    # 注意用 ``is None`` 判空：elevation 可能是 ndarray，``not arr`` 会抛
+    # "truth value of an array is ambiguous"。
+    if not dem or dem.get("elevation") is None:
         return None
 
     sampled = _get_elevation(dem, solution) if solution is not None else None
     if sampled is not None:
         elev, extent = sampled
     else:
-        left, bottom, right, top = (float(v) for v in dem["bounds"])
+        bounds = dem.get("bounds")
+        if not bounds:
+            return None  # 无包围盒就无法定位，宁可不画
+        left, bottom, right, top = (float(v) for v in bounds)
         extent = (left, right, bottom, top)
-        elev = np.asarray(dem["elevation"], dtype=float)
+        elev = np.atleast_2d(np.asarray(dem["elevation"], dtype=float))
     if elev.size == 0 or not np.isfinite(elev).any():
         return None
 
@@ -261,8 +352,10 @@ def _draw_dem(ax, dem: dict[str, Any] | None, solution: dict[str, Any] | None = 
     dy = max((extent[3] - extent[2]) / max(n_rows - 1, 1), 1e-6)
     # 2%–98% 分位拉伸，避免极值把色带两端压扁
     vmin, vmax = np.nanpercentile(elev, [2.0, 98.0])
-    if not np.isfinite(vmin) or vmax <= vmin:
+    if not np.isfinite(vmin) or not np.isfinite(vmax) or vmax <= vmin:
         vmin, vmax = float(np.nanmin(elev)), float(np.nanmax(elev))
+    if vmax <= vmin:                       # 全平原：给一个极小色阶，避免 norm 退化
+        vmax = vmin + 1.0
     norm = Normalize(vmin=float(vmin), vmax=float(vmax))
 
     # 西北 45° 光照；dx/dy 为真实米制格距，vert_exag 据此反映真实坡度。

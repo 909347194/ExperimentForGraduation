@@ -32,6 +32,13 @@
     render_from_results("results")                      # 全部图
     render_from_results("results", groups=["report"])   # 只出结论层（进论文）
     render_from_results("results", names=["geo_overview", "allocation"])
+
+    # 单图独立调试（不重跑实验，直接读 results/*.json）：
+    python plot/process/allocation.py                   # 直接脚本方式（自举转 -m）
+    python -m plot.process.allocation                   # 等价的模块方式
+    python plot/process/allocation_anim.py --pdf        # 动画图默认带 gif；--pdf 加矢量
+    python plot/process/allocation.py --out /tmp/fig --dpi 80   # 自定义输出目录 / dpi
+    # 以上等价于各模块末尾 `run_script(__file__.stem, sys.argv[1:])`
 """
 
 from __future__ import annotations
@@ -54,6 +61,7 @@ __all__ = [
     "make_plots",
     "load_results",
     "render_from_results",
+    "run_script",
     "resolve",
     "setup_style",
 ]
@@ -136,10 +144,11 @@ def make_plots(
         kwargs: dict[str, Any] = {}
         if extras is not None and "extras" in inspect.signature(fig.func).parameters:
             kwargs["extras"] = extras
-        # 动图格式（gif/mp4）只发给动画图：run.py 为刷新 allocation_anim 会把
+        # 动图格式（gif/mp4/poster）只发给动画图：run.py 为刷新 allocation_anim 会把
         # gif 补进 formats，若不过滤，每张静态图都会顺带落一个单帧 GIF。
+        # poster = 动画图专用的「只出末帧海报」令牌，静态图无此概念，同样过滤。
         fig_formats = formats if fig.animated else tuple(
-            f for f in formats if str(f).lower().lstrip(".") not in {"gif", "mp4"}
+            f for f in formats if str(f).lower().lstrip(".") not in {"gif", "mp4", "poster"}
         )
         produced = fig.func(metrics, solution, out_dir, fig_formats, dpi=dpi, **kwargs)
         if produced:
@@ -157,6 +166,85 @@ def make_plots(
     if skipped:
         print(f"[exp01]   跳过（数据不满足前置条件）：{', '.join(skipped)}")
     return written
+
+
+def _read_plot_dpi(exp_root: Path) -> int | None:
+    """从实验根目录的 ``config.yaml`` 读 ``plot.dpi``（读不到退回 ``None``）。"""
+    try:
+        import yaml
+
+        cfg_path = Path(exp_root) / "config.yaml"
+        if cfg_path.exists():
+            with cfg_path.open(encoding="utf-8") as fh:
+                cfg = yaml.safe_load(fh) or {}
+            dpi = int((cfg.get("plot") or {}).get("dpi", 0) or 0)
+            return dpi or None
+    except Exception:
+        return None
+    return None
+
+
+def run_script(figure_id: str, argv: Sequence[str] | None = None) -> list[Path]:
+    """单图脚本**独立绘制**入口：直接 ``python plot/process/allocation.py``。
+
+    只从已落盘的 ``results/`` 读数据（**不重跑实验**），输出到
+    ``results/figures/``，便于单独调试某张图的绘制逻辑。可选 ``argv``：
+
+    * ``--pdf``          额外输出 PDF 矢量图
+    * ``--dpi N``        指定 dpi（缺省读 ``config.yaml`` 的 ``plot.dpi``，再缺省 200）
+    * ``--results DIR``  指定 results 目录（缺省 ``<实验根>/results``）
+    * ``--out DIR``      指定输出目录（缺省 ``<results>/figures``）
+    * ``--no-gif``       动画图也不出 GIF
+
+    每个绘图模块只需在末尾加一段自举（本包已统一约定，直接复制即可）：:
+
+        if __name__ == "__main__":
+            import sys
+            from pathlib import Path as _P
+            _r = _P(__file__).resolve().parents[2]   # 实验根 = plot 的上两级
+            if str(_r) not in sys.path:
+                sys.path.insert(0, str(_r))
+            from plot import run_script
+            run_script(_P(__file__).stem, sys.argv[1:])
+
+    注：``python -m plot.process.allocation`` 同样可用（``-m`` 下包已可导入，
+    ``run_script`` 内部一律用绝对 ``from plot import ...``，两种启动方式通用）。
+    """
+    import argparse
+    from pathlib import Path as _Path
+
+    here = _Path(__file__).resolve().parent  # exp01_smoke/plot
+    exp_root = here.parent                    # exp01_smoke
+    results_dir = exp_root / "results"
+    figures_dir = results_dir / "figures"
+
+    table = _registry._by_id()
+    if figure_id not in table:
+        raise SystemExit(
+            f"[plot] 未知图 id={figure_id!r}；可用：{list(table)}"
+        )
+    fig = table[figure_id]
+
+    p = argparse.ArgumentParser(prog=f"plot:{figure_id}")
+    p.add_argument("--pdf", action="store_true", help="额外输出 PDF")
+    p.add_argument("--dpi", type=int, default=None, help="指定 dpi（缺省读 config.yaml）")
+    p.add_argument("--results", default=str(results_dir), help="results 目录")
+    p.add_argument("--out", default=str(figures_dir), help="输出目录")
+    p.add_argument("--no-gif", action="store_true", help="动画图也不出 GIF")
+    ns = p.parse_args(list(argv) if argv is not None else [])
+
+    dpi = ns.dpi if ns.dpi is not None else (_read_plot_dpi(exp_root) or 200)
+
+    formats = ["png"]
+    if fig.animated and not ns.no_gif:
+        formats.append("gif")
+    if ns.pdf:
+        formats.append("pdf")
+
+    return render_from_results(
+        ns.results, ns.out,
+        formats=formats, dpi=dpi, names=[figure_id],
+    )
 
 
 def render_from_results(

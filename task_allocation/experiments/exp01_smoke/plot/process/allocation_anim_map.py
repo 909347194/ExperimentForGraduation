@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
 """图 ``allocation_anim_map``——分配过程动画（**仅左栏地图**，高清大图）。
 
-``allocation_anim`` 是「左图地图 + 右栏 DMDE 收敛 / 滚动进度」的横版组合动图；
-本图把**左栏地图单独抽出来**，去掉右栏，让 DEM + 航迹回放占满整张画布，目标
-是「高清、大」——用于论文正文大图或投影展示时，地形纹理与航迹生长细节不被
-压缩。叙事与 ``allocation_anim`` 左栏完全一致：
+``allocation_anim`` 是「左栏地图（含底部滚动进度条）+ 右栏 DMDE 收敛」的左右
+两栏组合动图；本图把**左栏地图单独抽出来**，去掉右栏，让 DEM + 航迹回放占满
+整张画布，目标是「高清、大」——用于论文正文大图或投影展示时，地形纹理与航迹
+生长细节不被压缩。叙事与 ``allocation_anim`` 左栏基本一致（不含进度条）：
 
     * 机巢与地形为静态底图（只画一次），UAV 航迹随周期逐段「生长」；
     * 任务一旦被航迹扫过即点亮（按其承运 UAV 着色，标号 T#·Ck，Ck=到达周期）；
-    * 已到达但未执行者显红；左上角实时状态框给出「当前周期 / 已到达 / 已执行 /
-      累计里程」。
+    * 已到达但未执行者显红；地图上方的实时状态行给出「当前周期 / 已到达 / 已执行 /
+      累计里程」（本图为纯地图版，不含进度条与收敛曲线）。
 
 实现要点（见 2026-10-13 绘图审查）：
 
@@ -28,6 +28,30 @@ end_nest_id / task_ids / uav_id / est_cost）+ ``tasks`` / ``nests`` / ``dem``�
 """
 
 from __future__ import annotations
+
+# ── 独立运行自举：支持直接 `python plot/.../xxx.py`（脚本方式）──
+# 脚本方式运行时 __package__ 为空，模块内相对导入不可用；此处转以 -m 语义
+# 重跑自身（runpy 会正确设置包上下文），再触发文件末尾的 __main__ 守卫出图。
+if __name__ == "__main__" and __package__ in (None, ""):
+    import sys, runpy
+    from pathlib import Path as _P
+    _here = _P(__file__).resolve()
+    _root = _here.parents[2]   # 实验根 = plot 的上两级（使 `plot` 包可导入）
+    if str(_root) not in sys.path:
+        sys.path.insert(0, str(_root))
+    # 同时把项目根（含 task_allocation 包）加入路径：否则 plotting 内
+    # `from task_allocation.methods.utils import GeoTIFFDEM` 会因找不到包而
+    # 静默回退到 solution.json 的降采样 DEM（115x101px），地图被放大 10~24 倍变糊。
+    _proj = _here
+    while not (_proj / "task_allocation" / "__init__.py").is_file() and _proj.parent != _proj:
+        _proj = _proj.parent
+    if (_proj / "task_allocation" / "__init__.py").is_file() and str(_proj) not in sys.path:
+        sys.path.insert(0, str(_proj))
+    _rel = _here.relative_to(_root / "plot")
+    _mod = "plot." + ".".join(_rel.with_suffix("").parts)
+    runpy.run_module(_mod, run_name="__main__", alter_sys=True)
+    raise SystemExit(0)
+
 
 from pathlib import Path
 from typing import Any, Sequence
@@ -57,7 +81,10 @@ from ..theme import (
     plt,
     robust_pil_save,
     robust_savefig,
+    save_poster,
     style_axes,
+    declutter_figure,
+    audit_frame,
 )
 from .allocation import _arrival_cycle_map
 from .allocation_anim import (
@@ -104,7 +131,8 @@ def plot_allocation_anim_map(
     dpi: int = 200,
 ) -> list[Path]:
     fmt_set = {str(f).lower().lstrip(".") for f in formats}
-    if not (fmt_set & {"gif", "mp4"}):
+    # "poster" = 只出末帧静态海报（不渲 GIF）；默认 PNG 出图仍整体跳过动画图
+    if not (fmt_set & {"gif", "mp4", "poster"}):
         # 非动画格式请求时跳过——不拖慢默认 PNG 出图
         return []
 
@@ -200,6 +228,15 @@ def plot_allocation_anim_map(
                fontsize=_F_LEGEND, columnspacing=1.6, handletextpad=0.6,
                borderpad=0.5, frameon=False)
 
+    # 状态行**移出地图**（画布级）：放在顶部边距带（suptitle 之下、地图之上）。
+    # 与 P06 同因：状态文字宽占地图轴 1/3 以上，图内任何角落都会压住贴顶的
+    # 任务标号（逐帧自检 frame#12-68 实测 T10 互压 29%~42%）。
+    status_txt = fig.text(
+        0.5, 0.928, "", ha="center", va="center", fontsize=_F_STATUS,
+        color="#1f2933", zorder=10,
+        bbox=dict(boxstyle="round,pad=0.34", fc="white", ec="none", alpha=0.9),
+    )
+
     def _frame_state(idx: int) -> tuple[int | None, float]:
         return frames[idx]
 
@@ -214,12 +251,6 @@ def plot_allocation_anim_map(
         ax_anim.set_aspect("equal", adjustable="box")
         ax_anim.set_xticks([])
         ax_anim.set_yticks([])
-
-        title_txt = ax_anim.text(
-            0.025, 0.96, "", transform=ax_anim.transAxes, ha="left", va="top",
-            fontsize=_F_STATUS, color="#1f2933", zorder=10,
-            bbox=dict(boxstyle="round,pad=0.34", fc="white", ec="none", alpha=0.85),
-        )
 
         # 已完成任务集合（含本周期进度 p 之前扫过的）
         done: set[int] = set()
@@ -274,12 +305,12 @@ def plot_allocation_anim_map(
         # 左上角实时状态文字
         arrived = sum(1 for a in arrival_cycle.values() if a <= cur_cycle)
         if c is None:
-            title_txt.set_text(f"周期 0/{n_cyc} · 等待任务到达 · 0 km")
+            status_txt.set_text(f"周期 0/{n_cyc} · 等待任务到达 · 0 km")
         else:
             # 当前周期已揭示部分的里程（按比例累加本周期各航迹）
             cur_km = sum(t["est_cost"] for t in tours_by_cycle[c]) / 1000.0 * p
             total_km = (cum_km[c - 1] if c > 0 else 0.0) + cur_km
-            title_txt.set_text(
+            status_txt.set_text(
                 f"周期 {c + 1}/{n_cyc} · 已到达 {arrived}/{n_tasks} · "
                 f"已执行 {len(done)}/{n_tasks} 任务 · {total_km:.0f} km"
             )
@@ -299,8 +330,9 @@ def plot_allocation_anim_map(
                  fontsize=_F_SUPTITLE)
     footnote(fig, "口径：航迹按周期逐段生长，任务被航迹扫过即点亮（按承运 UAV 着色，标号 T#·Ck，Ck=到达周期）；"
                   "任务点于其到达周期才出现，未到达前不绘制，已到达但未执行者显红。\n"
-                  "左上角实时框给出当前周期 / 已到达 / 已执行 / 累计里程；里程 = 各航迹 est_cost 之和（km）；"
-                  "底图地形与机巢为静态层。本图为 allocation_anim 左栏地图的单独高清版，DMDE 收敛与滚动进度见原图。\n"
+                  "地图上方的实时状态行给出当前周期 / 已到达 / 已执行 / 累计里程（置于图外，避免压住贴顶任务标号）；里程 = 各航迹 est_cost 之和（km）；"
+                  "底图地形与机巢为静态层。本图为 allocation_anim 左栏地图的单独高清版，"
+                  "DMDE 收敛见原图右侧栏、滚动进度见原图地图底部进度条。\n"
                   "Ck 标出到达周期，晚到任务（如 T19·C3）无法并入早周期航次。")
 
     try:
@@ -308,11 +340,22 @@ def plot_allocation_anim_map(
 
         fig.set_dpi(gif_dpi)
         frames_rgb: list = []
-        for idx in range(n_frames):
-            _update(idx)
+        # poster-only 快路径：逐帧抓取只服务 GIF/MP4 编码；只要末帧海报时
+        # 直接渲染末帧（docstring 承诺「不渲 GIF」即不逐帧渲染）。
+        if fmt_set & {"gif", "mp4"}:
+            for idx in range(n_frames):
+                _update(idx)
+                # 逐帧排版修正 + 自检（见 allocation_anim 同名注释）
+                declutter_figure(fig)
+                audit_frame(fig, idx)
+                fig.canvas.draw()
+                rgba = np.asarray(fig.canvas.buffer_rgba())
+                frames_rgb.append(Image.fromarray(rgba).convert("RGB"))
+        else:
+            _update(n_frames - 1)
+            declutter_figure(fig)
+            audit_frame(fig, n_frames - 1)
             fig.canvas.draw()
-            rgba = np.asarray(fig.canvas.buffer_rgba())
-            frames_rgb.append(Image.fromarray(rgba).convert("RGB"))
 
         if "gif" in fmt_set and frames_rgb:
             gif_path = out_dir / f"{gif_name}.gif"
@@ -367,17 +410,25 @@ def plot_allocation_anim_map(
         _update(n_frames - 1)
         if "gif" in fmt_set:
             poster = out_dir / f"{gif_name}.gif"
-            robust_savefig(fig, poster, dpi=gif_dpi, bbox_inches="tight", facecolor="white")
+            save_poster(fig, poster, dpi=gif_dpi)
             written.append(poster)
 
     # 静态海报 PNG（最终帧），供论文/文档直接引用（高 dpi，印刷级锐利）
-    if "png" in fmt_set:
+    if "png" in fmt_set or "poster" in fmt_set:
         _update(n_frames - 1)
         poster_png = out_dir / f"{gif_name}_poster.png"
-        robust_savefig(fig, poster_png, dpi=300, bbox_inches="tight",
-                        facecolor="white")
+        save_poster(fig, poster_png, dpi=300)
         written.append(poster_png)
 
     if not written:
         plt.close(fig)
     return written
+
+if __name__ == "__main__":
+    import sys
+    from pathlib import Path as _P
+    _r = _P(__file__).resolve().parents[2]   # 实验根 = plot 的上两级
+    if str(_r) not in sys.path:
+        sys.path.insert(0, str(_r))
+    from plot import run_script
+    run_script(_P(__file__).stem, sys.argv[1:])

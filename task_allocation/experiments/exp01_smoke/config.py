@@ -175,6 +175,13 @@ def build_config_bundle(cfg: Mapping[str, Any]) -> ConfigBundle:
         w_nest_capacity=float(m.get("w_nest_capacity", 1.0)),
         w_time=float(m.get("w_time", 0.0)),
         default_service_time=float(m.get("default_service_time", 0.0)),
+        # 迟到奖励折减容忍 W（秒）：晚到 eff=R×max(0,1−L/W)；
+        # None = 关闭（历史口径）。与 selection.feasibility.late_tolerance_seconds 同值。
+        late_reward_decay_seconds=(
+            None
+            if m.get("late_reward_decay_seconds") is None
+            else float(m["late_reward_decay_seconds"])
+        ),
         constraints=constraints,
     )
     stage_model = MUASStageConfig(

@@ -150,6 +150,12 @@ class MUASProblemConfig:
     lexicographic: bool = True
     big_m: float | None = None
     default_service_time: float = 0.0
+    # 迟到奖励折减容忍 W（秒）：晚到任务的有效奖励
+    # ``eff = R × max(0, 1 − L/W)``（L = 迟到秒数）。迟到不是废飞
+    # （2026-10-15 协议）：晚到仍算完成并计奖励，但按迟到时长线性折减，
+    # 与 w_violation 的秒级惩罚同向压实「按时服务」。
+    # None / <=0 = 关闭折减（历史口径：F1 全额，迟到只经 w_violation 计价）。
+    late_reward_decay_seconds: float | None = None
     # 本周期的规划时刻：时间窗游标从它起算，而不是从 0
     # （滚动时域下任务 latest 是绝对时刻，游标起点必须跟着周期走）
     current_time: float = 0.0
@@ -360,11 +366,23 @@ class SelectiveMUASProblem:
         return sol
 
     def f1_reward(self, solution: AllocationSolution) -> float:
+        # 有效奖励 = Σ R_j × 折减系数；折减系数按每任务迟到秒数线性衰减
+        # （late_reward_decay_seconds=W 时 max(0, 1 − L/W)）。迟到的量取自
+        # check_feasible 透出的 lateness 表（时间窗游标的唯一模拟源）。
         total = 0.0
+        decay = self.config.late_reward_decay_seconds
+        feas = solution.meta.get("feasibility") or {}
+        lateness = feas.get("lateness") or {}
         for tid in solution.executed_task_ids:
             t = self.task_by_id.get(tid)
-            if t is not None:
-                total += max(t.reward, 0.0)
+            if t is None:
+                continue
+            r = max(t.reward, 0.0)
+            if decay is not None and float(decay) > 0:
+                late = float(lateness.get(int(tid), 0.0) or 0.0)
+                if late > 0.0:
+                    r *= max(0.0, 1.0 - late / float(decay))
+            total += r
         return float(total)
 
     def tour_path_cost(self, tour: UAVTour) -> float:
@@ -698,7 +716,7 @@ class SelectiveMUASProblem:
 
         # ---- 协同约束（coop_constraints）----
         if cons.time_window:
-            w_pen, w_tags = check_time_window_constraint(
+            w_pen, w_tags, w_late = check_time_window_constraint(
                 solution.tours,
                 self.task_by_id,
                 self.uav_by_id,
@@ -707,7 +725,9 @@ class SelectiveMUASProblem:
                 distance_fn=self.costs.travel,
             )
             if w_pen > 0:
-                report.add_window(w_tags, cons.w_window * w_pen)
+                report.add_window(
+                    w_tags, cons.w_window * w_pen, lateness=w_late
+                )
                 # 【任务级时间窗不可行 · 2026-10-12 改造】
                 # 不再把「含迟到任务的整条 tour」置 feasible=False。
                 # tw_task_* 标签已写入 violations（add_window），horizon._violated_task_ids

@@ -1,25 +1,53 @@
 # -*- coding: utf-8 -*-
-"""图 ``outcome_summary``——结果总览：完成率轨迹与任务终局。
+"""图 ``outcome_summary``——结果总览：正确执行吞吐与任务终局。
 
 【report 层 · 结果分析】
 
 回答 Q4「实验说明什么」的**核心图**：滚动闭环跑完，任务到底做得怎么样。
 
+口径（2026-10-14 长程协议）：**完成率不是目标**，周期可无限延长；真实目标 =
+持续到达下「尽可能多且正确地完成任务」。因此主面板是正确执行与吞吐，
+完成率降为辅助对账。
+
 2×2 四联面板：
 
-    (a) 完成率 CR 轨迹   累计到达 / 累计完成（柱）+ CR%（右轴）；
-                         口径 = 累计完成 / 累计到达，终点与 summary.completion_rate 一致
-    (b) 任务终局构成     到达任务的最终去向：完成 / 滞留池 / 到期作废 / 曾被闸门拦回
-                         （拦回 = 解被判违约、不顺延完成、解绑回池——完成率不说谎的机制）
-    (c) 双目标值         每周期 F1 收益 / F2 代价，不可行周期红字标记
+    (a) 每周期执行构成   出动 = 按时交付 + 迟到交付 + 废飞（堆叠柱）；右轴 = 累计
+                         吞吐（累计完成 / 周期数）
+    (b) 任务终局构成     到达任务的最终去向：完成 / 滞留池 / 到期作废 / 曾被物理拦回
+                         （拦回 = 解被判物理不可行、解绑回池——迟到交付已计入完成）
+    (c) 双目标值         每周期 F1 收益（迟到折减后）/ F2 代价，不可行周期红字标记
     (d) 关键指标表       summary 全字段 + 单/多 seed 标注
 
 数据来源：``metrics.json`` 的 cycles[] / summary / seeds。
-本图对**调试期同样有用**：完成率 0、全周期不可行、闸门大量拦回等回归问题，
+本图对**调试期同样有用**：按时率塌陷、全周期不可行、物理拦回等回归问题，
 在这张图上一眼可见（而不是被平均进某个数字里）。
 """
 
 from __future__ import annotations
+
+# ── 独立运行自举：支持直接 `python plot/.../xxx.py`（脚本方式）──
+# 脚本方式运行时 __package__ 为空，模块内相对导入不可用；此处转以 -m 语义
+# 重跑自身（runpy 会正确设置包上下文），再触发文件末尾的 __main__ 守卫出图。
+if __name__ == "__main__" and __package__ in (None, ""):
+    import sys, runpy
+    from pathlib import Path as _P
+    _here = _P(__file__).resolve()
+    _root = _here.parents[2]   # 实验根 = plot 的上两级（使 `plot` 包可导入）
+    if str(_root) not in sys.path:
+        sys.path.insert(0, str(_root))
+    # 同时把项目根（含 task_allocation 包）加入路径：否则 plotting 内
+    # `from task_allocation.methods.utils import GeoTIFFDEM` 会因找不到包而
+    # 静默回退到 solution.json 的降采样 DEM（115x101px），地图被放大 10~24 倍变糊。
+    _proj = _here
+    while not (_proj / "task_allocation" / "__init__.py").is_file() and _proj.parent != _proj:
+        _proj = _proj.parent
+    if (_proj / "task_allocation" / "__init__.py").is_file() and str(_proj) not in sys.path:
+        sys.path.insert(0, str(_proj))
+    _rel = _here.relative_to(_root / "plot")
+    _mod = "plot." + ".".join(_rel.with_suffix("").parts)
+    runpy.run_module(_mod, run_name="__main__", alter_sys=True)
+    raise SystemExit(0)
+
 
 from pathlib import Path
 from typing import Any, Sequence
@@ -50,12 +78,17 @@ def plot_outcome_summary(
     w = 0.38
 
     # ── 数据准备 ─────────────────────────────────────────────────
-    n_new = [int((c.get("pool_counts") or {}).get("n_new", 0)) for c in cycles]
+    n_exec = [int(c.get("n_executed", 0)) for c in cycles]
     n_done = [int(c.get("n_completed", 0)) for c in cycles]
-    cum_new = np.cumsum(n_new)
+    # 迟到不是废飞（2026-10-15）：完成 = 按时交付 + 迟到交付；
+    # 废飞只剩物理不可行的弹回（n_infeasible）
+    n_late = [int(c.get("n_late", 0)) for c in cycles]
+    n_on_time = [d - l for d, l in zip(n_done, n_late)]
+    n_waste = [int(c.get("n_infeasible", 0)) for c in cycles]
     cum_done = np.cumsum(n_done)
-    cr_curve = [d / a if a else 0.0 for d, a in zip(cum_done, cum_new)]
-    cr_final = cr_curve[-1] if cr_curve else 0.0
+    # 累计正确执行吞吐 = 累计完成（含迟到）/ 周期序号（长程协议主指标）
+    thru_curve = [d / (i + 1) for i, d in enumerate(cum_done)]
+    thru_final = thru_curve[-1] if thru_curve else 0.0
 
     done_ids: set[int] = set()
     expired_ids: set[int] = set()
@@ -70,6 +103,9 @@ def plot_outcome_summary(
                                max(n_arrived - n_done_total - len(expired_ids), 0)))
     n_expired = len(expired_ids)
     n_gated = len(gated_ids - done_ids - expired_ids)
+    n_late_total = int(summary.get("n_late", 0))
+    on_time_rate = float(summary.get("on_time_rate", 0.0))
+    avg_late = float(summary.get("avg_lateness_s", 0.0))
 
     f1 = [float((c.get("muas") or {}).get("f1_reward", 0.0)) for c in cycles]
     f2 = [float((c.get("muas") or {}).get("f2_cost", 0.0)) / 1000.0 for c in cycles]
@@ -78,24 +114,33 @@ def plot_outcome_summary(
     n_seeds = len(metrics.get("seeds") or [])
     feas_rate = float(summary.get("cycle_feasible_rate", 0.0))
     completion = float(summary.get("completion_rate", 0.0))
+    correct_rate = float(summary.get("correct_exec_rate", 0.0))
+    throughput = float(summary.get("throughput_per_cycle", 0.0))
+    n_waste_total = int(summary.get("n_infeasible_delivery", 0))
+    n_eliminated_total = int(summary.get("n_eliminated", 0))
 
     fig, ((ax_a, ax_b), (ax_c, ax_d)) = plt.subplots(
-        2, 2, figsize=(FIG_WIDE, 7.0))
+        2, 2, figsize=(FIG_WIDE, 7.3))
 
-    # ── (a) CR 轨迹 ──────────────────────────────────────────────
-    ax_a.bar(x - w / 2, cum_new, w, color=PALETTE["remain"], alpha=0.75,
-             label="累计到达", edgecolor="white", linewidth=0.4)
-    ax_a.bar(x + w / 2, cum_done, w, color=PALETTE["executed"], alpha=0.9,
-             label="累计完成", edgecolor="white", linewidth=0.4)
-    style_axes(ax_a, title=f"(a) 完成率 CR 轨迹（终点 {cr_final:.1%}，"
-                           f"summary 口径 {completion:.1%}）",
+    # ── (a) 每周期执行构成 + 累计吞吐 ────────────────────────────
+    ax_a.bar(x, n_on_time, 0.62, color=PALETTE["executed"], alpha=0.9,
+             label="按时交付", edgecolor="white", linewidth=0.4)
+    ax_a.bar(x, n_late, 0.62, bottom=n_on_time, color=PALETTE["deferred"],
+             alpha=0.9, label="迟到交付（计完成）", edgecolor="white",
+             linewidth=0.4)
+    ax_a.bar(x, n_waste, 0.62, bottom=n_done, color=PALETTE["release"],
+             alpha=0.85, label="废飞（物理不可行）", edgecolor="white",
+             linewidth=0.4, hatch="//")
+    style_axes(ax_a, title=f"(a) 每周期执行构成（柱高=出动；"
+                           f"终点吞吐 {thru_final:.2f} 任务/周期）",
                xlabel="滚动周期", ylabel="任务数")
     ax_a.set_xticks(x, cyc_labels)
     ax_a2 = ax_a.twinx()
-    ax_a2.plot(x, [v * 100 for v in cr_curve], "-o", color=PALETTE["cost"],
-               lw=1.6, ms=4, label="CR%（右轴）")
-    ax_a2.set_ylabel("CR（%）", color=PALETTE["cost"], fontsize=FS["base"])
-    ax_a2.set_ylim(-4, 105)
+    ax_a2.plot(x, thru_curve, "-o", color=PALETTE["cost"],
+               lw=1.6, ms=4, label="累计吞吐（右轴）")
+    ax_a2.set_ylabel("累计吞吐（任务/周期）", color=PALETTE["cost"],
+                     fontsize=FS["base"])
+    ax_a2.set_ylim(bottom=0)
     ax_a2.tick_params(axis="y", labelcolor=PALETTE["cost"])
     ax_a2.spines["right"].set_visible(True)
     ax_a2.grid(False)
@@ -108,7 +153,7 @@ def plot_outcome_summary(
         ("已完成", n_done_total, PALETTE["executed"]),
         ("滞留池中", n_remain, PALETTE["deferred"]),
         ("到期作废", n_expired, PALETTE["release"]),
-        ("闸门拦回", n_gated, "#b279a2"),
+        ("物理拦回", n_gated, "#b279a2"),
     ]
     parts = [(k, v, c) for k, v, c in parts if v > 0]
     if not parts:
@@ -147,10 +192,15 @@ def plot_outcome_summary(
     # ── (d) 关键指标表 ───────────────────────────────────────────
     rows = [
         ("到达 / 完成任务", f"{n_arrived} / {n_done_total}"),
-        ("完成率 CR", f"{completion:.1%}"),
+        ("正确执行吞吐（任务/周期）", f"{throughput:.3f}"),
+        ("平均正确执行率（按时/出动）", f"{correct_rate:.1%}"),
+        ("按时率 / 迟到交付", f"{on_time_rate:.1%} / {n_late_total}"),
+        ("平均迟到", f"{avg_late / 60:.1f} min"),
+        ("废飞（物理不可行）", str(n_waste_total)),
+        ("超期淘汰", str(n_eliminated_total)),
+        ("完成率 CR（辅助对账）", f"{completion:.1%}"),
         ("周期解可行率", f"{feas_rate:.0%}"),
-        ("闸门拦回（事件次）", str(int(summary.get("n_infeasible_delivery", 0)))),
-        ("总收益 F1", f"{summary.get('total_reward', 0.0):.1f}"),
+        ("总收益 F1（折减后）", f"{summary.get('total_reward', 0.0):.1f}"),
         ("总路径代价", f"{summary.get('total_cost', 0.0) / 1000:.1f} km"),
         ("平均等待", f"{summary.get('avg_wait', 0.0):.0f} s"),
         ("平均可用机数", f"{summary.get('K_avail_mean', 0.0):.1f}"),
@@ -176,11 +226,23 @@ def plot_outcome_summary(
                   family=MONO_ZH,
                   color=PALETTE["release"] if warn else "#0f4c81", zorder=2)
 
-    fig.suptitle("exp01_smoke：结果总览（完成率轨迹 · 终局构成 · 双目标 · 关键指标）",
+    fig.suptitle("exp01_smoke：结果总览（正确执行 · 终局构成 · 双目标 · 关键指标）",
                  fontsize=FS["suptitle"])
     fig.tight_layout(rect=(0, 0.035, 1, 0.95))
-    footnote(fig, "口径：CR = 累计完成 / 累计到达（到达以入池周期计，"
-                  "轨迹终点与 summary.completion_rate 同口径）；滞留 = 实验结束时"
-                  "仍在任务池；闸门拦回 = 违约任务不顺延完成、解绑回池（事件次数）。"
-                  "F1 = 任务收益和，F2 = 三维路径代价；红色数值为调试期回归信号。")
+    footnote(fig, "口径（长程协议）：完成率不是目标，主指标 = 吞吐"
+                  "（累计完成/周期）与正确执行率（按时出动/总出动）；迟到不是废飞"
+                  "（2026-10-15）——迟到交付计入完成，有效奖励按迟到线性折减"
+                  "（W=600s）；废飞 = 物理不可行（航程/续航/终点机巢违约）的弹回"
+                  "交付，UAV 已飞航程但任务解绑回池不计完成；滞留 = 实验结束时仍在"
+                  "任务池；到期作废 = deadline 已过被淘汰。"
+                  "F1 = 任务收益和（折减后），F2 = 三维路径代价；红色数值为调试期回归信号。")
     return save_figure(fig, Path(out_dir) / "R01_outcome_summary", formats, dpi=dpi)
+
+if __name__ == "__main__":
+    import sys
+    from pathlib import Path as _P
+    _r = _P(__file__).resolve().parents[2]   # 实验根 = plot 的上两级
+    if str(_r) not in sys.path:
+        sys.path.insert(0, str(_r))
+    from plot import run_script
+    run_script(_P(__file__).stem, sys.argv[1:])

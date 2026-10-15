@@ -209,3 +209,67 @@ def test_selection_run_does_not_mutate_shared_marginal():
         "run() 不应就地改写传入的 marginal.forced_task_ids"
     )
     assert cfg.marginal.wait_scale == before_wait, "run() 不应就地改写 wait_scale"
+
+
+# ── Fix②b 每周期重建透传（滚动层回归）─────────────────────────────
+def test_run_cycle_rebuild_carries_anti_starvation(monkeypatch):
+    """Fix②b：horizon.run_cycle 每周期重建 SelectionConfig 必须透传
+    anti_starvation —— 2026-10-15 长程实验发现漏传后静默退回
+    enabled=False，24 个周期 n_forced_in 全为 0，老化任务直接饿死。
+
+    做法：间谍替换 horizon 模块里的 run_selection，捕获其收到的 config；
+    选择结果置空（走 selection_empty 早退分支），不触达第二阶段。
+    """
+    import task_allocation.methods.rolling.horizon as horizon_mod
+    from task_allocation.common.types import Nest, Task, UAV, UAVStatus
+    from task_allocation.methods.rolling.horizon import (
+        HorizonConfig,
+        RollingHorizon,
+    )
+    from task_allocation.methods.selection.pipeline import SelectionResult
+    from task_allocation.methods.task_pool import TaskPool
+    from task_allocation.methods.uav_state import UAVFleet
+
+    nests = [Nest(id=0, x=0.0, y=0.0, z=0.0, capacity=4, available=True)]
+    uavs = [UAV(id=0, x=0.0, y=0.0, z=0.0, remaining_range=1e6,
+                speed=10.0, nest_id=0, status=UAVStatus.IDLE)]
+    tasks = [Task(id=0, x=100.0, y=0.0, z=0.0, reward=5.0,
+                  arrival_time=0.0, earliest=0.0, latest=1e6)]
+
+    sel_cfg = RollingHorizon.selection_config_from_dict(
+        {
+            "anti_starvation": {
+                "enabled": True,
+                "force_after_seconds": 777.0,
+                "deadline_slack": 111.0,
+            }
+        }
+    )
+
+    captured: dict = {}
+
+    def _spy(tasks_arg, uavs_arg, *, config, **kwargs):
+        captured["cfg"] = config
+        return SelectionResult(selected=[], scored=[], diagnostics={})
+
+    monkeypatch.setattr(horizon_mod, "run_selection", _spy)
+
+    pool = TaskPool(tasks, current_time=0.0)
+    fleet = UAVFleet(uavs, current_time=0.0)
+    horizon = RollingHorizon(
+        pool, fleet, nests,
+        dem=None, estimator=None,
+        horizon_config=HorizonConfig(n_cycles=1, cycle_length=600.0),
+        selection_config=sel_cfg,
+        event_config=None,
+    )
+    horizon.run_cycle()
+
+    cfg = captured.get("cfg")
+    assert cfg is not None, "run_selection 未被调用（周期早退？）"
+    assert cfg.anti_starvation.enabled is True, (
+        "run_cycle 重建 SelectionConfig 时漏传 anti_starvation → "
+        "yaml 开了防饥饿也不生效（Fix②b 回归）"
+    )
+    assert cfg.anti_starvation.force_after_seconds == 777.0
+    assert cfg.anti_starvation.deadline_slack == 111.0

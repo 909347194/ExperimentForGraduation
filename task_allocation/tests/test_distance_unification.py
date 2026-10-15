@@ -62,13 +62,14 @@ from task_allocation.methods.selection.marginal_gain import (  # noqa: E402
 # ---------------------------------------------------------------------------
 
 
-def _uav(uid: int = 0, x: float = 0.0, y: float = 0.0, speed: float = 10.0) -> UAV:
+def _uav(uid: int = 0, x: float = 0.0, y: float = 0.0, speed: float = 10.0,
+         remaining_range: float = 1e6) -> UAV:
     return UAV(
         id=uid,
         x=x,
         y=y,
         z=0.0,
-        remaining_range=1e6,
+        remaining_range=remaining_range,
         speed=speed,
         nest_id=0,
         status=UAVStatus.IDLE,
@@ -200,18 +201,19 @@ def test_time_window_eta_uses_distance_fn():
 
     # 直线口径：距离被缩到 100 m → 10 s，不违约
     shrink = make_distance_fn(_CountingEstimator(scale=0.1))  # type: ignore[arg-type]
-    pen_ok, tags_ok = check_time_window_constraint(
+    pen_ok, tags_ok, late_ok = check_time_window_constraint(
         [tour], {0: task}, {0: uav}, distance_fn=shrink
     )
-    assert pen_ok == 0.0 and tags_ok == []
+    assert pen_ok == 0.0 and tags_ok == [] and late_ok == {}
 
     # 统一口径（放大 10×）：距离 10000 m → 1000 s，违约且量级正确
     stretch = make_distance_fn(_CountingEstimator(scale=10.0))  # type: ignore[arg-type]
-    pen_bad, tags_bad = check_time_window_constraint(
+    pen_bad, tags_bad, late_bad = check_time_window_constraint(
         [tour], {0: task}, {0: uav}, distance_fn=stretch
     )
     assert pen_bad == pytest.approx(1000.0 - 50.0)
     assert tags_bad == ["tw_task_0"]
+    assert late_bad == {0: pytest.approx(950.0)}
 
 
 def test_time_window_default_is_euclid_backward_compatible():
@@ -219,9 +221,10 @@ def test_time_window_default_is_euclid_backward_compatible():
     uav = _uav(0, speed=10.0)
     task = _task(0, x=1000.0, latest=50.0)
     tour = _tour(uav, [0])
-    pen, tags = check_time_window_constraint([tour], {0: task}, {0: uav})
+    pen, tags, late = check_time_window_constraint([tour], {0: task}, {0: uav})
     assert pen == pytest.approx(100.0 - 50.0)
     assert tags == ["tw_task_0"]
+    assert late == {0: pytest.approx(50.0)}
 
 
 def test_tour_time_uses_travel_not_euclid():
@@ -278,21 +281,25 @@ def test_insert_delta_cost_fallback_uses_distance_fn():
     assert dem == pytest.approx(base * 10.0)
 
 
-def test_prefilter_time_window_uses_unified_travel():
-    """预筛的 ETA 走 cost_hint（三维代价）；cost_hint 即统一口径的产物。"""
+def test_prefilter_range_uses_unified_travel():
+    """预筛的航程判据走 cost_hint（三维代价）；cost_hint 即统一口径的产物。
+
+    2026-10-15 起按往返口径：2×travel vs margin×remaining_range。
+    """
     from task_allocation.methods.selection.feasibility import prefilter
     from task_allocation.common.types import ScoredTask
 
-    task = _task(0, x=10000.0, latest=100.0)
+    task = _task(0, x=11000.0, latest=1e6)
     s = ScoredTask(task=task, priority=1.0)
-    uav = _uav(0, speed=10.0)
+    uav = _uav(0, speed=10.0, remaining_range=20000.0)
     cfg = FeasibilityConfig(current_time=0.0)
 
-    # 无 cost_hint：直线 10000 m / 10 = 1000 s > 100 s → 淘汰
+    # 无 cost_hint：直线往返 2×11000=22000 > 20000 → 拒
     passed, rejected = prefilter([s], [uav], cfg)
-    assert not passed and rejected[0].filter_reason == "miss_time_window"
+    assert not passed and rejected[0].filter_reason == "exceed_round_trip_range"
 
-    # cost_hint 给出很短的三维代价 → 通过（证明 ETA 用的是 travel 而非直线）
-    s2 = ScoredTask(task=_task(0, x=10000.0, latest=100.0), priority=1.0)
+    # cost_hint 给出很短的三维代价 → 往返 2×50=100 ≤ 19000 → 通过
+    # （证明航程判据用的是 travel 而非直线）
+    s2 = ScoredTask(task=_task(0, x=10000.0, latest=1e6), priority=1.0)
     passed2, _ = prefilter([s2], [uav], cfg, cost_hint={0: 50.0})
     assert len(passed2) == 1
