@@ -9,18 +9,16 @@ venv/
 .workbuddy/
 
 
-# 结果图片
+# 结果图片（可由 results json 经 render_from_json.py 重渲，不入库）
 figures/
 
-# 实验结果（由 run.py 端到端重新生成，非源码）
-**/results/solution.json
-**/results/metrics.json
-**/results/run_meta.json
+# 分块续跑的原子存档（本地续跑用；求解完成即清除）
+**/results*/.chunk_state.pkl
 
-# LaTeX 编译中间产物与成品
-**/results/tables/*.aux
-**/results/tables/*.fdb_latexmk
-**/results/tables/*.fls
-**/results/tables/*.log
-**/results/tables/*.xdv
-**/results/tables/*.pdf
+# LaTeX 编译中间产物与成品（tex 源码入库，pdf/aux 等不入库）
+**/results*/tables/*.aux
+**/results*/tables/*.fdb_latexmk
+**/results*/tables/*.fls
+**/results*/tables/*.log
+**/results*/tables/*.xdv
+**/results*/tables/*.pdf

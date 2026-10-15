@@ -65,8 +65,8 @@ def check_time_window_constraint(
     service_time: float = 0.0,
     speed_default: float = 10.0,
     distance_fn: Callable[[Sequence[float], Sequence[float]], float] | None = None,
-) -> tuple[float, list[str]]:
-    """时间窗约束违背量（同时返回违规标签）。
+) -> tuple[float, list[str], dict[int, float]]:
+    """时间窗约束违背量（同时返回违规标签与每任务迟到量）。
 
     逐航次模拟到达游标：从 UAV 起点出发，按访问顺序累加段飞行时间，到点执行
     （若早于 ``earliest`` 则等待至 ``earliest``），离开时累加上 ``service_time``。
@@ -87,10 +87,14 @@ def check_time_window_constraint(
         distance_fn: 统一距离口径 ``f(xyz_a, xyz_b) -> 米``；None → 欧氏直线。
 
     Returns:
-        ``(window_penalty, violation_tags)``；无违规时两项均为 0 / 空。
+        ``(window_penalty, violation_tags, lateness)``；无违规时三项均为
+        0 / 空 / 空。``lateness`` = ``task_id → 迟到秒数``（仅迟到任务），
+        供 F1 奖励折减（迟到不是废飞，按迟到时长折减有效奖励）与滚动层
+        记录迟到交付使用。
     """
     penalty = 0.0
     tags: list[str] = []
+    lateness: dict[int, float] = {}
     for tour in tours:
         if not tour.task_ids:
             continue
@@ -113,11 +117,13 @@ def check_time_window_constraint(
             if est is not None and t_cursor < est:
                 t_cursor = est
             if lst is not None and t_cursor > lst + 1e-6:
-                penalty += t_cursor - lst
+                late = float(t_cursor - lst)
+                penalty += late
+                lateness[int(tid)] = late
                 tags.append(f"tw_task_{tid}")
             t_cursor += float(service_time)
             prev = task.position
-    return penalty, tags
+    return penalty, tags, lateness
 
 
 def check_sequence_constraint(

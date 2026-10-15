@@ -24,6 +24,30 @@
 
 from __future__ import annotations
 
+# ── 独立运行自举：支持直接 `python plot/.../xxx.py`（脚本方式）──
+# 脚本方式运行时 __package__ 为空，模块内相对导入不可用；此处转以 -m 语义
+# 重跑自身（runpy 会正确设置包上下文），再触发文件末尾的 __main__ 守卫出图。
+if __name__ == "__main__" and __package__ in (None, ""):
+    import sys, runpy
+    from pathlib import Path as _P
+    _here = _P(__file__).resolve()
+    _root = _here.parents[2]   # 实验根 = plot 的上两级（使 `plot` 包可导入）
+    if str(_root) not in sys.path:
+        sys.path.insert(0, str(_root))
+    # 同时把项目根（含 task_allocation 包）加入路径：否则 plotting 内
+    # `from task_allocation.methods.utils import GeoTIFFDEM` 会因找不到包而
+    # 静默回退到 solution.json 的降采样 DEM（115x101px），地图被放大 10~24 倍变糊。
+    _proj = _here
+    while not (_proj / "task_allocation" / "__init__.py").is_file() and _proj.parent != _proj:
+        _proj = _proj.parent
+    if (_proj / "task_allocation" / "__init__.py").is_file() and str(_proj) not in sys.path:
+        sys.path.insert(0, str(_proj))
+    _rel = _here.relative_to(_root / "plot")
+    _mod = "plot." + ".".join(_rel.with_suffix("").parts)
+    runpy.run_module(_mod, run_name="__main__", alter_sys=True)
+    raise SystemExit(0)
+
+
 from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Sequence
@@ -46,7 +70,8 @@ _REASON_NAMES = {
     "bad_nest": "机巢异常",
     "end_nest_unreachable": "终点机巢不可达",
     "tour_infeasible_uav": "航次整体不可行",
-    "miss_time_window": "时间窗超期",
+    "miss_time_window": "时间窗超期(消融)",
+    "exceed_round_trip_range": "往返航程超限",
     "time_window": "时间窗",
     "capability_budget": "能力预算",
     "range": "航程",
@@ -358,3 +383,12 @@ def plot_constraint_state(
                   "(e) 灰虚线 = 周期边界；"
                   f"{slack_note}。")
     return save_figure(fig, Path(out_dir) / "P11_constraint_state", formats, dpi=dpi)
+
+if __name__ == "__main__":
+    import sys
+    from pathlib import Path as _P
+    _r = _P(__file__).resolve().parents[2]   # 实验根 = plot 的上两级
+    if str(_r) not in sys.path:
+        sys.path.insert(0, str(_r))
+    from plot import run_script
+    run_script(_P(__file__).stem, sys.argv[1:])

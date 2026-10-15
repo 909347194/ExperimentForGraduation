@@ -6,8 +6,18 @@
 ``allocation.png`` 的 (b) 面板是「逐周期空间演化」的多联静态图；本图把它
 **变成动图**：在单张地图上回放整个滚动闭环——机巢与地形不动，UAV 航迹随
 周期逐段「生长」，任务一旦被航迹扫过即点亮（按其承运 UAV 着色），累计完成
-数与里程实时跳动；右栏同步画出「当前周期」的 DMDE 收敛曲线与进度刻度，把
-**空间分配**与**优化搜索**两件事钉在同一时间轴上，最直观地看到「整个过程」。
+数与里程实时跳动；右栏画出「当前周期」的 DMDE 收敛曲线，把**空间分配**与
+**优化搜索**两件事钉在同一时间轴上，最直观地看到「整个过程」。
+
+布局是**左右两栏**：(a) 左栏地图（DEM 满幅铺底 + 航迹回放 + 任务点亮），
+顶部一行**状态行**（周期 / 已到达 / **已完成百分比** / 里程，白底随文字自动
+贴合，按「哪侧顶部要素少」自动贴左或贴右）；(b) 右栏当前周期 DMDE 收敛曲线，
+游标随动画推进。
+
+「滚动进度」的四次定位调整（都是用户反馈驱动，记录以免重蹈）：右下独立子图 →
+地图底部卡片（压 DEM）→ 地图角上的卡片 + 进度条（状态行文字宽 3.9in 放不进
+2.4in 的卡片，溢出压住任务标号 = 视觉「文字堆叠」）→ **最终：不做进度条，
+只用状态行里的一个百分比数字**（剧情=进度其实已在数字里，占地最小）。
 
 输出：``allocation_anim.gif``（Pillow 合成；无 ffmpeg 时无 mp4）。
 ``formats`` 不含 ``gif`` / ``mp4`` 时本图直接跳过，避免拖慢默认 PNG 出图。
@@ -18,6 +28,30 @@ end_nest_id / task_ids / uav_id / est_cost）+ ``tasks`` / ``nests`` / ``dem``�
 """
 
 from __future__ import annotations
+
+# ── 独立运行自举：支持直接 `python plot/.../xxx.py`（脚本方式）──
+# 脚本方式运行时 __package__ 为空，模块内相对导入不可用；此处转以 -m 语义
+# 重跑自身（runpy 会正确设置包上下文），再触发文件末尾的 __main__ 守卫出图。
+if __name__ == "__main__" and __package__ in (None, ""):
+    import sys, runpy
+    from pathlib import Path as _P
+    _here = _P(__file__).resolve()
+    _root = _here.parents[2]   # 实验根 = plot 的上两级（使 `plot` 包可导入）
+    if str(_root) not in sys.path:
+        sys.path.insert(0, str(_root))
+    # 同时把项目根（含 task_allocation 包）加入路径：否则 plotting 内
+    # `from task_allocation.methods.utils import GeoTIFFDEM` 会因找不到包而
+    # 静默回退到 solution.json 的降采样 DEM（115x101px），地图被放大 10~24 倍变糊。
+    _proj = _here
+    while not (_proj / "task_allocation" / "__init__.py").is_file() and _proj.parent != _proj:
+        _proj = _proj.parent
+    if (_proj / "task_allocation" / "__init__.py").is_file() and str(_proj) not in sys.path:
+        sys.path.insert(0, str(_proj))
+    _rel = _here.relative_to(_root / "plot")
+    _mod = "plot." + ".".join(_rel.with_suffix("").parts)
+    runpy.run_module(_mod, run_name="__main__", alter_sys=True)
+    raise SystemExit(0)
+
 
 from pathlib import Path
 from typing import Any, Sequence
@@ -47,7 +81,10 @@ from ..theme import (
     plt,
     robust_pil_save,
     robust_savefig,
+    save_poster,
     style_axes,
+    declutter_figure,
+    audit_frame,
 )
 from .allocation import _arrival_cycle_map
 
@@ -186,7 +223,9 @@ def plot_allocation_anim(
     dpi: int = 200,
 ) -> list[Path]:
     fmt_set = {str(f).lower().lstrip(".") for f in formats}
-    if not (fmt_set & {"gif", "mp4"}):
+    # "poster" = 只出末帧静态海报（不渲 GIF）：长周期动画 GIF 极重，海报刷新
+    # 不必重跑整个动画。默认 PNG 出图仍整体跳过动画图（无 gif/mp4/poster）。
+    if not (fmt_set & {"gif", "mp4", "poster"}):
         # 非动画格式请求时跳过——不拖慢默认 PNG 出图
         return []
 
@@ -229,19 +268,19 @@ def plot_allocation_anim(
     n_frames = len(frames)
 
     # ── 画布 ─────────────────────────────────────────────────────
-    # 横向大画布：左列地图（DEM 满幅、近 1:1 铺底、清晰）+ 右列 DMDE 收敛。
-    # 旧的竖向 12.5×9.5 布局把地图压成左列竖条（aspect='equal' 后 DEM 左右
-    # 留白、有效像素被 GIF 全局 255 色版量化压糊）——本图只保留地图与收敛，
-    # 机巢驻巢数演化已独立成 allocation_status.gif，故地图可占 ~60% 宽、满高。
+    # 左右两栏：左栏地图（DEM 满幅、近 1:1 铺底、清晰）+ 右栏 DMDE 收敛。
+    # 进度信息（周期刻度 + 完成率）不再单独成面板，改为**内嵌到左栏地图底部**的
+    # 一条扁进度条（见 _draw_progress_strip），随动画同步推进；故右栏只需一个
+    # 全高子图，不再 subgridspec 拆分。
     fig = plt.figure(figsize=(13.5, 7.8))
+    # width_ratios=1.09: 地图 aspect='equal' 后实际绘制框为正方形（高 5.96in 限定），
+    # 1.09 使左槽宽≈5.96in 恰好填满，不留两侧空白；右栏收敛图相应略窄。
     gs = fig.add_gridspec(
-        1, 2, width_ratios=[1.6, 1.0], wspace=0.05,
+        1, 2, width_ratios=[1.09, 1.0], wspace=0.05,
         left=0.04, right=0.985, top=0.90, bottom=0.135,
     )
-    gs_r = gs[1].subgridspec(2, 1, height_ratios=[1.0, 0.62], hspace=0.32)
     ax_map = fig.add_subplot(gs[0])
-    ax_conv = fig.add_subplot(gs_r[0])
-    ax_status = fig.add_subplot(gs_r[1])
+    ax_conv = fig.add_subplot(gs[1])
 
     # 静态底图：DEM + 机巢（只画一次）
     _draw_dem(ax_map, solution.get("dem"), solution)
@@ -262,6 +301,19 @@ def plot_allocation_anim(
         ax_map.set_ylim(min(ys) - pad, max(ys) + pad)
     ax_map.set_facecolor("white")
     ax_map.set_aspect("equal", adjustable="box")
+
+    # 状态行**移出地图**：放在地图轴正下方的边距带（画布级 fig.text）。
+    # 为什么不能放图内：状态行宽约 3.9 in，占地图轴（≈5.2 in）的 3/4——放在
+    # 顶部无论左右都会横跨大半张地图，而 T10 等任务标号恰贴地图顶缘
+    # （逐帧自检 frame#12-68 实测互压 100%），任何图内角落都避不开。
+    # 底部边距带（gs.bottom=0.135 与 footnote 之间）是唯一无数据的干净区域。
+    _mp = ax_map.get_position()
+    status_txt = fig.text(
+        _mp.x0 + _mp.width / 2.0, 0.098, "",
+        ha="center", va="center", fontsize=_F_STATUS, color="#1f2933",
+        zorder=10,
+        bbox=dict(boxstyle="round,pad=0.34", fc="white", ec="none", alpha=0.9),
+    )
     ax_map.set_title("(a) 滚动闭环分配动画（DEM + 航迹回放）",
                      fontsize=_F_TITLE, loc="left", pad=8)
 
@@ -283,7 +335,7 @@ def plot_allocation_anim(
                    label="机巢（○=返航巢）"),
         _IconPatch(_G_DOT, fc=_C_PENDING, ec="white", lw=0.9, label="待执行任务（红）"),
     ]
-    fig.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.34, 0.052),
+    fig.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.72, 0.052),
                handler_map={_IconPatch: _IconHandler()}, ncol=3,
                fontsize=_F_LEGEND, columnspacing=1.6, handletextpad=0.6,
                borderpad=0.5, frameon=False)
@@ -303,13 +355,6 @@ def plot_allocation_anim(
         ax_anim.set_xticks([])
         ax_anim.set_yticks([])
         ax_conv.clear()
-        ax_status.clear()
-
-        title_txt = ax_anim.text(
-            0.03, 0.95, "", transform=ax_anim.transAxes, ha="left", va="top",
-            fontsize=_F_STATUS, color="#1f2933", zorder=10,
-            bbox=dict(boxstyle="round,pad=0.34", fc="white", ec="none", alpha=0.85),
-        )
 
         # 已完成任务集合（含本周期进度 p 之前扫过的）
         done: set[int] = set()
@@ -361,22 +406,22 @@ def plot_allocation_anim(
                 for tour in tours_by_cycle[ci]:
                     _draw_one_tour(ax_anim, tour, p, alpha=0.95, lw=1.9, drone=True)
 
-        # 顶部状态文字
+        # 状态行（单行：周期 / 已到达 / 已完成百分比 / 里程），白底随文字自动贴合
         arrived = sum(1 for a in arrival_cycle.values() if a <= cur_cycle)
+        rate = (len(done) / n_tasks * 100.0) if n_tasks else 0.0
         if c is None:
-            title_txt.set_text(f"周期 0/{n_cyc} · 等待任务到达 · 0 km")
+            status_text = (f"周期 0/{n_cyc} · 等待任务到达 · "
+                           f"已完成 0%（0/{n_tasks}） · 0 km")
         else:
             # 当前周期已揭示部分的里程（按比例累加本周期各航迹）
             cur_km = sum(t["est_cost"] for t in tours_by_cycle[c]) / 1000.0 * p
             total_km = (cum_km[c - 1] if c > 0 else 0.0) + cur_km
-            title_txt.set_text(
+            status_text = (
                 f"周期 {c + 1}/{n_cyc} · 已到达 {arrived}/{n_tasks} · "
-                f"已执行 {len(done)}/{n_tasks} 任务 · {total_km:.0f} km"
+                f"已完成 {rate:.0f}%（{len(done)}/{n_tasks}） · {total_km:.0f} km"
             )
+        status_txt.set_text(status_text)
 
-        # 收尾定格（末周期已画满）时，进度刻度全部转为「已完成」
-        status_c = n_cyc if (c is not None and c == n_cyc - 1 and p >= 1.0) else c
-        _draw_status(ax_status, status_c, n_cyc, done, n_tasks)
         _draw_conv(ax_conv, solution, c, p)
 
     # 渲染各帧并保存（手动逐帧抓取 → Pillow 合成，规避本机 matplotlib
@@ -393,10 +438,13 @@ def plot_allocation_anim(
                  fontsize=_F_SUPTITLE)
     footnote(fig, "口径：航迹按周期逐段生长，任务被航迹扫过即点亮（按承运 UAV 着色，"
                   "标号 T#·Ck，Ck=到达周期）；任务点于其到达周期才出现，未到达前不绘制，"
-                  "已到达但未执行者显红。右栏上为「当前周期」DMDE 最优适应度收敛曲线，"
-                  "游标随动画推进；右下 (b) 为滚动进度——周期刻度（绿●已完成 / 青环=当前 / "
-                  "灰○未到）+ 完成率横条。各机巢驻巢无人机数的逐周期演化已独立成图 "
-                  "allocation_status.gif。里程 = 各航迹 est_cost 之和（km）。"
+                  "已到达但未执行者显红。地图下方的状态行给出周期 / 已到达 / 已完成"
+                  "百分比 / 累计里程（完成进度只用数字表达，不画进度条；白底随文字"
+                  "自动贴合）——放在图外是因为状态行占地图宽 3/4，图内任何角落都会"
+                  "压住贴顶的任务标号（逐帧自检实测 T10 互压 100%）；"
+                  "右栏 (b) 为「当前周期」DMDE 最优适应度收敛曲线，游标随动画推进。"
+                  "各机巢驻巢无人机数的逐周期演化已独立成图 allocation_status.gif。"
+                  "里程 = 各航迹 est_cost 之和（km）。"
                   "底图地形与机巢为静态层。Ck 标出到达周期，晚到任务（如 T19·C3）"
                   "无法并入早周期航次。")
 
@@ -405,11 +453,24 @@ def plot_allocation_anim(
 
         fig.set_dpi(gif_dpi)
         frames_rgb: list = []
-        for idx in range(n_frames):
-            _update(idx)
+        # poster-only 快路径：逐帧抓取只服务 GIF/MP4 编码；只要末帧海报时
+        # 直接渲染末帧（docstring 承诺「不渲 GIF」即不逐帧渲染）。
+        if fmt_set & {"gif", "mp4"}:
+            for idx in range(n_frames):
+                _update(idx)
+                # 逐帧排版修正 + 自检：状态行文字长度随帧变化，堆叠/溢出只出现在
+                # 某些中间帧（poster 末帧正常不代表帧帧正常）。declutter 内部会
+                # draw；audit_frame 默认静默，EXP01_AUDIT_FRAMES=1 时逐帧全检。
+                declutter_figure(fig)
+                audit_frame(fig, idx)
+                fig.canvas.draw()
+                rgba = np.asarray(fig.canvas.buffer_rgba())
+                frames_rgb.append(Image.fromarray(rgba).convert("RGB"))
+        else:
+            _update(n_frames - 1)
+            declutter_figure(fig)
+            audit_frame(fig, n_frames - 1)
             fig.canvas.draw()
-            rgba = np.asarray(fig.canvas.buffer_rgba())
-            frames_rgb.append(Image.fromarray(rgba).convert("RGB"))
 
         if "gif" in fmt_set and frames_rgb:
             gif_path = out_dir / f"{gif_name}.gif"
@@ -460,67 +521,19 @@ def plot_allocation_anim(
         _update(n_frames - 1)
         if "gif" in fmt_set:
             poster = out_dir / f"{gif_name}.gif"
-            robust_savefig(fig, poster, dpi=gif_dpi, bbox_inches="tight", facecolor="white")
+            save_poster(fig, poster, dpi=gif_dpi)
             written.append(poster)
 
     # 静态海报 PNG（最终帧），供论文/文档直接引用（高 dpi，印刷级锐利）
-    if "png" in fmt_set:
+    if "png" in fmt_set or "poster" in fmt_set:
         _update(n_frames - 1)
         poster_png = out_dir / f"{gif_name}_poster.png"
-        robust_savefig(fig, poster_png, dpi=300, bbox_inches="tight",
-                        facecolor="white")
+        save_poster(fig, poster_png, dpi=300)
         written.append(poster_png)
 
     if not written:
         plt.close(fig)
     return written
-
-
-def _draw_status(ax, c: int | None, n_cyc: int,
-                 done: set[int], n_tasks: int) -> None:
-    """右栏下：(b) 滚动进度 = 周期刻度（C1..Cn）+ 完成率横条。
-
-    绿●已完成 / 青环=当前 / 灰○未到；完成率随动画推进实时增长。
-    各机巢驻巢无人机数的逐周期演化已独立成图 ``allocation_status.gif``。
-    """
-    style_axes(ax, title="(b) 滚动进度")
-    ax.set_title(ax.get_title(), fontsize=_F_TITLE)
-    ax.set_xlim(-0.6, max(n_cyc - 1, 0) + 0.6)
-    ax.set_ylim(0, 1.5)
-    ax.set_yticks([])
-    ax.set_xticks(range(n_cyc))
-    ax.set_xticklabels([f"C{i + 1}" for i in range(n_cyc)])
-    for lab in ax.get_xticklabels():
-        lab.set_fontsize(9.0)
-    for i in range(n_cyc):
-        if c is None:
-            state = "pending"
-        elif i < c:
-            state = "done"
-        elif i == c:
-            state = "current"
-        else:
-            state = "pending"
-        y = 1.0
-        if state == "done":
-            ax.scatter([i], [y], s=140, color=PALETTE["executed"],
-                       edgecolors="white", linewidths=1.2, zorder=3)
-        elif state == "current":
-            ax.scatter([i], [y], s=155, facecolors="white",
-                       edgecolors=PALETTE["selected"], linewidths=2.2, zorder=3)
-        else:
-            ax.scatter([i], [y], s=140, color="#c3cbd4",
-                       edgecolors="white", linewidths=1.2, zorder=3)
-    rate = len(done) / n_tasks if n_tasks else 0.0
-    ax.barh(0.45, rate, left=0.0, height=0.26,
-            color=PALETTE["executed"], edgecolor="none")
-    ax.barh(0.45, 1.0 - rate, left=rate, height=0.26,
-            color="#e6e9ed", edgecolor="none")
-    ax.text(0.5, 0.45, f"完成率 {rate*100:.0f}%  ({len(done)}/{n_tasks})",
-            ha="center", va="center", fontsize=9.5, color="#132238", zorder=5)
-    ax.text(0.0, 1.36, "绿●已完成   青环=当前   灰○未到", fontsize=_F_NOTE,
-            color="#7b8794", ha="left", va="center")
-    ax.grid(False)
 
 
 def _last_change_index(hist: Sequence[float]) -> int:
@@ -553,7 +566,7 @@ def _draw_conv(ax, solution: dict[str, Any], c: int | None, p: float) -> None:
     for cyc in cycles:
         hists.append([float(v) for v in (cyc.get("cost_history") or [])])
 
-    style_axes(ax, title="(c) 当前周期 DMDE 收敛（最优适应度）",
+    style_axes(ax, title="(b) 当前周期 DMDE 收敛（最优适应度）",
                xlabel="代数 g", ylabel="最优适应度")
     ax.set_title(ax.get_title(), fontsize=_F_TITLE)
     ax.tick_params(axis="both", labelsize=8.5)
@@ -581,10 +594,14 @@ def _draw_conv(ax, solution: dict[str, Any], c: int | None, p: float) -> None:
 
     g = np.arange(n_total)
     col = uav_color(ci)
-    # 全程淡线作参考，揭示段实线
-    ax.plot(g, hist, "-", drawstyle="steps-post", color=col, lw=1.0,
-            alpha=0.25, zorder=2)
-    gen_reveal = 0 if c is None else min(max(int(round(p * x_max)), 0), x_max)
+    # 只画到 visible 窗口：超出 xlim 的部分虽被裁掉看不见，但 Line2D 的 extent
+    # 仍按完整数据计入 bbox_inches="tight"，会把 poster 撑成异常宽幅
+    # （2026-10-13 实测 4.77× 画布宽 → poster 7964px）。
+    visible = min(n_total, x_max + 1)
+    ax.plot(g[:visible], hist[:visible], "-", drawstyle="steps-post",
+            color=col, lw=1.0, alpha=0.25, zorder=2)
+    gen_reveal = min(0 if c is None else min(max(int(round(p * x_max)), 0), x_max),
+                     visible - 1)
     ax.plot(g[: gen_reveal + 1], hist[: gen_reveal + 1], "-",
             drawstyle="steps-post", color=col, lw=2.0, zorder=4)
     ax.scatter([gen_reveal], [hist[gen_reveal]], s=32, color=col,
@@ -609,3 +626,11 @@ def _draw_conv(ax, solution: dict[str, Any], c: int | None, p: float) -> None:
                 color="0.35")
     ax.grid(axis="y", alpha=0.2)
 
+if __name__ == "__main__":
+    import sys
+    from pathlib import Path as _P
+    _r = _P(__file__).resolve().parents[2]   # 实验根 = plot 的上两级
+    if str(_r) not in sys.path:
+        sys.path.insert(0, str(_r))
+    from plot import run_script
+    run_script(_P(__file__).stem, sys.argv[1:])

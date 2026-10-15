@@ -60,11 +60,12 @@ def test_coop_window():
     uavs = {0: _uav(0, speed=10.0)}
     tour = UAVTour(uav_id=0, task_ids=[0], end_nest_id=0,
                    start_x=0.0, start_y=0.0, start_z=0.0)
-    pen, tags = check_time_window_constraint(
+    pen, tags, late = check_time_window_constraint(
         [tour], tasks, uavs, current_time=0.0, service_time=0.0
     )
     assert pen == 40.0  # 500m / 10 = 50s > latest 10 → 40
     assert tags == ["tw_task_0"]
+    assert late == {0: 40.0}
 
 
 def test_coop_window_optional_fields():
@@ -74,8 +75,9 @@ def test_coop_window_optional_fields():
     uavs = {0: _uav(0, speed=10.0)}
     tour = UAVTour(uav_id=0, task_ids=[0], end_nest_id=0,
                    start_x=0.0, start_y=0.0, start_z=0.0)
-    pen, tags = check_time_window_constraint([tour], tasks, uavs)
+    pen, tags, late = check_time_window_constraint([tour], tasks, uavs)
     assert pen == 40.0 and tags == ["tw_task_0"]
+    assert late == {0: 40.0}
 
 
 def test_coop_sequence_and_sync_inert():
@@ -88,7 +90,7 @@ def test_coop_sequence_and_sync_inert():
 def test_evaluator_report():
     r = ConstraintReport()
     r.add_range("range_uav_0", 20.0)
-    r.add_window(["tw_task_0"], 40.0)
+    r.add_window(["tw_task_0"], 40.0, lateness={0: 40.0})
     r.add_misc("idle_uav_1", 100.0)
     assert r.total_violation == 160.0
     assert r.violation_breakdown()["range"] == 20.0

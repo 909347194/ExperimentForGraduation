@@ -410,6 +410,32 @@ class TaskPool:
             released.append(task)
         return released
 
+    def mark_unreachable(self, task_ids: Iterable[int]) -> list[Task]:
+        """物理不可达任务出池（UNREACHABLE）——「过于偏远」，非违约。
+
+        与 ``expire`` 的区别：这是**静态物理判定**的结果（所有机巢往返
+        航程都超过满电可及范围，见 selection.feasibility.static_unreachable），
+        不是时间管理失败。用户原则（2026-10-15）下这是唯一合法的未完成
+        原因，故单列计数，不混入「超期淘汰」。
+
+        正在执行的任务不受影响（已在飞，物理上已证明可达）。
+        """
+        marked: list[Task] = []
+        for task_id in task_ids:
+            task = self._tasks.get(task_id)
+            if task is None or task_id in self._executing:
+                continue
+            task.status = TaskStatus.UNREACHABLE
+            task.meta["unreachable_time"] = self._current_time
+            self._tasks.pop(task_id)
+            self._source.pop(task_id, None)
+            self._planning_ids = [i for i in self._planning_ids if i != task_id]
+            self._new_pending.discard(task_id)
+            self._release_pending.discard(task_id)
+            self._finished[task_id] = task
+            marked.append(task)
+        return marked
+
     def expire(self, current_time: float | None = None) -> list[Task]:
         """超过 ``latest`` 的任务判过期并出池（EXPIRED）。
 

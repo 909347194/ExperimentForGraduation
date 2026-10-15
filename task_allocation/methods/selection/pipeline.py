@@ -228,8 +228,9 @@ def run(
     diagnostics["n_dropped_postcheck"] = len(dropped_post)
 
     # 淘汰原因直方图：用于把「物理上不可能完成」与「算法主动放弃」分开统计。
-    # 全域撒点后会出现一批 miss_time_window / exceed_remaining_range 的结构性
-    # 不可达任务，完成率下降必须能被这张表解释清楚，否则会被质疑数据合理性。
+    # 全域撒点后会出现一批 exceed_round_trip_range 的结构性不可达任务
+    # （往返航程超限，静态判定后由 horizon 标记 UNREACHABLE 出池），
+    # 完成率下降必须能被这张表解释清楚，否则会被质疑数据合理性。
     rejected_reasons: dict[str, int] = {}
     for s in scored_all:
         if s.filter_reason:

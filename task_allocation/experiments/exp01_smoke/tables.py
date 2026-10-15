@@ -120,15 +120,17 @@ def build_tab2_funnel(m: dict, s: dict) -> str:
             f"{pc.get('n_release', 0)} & {sel.get('n_after_prefilter', 0)} & "
             f"{sel.get('n_selected', 0)} & {c['muas'].get('n_executed', 0)} & "
             f"{c['muas'].get('n_deferred', 0)} & {len(c.get('completed_ids', []))} & "
+            f"{c.get('n_late', 0)} & "
             f"{len(c.get('infeasible_tags', {}))} \\\\"
         )
     body = "\n".join(rows)
     return (
         "\\begin{table}[htbp]\\centering\n"
-        "\\caption{逐周期任务漏斗与任务命运（闸门拦截 = 交付被判违约、解绑回池的任务次）}\n"
+        "\\caption{逐周期任务漏斗与任务命运（迟到 = 完成但晚于 latest，计入完成；"
+        "拦截 = 交付被判物理不可行、解绑回池的任务次）}\n"
         "\\label{tab:exp01-funnel}\n"
-        "\\begin{tabular}{rcccccccccc}\n\\toprule\n"
-        "周期 & 新到 & 滞留 & 释放 & 过预筛 & 选中 & 执行 & 延期 & 完成 & 拦截 \\\\\n"
+        "\\begin{tabular}{rccccccccccc}\n\\toprule\n"
+        "周期 & 新到 & 滞留 & 释放 & 过预筛 & 选中 & 执行 & 延期 & 完成 & 迟到 & 拦截 \\\\\n"
         "\\midrule\n" + body + "\n\\bottomrule\n\\end{tabular}\n\\end{table}\n"
     )
 
@@ -150,8 +152,9 @@ def build_tab3_objective(m: dict, s: dict) -> str:
     body = "\n".join(rows)
     return (
         "\\begin{table}[htbp]\\centering\n"
-        "\\caption{逐周期目标、约束可行性与求解开销（$F_1^{\\mathrm{plan}}$ 为规划口径收益，"
-        "$F_1^{\\mathrm{comp}}$ 为闸门后实际完成收益；$C^{3D}$ 为三维路径总代价，单位 km）}\n"
+        "\\caption{逐周期目标、约束可行性与求解开销（$F_1^{\\mathrm{plan}}$ 为规划口径收益"
+        "（迟到任务按 $W=600$~s 线性折减），$F_1^{\\mathrm{comp}}$ 为实际完成任务的"
+        "全额收益；$C^{3D}$ 为三维路径总代价，单位 km）}\n"
         "\\label{tab:exp01-objective}\n"
         "\\begin{tabular}{rccccccc}\n\\toprule\n"
         "周期 & $F_1^{\\mathrm{plan}}$ & $F_1^{\\mathrm{comp}}$ & $C^{3D}$ (km) & "
@@ -162,21 +165,28 @@ def build_tab3_objective(m: dict, s: dict) -> str:
 
 def build_tab4_tw(m: dict, s: dict) -> str:
     tasks = {t["id"]: t for t in s["tasks"]}
-    # 出动/拦截/完成历史
+    # 出动/物理拦截/完成历史 + 每任务最大迟到
     flown: dict[int, list[int]] = {}
     blocked: dict[int, list[int]] = {}
     completed: set[int] = set()
+    late_max: dict[int, float] = {}
     for c in m["cycles"]:
         for t in c.get("executed_ids", []):
             flown.setdefault(int(t), []).append(c["cycle"])
         for t in c.get("infeasible_tags", {}):
             blocked.setdefault(int(t), []).append(c["cycle"])
         completed.update(int(t) for t in c.get("completed_ids", []))
+        for tid, late in (c.get("lateness_by_task") or {}).items():
+            tid = int(tid)
+            late_max[tid] = max(late_max.get(tid, 0.0), float(late))
     interesting = sorted(set(flown) | set(blocked))
     rows = []
     for tid in interesting:
         tk = tasks.get(tid, {})
-        verdict = "完成" if tid in completed else ("未交付（重复拦截）" if len(blocked.get(tid, [])) > 1 else "未交付")
+        if tid in completed:
+            verdict = f"完成（晚 {late_max[tid] / 60:.1f} min）" if tid in late_max else "完成"
+        else:
+            verdict = "未交付（重复拦截）" if len(blocked.get(tid, [])) > 1 else "未交付"
         rows.append(
             f"T{tid} & {tk.get('latest', 0) / 60:.1f} & "
             f"{len(flown.get(tid, []))} & {len(blocked.get(tid, []))} & "
@@ -186,10 +196,10 @@ def build_tab4_tw(m: dict, s: dict) -> str:
     return (
         "\\begin{table}[htbp]\\centering\n"
         "\\caption{时间窗违约与出动明细（按任务列出全部曾出动任务；"
-        "重复出动 = 同一任务多周期再次派出）}\n"
+        "重复出动 = 同一任务多周期再次派出；拦截 = 物理不可行弹回）}\n"
         "\\label{tab:exp01-tw}\n"
         "\\begin{tabular}{rcccl}\n\\toprule\n"
-        "任务 & $t_{\\mathrm{latest}}$ (min) & 出动次数 & 闸门拦截 & 结局 \\\\\n"
+        "任务 & $t_{\\mathrm{latest}}$ (min) & 出动次数 & 物理拦截 & 结局 \\\\\n"
         "\\midrule\n" + body + "\n\\bottomrule\n\\end{tabular}\n\\end{table}\n"
     )
 
@@ -206,7 +216,7 @@ def build_tab5_outcome(m: dict, s: dict) -> str:
     # 周期可行率括注按数据算（曾硬编码「0/3」，与 1/3 的实际值矛盾 → 表说谎）
     n_cyc = len(m["cycles"])
     n_feas = sum(1 for c in m["cycles"] if c["muas"].get("feasible"))
-    n_tw = sum(1 for c in m["cycles"] if c.get("infeasible_tags"))
+    n_late_cyc = sum(1 for c in m["cycles"] if c.get("n_late"))
     # 终点机巢使用（solution tours）
     used_nests = set()
     for c in s.get("cycles", []):
@@ -215,14 +225,27 @@ def build_tab5_outcome(m: dict, s: dict) -> str:
                 used_nests.add(t["end_nest_id"])
     rows = [
         ("到达任务总数 $|\\mathcal{T}|$", str(sm.get("n_arrived"))),
-        ("完成任务数", f"{sm.get('n_completed')}（唯一 {len(uniq_comp)}）"),
+        ("完成任务数（含迟到交付）", f"{sm.get('n_completed')}（唯一 {len(uniq_comp)}）"),
         ("完成率", f"{sm.get('completion_rate', 0) * 100:.1f}\\%"),
+        ("正确执行吞吐（任务/周期）", _f(sm.get("throughput_per_cycle", 0.0), 3)),
+        ("平均正确执行率（按时交付/出动）",
+         f"{sm.get('correct_exec_rate', 0) * 100:.1f}\\%"),
+        ("按时率（按时出动/总出动）",
+         f"{sm.get('on_time_rate', 0) * 100:.1f}\\%"),
+        ("迟到交付次数（计入完成）", str(sm.get("n_late", 0))),
+        ("平均 / 最大迟到",
+         f"{sm.get('avg_lateness_s', 0) / 60:.1f} / "
+         f"{sm.get('max_lateness_s', 0) / 60:.1f} min"),
+        ("废飞次数（物理不可行弹回）", str(sm.get("n_infeasible_delivery", 0))),
+        ("不可达任务数（往返航程超限，过于偏远）",
+         str(sm.get("n_unreachable", 0))),
+        ("超期淘汰任务数", str(sm.get("n_eliminated", 0))),
         ("周期解可行率",
          f"{sm.get('cycle_feasible_rate', 0) * 100:.1f}\\%"
-         f"（{n_feas}/{n_cyc}；其中 {n_tw} 个周期含时间窗违约）"),
+         f"（{n_feas}/{n_cyc}；其中 {n_late_cyc} 个周期含迟到交付）"),
         ("规划口径收益 $\\sum F_1^{\\mathrm{plan}}$", _f(plan_r)),
         ("完成口径收益 $\\sum F_1^{\\mathrm{comp}}$", _f(comp_r)),
-        ("核算膨胀率", f"{(plan_r / comp_r - 1) * 100:.1f}\\%（闸门拦截 + 重复出动重复计数）"),
+        ("核算膨胀率", f"{(plan_r / comp_r - 1) * 100:.1f}\\%（废飞拦截 + 重复出动重复计数）"),
         ("总三维路径代价", f"{sm.get('total_cost', 0) / 1000:.1f} km"),
         ("平均等待时间", f"{sm.get('avg_wait', 0) / 60:.1f} min"),
         ("总出动任务次 / 重复出动", f"{len(all_exec)} / {repeats}"),
@@ -237,9 +260,15 @@ def build_tab5_outcome(m: dict, s: dict) -> str:
         "\\begin{tabular}{ll}\n\\toprule\n"
         "指标 & 数值 \\\\\n\\midrule\n" + body + "\n\\bottomrule\n\\end{tabular}\n"
         "\n\\vspace{2pt}\\parbox{0.92\\linewidth}{\\footnotesize "
-        "\\textbf{口径注}：$F_1^{\\mathrm{plan}}$ 为求解期目标值（含被完成闸门拦截的交付、"
-        "以及重复出动任务的重复计数）；$F_1^{\\mathrm{comp}}$ 按最终完成的唯一任务计。"
-        "论文报完成率与收益时应使用完成口径，规划口径仅用于说明优化过程。}"
+        "\\textbf{口径注}：长程协议下主指标为**正确执行吞吐 / 正确执行率**"
+        "（完成率只是窗口长度产物，不作质量证据）。迟到不是废飞"
+        "（2026-10-15 协议）：晚到任务计入完成与吞吐，有效奖励按迟到时长"
+        "线性折减（$W=600$~s），按时率/平均迟到单独报告；废飞只剩**物理"
+        "不可行**的弹回交付（航程/续航/终点机巢违约），总航程下降若靠它"
+        "换来则是净亏损。$F_1^{\\mathrm{plan}}$ 为求解期目标值（含迟到"
+        "折减与被拦交付及重复出动计数），$F_1^{\\mathrm{comp}}$ 按最终"
+        "完成的唯一任务计全额奖励，论文报收益应使用完成口径，规划口径"
+        "仅用于说明优化过程。}"
         "\n\\end{table}\n"
     )
 

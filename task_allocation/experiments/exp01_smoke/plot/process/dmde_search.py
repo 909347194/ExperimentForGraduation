@@ -23,13 +23,37 @@
 
 from __future__ import annotations
 
+# ── 独立运行自举：支持直接 `python plot/.../xxx.py`（脚本方式）──
+# 脚本方式运行时 __package__ 为空，模块内相对导入不可用；此处转以 -m 语义
+# 重跑自身（runpy 会正确设置包上下文），再触发文件末尾的 __main__ 守卫出图。
+if __name__ == "__main__" and __package__ in (None, ""):
+    import sys, runpy
+    from pathlib import Path as _P
+    _here = _P(__file__).resolve()
+    _root = _here.parents[2]   # 实验根 = plot 的上两级（使 `plot` 包可导入）
+    if str(_root) not in sys.path:
+        sys.path.insert(0, str(_root))
+    # 同时把项目根（含 task_allocation 包）加入路径：否则 plotting 内
+    # `from task_allocation.methods.utils import GeoTIFFDEM` 会因找不到包而
+    # 静默回退到 solution.json 的降采样 DEM（115x101px），地图被放大 10~24 倍变糊。
+    _proj = _here
+    while not (_proj / "task_allocation" / "__init__.py").is_file() and _proj.parent != _proj:
+        _proj = _proj.parent
+    if (_proj / "task_allocation" / "__init__.py").is_file() and str(_proj) not in sys.path:
+        sys.path.insert(0, str(_proj))
+    _rel = _here.relative_to(_root / "plot")
+    _mod = "plot." + ".".join(_rel.with_suffix("").parts)
+    runpy.run_module(_mod, run_name="__main__", alter_sys=True)
+    raise SystemExit(0)
+
+
 import math
 from pathlib import Path
 from typing import Any, Sequence
 
 import numpy as np
 
-from ..theme import FS, MONO_ZH, PALETTE, cycle_colors, footnote, plt, save_figure, style_axes
+from ..theme import FS, MONO_ZH, PALETTE, cycle_colors, footnote, plt, save_figure, style_axes, shrink_text_to_axes
 
 __all__ = ["plot_dmde_search"]
 
@@ -134,10 +158,14 @@ def plot_dmde_search(
     if has_flat_tail:
         x_max = min(n_total - 1, max(10, int(np.ceil(g_last * 1.3)) + 2))
 
+    # 只在可见窗口内画线：xlim 之外的部分虽被裁掉，但 Line2D 的 extent 仍按完整
+    # 数据计入 bbox_inches="tight"，会把出图撑成异常宽幅（2026-10-13 实测本图
+    # 1.42× 画布宽）。视觉完全一致——窗口外本来就不可见。
+    visible = x_max + 1
     for idx, (label, hist, change) in enumerate(series):
-        g = np.arange(len(hist))
+        g = np.arange(min(len(hist), visible))
         color = colors[idx]
-        ax_raw.plot(g, hist, "-", drawstyle="steps-post", color=color,
+        ax_raw.plot(g, hist[:len(g)], "-", drawstyle="steps-post", color=color,
                     lw=1.4, label=label)
         if change > 0:
             ax_raw.scatter([change], [hist[change]], s=16, color=color,
@@ -160,7 +188,8 @@ def plot_dmde_search(
         span = f0 - f_end
         if abs(span) > 1e-12:
             norm = [(f0 - v) / span * 100.0 for v in hist]
-            ax_norm.plot(g, norm, "-", drawstyle="steps-post",
+            g = np.arange(min(len(norm), visible))
+            ax_norm.plot(g, norm[:len(g)], "-", drawstyle="steps-post",
                          color=colors[idx], lw=1.4, label=label)
         else:
             flat_labels.append(label)
@@ -222,11 +251,14 @@ def plot_dmde_search(
         "",
         f"本实验取值：S = {s_gen}（cost_history 长度−1），ζ = {zeta:g}（config.yaml）",
     ]
-    ax_formula.text(0.02, 0.97, "\n".join(lines),
-                    transform=ax_formula.transAxes, ha="left", va="top",
-                    fontsize=FS["annotation"], family=MONO_ZH, color="0.2",
-                    bbox=dict(boxstyle="round,pad=0.55", facecolor="#f4f6f8",
-                              edgecolor="0.8", linewidth=0.8))
+    _formula_txt = ax_formula.text(
+        0.02, 0.97, "\n".join(lines),
+        transform=ax_formula.transAxes, ha="left", va="top",
+        fontsize=7.0,
+        family=MONO_ZH, color="0.2",
+        bbox=dict(boxstyle="round,pad=0.55", facecolor="#f4f6f8",
+                  edgecolor="0.8", linewidth=0.8))
+    shrink_text_to_axes(ax_formula, _formula_txt)
     style_axes(ax_formula, title="(f) 公式与参数（论文 §3.4.2）")
 
     fig.suptitle("exp01_smoke：DMDE 搜索机制（交叉变异调度 · 收敛 · 开销）",
@@ -237,3 +269,12 @@ def plot_dmde_search(
                   "归一化收敛以各周期自身初代为基准；"
                   "求解耗时 = muas.solve_seconds × 1000。")
     return save_figure(fig, Path(out_dir) / "P02_dmde_search", formats, dpi=dpi)
+
+if __name__ == "__main__":
+    import sys
+    from pathlib import Path as _P
+    _r = _P(__file__).resolve().parents[2]   # 实验根 = plot 的上两级
+    if str(_r) not in sys.path:
+        sys.path.insert(0, str(_r))
+    from plot import run_script
+    run_script(_P(__file__).stem, sys.argv[1:])

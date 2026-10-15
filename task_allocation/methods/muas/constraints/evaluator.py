@@ -38,6 +38,9 @@ class ConstraintReport:
     misc_penalty: float = 0.0
     nest_capacity: dict = field(default_factory=dict)
     violations: list[str] = field(default_factory=list)
+    # 每任务迟到秒数（tw_task_* 的任务级归因值）：供 F1 奖励折减与
+    # 滚动层记录「迟到交付」（2026-10-15 协议：迟到不是废飞）。
+    lateness: dict = field(default_factory=dict)
 
     @property
     def total_violation(self) -> float:
@@ -70,9 +73,17 @@ class ConstraintReport:
         self.violations.append(tag)
         self.seq_violation += amount
 
-    def add_window(self, tags: list[str], amount: float) -> None:
+    def add_window(
+        self,
+        tags: list[str],
+        amount: float,
+        *,
+        lateness: dict | None = None,
+    ) -> None:
         self.violations.extend(tags)
         self.window_violation += amount
+        if lateness:
+            self.lateness.update({int(k): float(v) for k, v in lateness.items()})
 
     def add_sync(self, tags: list[str], amount: float) -> None:
         self.violations.extend(tags)
@@ -114,4 +125,5 @@ class ConstraintReport:
             "violations": list(self.violations),
             "penalty": float(self.total_violation),
             "nest_capacity": self.nest_capacity,
+            "lateness": dict(self.lateness),
         }
