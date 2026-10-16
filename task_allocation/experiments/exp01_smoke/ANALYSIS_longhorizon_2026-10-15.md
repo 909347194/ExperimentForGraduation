@@ -340,3 +340,25 @@ python run_chunked.py --seed 42 --max-iter 100 --out results_phys_g100 ...
 python compare_protocols.py                                    # 10 组全对比
 python analyze_longhorizon.py results_phys                     # 恒等式/漏斗
 ```
+
+---
+
+# 附三：结果目录清理（2026-10-16）
+
+本地只保留现行物理口径两个目录：`results_phys/`（s42@500）与
+`results_phys_g100/`（s42@100，含全部图表）。其余 9 个变体目录
+（`results/`、`results_g100/`、`results_g100_pre/`、`results_pre_latefix/`、
+`results_s43/`、`results_s43_pre/`、`results_s43g100/`、`results_s43g100_pre/`、
+空目录 `results_smoke/`）已删除，释放约 594MB。
+
+**数据未丢失**：10 组协议的 metrics/solution/run_meta JSON 与 tables.tex 均已
+入库（提交 `49f9f55`）。需要旧协议数据时：
+
+```bash
+git checkout 49f9f55 -- task_allocation/experiments/exp01_smoke/results_pre_latefix
+python render_from_json.py png,gif --results results_pre_latefix   # 按需重渲图表
+```
+
+`compare_protocols.py` 已适配：缺失目录显示「本地已清理」提示而非报错。
+同时删除 `task_allocation/docs/exp01_analysis_20261012.md`（10-12 旧 3 周期
+协议报告，内容已被本文附一/附二取代，git 历史可查）。
