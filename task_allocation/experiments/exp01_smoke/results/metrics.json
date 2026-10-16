@@ -154,12 +154,12 @@
         },
         "n_executed": 20,
         "n_deferred": 0,
-        "f1_reward": 102.84084120085186,
-        "f2_cost": 507503.2968282357,
+        "f1_reward": 102.84084120085174,
+        "f2_cost": 507503.2968282356,
         "feasible": false,
-        "best_fitness": -45178103.66484743,
+        "best_fitness": -45178103.66484745,
         "model_type": "srp",
-        "solve_seconds": 180.2897,
+        "solve_seconds": 114.4187,
         "n_evals": 7775,
         "n_selected": 20,
         "replan": true,
@@ -169,7 +169,7 @@
           "tw_task_20",
           "tw_task_12"
         ],
-        "penalty": 2590.6381497326893
+        "penalty": 2590.638149732709
       },
       "n_executed": 20,
       "n_deferred": 10,
@@ -286,9 +286,9 @@
         12
       ],
       "lateness_by_task": {
-        "6": 1474.9653089481899,
-        "20": 952.944751757509,
-        "12": 162.72808902699035
+        "6": 1474.9653089481799,
+        "20": 952.9447517575309,
+        "12": 162.72808902699808
       },
       "n_unreachable": 0,
       "unreachable_ids": [],
@@ -345,11 +345,11 @@
         "n_executed": 19,
         "n_deferred": 1,
         "f1_reward": 76.03814406077775,
-        "f2_cost": 590019.9725296914,
+        "f2_cost": 590019.9725296907,
         "feasible": false,
-        "best_fitness": -29751676.18583067,
+        "best_fitness": -29751676.185830668,
         "model_type": "srp",
-        "solve_seconds": 154.6736,
+        "solve_seconds": 100.4043,
         "n_evals": 7488,
         "n_selected": 20,
         "replan": true,
@@ -362,7 +362,7 @@
           "tw_task_30",
           "tw_task_32"
         ],
-        "penalty": 3759.513446334107
+        "penalty": 3759.5134463340855
       },
       "n_executed": 19,
       "n_deferred": 1,
@@ -471,12 +471,12 @@
         32
       ],
       "lateness_by_task": {
-        "35": 264.3025101479534,
-        "28": 1203.9139681142356,
-        "36": 837.5903601501805,
-        "23": 171.59855934942243,
-        "30": 1137.2000735672273,
-        "32": 144.9079750050878
+        "35": 264.30251014793976,
+        "28": 1203.913968114222,
+        "36": 837.5903601501841,
+        "23": 171.59855934942152,
+        "30": 1137.2000735672264,
+        "32": 144.90797500509188
       },
       "n_unreachable": 0,
       "unreachable_ids": [],
@@ -536,12 +536,12 @@
         },
         "n_executed": 20,
         "n_deferred": 0,
-        "f1_reward": 105.50777370600582,
+        "f1_reward": 105.50777370600571,
         "f2_cost": 644257.8163326248,
         "feasible": false,
-        "best_fitness": -42176452.04551582,
+        "best_fitness": -42176452.04551581,
         "model_type": "srp",
-        "solve_seconds": 150.772,
+        "solve_seconds": 100.7123,
         "n_evals": 7160,
         "n_selected": 20,
         "replan": true,
@@ -551,7 +551,7 @@
           "tw_task_8",
           "tw_task_55"
         ],
-        "penalty": 1946.556107836625
+        "penalty": 1946.5561078366359
       },
       "n_executed": 20,
       "n_deferred": 1,
@@ -680,8 +680,8 @@
         55
       ],
       "lateness_by_task": {
-        "48": 251.2881413666073,
-        "8": 759.9014200573979,
+        "48": 251.2881413666173,
+        "8": 759.9014200573988,
         "55": 935.3665464126198
       },
       "n_unreachable": 0,
@@ -727,11 +727,11 @@
         "n_executed": 1,
         "n_deferred": 0,
         "f1_reward": 7.513338376575563,
-        "f2_cost": 39264.92636688985,
+        "f2_cost": 39264.92636689002,
         "feasible": true,
         "best_fitness": -270287.20566363615,
         "model_type": "balanced",
-        "solve_seconds": 0.3914,
+        "solve_seconds": 0.1903,
         "n_evals": 1,
         "n_selected": 1,
         "replan": false,
@@ -841,7 +841,7 @@
       "lateness_by_task": {},
       "n_unreachable": 0,
       "unreachable_ids": [],
-      "correct_exec_rate": 0.0
+      "correct_exec_rate": null
     },
     {
       "cycle": 6,
@@ -903,7 +903,7 @@
       "lateness_by_task": {},
       "n_unreachable": 0,
       "unreachable_ids": [],
-      "correct_exec_rate": 0.0
+      "correct_exec_rate": null
     },
     {
       "cycle": 7,
@@ -965,7 +965,7 @@
       "lateness_by_task": {},
       "n_unreachable": 0,
       "unreachable_ids": [],
-      "correct_exec_rate": 0.0
+      "correct_exec_rate": null
     },
     {
       "cycle": 8,
@@ -1027,14 +1027,14 @@
       "lateness_by_task": {},
       "n_unreachable": 0,
       "unreachable_ids": [],
-      "correct_exec_rate": 0.0
+      "correct_exec_rate": null
     }
   ],
   "summary": {
     "n_arrived": 60,
     "n_completed": 60,
     "completion_rate": 1.0,
-    "cycle_feasible_rate": 0.125,
+    "cycle_feasible_rate": 0.25,
     "n_infeasible_delivery": 0,
     "n_eliminated": 0,
     "n_unreachable": 0,
@@ -1042,16 +1042,23 @@
     "on_time_rate": 0.8,
     "avg_lateness_s": 691.392,
     "max_lateness_s": 1474.965,
-    "correct_exec_rate": 0.423026,
+    "correct_exec_rate": 0.846053,
     "throughput_per_cycle": 7.5,
+    "n_active_cycles": 4,
+    "throughput_per_active_cycle": 15.0,
+    "n_zero_reward_delivery": 7,
+    "effective_completion_rate": 0.883333,
+    "reward_yield": 0.879901,
     "avg_wait": 720.0,
     "total_reward": 291.9001,
-    "total_cost": 1781046.012,
-    "solve_time_ms": 486126.7,
+    "total_cost": 1772749.304,
+    "total_penalty": 8296.708,
+    "total_f2": 1781046.012,
+    "solve_time_ms": 315725.6,
     "K_avail_mean": 10.0,
     "n_deferred_last": 0,
     "n_remaining_pool": 0,
-    "wall_seconds": 0.0
+    "wall_seconds": 318.66
   },
   "fleet": {
     "current_time": 0.0,
@@ -1203,7 +1210,7 @@
         "n_arrived": 60,
         "n_completed": 60,
         "completion_rate": 1.0,
-        "cycle_feasible_rate": 0.125,
+        "cycle_feasible_rate": 0.25,
         "n_infeasible_delivery": 0,
         "n_eliminated": 0,
         "n_unreachable": 0,
@@ -1211,16 +1218,23 @@
         "on_time_rate": 0.8,
         "avg_lateness_s": 691.392,
         "max_lateness_s": 1474.965,
-        "correct_exec_rate": 0.423026,
+        "correct_exec_rate": 0.846053,
         "throughput_per_cycle": 7.5,
+        "n_active_cycles": 4,
+        "throughput_per_active_cycle": 15.0,
+        "n_zero_reward_delivery": 7,
+        "effective_completion_rate": 0.883333,
+        "reward_yield": 0.879901,
         "avg_wait": 720.0,
         "total_reward": 291.9001,
-        "total_cost": 1781046.012,
-        "solve_time_ms": 486126.7,
+        "total_cost": 1772749.304,
+        "total_penalty": 8296.708,
+        "total_f2": 1781046.012,
+        "solve_time_ms": 315725.6,
         "K_avail_mean": 10.0,
         "n_deferred_last": 0,
         "n_remaining_pool": 0,
-        "wall_seconds": 0.0
+        "wall_seconds": 318.66
       },
       "cycles": [
         {
@@ -1276,12 +1290,12 @@
             },
             "n_executed": 20,
             "n_deferred": 0,
-            "f1_reward": 102.84084120085186,
-            "f2_cost": 507503.2968282357,
+            "f1_reward": 102.84084120085174,
+            "f2_cost": 507503.2968282356,
             "feasible": false,
-            "best_fitness": -45178103.66484743,
+            "best_fitness": -45178103.66484745,
             "model_type": "srp",
-            "solve_seconds": 180.2897,
+            "solve_seconds": 114.4187,
             "n_evals": 7775,
             "n_selected": 20,
             "replan": true,
@@ -1291,7 +1305,7 @@
               "tw_task_20",
               "tw_task_12"
             ],
-            "penalty": 2590.6381497326893
+            "penalty": 2590.638149732709
           },
           "n_executed": 20,
           "n_deferred": 10,
@@ -1408,9 +1422,9 @@
             12
           ],
           "lateness_by_task": {
-            "6": 1474.9653089481899,
-            "20": 952.944751757509,
-            "12": 162.72808902699035
+            "6": 1474.9653089481799,
+            "20": 952.9447517575309,
+            "12": 162.72808902699808
           },
           "n_unreachable": 0,
           "unreachable_ids": [],
@@ -1467,11 +1481,11 @@
             "n_executed": 19,
             "n_deferred": 1,
             "f1_reward": 76.03814406077775,
-            "f2_cost": 590019.9725296914,
+            "f2_cost": 590019.9725296907,
             "feasible": false,
-            "best_fitness": -29751676.18583067,
+            "best_fitness": -29751676.185830668,
             "model_type": "srp",
-            "solve_seconds": 154.6736,
+            "solve_seconds": 100.4043,
             "n_evals": 7488,
             "n_selected": 20,
             "replan": true,
@@ -1484,7 +1498,7 @@
               "tw_task_30",
               "tw_task_32"
             ],
-            "penalty": 3759.513446334107
+            "penalty": 3759.5134463340855
           },
           "n_executed": 19,
           "n_deferred": 1,
@@ -1593,12 +1607,12 @@
             32
           ],
           "lateness_by_task": {
-            "35": 264.3025101479534,
-            "28": 1203.9139681142356,
-            "36": 837.5903601501805,
-            "23": 171.59855934942243,
-            "30": 1137.2000735672273,
-            "32": 144.9079750050878
+            "35": 264.30251014793976,
+            "28": 1203.913968114222,
+            "36": 837.5903601501841,
+            "23": 171.59855934942152,
+            "30": 1137.2000735672264,
+            "32": 144.90797500509188
           },
           "n_unreachable": 0,
           "unreachable_ids": [],
@@ -1658,12 +1672,12 @@
             },
             "n_executed": 20,
             "n_deferred": 0,
-            "f1_reward": 105.50777370600582,
+            "f1_reward": 105.50777370600571,
             "f2_cost": 644257.8163326248,
             "feasible": false,
-            "best_fitness": -42176452.04551582,
+            "best_fitness": -42176452.04551581,
             "model_type": "srp",
-            "solve_seconds": 150.772,
+            "solve_seconds": 100.7123,
             "n_evals": 7160,
             "n_selected": 20,
             "replan": true,
@@ -1673,7 +1687,7 @@
               "tw_task_8",
               "tw_task_55"
             ],
-            "penalty": 1946.556107836625
+            "penalty": 1946.5561078366359
           },
           "n_executed": 20,
           "n_deferred": 1,
@@ -1802,8 +1816,8 @@
             55
           ],
           "lateness_by_task": {
-            "48": 251.2881413666073,
-            "8": 759.9014200573979,
+            "48": 251.2881413666173,
+            "8": 759.9014200573988,
             "55": 935.3665464126198
           },
           "n_unreachable": 0,
@@ -1849,11 +1863,11 @@
             "n_executed": 1,
             "n_deferred": 0,
             "f1_reward": 7.513338376575563,
-            "f2_cost": 39264.92636688985,
+            "f2_cost": 39264.92636689002,
             "feasible": true,
             "best_fitness": -270287.20566363615,
             "model_type": "balanced",
-            "solve_seconds": 0.3914,
+            "solve_seconds": 0.1903,
             "n_evals": 1,
             "n_selected": 1,
             "replan": false,
@@ -1963,7 +1977,7 @@
           "lateness_by_task": {},
           "n_unreachable": 0,
           "unreachable_ids": [],
-          "correct_exec_rate": 0.0
+          "correct_exec_rate": null
         },
         {
           "cycle": 6,
@@ -2025,7 +2039,7 @@
           "lateness_by_task": {},
           "n_unreachable": 0,
           "unreachable_ids": [],
-          "correct_exec_rate": 0.0
+          "correct_exec_rate": null
         },
         {
           "cycle": 7,
@@ -2087,7 +2101,7 @@
           "lateness_by_task": {},
           "n_unreachable": 0,
           "unreachable_ids": [],
-          "correct_exec_rate": 0.0
+          "correct_exec_rate": null
         },
         {
           "cycle": 8,
@@ -2149,7 +2163,7 @@
           "lateness_by_task": {},
           "n_unreachable": 0,
           "unreachable_ids": [],
-          "correct_exec_rate": 0.0
+          "correct_exec_rate": null
         }
       ]
     }

@@ -261,8 +261,6 @@ def main(argv: list[str] | None = None) -> int:
     if verbose:
         print(f"[exp01] 多 seed 复现：{seeds}" if multi else f"[exp01] 单 seed：{seeds[0]}")
 
-    t_wall = time.time()
-
     # ── 场景（与种子无关，只构建一次）────────────────────────────
     scenario = build_scenario(raw_cfg, DATA_DIR)
     nests = scenario.nests
@@ -278,16 +276,21 @@ def main(argv: list[str] | None = None) -> int:
     # ── 逐 seed 运行 ─────────────────────────────────────────────
     results: list[tuple[int, RunFacts, dict, dict]] = []
     for seed in seeds:
+        t_seed = time.time()
         facts, metrics, solution = _run_once(
             raw_cfg, seed,
             scenario=scenario, nests=nests, terrain=terrain,
             estimator=estimator, verbose=verbose,
         )
+        # 单 seed 墙钟：旧口径在 build_metrics 之后才回填 wall_seconds，
+        # summary 里恒为 0.0（2026-10-16 审查 I7）——现在在汇总前写入。
+        elapsed = round(time.time() - t_seed, 3)
+        facts.wall_seconds = elapsed
+        metrics["summary"]["wall_seconds"] = elapsed
         results.append((seed, facts, metrics, solution))
 
     # 代表性运行取首个 seed（供现有图与单值指标展示）
     rep_seed, rep_facts, rep_metrics, rep_solution = results[0]
-    results[0][1].wall_seconds = time.time() - t_wall
 
     # ── 多 seed 聚合 ──────────────────────────────────────────────
     if multi:
