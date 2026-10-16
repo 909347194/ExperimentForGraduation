@@ -233,6 +233,10 @@ def build_config_bundle(cfg: Mapping[str, Any]) -> ConfigBundle:
         reward_threshold=float(e.get("reward_threshold", 8.0)),
         slack_threshold=float(e.get("slack_threshold", 900.0)),
     )
+    # 收敛早停配置（论文长程吞吐口径）
+    sw = rolling.get("stop_when_stable") or {}
+    stop_when_stable = bool(sw.get("enabled", False))
+    stable_patience = int(sw.get("patience", 4))
 
     problem = _section(cfg, "problem")
     horizon = HorizonConfig(
@@ -250,6 +254,8 @@ def build_config_bundle(cfg: Mapping[str, Any]) -> ConfigBundle:
         completion_feasibility_gate=bool(
             rolling.get("completion_feasibility_gate", True)
         ),
+        stop_when_stable=stop_when_stable,
+        stable_patience=stable_patience,
     )
 
     selection = RollingHorizon.selection_config_from_dict(cfg.get("selection"))

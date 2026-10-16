@@ -210,3 +210,94 @@ def test_reflow_fleet_scope_still_defers_infeasible():
     assert set(sol.executed_task_ids) == {0}, (
         f"真不可达任务不应因救援池扩大而被执行：{sol.executed_task_ids}"
     )
+
+
+# ---------------------------------------------------------------------------
+# 5. 重排的航程预算必须含返航腿（uav_9「边际航程弹回」链路根因）
+# ---------------------------------------------------------------------------
+
+
+def _task_at(tid: int, x: float, y: float, latest: float = 1e9) -> Task:
+    return Task(id=tid, x=x, y=y, z=0.0, reward=10.0,
+                earliest=0.0, latest=latest, arrival_time=0.0)
+
+
+def _uav9_rebound_fixture():
+    """uav_9「边际航程弹回」的对抗性微型几何。
+
+    exp01 实测（results_phys_60，seed 42）：uav_9 周期 3–6 交付航次固定
+    ``[47,59,40,55]``、终点 nest 4、全航程 80 027.58 m，超满电 80 000 m
+    仅 27.58 m（0.034%），四周期共 16 次弹回，标签全是
+    ``range_uav_9`` + ``tour_infeasible_uav_9``。
+
+    根因（插桩复现，build_solution 四阶段探针对照）::
+
+        post-loop-entry    tour=[59,40,55,47] cost=77686.91  OVER=False
+        after-complete     tour=[59,40,55,47] cost=77686.91  OVER=False
+        after-reorder      tour=[47,59,40,55] cost=80027.58  OVER=True
+        after-final-choose tour=[47,59,40,55] cost=80027.58  OVER=True
+
+    ``_reorder_for_deadlines → _best_order → _evaluate`` 只累计「起点 →
+    各任务」的**外出链**（48 713.62 m ≤ 80 000 m，过关），**漏掉返航腿**
+    （末任务 55 → 终点巢的 31 313.96 m）；而完成闸门（check_range_constraint
+    → problem.tour_path_cost）与 ``_repair_range``/``_tour_cost``/
+    ``_reflow_task`` 用的都是「起点 → 任务 → 终点巢」**全航程**。且
+    post-loop 的 ``_choose_end_nests`` 之后没有航程复闸，越限航次直接漏到
+    交付 → 判 range_uav_9 弹回（航程/位置已更新却解绑回池不计完成＝废飞）。
+
+    本几何复现同一结构（uav9 起点 (0,0)，满电 80 km，nest 0 近 / nest 1 极远）：
+
+    ============  =====================  ============================  ========
+    序            外出链                  全航程（返航到**最近**巢）      结论
+    ============  =====================  ============================  ========
+    ``[p, q]``    28 + 35 = 63 km        63 + 15 = 78 km               可行
+    ``[q, p]``    10 + 35 = 45 km        45 + 47.6 = 92.6 km           越限
+    ============  =====================  ============================  ========
+
+    ``q`` 近巢（15 km）、``p`` 远巢（47.6 km），故把 ``p`` 排到末位返航腿
+    暴涨。时间窗开启但 ``q.latest=6000 s``：原序 ``[p,q]`` 下 ``q`` 到达
+    6 300 s 迟到，反向序 ``[q,p]`` 零迟到——字典序「迟到数, 迟到量, 航程」
+    下反向序胜出，这正是重排的动机。修复前 ``_evaluate`` 按外出链放行
+    ``[q,p]``，交付即越限。
+    """
+    tasks = [
+        _task_at(47, -17_050.0, 22_210.4),             # p：远巢（47.6 km）
+        _task_at(59, 10_000.0, 0.0, latest=6_000.0),   # q：近巢（15 km）
+    ]
+    uavs = [_uav(9)]                                   # 起点 (0,0)，满电 80 km
+    nests = [
+        Nest(id=0, x=25_000.0, y=0.0, z=0.0, capacity=10),      # 近 q
+        Nest(id=1, x=0.0, y=-100_000.0, z=0.0, capacity=10),    # 极远（对照）
+    ]
+    return tasks, uavs, nests
+
+
+def test_reorder_range_budget_includes_return_leg():
+    """_best_order 的航程预算必须含返航腿，否则越限序会被放行。"""
+    tasks, uavs, nests = _uav9_rebound_fixture()
+    ev = _evaluator(tasks, uavs, nests)
+    # 原序 [p, q]（本地 [47, 59]）：q 迟到 → 触发候选重排
+    order = ev._best_order(9, [47, 59])
+    cost = ev._tour_cost(9, order, None)  # 终点未定 → 最近巢（保守下界）
+    assert cost <= RANGE + 1e-6, (
+        f"_best_order 返回全航程越限的序 {order}（{cost:.1f} m > {RANGE:.0f} m）："
+        "返航腿未计入航程预算，重排会把可行航次改成越限航次"
+    )
+
+
+def test_delivered_tours_never_exceed_range_after_reorder():
+    """交付解不得含超过剩余航程的航次（完成闸门同口径，防废飞弹回）。"""
+    tasks, uavs, nests = _uav9_rebound_fixture()
+    ev = _evaluator(tasks, uavs, nests)
+    sol = ev.build_solution([(0, 0), (0, 1)])  # 两任务都派给 uav9
+    assert any(t.task_ids for t in sol.tours), "应有非空闲航次"
+    for tour in sol.tours:
+        if not tour.task_ids:
+            continue
+        cost = ev.problem.tour_path_cost(tour)  # 与完成闸门同口径
+        limit = ev._uav_by_id[tour.uav_id].remaining_range
+        assert cost <= limit + 1e-6, (
+            f"uav{tour.uav_id} 航次 {tour.task_ids} 全航程 {cost:.1f} m 超剩余 "
+            f"航程 {limit:.1f} m —— 会被完成闸门判 range_uav_{tour.uav_id} "
+            "弹回（航程/位置已更新却解绑回池不计完成＝废飞）"
+        )
