@@ -128,7 +128,9 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
     total_reward = sum(float(r.muas.get("f1_reward", 0.0)) for r in records)
     solve_ms = sum(float(r.muas.get("solve_seconds", 0.0)) for r in records) * 1000.0
     k_avail = [r.selection.get("n_uav_avail", 0) for r in records]
-    n_cycles = int(f.bundle.horizon.n_cycles)
+    # 实际跑的周期数：收敛早停后可能 < 配置的 n_cycles 安全上限；吞吐/报告
+    # 一律以真实周期数为准（跑满时 len(records) 与配置一致，旧口径不变）。
+    n_cycles = len(records) or int(f.bundle.horizon.n_cycles)
     # 完成闸门：被判**物理不可行**、未真正交付而回池的任务（不计完成、
     # 不计奖励）。2026-10-15 协议「迟到不是废飞」后，废飞只剩这一类
     # （航程/续航/终点机巢/结构类违约）；迟到交付计入完成。

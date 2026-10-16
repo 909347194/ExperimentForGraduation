@@ -125,6 +125,11 @@ class HorizonConfig:
     # 在本周期计划内做反应式调整（强制纳入紧急任务、剔除不可用机巢）。
     # 置 False 则事件仅被记录、不触发本期重规划（供消融对比关停该机制）。
     event_replan: bool = True
+    # 收敛早停（论文长程吞吐口径）：到达全部注入后，若池内未完成任务数
+    # len(pool) 连续 stable_patience 个周期不变，说明可完成的都已交付、剩余为
+    # 物理不可达/淘汰的死任务，提前停止（周期数本身不定）。n_cycles 仅作安全上限。
+    stop_when_stable: bool = False
+    stable_patience: int = 4
 
 
 def tour_snapshot(tour: UAVTour) -> dict[str, Any]:
@@ -308,6 +313,12 @@ class RollingHorizon:
         self._time = float(pool.current_time)
         self._known_unavailable = {n.id for n in self.nests if not n.available}
         self.records: list[CycleRecord] = []
+        # 收敛早停状态：到达阶段（cycle <= 最后到达周期）不计数；之后监测
+        # 池内未完成任务数，连续 stable_patience 周期不变即判稳态。
+        self._conv_enabled = bool(self.hcfg.stop_when_stable)
+        self._conv_patience = int(self.hcfg.stable_patience)
+        self._conv_streak = 0
+        self._conv_last_len: int | None = None
 
     # ------------------------------------------------------------------
     # 单周期
@@ -556,6 +567,30 @@ class RollingHorizon:
     # 多周期
     # ------------------------------------------------------------------
 
+    def _converged(self, cycle: int, last_arrival_cycle: int) -> bool:
+        """收敛早停判定：到达全部注入后，池内未完成任务数 ``len(pool)`` 连续
+        ``stable_patience`` 个周期不变即判稳态、建议停止。
+
+        Args:
+            cycle: 刚完成的周期号（1-based）。
+            last_arrival_cycle: 最后有任务到达的周期号；此周期及之前为到达阶段，
+                不计入稳态判定（到达本身就会改变池大小）。
+        """
+        if not self._conv_enabled:
+            return False
+        cur = len(self.pool)  # 未完成任务数 = 已完成/淘汰/不可达之后剩余
+        if cycle <= last_arrival_cycle:
+            # 仍在到达阶段：重置计数，避免把"到达导致的变化"误判为稳态
+            self._conv_last_len = cur
+            self._conv_streak = 0
+            return False
+        if self._conv_last_len is not None and cur == self._conv_last_len:
+            self._conv_streak += 1
+        else:
+            self._conv_streak = 0
+        self._conv_last_len = cur
+        return self._conv_streak >= self._conv_patience
+
     def run(
         self,
         n_cycles: int | None = None,
@@ -569,8 +604,13 @@ class RollingHorizon:
         """
         n = int(n_cycles if n_cycles is not None else self.hcfg.n_cycles)
         arrivals = dict(arrivals or {})
+        last_arrival = max(arrivals.keys()) if arrivals else 1
         for step in range(1, n + 1):
             self.run_cycle(new_tasks=arrivals.get(step))
+            if self._converged(step, last_arrival):
+                print(f"[horizon] 收敛于周期 {step}：池内未完成任务数连续 "
+                      f"{self._conv_streak} 周期不变（={len(self.pool)}），提前停止。")
+                break
         return self.records
 
     # ------------------------------------------------------------------

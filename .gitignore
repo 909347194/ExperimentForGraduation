@@ -1,24 +1,16 @@
+# 实验运行日志
+logs/
+*.log
+
+# 动画图件（GIF 体积大且可由 results/*.json 经 render_from_json.py 重新生成）
+task_allocation/experiments/exp01_smoke/results/figures/*.gif
+
+# LaTeX 编译中间文件
+*.aux
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.xdv
 __pycache__/
 *.py[cod]
-*.egg-info/
-.pytest_cache/
-.venv/
-venv/
-
-# 工具自身的内部笔记，不属于论文代码
 .workbuddy/
-
-
-# 结果图片（可由 results json 经 render_from_json.py 重渲，不入库）
-figures/
-
-# 分块续跑的原子存档（本地续跑用；求解完成即清除）
-**/results*/.chunk_state.pkl
-
-# LaTeX 编译中间产物与成品（tex 源码入库，pdf/aux 等不入库）
-**/results*/tables/*.aux
-**/results*/tables/*.fdb_latexmk
-**/results*/tables/*.fls
-**/results*/tables/*.log
-**/results*/tables/*.xdv
-**/results*/tables/*.pdf

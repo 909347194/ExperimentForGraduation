@@ -184,6 +184,8 @@ def main(argv: list[str] | None = None) -> int:
         next_cycle = 1
         wall_seconds = 0.0
 
+    last_arrival = max(batch.arrivals.keys()) if batch.arrivals else 1
+
     horizon = RollingHorizon(
         pool, fleet, nests,
         dem=terrain, estimator=estimator,
@@ -226,6 +228,11 @@ def main(argv: list[str] | None = None) -> int:
               f"执行={len(rec.executed_ids)} 交付={len(rec.completed_ids)} "
               f"废飞={len(rec.infeasible_ids)} 淘汰={len(rec.expired_ids)} "
               f"solve={solve_s:.1f}s 累计墙钟={wall_seconds:.0f}s", flush=True)
+        if horizon._converged(next_cycle - 1, last_arrival):
+            print(f"[chunk] 收敛于周期 {next_cycle-1}：池内未完成任务数连续 "
+                  f"{horizon._conv_streak} 周期不变（={len(horizon.pool)}），提前停止。",
+                  flush=True)
+            break
         if time.monotonic() - t_start >= args.budget_seconds and next_cycle <= n_cycles:
             print(f"[chunk] 到达时间预算，存档退出（下周期 {next_cycle}）", flush=True)
             return 0

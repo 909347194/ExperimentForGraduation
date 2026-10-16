@@ -670,9 +670,20 @@ class MUASAssignmentEvaluator:
         routes, end_nests = self._complete_coverage(routes, end_nests)
         # 航次内访问顺序的时间窗修复（不改任务集，只调先后）
         routes = self._reorder_for_deadlines(routes)
+        # 重排按「迟到数, 迟到量, 航程」字典序挑顺序，末任务换人会拉长返航腿，
+        # 可能把航次推过剩余航程（uav_9 周期 3–6 的 [47,59,40,55] 即由可行序
+        # [59,40,55,47] 重排而来，全航程 77 686.91 → 80 027.58 m）。先按当前
+        # 终点闸一次；被移除任务由 _reflow_task 改派（全航程口径校验），全部
+        # 不可行才证明性暂缓。
+        routes, end_nests = self._repair_range(routes, end_nests)
         if routes:
             # 新增航次后终点机巢需重新联合分配（容量约束下精确求解）
             end_nests = self._choose_end_nests(routes)
+        # 终点机巢在容量竞争下未必是最近巢，改派会再次拉长航程。交付前最后
+        # 闸一次：否则完成闸门按「起点→任务→终点巢」全航程判 range_uav_*
+        # 弹回——航程/位置已更新却解绑回池不计完成（废飞），uav_9 周期 3–6
+        # 的 16 次弹回全部源于此（超限仅 27.58 m = 0.034%）。
+        routes, end_nests = self._repair_range(routes, end_nests)
 
         return self._assemble(routes, end_nests)
 
@@ -773,6 +784,17 @@ class MUASAssignmentEvaluator:
                 if lst is not None and arrive > float(lst) + 1e-6:
                     n_late += 1
                     late_total += arrive - float(lst)
+            # 返航腿必须计入航程预算。完成闸门（check_range_constraint →
+            # problem.tour_path_cost）与 _repair_range/_tour_cost/_reflow_task
+            # 用的都是「起点 → 各任务 → 终点巢」全航程；只查外出链会把
+            # 「外出 48.7 km + 返航 31.3 km」的越限航次放行——uav_9 周期 3–6
+            # 的 [47,59,40,55]（全航程 80 027.58 m，超满电 27.58 m）正是被
+            # 这里放行后漏到交付，16 次弹回全部源于此。
+            # 终点机巢此刻尚未定稿（_choose_end_nests 在重排之后才跑），取
+            # 最近可用巢作为返航下界——实际终点只会更远或相等，保守。
+            length += self._return_leg_cost(seq[-1], None)
+            if length > budget + 1e-6:
+                return None
             return (n_late, round(late_total, 6), round(length, 6))
 
         # 早退：原序已零迟到 → 不必重排。绝大多数航次走这条路（每代每体都要
