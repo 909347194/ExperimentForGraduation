@@ -70,7 +70,7 @@ def main() -> None:
     for label, rdir, proto, seed, gen in RUNS:
         m = _load(rdir)
         if m is None:
-            print(f"{label:<16}(未找到 {rdir})")
+            print(f"{label:<16}(本地已清理；git checkout 恢复 JSON 后可重渲图表)")
             continue
         s = m["summary"]
         row = "".join(f"{_fmt(s.get(k), k):>9}" for k, _ in KEYS)
