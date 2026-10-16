@@ -124,9 +124,18 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
 
     tasks = f.batch.all_tasks()
     n_arrived = len(tasks)
-    total_cost = sum(float(r.muas.get("f2_cost", 0.0)) for r in records)
-    total_reward = sum(float(r.muas.get("f1_reward", 0.0)) for r in records)
-    solve_ms = sum(float(r.muas.get("solve_seconds", 0.0)) for r in records) * 1000.0
+    # ── 代价口径拆分（2026-10-16 审查 I3）──────────────────────────
+    # f2_cost = 路径(米) + w_penalty·惩罚(秒/单位)：量纲不同不能混加后当
+    # 「总路径代价」报。按 w_penalty 反解拆开：total_cost 只留米制路径
+    # （与 tables/plot 的「总三维路径代价」标签一致），惩罚单列 total_penalty，
+    # 原始 f2 合计留 total_f2 供追溯。注意：优化口径是 λ·path + w_violation·
+    # penalty（解耦），报告口径与之独立、但互相不再冒充。
+    w_penalty = float(getattr(f.bundle.problem_model, "w_penalty", 1.0) or 0.0)
+    total_f2 = sum(float(r.muas.get("f2_cost", 0.0) or 0.0) for r in records)
+    total_penalty = sum(float(r.muas.get("penalty", 0.0) or 0.0) for r in records)
+    total_cost = total_f2 - w_penalty * total_penalty
+    total_reward = sum(float(r.muas.get("f1_reward", 0.0) or 0.0) for r in records)
+    solve_ms = sum(float(r.muas.get("solve_seconds", 0.0) or 0.0) for r in records) * 1000.0
     k_avail = [r.selection.get("n_uav_avail", 0) for r in records]
     # 实际跑的周期数：收敛早停后可能 < 配置的 n_cycles 安全上限；吞吐/报告
     # 一律以真实周期数为准（跑满时 len(records) 与配置一致，旧口径不变）。
@@ -142,12 +151,43 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
     ]
     # 超期淘汰：deadline 已过仍在池中、被 expire 出池的任务
     n_eliminated = sum(len(r.expired_ids) for r in records)
+    # ── 有效完成口径（2026-10-16 审查 I4）──────────────────────────
+    # 「迟到≠废飞」下迟到交付计完成，但迟到 ≥ W 的交付有效奖励折减为 0。
+    # 完成率若不并列这个口径就会虚高（本跑 12 个迟到交付中 7 个实得 0）。
+    # 有效奖励 eff = R·max(0, 1−L/W)，迟到秒数取闭环实际交付迟到
+    # （record.lateness_by_task，非规划端预估），与 total_reward 口径互验。
+    decay_w = getattr(f.bundle.problem_model, "late_reward_decay_seconds", None)
+    lateness_actual: dict[int, float] = {}
+    for r in records:
+        for k, v in (r.lateness_by_task or {}).items():
+            lateness_actual[int(k)] = float(v)
+    reward_possible = sum(max(float(t.reward), 0.0) for t in tasks)
+    reward_effective = 0.0
+    n_zero_reward_delivery = 0
+    for t in completed:
+        r_full = max(float(t.reward), 0.0)
+        late = lateness_actual.get(int(t.id), 0.0)
+        eff = r_full
+        if decay_w is not None and float(decay_w) > 0 and late > 0:
+            eff = r_full * max(0.0, 1.0 - late / float(decay_w))
+        reward_effective += eff
+        if r_full > 0 and eff <= 0.0:
+            n_zero_reward_delivery += 1
     # 静态物理不可达（「过于偏远」）：所有机巢往返航程超过满电可及范围，
     # 入池判定一次性出池。用户原则（2026-10-15）下唯一合法的未完成原因，
     # 与超期淘汰分列——后者对物理可行任务是兜底失灵的信号，应趋 0。
     n_unreachable = sum(len(r.unreachable_ids) for r in records)
-    feas_flags = [bool(r.muas.get("feasible", False)) for r in records]
+    # 只统计真正求解过的周期（2026-10-16 审查 I2：空转周期 muas 无解，
+    # 旧口径把它们当 feasible=False 摊薄，1/4 被记成 1/8）
+    feas_flags = [
+        bool(r.muas.get("feasible"))
+        for r in records
+        if r.muas.get("feasible") is not None
+    ]
     cycle_feasible_rate = (sum(feas_flags) / len(feas_flags)) if feas_flags else 0.0
+    # 活跃周期（有出动）计数：吞吐的另一个分母（I6：全周期分母含空转兜底周期，
+    # 跨配置对比会被收敛节奏差异污染）
+    n_active_cycles = sum(1 for r in records if len(r.executed_ids) > 0)
 
     # ── 长程吞吐协议指标（2026-10-14 用户定口径，2026-10-15 修订）──────
     # 完成率不是目标；真实目标 = 持续到达下「尽可能多且正确地完成任务」。
@@ -157,13 +197,21 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
     # 废飞（n_infeasible_delivery）= 物理不可行的弹回交付：UAV 已飞航程、
     # 位置已更新，但任务解绑回池不计完成——总航程下降若靠它换来则是净
     # 亏损，必须与吞吐同权报告。迟到单独以 n_late / 按时率 / 平均迟到报告。
-    per_cycle_correct = []
+    # 每活跃周期正确率，按 cycle 键控（2026-10-16 审查 I1：空转周期不入均值；
+    # 同时修复旧口径 zip 对齐错位——列表变短后行与率会配错周期）
+    per_cycle_correct: dict[int, float] = {}
     for r in records:
         n_exec = len(r.executed_ids)
+        if not n_exec:
+            # 空转周期（池空/无出动）不入均值：旧口径记 0 再平均，
+            # 4 个空周期把 0.846 摊成 0.423，与 on_time_rate 矛盾
+            continue
         n_on_time = n_exec - len(r.late_ids) - len(r.infeasible_ids)
-        per_cycle_correct.append(max(n_on_time, 0) / n_exec if n_exec else 0.0)
-    correct_exec_rate = (sum(per_cycle_correct) / len(per_cycle_correct)) \
+        per_cycle_correct[r.cycle] = max(n_on_time, 0) / n_exec
+    correct_exec_rate = (
+        sum(per_cycle_correct.values()) / len(per_cycle_correct)
         if per_cycle_correct else 0.0
+    )
     n_executed_total = sum(len(r.executed_ids) for r in records)
     on_time_rate = (
         (n_executed_total - n_late - n_infeasible_delivery) / n_executed_total
@@ -173,8 +221,10 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
     max_lateness = max(all_lateness) if all_lateness else 0.0
     throughput = (len(completed) / n_cycles) if n_cycles else 0.0
     cycles_payload = [r.as_dict() for r in records]
-    for row, rate in zip(cycles_payload, per_cycle_correct):
-        row["correct_exec_rate"] = round(rate, 6)
+    for row in cycles_payload:
+        rate = per_cycle_correct.get(row.get("cycle"))
+        # 空转周期显式置 None（JSON null），不再伪装成 0.0 的「错误率」
+        row["correct_exec_rate"] = None if rate is None else round(rate, 6)
 
     return {
         "status": "ok",
@@ -222,9 +272,26 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
             "max_lateness_s": round(max_lateness, 3),
             "correct_exec_rate": round(correct_exec_rate, 6),
             "throughput_per_cycle": round(throughput, 6),
+            "n_active_cycles": n_active_cycles,
+            "throughput_per_active_cycle": round(
+                (len(completed) / n_active_cycles) if n_active_cycles else 0.0, 6
+            ),
+            # 有效完成口径（I4）：零奖励交付 / 有效完成率 / 奖励产出率
+            "n_zero_reward_delivery": n_zero_reward_delivery,
+            "effective_completion_rate": round(
+                ((len(completed) - n_zero_reward_delivery) / n_arrived)
+                if n_arrived else 0.0,
+                6,
+            ),
+            "reward_yield": round(
+                (reward_effective / reward_possible) if reward_possible else 0.0, 6
+            ),
             "avg_wait": (sum(waits) / len(waits)) if waits else 0.0,
             "total_reward": round(total_reward, 4),
+            # total_cost = 纯三维路径代价（米，I3 拆分后）；惩罚单列 total_penalty
             "total_cost": round(total_cost, 3),
+            "total_penalty": round(total_penalty, 3),
+            "total_f2": round(total_f2, 3),
             "solve_time_ms": round(solve_ms, 2),
             "K_avail_mean": (sum(k_avail) / len(k_avail)) if k_avail else 0.0,
             "n_deferred_last": records[-1].muas.get("n_deferred", 0) if records else 0,
@@ -273,6 +340,13 @@ _SEED_AGG_KEYS = (
     "avg_lateness_s",
     "correct_exec_rate",
     "throughput_per_cycle",
+    "n_active_cycles",
+    "throughput_per_active_cycle",
+    "n_zero_reward_delivery",
+    "effective_completion_rate",
+    "reward_yield",
+    "total_penalty",
+    "total_f2",
     "avg_wait",
     "total_reward",
     "total_cost",
@@ -437,6 +511,9 @@ def print_summary(metrics: dict[str, Any], n_arrived: int, out_dir: Path) -> Non
             f"[exp01] 长程口径：吞吐 {sm['throughput_per_cycle']:.3f}/周期，"
             f"按时率 {sm.get('on_time_rate', 0.0):.1%}，"
             f"迟到交付 {sm.get('n_late', 0)}（平均 {sm.get('avg_lateness_s', 0.0):.0f}s），"
+            f"零奖励交付 {sm.get('n_zero_reward_delivery', 0)}"
+            f"（有效完成率 {sm.get('effective_completion_rate', 0.0):.1%}，"
+            f"奖励产出率 {sm.get('reward_yield', 0.0):.1%}），"
             f"废飞(物理不可行) {sm['n_infeasible_delivery']}，"
             f"不可达(过于偏远) {sm.get('n_unreachable', 0)}，"
             f"淘汰 {sm['n_eliminated']}"
