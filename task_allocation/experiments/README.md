@@ -206,6 +206,10 @@ experiments/expXX_*/  → 一次具体设定的编排、配置与产物
 
 ## 7. 当前实验列表
 
-| 目录 | 状态 | 说明 |
-|---|---|---|
-| `exp01_smoke` | active | 接口与目录联调；不宣称算法性能结论 |
+| 目录 | 状态 | 说明 | 论文锚点 |
+|---|---|---|---|
+| `exp01_smoke` | active | 端到端闭环与方法正确性；不宣称性能排名 | 3.5.1 场景口径 |
+| `exp02_selection_scale` | active | 第一阶段选择规模–时间–质量 | 3.5.3 |
+| `exp03_event_rolling` | planned | 动态事件 + 滚动适应性（仅 notes） | 3.5.6 |
+| `exp04_ablation` | planned | 内部机制消融与终点策略（仅 notes） | 3.5.5 |
+| `exp05_baselines` | planned | 构造性基线与欧氏对照（仅 notes） | 3.5.4 |
