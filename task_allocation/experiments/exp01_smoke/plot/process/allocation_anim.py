@@ -258,8 +258,21 @@ def plot_allocation_anim(
     # 帧(p=0)做「到达揭示」——新到达任务以红点停留、本周期航迹尚未生长，使红点
     # 出现事件清晰可见；随后 _GROW_FRAMES 帧航迹生长点亮任务；末段 _HOLD_FRAMES
     # 帧定格。outro 定格末周期。
+    #
+    # 空转周期（无航次且无 cost_history——任务池耗尽后的周期，如 exp01 周期
+    # 5-8）不做到达揭示/生长动画：左栏本就完全定格（完成率/里程不变），逐帧
+    # 重绘只是空转；只保留定格帧，使状态行里的周期号切换仍然可见。
+    cycles_raw = list(solution.get("cycles") or [])
+    idle_set = {
+        c for c in range(n_cyc)
+        if not tours_by_cycle[c]
+        and not (cycles_raw[c].get("cost_history") or [])
+    }
     frames: list[tuple[int | None, float]] = [(None, 0.0)] * _INTRO_FRAMES
     for c in range(n_cyc):
+        if c in idle_set:
+            frames += [(c, 1.0)] * _HOLD_FRAMES
+            continue
         frames += [(c, 0.0)] * _ARRIVE_FRAMES   # 到达揭示：红点先出现并停留
         for g in range(_GROW_FRAMES):
             frames.append((c, (g + 1) / _GROW_FRAMES))
@@ -443,6 +456,8 @@ def plot_allocation_anim(
                   "自动贴合）——放在图外是因为状态行占地图宽 3/4，图内任何角落都会"
                   "压住贴顶的任务标号（逐帧自检实测 T10 互压 100%）；"
                   "右栏 (b) 为「当前周期」DMDE 最优适应度收敛曲线，游标随动画推进。"
+                  "任务池耗尽的空转周期无求解数据，右栏显式标注「无 DMDE 求解」，"
+                  "不再错接其它周期的曲线。"
                   "各机巢驻巢无人机数的逐周期演化已独立成图 allocation_status.gif。"
                   "里程 = 各航迹 est_cost 之和（km）。"
                   "底图地形与机巢为静态层。Ck 标出到达周期，晚到任务（如 T19·C3）"
@@ -576,9 +591,26 @@ def _draw_conv(ax, solution: dict[str, Any], c: int | None, p: float) -> None:
                 ha="center", va="center", fontsize=FS["base"], color="0.5")
         return
 
-    ci = c if (c is not None and 0 <= c < len(hists)
-               and len(hists[c]) >= 2) else 0
+    if c is not None and 0 <= c < len(hists) and len(hists[c]) < 2:
+        # 本周期无求解数据（任务池已空、零出动，cost_history 为空）。
+        # 绝不再回退到周期 0 的曲线——那会把「左栏周期 N、右栏周期 1 曲线」
+        # 钉成跨周期错位（P06 实测：后 4 个空转周期占 51% 播放时长全部
+        # 如此，末帧海报亦复现），改为显式占位说明。
+        style_axes(ax, title=f"(b) 周期 {c + 1}：无 DMDE 求解",
+                   xlabel="代数 g", ylabel="最优适应度")
+        ax.set_title(ax.get_title(), fontsize=_F_TITLE)
+        ax.tick_params(axis="both", labelsize=8.5)
+        ax.text(0.5, 0.5, "任务池已空，本周期无调度决策\n（无 cost_history）",
+                transform=ax.transAxes, ha="center", va="center",
+                fontsize=FS["base"], color="0.5")
+        return
+
+    ci = c if (c is not None and 0 <= c < len(hists)) else 0
     hist = hists[ci]
+    if len(hist) < 2:
+        ax.text(0.5, 0.5, "无 cost_history", transform=ax.transAxes,
+                ha="center", va="center", fontsize=FS["base"], color="0.5")
+        return
     ch = _last_change_index(hist)
     n_total = len(hist)
     x_max = n_total - 1
