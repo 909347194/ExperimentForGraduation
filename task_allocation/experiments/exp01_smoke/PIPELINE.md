@@ -88,8 +88,9 @@ r('task_allocation/experiments/exp01_smoke/results', groups=['report'])"
 # 或跑实验时限定：python run.py --group scene --figure geo_overview
 ```
 
-配套分析脚本 `analyze.py`：给定 `metrics.json` 打印可行率、违约分类、闸门拦截量、
-终点机巢分布与跨 seed 汇总，用于两组配置对照。
+配套分析脚本（只读 json、不重跑实验）：`analyze_longhorizon.py` / `report_longhorizon.py`
+打印完成率、吞吐、正确执行率、废飞/淘汰与逐周期状态；`render_from_json.py`
+从 json 补出图（GIF 需逐个 `--figure` 渲染，一次全渲会超时）。
 
 ---
 
