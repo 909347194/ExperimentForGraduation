@@ -300,7 +300,7 @@ solver:
     #      更优解在 100 代下从未命中（4 个求解器种子全部 miss），500 代是治
     #      「人为依赖 miss」的预算侧前提（配合 --seeds 统计协议）。
     # 代价：单周期求解耗时约 ×5（exp01 单 seed 全程约 80s → 约 7min）；
-    # 调试时可临时调回 100 或配合 --no-plots/--no-tables。
+    # 调试时可临时调回 100 或配合 --no-plots。
     max_iter: 100 # max_generations（论文主口径；500代对照见敏感性分析）
     zeta: 3 # 动态交叉率曲率指数 ζ（论文式 3-9 取 3）
     # 灭绝门限 δ：留空 = 论文公式 3-12 原式 GMR = 1 - CR（不加门限）。
@@ -372,7 +372,6 @@ rolling:
 run:
     save_results: true
     make_plots: true
-    make_tables: true # 结果 LaTeX 表（tables.py 生成 tex，并尽力编译 PDF）
     verbose: true
 
 # ── 可视化（代码在 plot/，产物落到 experiment.figures_dir）─────

@@ -134,11 +134,6 @@ class ConfigBundle:
         return bool(self.run.get("make_plots", True))
 
     @property
-    def make_tables(self) -> bool:
-        """结果 LaTeX 表格（tex + 尽力而为的 PDF 编译）开关，与 make_plots 对齐。"""
-        return bool(self.run.get("make_tables", True))
-
-    @property
     def save_results(self) -> bool:
         return bool(self.run.get("save_results", True))
 
