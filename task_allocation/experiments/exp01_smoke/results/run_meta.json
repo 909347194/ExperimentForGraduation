@@ -1,7 +1,7 @@
 {
   "experiment": "exp01_smoke",
   "seed": 42,
-  "timestamp_utc": "2026-10-18T10:29:07.644461+00:00",
+  "timestamp_utc": "2026-10-18T14:41:44.165511+00:00",
   "config_path": "task_allocation\\experiments\\exp01_smoke\\config.yaml",
   "repo_root": "D:\\SchoolAffairs\\groupmeeting\\thesis\\dissertation\\ExperimentForGraduation",
   "dem_terrain": {
