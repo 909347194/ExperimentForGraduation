@@ -114,7 +114,8 @@ selection:
         budget_factor: 1.0 # 机群总航程预算系数
         # 消融口径专用（check_time_window=true 时生效）：迟到容忍 W（s）。
         # 0 = 历史口径（直飞到达 > latest 即拒）。
-        late_tolerance_seconds: 600.0
+        # 与 muas.late_reward_decay_seconds 保持同值（2026-10-18 起 1800）。
+        late_tolerance_seconds: 1800.0
     marginal:
         eps: 1.0 # 边际代价地板，与距离同量纲（m）
         max_selected: null # null → 由 max_ratio × K_avail 决定
@@ -163,12 +164,28 @@ muas:
     # 时间窗违约以秒计，取 0.01~0.02 即「迟到 300 s ≈ 3~6 点奖励」。
     w_violation: 0.01
     w_nest_capacity: 1.0 # 机巢容量违反的惩罚权重
+    # ── 四层准字典序 T0 层（2026-10-18）────────────────────────────
+    # f = W_hard·n_hard + w_exc·excess_m − m·F1_eff + w_late·L_tot + λ·path + w_time·F3
+    #   T0 物理违约（硬）：range/endurance/时序/同步/巢容量/终点不可达/结构。
+    #     任何一次违约压倒任意交付收益——「纸面可行、执行弹回」的幽灵 F1
+    #     永不入选（旧口径 misc×1e3×wv 只折 10 单位，而单任务收益 m·R≈2.7e5）。
+    #   w_hard_violation: null = 自动 κ·m·R_pool（κ 见下）；显式值固定权重；
+    #     0 = 关闭 T0 层（消融对照：退回旧混合 penalty 口径）。
+    #   w_range_excess:   null = 自动 1/m（1km 超程≈1000 单位，仅在不可行
+    #     解之间做层内排序，永远翻不了记账）。
+    w_hard_violation: null
+    w_range_excess: null
+    hard_violation_kappa: 10.0 # W_hard = κ·m·R_pool 的安全系数
     # 迟到奖励折减容忍 W（s）：晚到任务有效奖励 eff = R × max(0, 1 − L/W)。
     # 迟到不是废飞（2026-10-15 协议）——晚到仍算完成、计奖励，但按迟到
     # 时长线性折减，与 w_violation 同向压实「按时服务」。
+    # 【2026-10-18 重新标定】600→1800：实测 12 个迟到任务 145–1475s（中位
+    # 838s），W=600 时 7/12 奖励归零（均值保留 27.8%）——与「迟到可以接受」
+    # 直接冲突；W=1800 时 0/12 归零、均值保留 61.6%，且 L=1800s 才等价于
+    # 丢掉整个任务，「可接受但最好不迟到」的拐点。
     # 必须与 selection.feasibility.late_tolerance_seconds 同值；
     # null = 关闭折减（历史口径：F1 全额，迟到只经 w_violation 计价）。
-    late_reward_decay_seconds: 600.0
+    late_reward_decay_seconds: 1800.0
     w_time: 0.0 # 最坏机航迹时间项权重（论文 §5(3) a·max(Σt) 负载均衡项）；0 = 关闭（默认双目标）
     default_service_time: 60.0 # 单任务作业时长（s）
     # 参与规划的 UAV 上限；null → 自动取 min(K_avail, M-1) 以走 srp 巡游模型
@@ -220,6 +237,15 @@ muas:
     prune_unprofitable: true # 剔除执行代价高于收益的任务（y_j = 0）
     prune_margin: 0.0 # 剔除判据裕度：λ·节省 > R·(1+margin) 才剔除
     prune_max_rounds: 8
+    # 零奖励剔除（2026-10-18 四层适应度配套）：ETA ≥ latest+W 的任务 eff≈0，
+    # 带着飞只赔迟到惩罚（T2）却按完成计——暂缓把机会留给下周期。字典序下
+    # prune_unprofitable 整体关闭（丢正收益任务必降 F1），但零奖励任务不降
+    # F1，剔除是严格改进。仅 late_reward_decay_seconds>0 时生效。
+    # 【消融实测 seed=42】W=1800 下零奖励交付已为 0（A2），剔除开启（A3）反而
+    # 因搜索期结构扰动偏向「周期1 多塞一个但迟到更深」（6 迟发/均~1000s vs 2），
+    # 奖励产出率 94.4%→91.1%、按时率 81.7%→78.3%——靶病不存在时只亏不赚。
+    # 故 exp01 生产默认关闭；保留开关供 |T|≫K 压力场（exp02）评估。
+    prune_zero_reward: false
     # 等待补偿（论文 §3.2 的 W_i(t)）：滞留越久，有效收益越高，越难被剔除，
     # 避免偏远任务连续多周期得不到执行而永久滞留
     prune_wait_bonus: 1.0

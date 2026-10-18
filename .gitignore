@@ -11,6 +11,8 @@ task_allocation/experiments/exp01_smoke/results/figures/*.gif
 *.fdb_latexmk
 *.synctex.gz
 *.xdv
+*.out
+*.toc
 __pycache__/
 *.py[cod]
 .workbuddy/

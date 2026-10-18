@@ -237,6 +237,10 @@ def _problem(w_violation):
         costs=build_cost_provider(tasks, nests, uavs),
         config=MUASProblemConfig(
             lambda_cost=1e-4, w_penalty=1.0, w_violation=w_violation,
+            # legacy 加权和口径（2026-10-18 起四层准字典序的消融对照）：
+            # lexicographic=False → f=-F1+λ·path+w_violation·penalty+w_time·F3，
+            # 惩罚总量（硬+软）经 w_violation 直接计入。big_m=1 锁 m=1。
+            lexicographic=False,
             big_m=1.0,  # 固定字典序权重=1，锁公式的数值口径
         ),
     )

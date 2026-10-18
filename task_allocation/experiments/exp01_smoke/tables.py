@@ -52,6 +52,24 @@ def _rewards(s: dict) -> dict[int, float]:
     return {t["id"]: float(t.get("reward", 0.0)) for t in s["tasks"]}
 
 
+def _decay_W() -> str:
+    """迟到奖励折减容忍 W（s）：从 config.yaml 实读，表注释不写死。"""
+    try:
+        import yaml  # type: ignore
+
+        cfg = yaml.safe_load(
+            (EXP_DIR / "config.yaml").read_text(encoding="utf-8")
+        ) or {}
+        w = (
+            cfg.get("muas", {}) or {}
+        ).get("late_reward_decay_seconds")
+        if w:
+            return f"{float(w):g}"
+    except Exception:
+        pass
+    return "1800"
+
+
 # ---------------------------------------------------------------------------
 # 各表
 # ---------------------------------------------------------------------------
@@ -150,10 +168,11 @@ def build_tab3_objective(m: dict, s: dict) -> str:
             f"{mu.get('solve_seconds', 0):.1f} \\\\"
         )
     body = "\n".join(rows)
+    w_str = _decay_W()
     return (
         "\\begin{table}[htbp]\\centering\n"
         "\\caption{逐周期目标、约束可行性与求解开销（$F_1^{\\mathrm{plan}}$ 为规划口径收益"
-        "（迟到任务按 $W=600$~s 线性折减），$F_1^{\\mathrm{comp}}$ 为实际完成任务的"
+        "（迟到任务按 $W=" + w_str + "$~s 线性折减），$F_1^{\\mathrm{comp}}$ 为实际完成任务的"
         "全额收益；$C^{3D}$ 为三维路径总代价，单位 km）}\n"
         "\\label{tab:exp01-objective}\n"
         "\\begin{tabular}{rccccccc}\n\\toprule\n"
@@ -253,6 +272,7 @@ def build_tab5_outcome(m: dict, s: dict) -> str:
         ("总求解时间", f"{sm.get('solve_time_ms', 0) / 1000:.1f} s"),
     ]
     body = "\n".join(f"{k} & {v} \\\\" for k, v in rows)
+    w_str = _decay_W()
     return (
         "\\begin{table}[htbp]\\centering\n"
         "\\caption{结果总览与收益核算对账}\n"
@@ -263,7 +283,7 @@ def build_tab5_outcome(m: dict, s: dict) -> str:
         "\\textbf{口径注}：长程协议下主指标为**正确执行吞吐 / 正确执行率**"
         "（完成率只是窗口长度产物，不作质量证据）。迟到不是废飞"
         "（2026-10-15 协议）：晚到任务计入完成与吞吐，有效奖励按迟到时长"
-        "线性折减（$W=600$~s），按时率/平均迟到单独报告；废飞只剩**物理"
+        "线性折减（$W=" + w_str + "$~s），按时率/平均迟到单独报告；废飞只剩**物理"
         "不可行**的弹回交付（航程/续航/终点机巢违约），总航程下降若靠它"
         "换来则是净亏损。$F_1^{\\mathrm{plan}}$ 为求解期目标值（含迟到"
         "折减与被拦交付及重复出动计数），$F_1^{\\mathrm{comp}}$ 按最终"
