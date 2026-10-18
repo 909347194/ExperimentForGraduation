@@ -13,7 +13,7 @@
     python run_chunked.py                    # 默认预算 480s，跑/续跑到完
     python run_chunked.py --budget-seconds 420
     python run_chunked.py --fresh            # 丢弃存档重开
-    python run_chunked.py --no-plots --no-tables   # 只攒 json 数值产物
+    python run_chunked.py --no-plots        # 只攒 json 数值产物
 
 存档：``results/.chunk_state.pkl``（指纹 = config 字节 + seed + n_cycles
 + max_iter + --set 覆盖 + out；不匹配自动重开，防配置改了还拿旧状态续）。
@@ -177,7 +177,6 @@ def main(argv: list[str] | None = None) -> int:
                     help="覆盖 experiment.output_dir（变体实验目录，如 results_s43；"
                          "存档/图表/表格全部跟随；进入指纹）")
     ap.add_argument("--no-plots", action="store_true", help="全部跑完才出图")
-    ap.add_argument("--no-tables", action="store_true")
     ap.add_argument("--set", action="append", default=[], metavar="dotted.path=value",
                     help="覆盖 config.yaml 中的标量值（可多次；进入存档指纹），"
                          "如 --set muas.late_reward_decay_seconds=600；"
@@ -332,19 +331,6 @@ def main(argv: list[str] | None = None) -> int:
                 formats = (*formats, "gif")
         make_plots(final_metrics, rep_solution, figures_dir,
                    formats=formats, dpi=int(plot_cfg.get("dpi", 200)))
-
-    # ── 结果表（只读 json 制表 + latexmk 编译 PDF）─────────────────
-    if bundle.save_results and bundle.make_tables and not args.no_tables:
-        try:
-            from run import _compile_tables
-            from tables import render as render_tables
-
-            tables_dir = out_dir / "tables"
-            tex_path = render_tables(tables_dir / "exp01_tables.tex", results_dir=out_dir)
-            print(f"[chunk] 结果表已生成：{tex_path}")
-            _compile_tables(tables_dir, verbose=True)
-        except Exception as exc:
-            print(f"[chunk] 结果表生成失败（不影响主结果）：{exc}")
 
     print("[chunk] 全部完成", flush=True)
     return 0

@@ -6,7 +6,6 @@
 %   results/metrics.json   逐周期与汇总指标
 %   results/solution.json  场景、机群、任务、交付航次
 %   results/figures/       图产物（17 个）
-%   results/tables/        结果表（exp01_tables.tex / .pdf）
 %
 % 编译：latexmk -xelatex report.tex     （ctex 需 xelatex）
 % ============================================================
@@ -422,15 +421,13 @@ $\lambda = 1.0\times10^{-4}$ 收益当量/米。
 \texttt{solution.json} & 场景、机群、任务、逐周期交付航次 \\
 \texttt{run\_meta.json} & 运行元数据（种子、DEM 参数、时间戳） \\
 \texttt{figures/} & 17 个图产物 \\
-\texttt{tables/exp01\_tables.tex / .pdf} & 结果表（由 \texttt{render\_from\_json.py tables} 生成） \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 复现方式：在本实验目录执行
 \fname{python run.py -{}-seeds 42}（默认配置即本报告口径，
-\fname{output\_dir: results}）；绘图与表格可在不重跑求解的情况下由
-\fname{python render\_from\_json.py png,gif -{}-results results} 与
-\fname{python render\_from\_json.py tables -{}-results results} 补出。
+\fname{output\_dir: results}）；绘图可在不重跑求解的情况下由
+\fname{python render\_from\_json.py png,gif -{}-results results} 补出。
 
 \end{document}

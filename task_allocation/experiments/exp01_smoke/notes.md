@@ -129,7 +129,7 @@ from plot import render_from_results as r; r('task_allocation/experiments/exp01_
 | 三维代价 / DEM 网格步长 | `config.yaml` 的 `cost:` | 网格步长直接决定一次性开销 |
 | 滚动周期、到达、故障注入 | `config.yaml` 的 `rolling:` | `arrivals: {mode: poisson\|uniform\|fixed, …}` 随机到达流;含 `strict_capacity` 硬校验开关。**长程协议（2026-10-14）**：`n_cycles: 24` + `arrivals.mode: poisson, lambda: 5.0`——完成率不是目标，主指标为正确执行吞吐/正确执行率（见 metrics summary 新字段）。注意 `fixed` 的 counts 长度必须 = n_cycles−1，否则延长周期只补 0 到达空转 |
 | 多 seed 复现 | `config.yaml` 的 `experiment.seeds` | 多次随机重复取均值±标准差(论文稳健性证据);仅 1 个元素时退化为单 seed |
-| 命令行覆盖(不改 yaml) | `run.py --seeds 42 43 44` / `42-46`(区间)/ `42,43`(逗号,可混用);`--no-plots` / `--no-tables` | 多种子长跑的调试入口:覆盖 seeds、跳过图表(只落 json);区间展开 `--seeds 42-51` 即 10 seed |
+| 命令行覆盖(不改 yaml) | `run.py --seeds 42 43 44` / `42-46`(区间)/ `42,43`(逗号,可混用);`--no-plots` | 多种子长跑的调试入口:覆盖 seeds、跳过图表(只落 json);区间展开 `--seeds 42-51` 即 10 seed |
 | 图格式、分辨率 | `config.yaml` 的 `plot:` | 代码在 `plot/`,产物路径在 `experiment.figures_dir` |
 | 约束开关与惩罚权重 | `config.yaml` 的 `constraints:` | 11 个开关 + 9 个权重,置 false 即该约束既不判可行也不计惩罚(消融/口径取舍) |
 | 惩罚量纲解耦 | `config.yaml` 的 `muas.w_violation` | null = 历史口径(惩罚随 F2 乘 λ);给数值则惩罚以「奖励当量/惩罚单位」直接计入 |
