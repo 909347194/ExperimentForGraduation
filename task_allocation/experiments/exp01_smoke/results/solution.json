@@ -12973,7 +12973,23 @@
         -27422948.345033914,
         -27422948.345033914,
         -27422948.345033914
-      ]
+      ],
+      "fitness_weights": {
+        "m": 232916.86689754136,
+        "w_hard": 275323646.6684696,
+        "w_excess": 4.293377346690369e-06,
+        "w_late": 0.01,
+        "lambda": 0.0001,
+        "w_time": 0.0,
+        "W_decay": 1800.0
+      },
+      "final_fitness": -25955332.632886305,
+      "final_f1": 111.43624321368405,
+      "final_path_m": 387514.8854678186,
+      "final_late_s": 924.378884038948,
+      "final_bottleneck_s": 4848.247959564597,
+      "final_n_hard": 0,
+      "final_excess_m": 0.0
     },
     {
       "cycle": 2,
@@ -13252,7 +13268,23 @@
         -19037317.841908082,
         -19037317.841908082,
         -19037317.841908082
-      ]
+      ],
+      "fitness_weights": {
+        "m": 219669.072889474,
+        "w_hard": 197755740.6373744,
+        "w_excess": 4.552302182761739e-06,
+        "w_late": 0.01,
+        "lambda": 0.0001,
+        "w_time": 0.0,
+        "W_decay": 1800.0
+      },
+      "final_fitness": -17826088.175393023,
+      "final_f1": 81.150296861356,
+      "final_path_m": 661538.6344496631,
+      "final_late_s": 5614.698319591856,
+      "final_bottleneck_s": 5439.6492411799045,
+      "final_n_hard": 0,
+      "final_excess_m": 0.0
     },
     {
       "cycle": 3,
@@ -13499,7 +13531,23 @@
         -11602486.571315952,
         -11602486.571315952,
         -11602486.571315952
-      ]
+      ],
+      "fitness_weights": {
+        "m": 98357.77166407304,
+        "w_hard": 117766657.23714368,
+        "w_excess": 1.0166964776462786e-05,
+        "w_late": 0.01,
+        "lambda": 0.0001,
+        "w_time": 0.0,
+        "W_decay": 1800.0
+      },
+      "final_fitness": -10010717.117137289,
+      "final_f1": 101.77935538967506,
+      "final_path_m": 573700.949572397,
+      "final_late_s": 1611.030195425998,
+      "final_bottleneck_s": 5390.419440549089,
+      "final_n_hard": 0,
+      "final_excess_m": 0.0
     },
     {
       "cycle": 4,
@@ -13641,31 +13689,79 @@
         -525371.9570608416,
         -525371.9570608416,
         -525371.9570608416
-      ]
+      ],
+      "fitness_weights": {
+        "m": 28073.43494944736,
+        "w_hard": 5253831.326606608,
+        "w_excess": 3.5620863702668686e-05,
+        "w_late": 0.01,
+        "lambda": 0.0001,
+        "w_time": 0.0,
+        "W_decay": 1800.0
+      },
+      "final_fitness": -525371.9570608416,
+      "final_f1": 18.714600960186498,
+      "final_path_m": 111755.9981916928,
+      "final_late_s": 0.0,
+      "final_bottleneck_s": 4552.5146556519685,
+      "final_n_hard": 0,
+      "final_excess_m": 0.0
     },
     {
       "cycle": 5,
       "current_time": 3000.0,
       "tours": [],
-      "cost_history": []
+      "cost_history": [],
+      "fitness_weights": {},
+      "final_fitness": null,
+      "final_f1": null,
+      "final_path_m": null,
+      "final_late_s": null,
+      "final_bottleneck_s": null,
+      "final_n_hard": null,
+      "final_excess_m": null
     },
     {
       "cycle": 6,
       "current_time": 3600.0,
       "tours": [],
-      "cost_history": []
+      "cost_history": [],
+      "fitness_weights": {},
+      "final_fitness": null,
+      "final_f1": null,
+      "final_path_m": null,
+      "final_late_s": null,
+      "final_bottleneck_s": null,
+      "final_n_hard": null,
+      "final_excess_m": null
     },
     {
       "cycle": 7,
       "current_time": 4200.0,
       "tours": [],
-      "cost_history": []
+      "cost_history": [],
+      "fitness_weights": {},
+      "final_fitness": null,
+      "final_f1": null,
+      "final_path_m": null,
+      "final_late_s": null,
+      "final_bottleneck_s": null,
+      "final_n_hard": null,
+      "final_excess_m": null
     },
     {
       "cycle": 8,
       "current_time": 4800.0,
       "tours": [],
-      "cost_history": []
+      "cost_history": [],
+      "fitness_weights": {},
+      "final_fitness": null,
+      "final_f1": null,
+      "final_path_m": null,
+      "final_late_s": null,
+      "final_bottleneck_s": null,
+      "final_n_hard": null,
+      "final_excess_m": null
     }
   ]
 }
