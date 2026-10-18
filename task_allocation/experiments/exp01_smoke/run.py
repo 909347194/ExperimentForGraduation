@@ -33,7 +33,8 @@
   （``seeds`` 缺失或单元素 → 单 seed）。
 - ``--no-plots``  跳过出图。多种子 × 多代数的长跑调试时只关心 json
   数值，不必每次等 16 张图。
-"""
+- ``--no-audit``  跳过末尾的方法正确性审计（默认跑：23 项不变量/口径，
+  FAIL 终端报警）。"""
 
 from __future__ import annotations
 
@@ -68,6 +69,35 @@ from metrics import (
 from task_allocation.methods.rolling.horizon import RollingHorizon
 from task_allocation.methods.task_pool import TaskPool
 from task_allocation.methods.uav_state import UAVFleet
+
+
+def _run_audit(out_dir: Path, *, verbose: bool) -> bool:
+    """跑方法正确性审计（audit_correctness.py，持续门禁）。
+
+    从落盘 json 独立复核 23 项结构不变量与口径（A~N1/N2, J/K/L/M）。
+    有 FAIL → 返回 False 并在终端醒目报警（主流程不阻断——产物已落盘，
+    报警促人核查）；仅 WARN → 返回 True。审计本身异常（缺 json 等）
+    不阻断主流程，只警告。
+    """
+    import subprocess
+
+    res_name = out_dir.name
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(EXP_DIR / "audit_correctness.py"),
+             "--results", res_name],
+            capture_output=True, text=True, timeout=600,
+        )
+    except Exception as exc:
+        print(f"[exp01] 审计调用异常（不影响主结果）：{exc}")
+        return True
+    if proc.stdout:
+        print(proc.stdout.rstrip())
+    if proc.returncode == 1:
+        print("\n[exp01] \033[1;31m正确性审计发现 FAIL 项！"
+              "落盘结果与理论口径不一致，请核查后再用于论文。\033[0m")
+        return False
+    return True
 
 
 def _run_once(
@@ -196,6 +226,10 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--pdf", action="store_true", help="额外输出 PDF 矢量图（默认仅 PNG）"
     )
     parser.add_argument(
+        "--no-audit", action="store_true",
+        help="跳过末尾的方法正确性审计（audit_correctness.py）",
+    )
+    parser.add_argument(
         "--group", action="append", dest="groups", metavar="LAYER",
         choices=("scene", "process", "report"),
         help="只出某一层的图：scene=环境初始配置 / process=运行过程 / "
@@ -321,6 +355,12 @@ def main(argv: list[str] | None = None) -> int:
             names=args.figures,
             groups=args.groups,
         )
+
+    # ── 方法正确性审计（持续门禁，默认开）────────────────────────
+    # 从落盘 json 独立复核 23 项不变量/口径；FAIL 只报警不阻断
+    # （产物已落盘，报警促人核查）。--no-audit 可关。
+    if bundle0.save_results and not args.no_audit:
+        _run_audit(out_dir, verbose=verbose)
 
     return 0
 

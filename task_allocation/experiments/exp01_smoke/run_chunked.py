@@ -177,6 +177,8 @@ def main(argv: list[str] | None = None) -> int:
                     help="覆盖 experiment.output_dir（变体实验目录，如 results_s43；"
                          "存档/图表/表格全部跟随；进入指纹）")
     ap.add_argument("--no-plots", action="store_true", help="全部跑完才出图")
+    ap.add_argument("--no-audit", action="store_true",
+                    help="跳过末尾的方法正确性审计（默认跑，FAIL 报警）")
     ap.add_argument("--set", action="append", default=[], metavar="dotted.path=value",
                     help="覆盖 config.yaml 中的标量值（可多次；进入存档指纹），"
                          "如 --set muas.late_reward_decay_seconds=600；"
@@ -333,6 +335,24 @@ def main(argv: list[str] | None = None) -> int:
                    formats=formats, dpi=int(plot_cfg.get("dpi", 200)))
 
     print("[chunk] 全部完成", flush=True)
+
+    # ── 方法正确性审计（持续门禁，与 run.py 同口径）────────────────
+    if bundle.save_results and not args.no_audit:
+        import subprocess
+
+        try:
+            proc = subprocess.run(
+                [sys.executable, str(EXP_DIR / "audit_correctness.py"),
+                 "--results", out_dir.name],
+                capture_output=True, text=True, timeout=600,
+            )
+            if proc.stdout:
+                print(proc.stdout.rstrip())
+            if proc.returncode == 1:
+                print("[chunk] \033[1;31m正确性审计发现 FAIL 项！"
+                      "落盘结果与理论口径不一致，请核查。\033[0m")
+        except Exception as exc:
+            print(f"[chunk] 审计调用异常（不影响主结果）：{exc}")
     return 0
 
 
