@@ -173,6 +173,19 @@ def build_config_bundle(cfg: Mapping[str, Any]) -> ConfigBundle:
         # 惩罚量纲解耦开关：留空/None = 历史口径（惩罚随 F2 一起乘 λ）
         w_violation=(None if m.get("w_violation") is None else float(m["w_violation"])),
         w_nest_capacity=float(m.get("w_nest_capacity", 1.0)),
+        # 2026-10-18 四层准字典序 T0 层：硬违约（物理）支配权重与超程 tie-break。
+        #   w_hard_violation: None = 自动 κ·m·R_pool（κ=hard_violation_kappa）；
+        #     显式值 = 固定权重（0 = 关闭 T0 层，退回旧混合 penalty 口径）。
+        #   w_range_excess:   None = 自动 1/m（1km 超程≈1000 单位）。
+        w_hard_violation=(
+            None if m.get("w_hard_violation") is None
+            else float(m["w_hard_violation"])
+        ),
+        w_range_excess=(
+            None if m.get("w_range_excess") is None
+            else float(m["w_range_excess"])
+        ),
+        hard_violation_kappa=float(m.get("hard_violation_kappa", 10.0)),
         w_time=float(m.get("w_time", 0.0)),
         default_service_time=float(m.get("default_service_time", 0.0)),
         # 迟到奖励折减容忍 W（秒）：晚到 eff=R×max(0,1−L/W)；
@@ -206,6 +219,8 @@ def build_config_bundle(cfg: Mapping[str, Any]) -> ConfigBundle:
         prune_unprofitable=bool(m.get("prune_unprofitable", True)),
         prune_margin=float(m.get("prune_margin", 0.0)),
         prune_max_rounds=int(m.get("prune_max_rounds", 8)),
+        # 2026-10-18 零奖励剔除：ETA ≥ latest+W 的任务暂缓（eff≈0 不降 F1）
+        prune_zero_reward=bool(m.get("prune_zero_reward", True)),
         prune_wait_bonus=float(m.get("prune_wait_bonus", 1.0)),
         wait_scale=float(m.get("wait_scale", 3600.0)),
         lamarckian=bool(m.get("lamarckian", True)),

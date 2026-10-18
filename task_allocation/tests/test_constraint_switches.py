@@ -84,10 +84,13 @@ def test_defaults_all_enabled():
 
 
 def test_time_window_switch():
-    # 开启 → 判违约、不可行
+    # 开启 → 记违约。2026-10-18 硬/软分桶：时间窗迟到是**软**违约——
+    # 物理仍可行（ok=True，与执行闸门 tw_task 不弹回一致），但 violations
+    # 记 tw_task_0、soft_violation>0，由适应度 T2 层按秒计价。
     p = _window_problem(ConstraintConfig(time_window=True, endurance=False))
     ok, det = p.check_feasible(_tour_and_solution())
-    assert ok is False and det["violations"] == ["tw_task_0"]
+    assert ok is True and det["violations"] == ["tw_task_0"]
+    assert det["n_hard"] == 0 and det["soft_violation"] > 0.0
 
     # 关闭 → 不判违约、可行
     p = _window_problem(ConstraintConfig(time_window=False, endurance=False))

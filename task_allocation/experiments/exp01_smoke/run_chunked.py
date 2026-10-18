@@ -16,7 +16,12 @@
     python run_chunked.py --no-plots --no-tables   # 只攒 json 数值产物
 
 存档：``results/.chunk_state.pkl``（指纹 = config 字节 + seed + n_cycles
-+ max_iter；不匹配自动重开，防配置改了还拿旧状态续）。
++ max_iter + --set 覆盖 + out；不匹配自动重开，防配置改了还拿旧状态续）。
+
+消融变体（无需复制 yaml）：::
+
+    python run_chunked.py --out results_abl_A1 --set muas.late_reward_decay_seconds=600
+    python run_chunked.py --out results_abl_A2 --set muas.prune_zero_reward=false
 """
 
 from __future__ import annotations
@@ -66,14 +71,61 @@ def _state_path(out_dir: str | None) -> Path:
     return EXP_DIR / out_dir / ".chunk_state.pkl"
 
 
-def _fingerprint(raw_cfg: dict, seed: int, max_iter: int | None,
+def _coerce_scalar(raw: str):
+    """--set 的字符串值 → bool/int/float/None/str（保持可指纹化）。"""
+    s = str(raw).strip()
+    low = s.lower()
+    if low in ("null", "none", ""):
+        return None
+    if low == "true":
+        return True
+    if low == "false":
+        return False
+    try:
+        return int(s)
+    except ValueError:
+        pass
+    try:
+        return float(s)
+    except ValueError:
+        pass
+    return s
+
+
+def _parse_set(items: list[str]) -> dict:
+    """``["muas.late_reward_decay_seconds=600"]`` → 嵌套 dict（深合并用）。"""
+    out: dict = {}
+    for it in items:
+        key, sep, raw = str(it).partition("=")
+        if not sep or not key.strip():
+            raise argparse.ArgumentTypeError(
+                f"--set 需要 dotted.path=value 形式：{it!r}"
+            )
+        parts = [p for p in key.strip().split(".") if p]
+        node = out
+        for p in parts[:-1]:
+            node = node.setdefault(p, {})
+        node[parts[-1]] = _coerce_scalar(raw)
+    return out
+
+
+def _deep_merge(dst: dict, src: dict) -> None:
+    for k, v in src.items():
+        if isinstance(v, dict) and isinstance(dst.get(k), dict):
+            _deep_merge(dst[k], v)
+        else:
+            dst[k] = v
+
+
+def _fingerprint(raw_cfg: dict, overrides: dict, seed: int, max_iter: int | None,
                  out_dir: str | None) -> str:
-    """配置指纹：config 原文 + 关键旋钮，防止改配置后错配旧存档。"""
+    """配置指纹：config 原文 + 关键旋钮 + --set 覆盖，防止改配置后错配旧存档。"""
     cfg_bytes = (EXP_DIR / "config.yaml").read_bytes()
     rolling = raw_cfg.get("rolling", {}) or {}
     solver = raw_cfg.get("solver", {}) or {}
     key = (
         cfg_bytes,
+        repr(sorted(overrides.items())).encode(),
         str(seed).encode(),
         str(rolling.get("n_cycles")).encode(),
         str(solver.get("max_iter")).encode(),
@@ -126,11 +178,18 @@ def main(argv: list[str] | None = None) -> int:
                          "存档/图表/表格全部跟随；进入指纹）")
     ap.add_argument("--no-plots", action="store_true", help="全部跑完才出图")
     ap.add_argument("--no-tables", action="store_true")
+    ap.add_argument("--set", action="append", default=[], metavar="dotted.path=value",
+                    help="覆盖 config.yaml 中的标量值（可多次；进入存档指纹），"
+                         "如 --set muas.late_reward_decay_seconds=600；"
+                         "值支持 null/true/false/int/float/str")
     args = ap.parse_args(argv)
 
+    overrides = _parse_set(args.set)
     t_start = time.monotonic()
     raw_cfg = load_config(EXP_DIR / "config.yaml")
-    # 命令行覆盖：max_iter / output_dir 先进 raw_cfg，再构建 bundle
+    # 命令行覆盖：--set 先进 raw_cfg（深合并），再构建 bundle
+    _deep_merge(raw_cfg, overrides)
+    # 命令行覆盖：max_iter / output_dir 进 raw_cfg
     if args.max_iter is not None:
         raw_cfg.setdefault("solver", {})["max_iter"] = int(args.max_iter)
     if args.out:
@@ -138,7 +197,7 @@ def main(argv: list[str] | None = None) -> int:
         raw_cfg["experiment"]["figures_dir"] = f"{args.out}/figures"
     seed = args.seed if args.seed is not None else int(
         (raw_cfg.get("experiment", {}) or {}).get("seed", 42))
-    fp = _fingerprint(raw_cfg, seed, args.max_iter, args.out)
+    fp = _fingerprint(raw_cfg, overrides, seed, args.max_iter, args.out)
     state_path = _state_path(args.out)
 
     # 两条路径（新建/续跑）都必须用注入 seed 的配置构建 bundle，

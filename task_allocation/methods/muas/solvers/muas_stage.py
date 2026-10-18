@@ -98,6 +98,13 @@ class MUASStageConfig:
     # 本开关仅在 legacy 加权和（lexicographic=False）下生效（消融对比口径）。
     prune_unprofitable: bool = True
     prune_max_rounds: int = 8
+    # 零奖励剔除（2026-10-18 四层适应度配套）：对「ETA ≥ latest + W」的任务
+    # （迟到折减 eff=R·max(0,1−L/W) 下 F1 贡献≈0）在 repair 链末轮暂缓
+    # （y_j=0）。字典序下经济性剔除（prune_unprofitable）整体关闭——丢正收益
+    # 任务必降 F1；而零奖励任务不降 F1，剔除它是严格的适应度改进（省 T2
+    # 迟到惩罚），还把机会留给下一周期（可能按时交付）。仅当
+    # problem.late_reward_decay_seconds>0 且时间窗约束启用时生效。
+    prune_zero_reward: bool = True
     # 剔除判据的裕度：仅当 λ·节省 > 收益 × (1 + margin) 时才剔除
     prune_margin: float = 0.0
     # 等待补偿（论文 §3.2 的 W_i(t)）：任务滞留越久越不容易被剔除，
@@ -670,6 +677,9 @@ class MUASAssignmentEvaluator:
         routes, end_nests = self._complete_coverage(routes, end_nests)
         # 航次内访问顺序的时间窗修复（不改任务集，只调先后）
         routes = self._reorder_for_deadlines(routes)
+        # 零奖励剔除：ETA ≥ latest+W 的任务 eff≈0——带着飞只赔迟到惩罚
+        # （T2），暂缓把机会留给下周期（2026-10-18 四层适应度配套）。
+        routes, end_nests = self._prune_zero_reward(routes, end_nests)
         # 重排按「迟到数, 迟到量, 航程」字典序挑顺序，末任务换人会拉长返航腿，
         # 可能把航次推过剩余航程（uav_9 周期 3–6 的 [47,59,40,55] 即由可行序
         # [59,40,55,47] 重排而来，全航程 77 686.91 → 80 027.58 m）。先按当前
@@ -922,6 +932,86 @@ class MUASAssignmentEvaluator:
             if not tids:
                 ends[uav_id] = None
 
+        return work, ends
+
+    # -- 零奖励剔除（2026-10-18 四层适应度配套）--------------------------
+
+    def _task_latest(self, tid: int) -> float | None:
+        """任务的 deadline：优先 ``time_window`` 元组，回退 ``.latest``。
+
+        与判废口径（``coop_constraints._task_window`` /
+        ``check_time_window_constraint``）一致，避免两处读取不同的字段。
+        """
+        task = self._task_by_id.get(tid)
+        if task is None:
+            return None
+        tw = getattr(task, "time_window", None)
+        if isinstance(tw, (tuple, list)) and len(tw) == 2 and tw[1] is not None:
+            return float(tw[1])
+        lst = getattr(task, "latest", None)
+        return None if lst is None else float(lst)
+
+    def _prune_zero_reward(
+        self,
+        routes: Mapping[int, Sequence[int]],
+        end_nests: Mapping[int, int | None],
+    ) -> tuple[dict[int, list[int]], dict[int, int | None]]:
+        """剔除「必然零奖励」的任务（ETA ≥ latest + W ⇒ eff≈0，y_j=0 暂缓）。
+
+        动机（2026-10-18）：迟到折减 ``eff = R·max(0, 1 − L/W)`` 下，到达
+        晚于 ``latest + W`` 的任务对 F1 的贡献为 0，却仍占用航次与航程、
+        并计迟到惩罚——经济上等价于废飞，却按「完成」计。字典序下
+        ``_prune``（经济性剔除）整体关闭（丢正收益任务必降 F1），而零奖励
+        任务**不降 F1**：剔除它是严格的适应度改进（省 T2 迟到惩罚），
+        还把机会留给下一周期（可能按时交付）。与「尽可能多且**正确地**
+        完成任务」的长程目标一致。
+
+        做法：逐航次按完成闸门同口径模拟 ETA，对第一个零奖励任务移除并
+        :meth:`_reflow_task`（``require_window`` + ``full_window``：只接受
+        「整条航次全部准时」的落点，不制造新违约；不做换机腾挪——剔除
+        场景下改派不成立就应当暂缓）。移除只会让后续任务更早，迭代至
+        无零奖励任务即终止（每轮至少永久移除一个）。
+        """
+        decay = getattr(self.problem.config, "late_reward_decay_seconds", None)
+        if not decay or float(decay) <= 0.0:
+            return {k: list(v) for k, v in routes.items()}, dict(end_nests)
+        if not self.config.prune_zero_reward or not self._window_enabled():
+            return {k: list(v) for k, v in routes.items()}, dict(end_nests)
+        W = float(decay)
+        work: dict[int, list[int]] = {k: list(v) for k, v in routes.items()}
+        ends: dict[int, int | None] = dict(end_nests)
+
+        # 每轮至少永久移除一个任务，轮数上界 = 任务数 + 4
+        for _ in range(len(self._task_ids) + 4):
+            changed = False
+            for uav_id in sorted(work):
+                tids = work[uav_id]
+                if not tids:
+                    continue
+                for pos in range(len(tids)):
+                    tid = tids[pos]
+                    latest = self._task_latest(tid)
+                    if latest is None:
+                        continue
+                    if self._arrival_time_of(uav_id, tids, pos) < latest + W - 1e-9:
+                        continue
+                    # 零奖励：移除；改派到「整航次准时」处则保住，否则暂缓
+                    tids.pop(pos)
+                    self._reflow_task(
+                        tid, work, ends,
+                        require_window=True, full_window=True, allow_evict=False,
+                    )
+                    changed = True
+                    break
+                if changed:
+                    break
+            if not changed:
+                break
+
+        # 航次被清空的 UAV 转为空闲，回到原归属机巢（释放名额）
+        for uav_id, tids in work.items():
+            if not tids:
+                ends[uav_id] = None
         return work, ends
 
     def _nearest_nest_cost(self, node_id: int) -> float:

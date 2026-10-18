@@ -21,10 +21,18 @@
     min F3 = max_k T_k        （最坏机航迹时间，论文 §5(3) 负载均衡/公平性项）
 
 适应度（DMDE 最小化标量）：
-    字典序（默认，方案 B 主线）：f(s) = -big_m·F1 + λ·F2 + w_time·F3
-      big_m 主导：任一 ≥ 最小正收益的收益优势支配任意成本差异
-      （先最大化任务收益，再在收益等价的解中最小化成本）；
-    legacy（lexicographic=False，消融对比）：f(s) = -F1 + λ·F2 + w_time·F3
+    四层准字典序（2026-10-18 起默认，方案 A/B 主线）：
+        f(s) = W_hard·n_hard + w_exc·excess_m        # T0 物理违约（硬，真 big-M）
+              − big_m·F1_eff                          # T1 交付收益（含迟到折减）
+              + w_late·L_tot                          # T2 迟到（软，秒级）
+              + λ·path + w_time·F3                    # T3 航程/负载均衡
+      T0：W_hard = κ·big_m·R_pool —— 任何一次物理违约压倒任意交付收益
+          （幽灵 F1 永不入选：纸面可行、执行弹回的航次不计功）；
+      T1：big_m 主导 —— 任一 ≥ 最小正收益的收益优势支配任意次级差异
+          （先最大化任务收益，再在收益等价的解中最小化成本）；
+      T2：迟到秒数软计价 —— 迟到可接受，只与路径同台竞争；
+    legacy（lexicographic=False，消融对比）：f(s) = -F1 + λ·path + w_v·penalty
+    ；最老口径（w_violation=None）：惩罚随 F2 一起乘 λ。
 其中 F3 = max_k T_k 为各 UAV 航迹时间的最大值（瓶颈机），对应 Ming et al. 2017
 Eq.1 中的 a·max(Σ_i Σ_j t(i,j)·x(i,j)) 最坏机飞行时间项。w_time=0 时退化为
 原双目标形式，行为与重构前完全一致。
@@ -132,6 +140,21 @@ class MUASProblemConfig:
     # 取 0.01~0.02 意味着「迟到 300 s ≈ 3~6 点奖励」，足以抵消单任务收益。
     # None = 沿用历史口径 λ·w_penalty（保持旧行为与既有测试不变）。
     w_violation: float | None = None
+    # ── 2026-10-18 四层准字典序：硬违约（物理）的支配权重 ──────────────
+    # T0 层 ``W_hard·n_hard + w_exc·excess_m``：任何一次物理违约（航程超限/
+    # 续航/时序/同步/机巢容量/终点不可达/结构）压倒任意交付收益，杜绝「纸面
+    # 可行、执行弹回」的幽灵 F1——旧口径 misc×1e3×wv 只折 10 单位，而单任务
+    # 收益 m·R≈2.7e5，修 uav_9 前的 16 次弹回正是这类幽灵被计功。
+    #   None = 自动：κ·m·R_pool（κ=hard_violation_kappa，R_pool=本周期候选
+    #          任务奖励和）⇒ 可行解永远压到不可行解之前；
+    #   显式值 = 固定权重（测试/消融用；0 = 关闭 T0 层）。
+    w_hard_violation: float | None = None
+    # T0 层内 tie-break：航程超限米数权重（米 → 奖励当量）。None = 自动 1/m：
+    # 1km 超程≈1000 单位，在不可行解间制造「少超更好」的梯度，又永远翻不了
+    # 记账（要抵一次违约计数需 ~4.5e5 km）。
+    w_range_excess: float | None = None
+    # W_hard 自动推导的安全系数：W_hard = hard_violation_kappa · m · R_pool。
+    hard_violation_kappa: float = 10.0
     # 约束开关与各类惩罚权重（实验可配置）；判定见 constraints.*
     constraints: ConstraintConfig = field(default_factory=ConstraintConfig)
     # 机巢容量惩罚权重（论文 §4.3）。历史字段，保留作缺省来源：
@@ -408,10 +431,11 @@ class SelectiveMUASProblem:
         return float(path + self.config.w_penalty * penalty)
 
     def violation_penalty(self, solution: AllocationSolution) -> float:
-        """解当前的约束惩罚总量（单位取决于各约束：s / 单位）。
+        """解当前的约束惩罚**总量**（硬+软；legacy 加权和口径消费）。
 
         优先取 :meth:`evaluate` 实际计入 ``f2_cost`` 的惩罚（``meta["penalty"]``），
-        否则回落到可行性报告里的惩罚值。
+        否则回落到可行性报告里的惩罚值。四层适应度不消费本方法——
+        硬违约走 :meth:`hard_stats`（T0），软违约走 :meth:`soft_violation`（T2）。
         """
         meta = solution.meta or {}
         if "penalty" in meta:
@@ -485,6 +509,20 @@ class SelectiveMUASProblem:
         # 实际计入 F2 的惩罚量（供 w_violation 解耦口径读取，避免重复解析报告）
         solution.meta["penalty"] = pen
         solution.meta["bottleneck_time"] = self.bottleneck_time(solution)
+        # 2026-10-18：本次评价实际使用的四层权重快照。记录/重算/绘图共用
+        # 同一组权重，消灭 auto big_m 逐周期漂移导致的「记录 best_fitness
+        # 与重算目标差 6.5~13.6」。
+        decay = self.config.late_reward_decay_seconds
+        solution.meta["fitness_weights"] = {
+            "m": float(self.f1_weight()),
+            "w_hard": float(self.hard_weight()),
+            "w_excess": float(self.range_excess_weight()),
+            "w_late": (None if self.config.w_violation is None
+                       else float(self.config.w_violation)),
+            "lambda": float(self.config.lambda_cost),
+            "w_time": float(self.config.w_time),
+            "W_decay": (None if not decay else float(decay)),
+        }
         for tour in solution.tours:
             tour.est_cost = self.tour_path_cost(tour)
             tour.est_reward = sum(
@@ -497,20 +535,33 @@ class SelectiveMUASProblem:
     def scalar_fitness(self, solution: AllocationSolution) -> float:
         """DMDE 最小化的标量适应度。
 
-        字典序（默认）：``f = -big_m·F1 + λ·F2' + w_time·F3``，
-        ``big_m`` 见 :meth:`f1_weight`（收益优先、成本次之）；
-        legacy（``lexicographic=False``）：``f = -F1 + λ·F2 + w_time·F3``。
+        四层准字典序（2026-10-18，``lexicographic=True`` 且 ``w_violation``
+        给定时的生产口径）::
 
-        - F1 任务奖励（最大化 → 取负）
-        - F2 路径代价 + 约束惩罚（最小化）
-        - F3=max_k T_k 最坏机航迹时间（最小化，负载均衡；w_time=0 时关闭）
+            f = W_hard·n_hard + w_exc·excess_m       # T0 物理违约（硬）
+              − m·F1_eff                              # T1 交付收益
+              + w_late·L_tot                          # T2 迟到（软，秒级）
+              + λ·path + w_time·F3                    # T3 航程/负载均衡
+
+        - **T0**：``W_hard = κ·m·R_pool``（默认自动推导）使任何一次物理违约
+          压倒任意交付收益——幽灵 F1（纸面可行、执行弹回）永不入选；
+          ``excess_m``（超限米数）仅在不可行解之间做层内排序。
+        - **T1**：``F1_eff`` 含迟到折减（``late_reward_decay_seconds``）；
+          ``m`` 保证「多交付 ≥1 个任务」支配一切次级差异。
+        - **T2**：迟到秒数软计价（``w_violation``，0.01/s）——迟到可接受，
+          只与路径同台竞争；迟到与任务数的权衡由 T1 的折减管。
+        - **T3**：``λ·path + w_time·F3``（收益等价时的最小化目标）。
+
+        legacy 加权和（``lexicographic=False``）：``f = -F1 + λ·path +
+        w_violation·penalty + w_time·F3``（惩罚不再乘 λ 的解耦口径）。
+        最老口径（``w_violation=None``）：惩罚随 F2 一起乘 λ。
         """
         if not solution.meta.get("feasibility"):
             self.evaluate(solution)
         bt = solution.meta.get("bottleneck_time", self.bottleneck_time(solution))
-        wv = self.config.w_violation
         m = self.f1_weight()
         f1 = float(solution.f1_reward)
+        wv = self.config.w_violation
         if wv is None:
             # 历史口径：惩罚随 F2 一起乘 λ（量纲未解耦，秒级惩罚被压缩）
             return float(
@@ -518,14 +569,65 @@ class SelectiveMUASProblem:
                 + self.config.lambda_cost * solution.f2_cost
                 + self.config.w_time * bt
             )
-        # 量纲解耦：路径代价仍乘 λ（米 → 奖励当量），惩罚按 w_violation
-        # 直接以「奖励当量 / 惩罚单位」计入，不再被 λ 压没。
+        if not self.config.lexicographic:
+            # legacy 加权和 + 惩罚量纲解耦（消融对比口径，不含 T0 支配层）
+            return float(
+                -m * f1
+                + self.config.lambda_cost * self.path_cost(solution)
+                + float(wv) * self.violation_penalty(solution)
+                + self.config.w_time * bt
+            )
+        # 四层准字典序（生产口径）
+        n_hard, excess_m = self.hard_stats(solution)
         return float(
-            -m * f1
+            self.hard_weight() * n_hard
+            + self.range_excess_weight() * excess_m
+            - m * f1
+            + float(wv) * self.soft_violation(solution)
             + self.config.lambda_cost * self.path_cost(solution)
-            + float(wv) * self.violation_penalty(solution)
             + self.config.w_time * bt
         )
+
+    # ---- T0 硬违约权重与分解（2026-10-18 四层适应度）-------------------
+
+    def hard_weight(self) -> float:
+        """T0 硬违约的支配权重 ``W_hard = κ·m·R_pool``。
+
+        保证任一物理违约的代价超过本周期全部候选任务的收益和——可行解
+        永远压到不可行解之前，与交付了多少任务无关。legacy 加权和
+        （``lexicographic=False``）不设支配层，返回 1.0。
+        """
+        if not self.config.lexicographic:
+            return 1.0
+        if self.config.w_hard_violation is not None:
+            return max(0.0, float(self.config.w_hard_violation))
+        cached = getattr(self, "_hard_weight_cache", None)
+        if cached is None:
+            m = self.f1_weight()
+            r_pool = sum(max(float(t.reward), 0.0) for t in self.tasks)
+            cached = float(self.config.hard_violation_kappa) * m * r_pool
+            self._hard_weight_cache = cached
+        return float(cached)
+
+    def range_excess_weight(self) -> float:
+        """T0 层内 tie-break 权重（米 → 奖励当量）；None = 自动 ``1/m``。"""
+        if self.config.w_range_excess is not None:
+            return max(0.0, float(self.config.w_range_excess))
+        return 1.0 / max(self.f1_weight(), 1.0)
+
+    def hard_stats(self, solution: AllocationSolution) -> tuple[int, float]:
+        """``(硬违约条数, 航程超限米数)``（T0 层两个计数基）。"""
+        det = solution.meta.get("feasibility") or {}
+        if "n_hard" not in det:
+            _, det = self.check_feasible(solution)
+        return int(det.get("n_hard", 0)), float(det.get("range_excess", 0.0))
+
+    def soft_violation(self, solution: AllocationSolution) -> float:
+        """软违约量 = 时间窗迟到秒数合计（T2 层；迟到不是不可行）。"""
+        det = solution.meta.get("feasibility") or {}
+        if "soft_violation" not in det:
+            _, det = self.check_feasible(solution)
+        return float(det.get("soft_violation", 0.0))
 
     # ---- 字典序权重（big-M）------------------------------------------
 
@@ -552,7 +654,13 @@ class SelectiveMUASProblem:
         return 1.0 + self._secondary_upper_bound() / r_min
 
     def _secondary_upper_bound(self) -> float:
-        """任一解次目标值的保守上界（λ·路径 + 惩罚项 + w_time·最坏机时间）。"""
+        """任一解次目标值的保守上界（λ·路径 + 软惩罚 + w_time·最坏机时间）。
+
+        2026-10-18 四层适应度：硬违约已升入 T0 支配层（``W_hard = κ·m·R_pool``，
+        与 m 的推导解耦），不再进次目标上界；此处只包软违约（时间窗迟到
+        秒数）——按每任务 1e6 s 的保守帽估计，保证 m·r_min 覆盖任何可实现的
+        迟到总量差异。
+        """
         cfg = self.config
         n_t, n_u, n_b = len(self.tasks), len(self.uavs), len(self.nests)
         # 航次腿数上界：每任务一条链边 + 每航次进/出边
@@ -562,8 +670,9 @@ class SelectiveMUASProblem:
             (max(float(getattr(u, "speed", 0.0) or 0.0), 1e-6) for u in self.uavs),
             default=1.0,
         )
-        # 原始惩罚单位含「秒」，按 1e6/条 × 条目数保守折算
-        v_bound = 1.0e6 * (n_t + n_u + n_b + 8)
+        # 软违约（迟到秒数）保守上界：每任务 1e6 s（≈11.6 天，无实际意义，
+        # 只为「一个任务的收益优势压倒任意次级差异」提供不破的保证）。
+        v_bound = 1.0e6 * (n_t + 8)
         lam = float(cfg.lambda_cost)
         total = lam * c_bound
         if cfg.w_violation is None:
@@ -646,8 +755,11 @@ class SelectiveMUASProblem:
             if cons.range:
                 rv = check_range_constraint(u, pc, margin=1.0)
                 if rv > 0:
+                    # excess=rv：超限米数单独进 T0 层内 tie-break（不受
+                    # w_range 缩放影响），使不可行解之间也有「少超一点
+                    # 更好」的梯度。
                     report.add_range(
-                        f"range_uav_{tour.uav_id}", cons.w_range * rv
+                        f"range_uav_{tour.uav_id}", cons.w_range * rv, excess=rv
                     )
                     tour_ok = False
             if cons.endurance:
