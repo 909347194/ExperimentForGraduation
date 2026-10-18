@@ -11,13 +11,25 @@
   C 闸门语义   物理不可行交付不计完成；迟到 ⊆ 完成；废飞 ⊆ 出动
   D 时间语义   迟到秒数 = 仿真 ETA − latest（连续时间口径，**不是**
                completed_at − latest——后者是周期末记账时刻，见 M4 瞬移语义；
-               容差 max(20s,2%)：存在 ≤18s 评价—交付残差，机制待插桩）；
+               容差 max(20s,2%)：存在 ≤18s 评价—交付残差（机制待插桩，
+               已量化为 info 行）；**latest 判定翻转零容差 FAIL**
+               （迟到标记必须 ≡ ETA−latest，容差不适用于判定本身）；
                等待非负；完成时刻 = 周期推进时刻
   E 奖励守恒   Σf1（规划端折减）≈ Σ R·max(0,1−L/W)（交付端实际迟到）
   F 池守恒     n_total = n_remain + n_new + n_release；逐周期水位递推闭合
   G 选择漏斗   逐级单调不增；n_selected ≤ max_ratio·K_avail
   H 参与机数   K ≤ min(K_avail, 任务数)（SRP 不变式 K ≤ M−1）
   I 收敛单调   cost_history（best fitness）非增
+  N 适应度可复算（治 auto big_m 漂移，2026-10-18 拆双口径）：
+               N1 搜索期自洽 cost_history[-1] == muas.best_fitness；
+               N2 交付解可复算 final_fitness == 用落盘快照
+                  fitness_weights 对 (f1, 迟到秒, 航程, 硬违约,
+                  超限米, 最坏机时间) 的独立重算（相对差 < 0.1%）。
+                  口径分离原因：Lamarckian 回写只改起始基因通道、
+                  巡游基因保留未修复原值，回写后基因解码重建的交付解
+                  与搜索期被评价解本不可比（记录值与搜索期重算曾差
+                  6.5~13.6，即两类漂移/差异的混合）；无 final_fitness
+                  字段的旧数据 N2 SKIP。
   J 航程物理   逐腿有序 estimate 独立重算航程 = 记录 est_cost，且 ≤ 满电航程
   K 起点链     无瞬移：下周期起点 = 上周期终点机巢位置
   L 容量/巢    逐周期机巢占用 ≤ capacity；终点机巢 id 合法
@@ -26,6 +38,11 @@
 
 用法（仓库根或本目录）：
     python3 task_allocation/experiments/exp01_smoke/audit_correctness.py
+    python3 task_allocation/experiments/exp01_smoke/audit_correctness.py --results results_s43
+
+``--results`` 指定结果目录名（相对实验目录，默认 ``results``）；
+多 seed / 消融变体各自审计。退出码：有 FAIL → 1，仅 WARN → 0。
+run.py / run_chunked.py 每次运行末尾自动调用本审计（持续门禁）。
 """
 
 from __future__ import annotations
@@ -52,8 +69,8 @@ def check(name: str, ok: bool, detail: str = "", warn: bool = False) -> None:
     RESULTS.append((name, bool(ok), detail, warn))
 
 
-def main() -> int:
-    results_dir = EXP_DIR / "results"
+def main(results_name: str = "results") -> int:
+    results_dir = EXP_DIR / results_name
     m = json.loads((results_dir / "metrics.json").read_text(encoding="utf-8"))
     sol = json.loads((results_dir / "solution.json").read_text(encoding="utf-8"))
     cfg = load_config(EXP_DIR / "config.yaml")
@@ -121,6 +138,8 @@ def main() -> int:
     # 与记录 lateness 对账（容差 max(5s, 0.5%)：缓存量化微差 ~0.1%）。
     lat_ok, wait_ok, quant_ok = True, True, True
     eta_bad = []
+    residuals: list[float] = []   # 评价—执行迟到残差（rec − exp），仅量化不判罪
+    flip_bad: list[tuple] = []    # latest 判定翻转（零容差 FAIL）
     for c in cycles:
         t_cur = float(c["current_time"])
         comp = {int(x) for x in c.get("completed_ids", [])}
@@ -135,7 +154,7 @@ def main() -> int:
             if ca - float(t["arrival_time"]) < -1e-9:
                 wait_ok = False
             if abs(ca - t_cur) > 1e-6:
-                quant_ok = False  # complete_after_cycle：完成时刻 = 周期推进时刻
+                quant_ok = False  # complete_after_cycle：完成时刻 =周期推进时刻
 
     # ── 代价/距离重建（D 的 ETA 与 J 的航程共用）────────────────
     scenario = build_scenario(cfg, DATA_DIR)
@@ -169,12 +188,25 @@ def main() -> int:
                 if abs(rec - exp_late) > tol:
                     lat_ok = False
                     eta_bad.append((c["cycle"], tid, round(rec, 1), round(exp_late, 1)))
-                if (rec > 0) != (exp_late > 0):
-                    lat_ok = False
-                    eta_bad.append((c["cycle"], tid, "late 标记与 ETA/latest 不符"))
                 t_cursor += service
                 prev = p
-    check("D 迟到秒数=仿真ETA−latest（容差 max(20s,2%)，残差见备注）",
+                residuals.append(rec - exp_late)
+                # latest 判定翻转：零容差 FAIL——评价端与执行端对「是否
+                # 迟到」的结论必须一致（容差只适用于迟到秒数，不适用于
+                # 判定本身；否则 15s 迟到可被 20s 容差吞成「按时」）。
+                if (rec > 1e-9) != (exp_late > 1e-9):
+                    flip_bad.append(
+                        (c["cycle"], tid, round(rec, 1), round(exp_late, 1))
+                    )
+    if residuals:
+        arr = sorted(abs(r) for r in residuals)
+        p50 = arr[len(arr) // 2]
+        print(f"[info] D 评价—执行迟到残差：n={len(arr)} "
+              f"min={arr[0]:.1f}s p50={p50:.1f}s max={arr[-1]:.1f}s"
+              f"（≤20s 为评价口径微差，不翻转 latest 判定）")
+    check("D latest 判定无翻转（零容差：迟到标记 ≡ ETA−latest）",
+          not flip_bad, str(flip_bad[:3]))
+    check("D 迟到秒数=仿真ETA−latest（容差 max(20s,2%)，残差见 info 行）",
           lat_ok, str(eta_bad[:3]), warn=True)
     check("D 等待非负", wait_ok)
     check("D 完成时刻=周期推进时刻（complete_after_cycle 语义）", quant_ok)
@@ -255,6 +287,75 @@ def main() -> int:
                 mono_bad.append((c["cycle"], a, b))
                 break
     check("I DMDE 收敛曲线非增（best fitness）", not mono_bad, str(mono_bad[:3]))
+
+    # ── N 适应度可复算（治 auto big_m 漂移，2026-10-18 拆双口径）───────
+    # 四层适应度（生产口径，w_time=0 时 F3 缺席）：
+    #   f = W_hard·n_hard + w_exc·excess_m − m·F1 + w_late·L_tot + λ·path
+    #       + w_time·F3
+    # 权重取落盘快照 fitness_weights（本周期实际使用的 m/W_hard/w_exc/
+    # w_late/λ/w_time/W_decay），成分从 solution.json 独立重取。
+    #
+    # N1 搜索期自洽：cost_history[-1] == muas.best_fitness。两者同为
+    #    搜索期口径（Lamarckian 回写前 child 修复解的评价值）。
+    # N2 交付解可复算：final_fitness == 重算值（成分 = 交付解自身的
+    #    f1/迟到秒/航程/硬违约/超限米/最坏机时间）。与 N1 分离的原因：
+    #    回写只改起始基因通道，交付解由回写后基因解码重建，与 N1 被评价
+    #    解可不同——曾经的「记录 best_fitness 与重算差 6.5~13.6」是
+    #    auto big_m 漂移与这一口径差两者的混合，现分别设闸。
+    n1_bad: list[tuple] = []
+    n2_bad: list[tuple] = []
+    n_checked = 0
+    n2_skipped = 0
+    for c in sol["cycles"]:
+        cmeta = next((x for x in cycles if x["cycle"] == c["cycle"]), None)
+        if cmeta is None:
+            continue
+        fw = c.get("fitness_weights") or {}
+        hist = c.get("cost_history") or []
+        if not fw or not hist:
+            continue  # 空转周期无快照；旧数据无权重字段（跳过并提示）
+        n_checked += 1
+        # N1：曲线终点与 best_fitness 一致（绝对差 < 1e-3）
+        f_logged = float(hist[-1])
+        f_meta = float(cmeta["muas"].get("best_fitness") or 0.0)
+        if abs(f_logged - f_meta) > 1e-3:
+            n1_bad.append((c["cycle"], round(f_logged, 3), round(f_meta, 3)))
+        # N2：交付解适应度用快照权重独立重算
+        f_final = c.get("final_fitness")
+        if f_final is None:
+            n2_skipped += 1
+            continue
+        f_final = float(f_final)
+        fw_m = float(fw["m"])
+        w_hard = float(fw.get("w_hard") or 0.0)
+        w_excess = float(fw.get("w_excess") or 0.0)
+        w_late = float(fw.get("w_late") or 0.0)
+        lam = float(fw["lambda"])
+        w_time = float(fw.get("w_time") or 0.0)
+        if w_time != 0.0 and c.get("final_bottleneck_s") is None:
+            n2_skipped += 1
+            continue
+        f_rec = (
+            w_hard * float(c.get("final_n_hard") or 0)
+            + w_excess * float(c.get("final_excess_m") or 0.0)
+            - fw_m * float(c.get("final_f1") or 0.0)
+            + w_late * float(c.get("final_late_s") or 0.0)
+            + lam * float(c.get("final_path_m") or 0.0)
+            + w_time * float(c.get("final_bottleneck_s") or 0.0)
+        )
+        rel = abs(f_rec - f_final) / max(abs(f_final), 1e-9)
+        if rel > 1e-3:
+            n2_bad.append((c["cycle"], round(f_rec, 3), round(f_final, 3)))
+    check(f"N1 搜索期自洽：cost_history[-1] == best_fitness（{n_checked} 个有作业周期）",
+          not n1_bad, str(n1_bad[:3]))
+    n2_name = (f"N2 交付解适应度可用快照权重独立重算"
+               f"（{n_checked - n2_skipped} 个周期，相对差 < 0.1%）")
+    if n2_skipped and n_checked == n2_skipped:
+        check(n2_name, True, "旧数据无 final_fitness 字段，SKIP", warn=True)
+    else:
+        check(n2_name, not n2_bad,
+              str(n2_bad[:3]) + (f"（另 {n2_skipped} 周期缺字段 SKIP）"
+                                 if n2_skipped else ""))
 
     # ── J/K 航程物理 + 起点链（独立重算）────────────────────────
     # 逐腿用**有序** estimator.estimate(a,b)（与代价矩阵 build_pairwise_costs
@@ -345,4 +446,12 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    _args = [a for a in sys.argv[1:] if not a.startswith("-")]
+    _res = "results"
+    if "--results" in sys.argv:
+        i = sys.argv.index("--results")
+        if i + 1 < len(sys.argv):
+            _res = sys.argv[i + 1]
+    elif _args:
+        _res = _args[0]
+    sys.exit(main(_res))

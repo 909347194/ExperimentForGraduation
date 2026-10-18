@@ -104,7 +104,13 @@ class MUASStageConfig:
     # 任务必降 F1；而零奖励任务不降 F1，剔除它是严格的适应度改进（省 T2
     # 迟到惩罚），还把机会留给下一周期（可能按时交付）。仅当
     # problem.late_reward_decay_seconds>0 且时间窗约束启用时生效。
-    prune_zero_reward: bool = True
+    #
+    # **默认 false（2026-10-18 消融定稿）**：exp01 s42 实测剔除开启后奖励
+    # 产出率 94.4%→91.1%（净亏）——剔除在搜索期对每个候选生效，把「硬塞
+    # 必然迟发任务」的候选救回可交付形态，搜索偏向「周期 1 多塞一个但迟到
+    # 更深」的盆地；而 W=1800 已单独消灭零奖励交付（7→0），靶病不存在。
+    # 开关保留供 exp02（|T|≫K）压力场评估。
+    prune_zero_reward: bool = False
     # 剔除判据的裕度：仅当 λ·节省 > 收益 × (1 + margin) 时才剔除
     prune_margin: float = 0.0
     # 等待补偿（论文 §3.2 的 W_i(t)）：任务滞留越久越不容易被剔除，
@@ -1702,8 +1708,19 @@ def run_selective_muas(
 
     # 用最优 assignment 重建最终解（终点机巢与选择性剔除在此落地）：
     # 终点由内层最小费用流在容量约束下精确求解（方案 A）
+    #
+    # 口径说明（2026-10-18，治「记录 best_fitness 与重算目标差 6.5~13.6」的
+    # 最后一环）：``result.best_fitness`` 是**搜索期**适应度——Lamarckian
+    # 回写只改写起始基因通道、巡游基因保留未修复原值（有意的保守设计，
+    # 见 :meth:`lamarckian_reencode`），故回写后基因解码重建的交付解与
+    # 当时被评价的解任务集/顺序/ETA 均可不同，两者适应度本不可比。收敛
+    # 曲线（``cost_history``）与 ``best_fitness`` 保持搜索期口径自洽
+    # （``cost_history[-1] == best_fitness``）；交付解自身的适应度另记
+    # ``final_fitness`` 及成分，供审计用快照权重独立重算对账。
     final = evaluator.build_solution(result.best_assignment)
     problem.evaluate(final)
+    final_fitness = float(problem.scalar_fitness(final))
+    final_n_hard, final_excess_m = problem.hard_stats(final)
 
     model_type = (
         "balanced" if len(participating) == len(task_list)
@@ -1736,6 +1753,23 @@ def run_selective_muas(
             "f1_reward": final.f1_reward,
             "f2_cost": final.f2_cost,
             "feasible": final.feasible,
+            # 交付解（回写后基因解码重建 + 修复链）自身的适应度与成分。
+            # 与搜索期 best_fitness 口径分离：审计 N 项据此验证
+            # 「交付解适应度 = 成分 + 快照权重重算」，曲线终点则验证
+            # 「cost_history[-1] == best_fitness」的搜索期自洽。
+            "final_fitness": final_fitness,
+            "final_f1": float(final.f1_reward),
+            "final_path_m": float(problem.path_cost(final)),
+            "final_late_s": float(problem.soft_violation(final)),
+            "final_bottleneck_s": float(final.meta.get("bottleneck_time", 0.0) or 0.0),
+            "final_n_hard": int(final_n_hard),
+            "final_excess_m": float(final_excess_m),
             "best_fitness": float(result.best_fitness),
+            # 适应度权重快照（problem.evaluate 写入 final.meta）：
+            # m / W_hard / w_exc / w_late / λ / w_time / W_decay。
+            # 落盘后 final_fitness 及其成分可用同一组权重独立重算，
+            # 消「记录 best_fitness 与重算目标差 6.5~13.6」（auto big_m
+            # 漂移）——审计脚本 N 项据此交叉验证。
+            "fitness_weights": dict(final.meta.get("fitness_weights") or {}),
         },
     )

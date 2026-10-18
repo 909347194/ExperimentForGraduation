@@ -451,6 +451,22 @@ def build_solution(f: RunFacts) -> dict[str, Any]:
                 "current_time": round(float(r.current_time), 3),
                 "tours": list(r.tours),
                 "cost_history": list(r.cost_history),
+                # 适应度权重快照（本周期实际使用的 m/W_hard/w_late/λ 等）：
+                # 与 cost_history 同盘落定，使交付解适应度可用同一组
+                # 权重独立重算（治 auto big_m 漂移；审计 N 项校验）。
+                "fitness_weights": dict(
+                    (r.muas or {}).get("fitness_weights") or {}
+                ),
+                # 交付解自身适应度与成分（与搜索期 best_fitness 口径分离：
+                # Lamarckian 只回写起始基因通道，回写后基因解码重建的解与
+                # 搜索期被评价解可不同）。缺省空值（旧数据/空转周期）。
+                "final_fitness": (r.muas or {}).get("final_fitness"),
+                "final_f1": (r.muas or {}).get("final_f1"),
+                "final_path_m": (r.muas or {}).get("final_path_m"),
+                "final_late_s": (r.muas or {}).get("final_late_s"),
+                "final_bottleneck_s": (r.muas or {}).get("final_bottleneck_s"),
+                "final_n_hard": (r.muas or {}).get("final_n_hard"),
+                "final_excess_m": (r.muas or {}).get("final_excess_m"),
             }
             for r in f.records
         ],

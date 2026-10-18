@@ -21,6 +21,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]  # task_allocation/
 REPO = ROOT.parent
 if str(REPO) not in sys.path:
@@ -274,3 +276,42 @@ def test_economic_prune_disabled_under_lexicographic():
         assert done is expect_done, (
             f"lexicographic={lexi}: 执行={done}，期望={expect_done}"
         )
+
+
+# ── 7. 交付解适应度对账（审计 N 项 N2 口径，2026-10-18）──────────────
+#
+# muas_stage 落盘的 final_fitness/final_f1/final_path_m/final_late_s/
+# final_n_hard/final_excess_m + fitness_weights 快照，必须能独立重算出
+# 交付解适应度（审计 audit_correctness.py N2 的算术）。同时锁死：
+# final_fitness == scalar_fitness(stage.solution)（交付解自身口径），
+# 且与搜索期 best_fitness 口径分离（Lamarckian 只回写起始基因通道，
+# 回写后基因解码重建的解与搜索期被评价解可不同，两者不要求相等）。
+
+def test_delivered_fitness_recompute_from_components():
+    tasks, uavs, nests = _e2e_setup()
+    cb = build_pairwise_costs(tasks, uavs, nests=nests, dem=None, estimator=None,
+                              nest_offset=NEST_KEY)
+    stage = run_selective_muas(
+        tasks, uavs, nests, cb,
+        fleet_uavs=uavs,
+        problem_config=MUASProblemConfig(w_time=0.0, w_violation=0.01),
+        stage_config=MUASStageConfig(),
+        solver_config=DMDEConfig(pop_size=10, max_generations=5, seed=1),
+        current_time=0.0,
+    )
+    d = stage.diagnostics
+    for key in ("final_fitness", "final_f1", "final_path_m", "final_late_s",
+                "final_n_hard", "final_excess_m", "fitness_weights"):
+        assert key in d, f"diagnostics 缺字段 {key}"
+    w = d["fitness_weights"]
+    rec = (
+        w["w_hard"] * d["final_n_hard"]
+        + w["w_excess"] * d["final_excess_m"]
+        - w["m"] * d["final_f1"]
+        + (w["w_late"] or 0.0) * d["final_late_s"]
+        + w["lambda"] * d["final_path_m"]
+        + w["w_time"] * 0.0
+    )
+    assert rec == pytest.approx(d["final_fitness"], rel=1e-9), (
+        f"重算 {rec} != 记录 {d['final_fitness']}"
+    )
