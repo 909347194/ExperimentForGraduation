@@ -480,6 +480,18 @@ def build_solution(f: RunFacts) -> dict[str, Any]:
                 "polish_gain": (r.muas or {}).get("polish_gain"),
                 "polish_converged": (r.muas or {}).get("polish_converged"),
                 "polish_budget_hit": (r.muas or {}).get("polish_budget_hit"),
+                # memetic M1 精英档案诊断（2026-10-19）：搜索期内每 K 代
+                # 对精英 polish，档案轨迹与 cost_history 逐代对齐，供
+                # 「搜索期内路由在降」出图。缺省空值（旧数据/空转周期）。
+                "memetic_enabled": (r.muas or {}).get("memetic_enabled"),
+                "memetic_K": (r.muas or {}).get("memetic_K"),
+                "memetic_n_polish": (r.muas or {}).get("memetic_n_polish"),
+                "memetic_n_accepted": (r.muas or {}).get("memetic_n_accepted"),
+                "memetic_first_fitness": (r.muas or {}).get("memetic_first_fitness"),
+                "memetic_final_fitness": (r.muas or {}).get("memetic_final_fitness"),
+                "memetic_gain": (r.muas or {}).get("memetic_gain"),
+                "memetic_last_improve_gen": (r.muas or {}).get("memetic_last_improve_gen"),
+                "memetic_trajectory": (r.muas or {}).get("memetic_trajectory"),
             }
             for r in f.records
         ],
