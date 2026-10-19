@@ -4,12 +4,14 @@
 契约：
 
 1. **代际钩子**（dmde_solver）：``gen_callback`` 每代被调一次（gen=1..G）；
-   ``None`` ⇒ 纯 DMDE 零行为变化；回调抛异常被吞（不破坏 DMDE 确定性）；
+   ``None`` ⇒ 纯 DMDE 零行为变化；回调一旦抛异常即被吞并停用，stderr
+   警告一次（不静默、不每代重复），DMDE 数值确定性不受影响；
 2. **RNG 无关性 / 无回归**：同种子下 polish_in_loop 开/关的 DMDE 曲线
    （``cost_history``）逐位相同——钩子 RNG-free、不改群体，故纯 DMDE 轨迹不变；
 3. **档案机制**（run_selective_muas）：开启后 ``memetic_n_polish == G // K``、
    ``memetic_trajectory`` 长度 == ``len(cost_history) == G+1``、与曲线逐代对齐、
-   首次 polish 前记 ``None``（+inf）；
+   首次 polish 前记 ``None``（+inf）；单次精英打磨失败只计数
+   （``memetic_n_failed``），不得破坏上述对齐（审查加固，2026-10-19）；
 4. **择优单调**：交付解取「收敛后 polish」与「档案最优」的更优者，
    ``final_fitness(on) <= final_fitness(off)``，且两口径均零硬违约；
 5. **配置校验**：``memetic_K < 1`` 拒绝。
@@ -111,6 +113,40 @@ def test_gen_callback_exception_swallowed():
     assert res is not None and len(res.cost_history) == 6
 
 
+def test_gen_callback_exception_warns_once_and_disables(capsys):
+    """回调抛异常：stderr 警告恰好一次、即停不再重试、曲线与无回调一致。
+
+    审查加固（2026-10-19）：裸吞异常违反「回退永不静默」惯例；改为
+    warn-once + 停用。本测试锁死「恰好一次警告 + 只尝试一次 + 数值
+    确定性不受影响（与无回调同种子曲线逐位相同）」三条不变量。
+    """
+    ev = _FakeEval()
+    calls = {"n": 0}
+
+    def _boom(g, ind):
+        calls["n"] += 1
+        raise RuntimeError("boom")
+
+    cfg = DMDEConfig(pop_size=5, max_generations=5, seed=3, gen_callback=_boom)
+    res = DMDESolver(config=cfg).solve(
+        cost_matrix=_tiny_cm(2, 3), n_uavs=2, n_targets=3, fitness_evaluator=ev
+    )
+    captured = capsys.readouterr()
+    assert calls["n"] == 1, "异常后即停用，不得每代重试已失败的回调"
+    assert captured.err.count("[dmde][warn]") == 1, "警告恰好一次（不静默也不刷屏）"
+    assert "[dmde][warn]" not in captured.out, "警告走 stderr，不污染 stdout"
+    # 数值确定性：与无回调同种子跑逐位相同
+    ev2 = _FakeEval()
+    cfg2 = DMDEConfig(pop_size=5, max_generations=5, seed=3)
+    res2 = DMDESolver(config=cfg2).solve(
+        cost_matrix=_tiny_cm(2, 3), n_uavs=2, n_targets=3, fitness_evaluator=ev2
+    )
+    assert res.cost_history == res2.cost_history, (
+        "回调异常被吞并停用后，纯 DMDE 曲线必须与无回调逐位一致"
+    )
+    assert res.best_fitness == res2.best_fitness
+
+
 # ---------------------------------------------------------------------------
 # 2-4. run_selective_muas 集成：无回归 + 档案机制 + 择优单调
 # ---------------------------------------------------------------------------
@@ -195,6 +231,41 @@ def test_memetic_final_never_worse_and_feasible():
     assert off.diagnostics["final_n_hard"] == 0
     assert on.diagnostics["final_n_hard"] == 0, "memetic 不得引入硬违约"
     assert on.solution.feasible and off.solution.feasible
+
+
+def test_memetic_inloop_failure_keeps_trajectory_aligned(monkeypatch):
+    """钩子内 in-loop polish 抛异常：轨迹仍与曲线逐代对齐、失败只计数。
+
+    审查加固（2026-10-19）：修复前钩子内异常会上抛给求解器吞掉，导致
+    失败代及其后各代不再落档（trajectory 长度 < len(cost_history)），
+    且回调停用后档案维护中断。修复后单次失败只计 memetic_n_failed，
+    「每代必落一档」对齐不变量与 DMDE 曲线不变性均保持。
+    """
+    import task_allocation.methods.muas.solvers.muas_stage as ms
+
+    real = ms.polish_assignment
+    calls = {"n": 0}
+
+    def flaky(evaluator, assignment, cfg):
+        calls["n"] += 1
+        if calls["n"] == 2:  # gen4 的 in-loop（gen2/gen6/收敛后为 1/3/4）
+            raise RuntimeError("injected in-loop failure")
+        return real(evaluator, assignment, cfg)
+
+    off = _run(polish_in_loop=False)  # 对照跑先于 patch：其收敛后打磨不计入 calls
+    monkeypatch.setattr(ms, "polish_assignment", flaky)
+    on = _run(polish_in_loop=True, memetic_K=2)
+    d = on.diagnostics
+    assert d["memetic_enabled"] is True
+    assert d["memetic_n_failed"] == 1, "单次精英打磨失败只计数"
+    assert d["memetic_n_polish"] == 2, "gen2/gen6 两次成功（gen4 失败不计入）"
+    assert calls["n"] == 4, "3 次 in-loop + 1 次收敛后均应透传"
+    assert len(d["memetic_trajectory"]) == len(on.cost_history) == 7, (
+        "失败代也必须落一档：轨迹与曲线逐代对齐（G+1）"
+    )
+    assert on.cost_history == off.cost_history, "钩子内失败不得扰动 DMDE 曲线"
+    assert np.isfinite(d["memetic_final_fitness"]), "档案仍保有 gen2/gen6 成果"
+    assert on.diagnostics["final_n_hard"] == 0, "失败注入不得引入硬违约"
 
 
 # ---------------------------------------------------------------------------

@@ -487,6 +487,7 @@ def build_solution(f: RunFacts) -> dict[str, Any]:
                 "memetic_K": (r.muas or {}).get("memetic_K"),
                 "memetic_n_polish": (r.muas or {}).get("memetic_n_polish"),
                 "memetic_n_accepted": (r.muas or {}).get("memetic_n_accepted"),
+                "memetic_n_failed": (r.muas or {}).get("memetic_n_failed"),
                 "memetic_first_fitness": (r.muas or {}).get("memetic_first_fitness"),
                 "memetic_final_fitness": (r.muas or {}).get("memetic_final_fitness"),
                 "memetic_gain": (r.muas or {}).get("memetic_gain"),
