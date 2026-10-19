@@ -1766,6 +1766,7 @@ def run_selective_muas(
         "solution": None,
         "n_polish": 0,
         "n_accepted": 0,
+        "n_failed": 0,           # 精英打磨抛异常次数（进诊断，供审计对账）
         "trajectory": [float("inf")],   # 对齐 cost_history[0]（gen0 初始）
         "last_improve_gen": None,
     }
@@ -1781,18 +1782,24 @@ def run_selective_muas(
         )
 
         def _memetic_hook(gen: int, best_ind: Any) -> None:
-            assign = list(best_ind.assignment)
-            if gen % _mK == 0 and assign:
-                pr = polish_assignment(evaluator, assign, _mem_cfg)
-                memetic["n_polish"] += 1
-                memetic["n_accepted"] += int(pr.n_accepted_total)
-                if memetic["first_fitness"] is None:
-                    memetic["first_fitness"] = float(pr.best_fitness)
-                if float(pr.best_fitness) < memetic["fitness"] - _m_eps:
-                    memetic["fitness"] = float(pr.best_fitness)
-                    memetic["assignment"] = list(pr.best_assignment)
-                    memetic["solution"] = pr.best_solution
-                    memetic["last_improve_gen"] = int(gen)
+            # 审查加固（2026-10-19）：单次精英打磨失败只计数、不得破坏
+            # 「每代必落一档」的对齐不变量（trajectory 长度 ==
+            # len(cost_history)），也不得中断后续代的档案维护。
+            try:
+                assign = list(best_ind.assignment)
+                if gen % _mK == 0 and assign:
+                    pr = polish_assignment(evaluator, assign, _mem_cfg)
+                    memetic["n_polish"] += 1
+                    memetic["n_accepted"] += int(pr.n_accepted_total)
+                    if memetic["first_fitness"] is None:
+                        memetic["first_fitness"] = float(pr.best_fitness)
+                    if float(pr.best_fitness) < memetic["fitness"] - _m_eps:
+                        memetic["fitness"] = float(pr.best_fitness)
+                        memetic["assignment"] = list(pr.best_assignment)
+                        memetic["solution"] = pr.best_solution
+                        memetic["last_improve_gen"] = int(gen)
+            except Exception:
+                memetic["n_failed"] += 1
             # 每代都记一档（与 cost_history 逐代对齐；未触发代记当前档案值）
             memetic["trajectory"].append(memetic["fitness"])
 
@@ -1925,6 +1932,7 @@ def run_selective_muas(
             "memetic_K": int(stage_cfg.memetic_K),
             "memetic_n_polish": int(memetic["n_polish"]),
             "memetic_n_accepted": int(memetic["n_accepted"]),
+            "memetic_n_failed": int(memetic["n_failed"]),
             "memetic_first_fitness": (
                 float(memetic["first_fitness"])
                 if memetic["first_fitness"] is not None else None

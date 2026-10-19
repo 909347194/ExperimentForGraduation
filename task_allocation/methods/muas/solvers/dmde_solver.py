@@ -23,6 +23,7 @@
 
 from __future__ import annotations
 
+import sys
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable
@@ -89,8 +90,9 @@ class DMDEConfig:
     # 代际回调（memetic M1 精英档案，2026-10-19）：每代收敛记录后调用
     # ``gen_callback(gen, best_individual)``，供进化循环内对当代精英做
     # 解码后局部搜索（``run_selective_muas`` 的 M1 档案借此落地）。
-    # 默认 ``None`` ⇒ 纯 DMDE 行为逐位不变、零开销。回调抛出的任何异常
-    # 都被吞掉——memetic 钩子不得破坏纯 DMDE 的数值确定性。
+    # 默认 ``None`` ⇒ 纯 DMDE 行为逐位不变、零开销。回调一旦抛异常即被
+    # 吞并停用（stderr 警告一次，不静默）——memetic 钩子不得破坏纯 DMDE
+    # 的数值确定性。
     gen_callback: Callable[[int, Any], None] | None = None
 
 
@@ -172,6 +174,10 @@ class DMDESolver(BaseOptimizer):
 
         best_individual = population[best_idx].copy()
         cost_history = [best_individual.fitness]
+
+        # 代际回调保险：钩子一旦抛异常即吞并停用（见下方），此标记保证
+        # 「每次 solve 最多警告一次」且不再重试已失败的回调。
+        callback_failed = False
 
         t_start = time.time()
 
@@ -267,12 +273,19 @@ class DMDESolver(BaseOptimizer):
 
             # memetic 代际回调（M1 精英档案）：给钩子一次对当代精英下手的
             # 机会。纯 DMDE（gen_callback=None）时零开销、零行为变化；
-            # 钩子异常被吞，保证 DMDE 数值确定性不受 memetic 影响。
-            if cfg.gen_callback is not None:
+            # 钩子异常被吞并停用该回调（stderr 警告一次，不静默——
+            # 遵循本项目「回退永不静默」惯例），保证 DMDE 数值确定性
+            # 不受 memetic 影响。
+            if cfg.gen_callback is not None and not callback_failed:
                 try:
                     cfg.gen_callback(gen, best_individual)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    callback_failed = True
+                    print(
+                        f"[dmde][warn] gen_callback 在第 {gen} 代抛异常，"
+                        f"已吞并停用（纯 DMDE 继续，数值确定性不变）：{exc!r}",
+                        file=sys.stderr,
+                    )
 
             # 日志
             if cfg.verbose and gen % cfg.log_interval == 0:
