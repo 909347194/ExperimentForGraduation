@@ -186,6 +186,20 @@ class MUASStageConfig:
     polish_max_rounds: int = 30     # 无改进即停的轮数上限
     polish_max_evals: int = 2000    # 真实评估数预算（缓存命中不计）
     polish_eps: float = 1e-6        # 严格改进阈值（绝对；吸收浮点求和噪声）
+    # 搜索期内精英档案（memetic M1，2026-10-19）：开启后每 memetic_K 代在
+    # DE 进化循环内对当前精英跑一次 polish_assignment，维护「best polished」
+    # 档案（assignment/fitness/solution）。M1 **不改基因型**（无反映射），
+    # DE 群体照常探索结构；档案使命中路由在**搜索期内**即被持续压低，交付解
+    # 取「收敛后 polish」与「档案最优」的更优者——把 DMDE 早平后留给收敛再做的
+    # 路由改进前移进搜索期。默认关（exp01 非 memetic 基线不动）；exp01 memetic
+    # 变体显式开。M2（Lamarckian 反射写回，让路由改进回流群体）见报告展望。
+    polish_in_loop: bool = False
+    memetic_K: int = 20             # 每 K 代触发一次精英 polish（>=1）
+    # 搜索期内精英 polish 的**从紧预算**：强化只需 incremental 改进、不必每步
+    # 收敛到局部最优（first-improvement 本就早停），故轮数/评估数远小于收敛后
+    # 的终打磨。控住单周期耗时（每 K 代一次、每次封顶，避免 10× 全量 polish）。
+    memetic_max_rounds: int = 6
+    memetic_max_evals: int = 500
 
     def __post_init__(self) -> None:
         if self.max_participating_uavs is not None and self.max_participating_uavs < 1:
@@ -214,6 +228,12 @@ class MUASStageConfig:
             raise ValueError("polish_max_evals 必须 >= 1")
         if self.polish_eps < 0:
             raise ValueError("polish_eps 不能为负")
+        if self.memetic_K < 1:
+            raise ValueError("memetic_K 必须 >= 1")
+        if self.memetic_max_rounds < 1:
+            raise ValueError("memetic_max_rounds 必须 >= 1")
+        if self.memetic_max_evals < 1:
+            raise ValueError("memetic_max_evals 必须 >= 1")
 
 
 @dataclass(frozen=True)
@@ -1733,6 +1753,51 @@ def run_selective_muas(
         solver_cfg = replace(solver_config, lamarckian=stage_cfg.lamarckian)
     else:
         solver_cfg = DMDEConfig(lamarckian=stage_cfg.lamarckian)
+
+    # memetic M1 精英档案（2026-10-19）：DE 循环内每 memetic_K 代对当代
+    # 精英跑一次 polish_assignment，维护 best-polished 档案。轨迹按代记录
+    # （长度 == len(cost_history)，gen0 记 +inf 直到首次 polish），供
+    # 「搜索期内路由在降」出图。未开启时全零/空、行为逐位等于非 memetic。
+    memetic = {
+        "enabled": bool(stage_cfg.polish_in_loop and stage_cfg.polish_enabled),
+        "fitness": float("inf"),
+        "first_fitness": None,
+        "assignment": None,
+        "solution": None,
+        "n_polish": 0,
+        "n_accepted": 0,
+        "trajectory": [float("inf")],   # 对齐 cost_history[0]（gen0 初始）
+        "last_improve_gen": None,
+    }
+    if memetic["enabled"]:
+        _mK = max(1, int(stage_cfg.memetic_K))
+        _m_eps = float(stage_cfg.polish_eps)
+        # 搜索期内强化用从紧预算（rounds/evals 封顶），控单周期耗时；fitness
+        # 与终打磨同口径可比，档案择优不受预算影响（只影响单次深度）。
+        _mem_cfg = replace(
+            stage_cfg,
+            polish_max_rounds=int(stage_cfg.memetic_max_rounds),
+            polish_max_evals=int(stage_cfg.memetic_max_evals),
+        )
+
+        def _memetic_hook(gen: int, best_ind: Any) -> None:
+            assign = list(best_ind.assignment)
+            if gen % _mK == 0 and assign:
+                pr = polish_assignment(evaluator, assign, _mem_cfg)
+                memetic["n_polish"] += 1
+                memetic["n_accepted"] += int(pr.n_accepted_total)
+                if memetic["first_fitness"] is None:
+                    memetic["first_fitness"] = float(pr.best_fitness)
+                if float(pr.best_fitness) < memetic["fitness"] - _m_eps:
+                    memetic["fitness"] = float(pr.best_fitness)
+                    memetic["assignment"] = list(pr.best_assignment)
+                    memetic["solution"] = pr.best_solution
+                    memetic["last_improve_gen"] = int(gen)
+            # 每代都记一档（与 cost_history 逐代对齐；未触发代记当前档案值）
+            memetic["trajectory"].append(memetic["fitness"])
+
+        solver_cfg.gen_callback = _memetic_hook
+
     solver = DMDESolver(config=solver_cfg)
     result = solver.solve(
         cost_matrix=cm,
@@ -1770,6 +1835,19 @@ def run_selective_muas(
         and polish.best_fitness < final_fitness - stage_cfg.polish_eps
     ):
         final = polish.best_solution
+        problem.evaluate(final)
+        final_fitness = float(problem.scalar_fitness(final))
+        final_n_hard, final_excess_m = problem.hard_stats(final)
+
+    # memetic M1 档案择优：交付解取「收敛后 polish」与「搜索期内精英档案
+    # 最优」的更优者。档案是搜索期内多代精英逐一打磨的 best（都过同一修复
+    # 链，fitness 可比），常优于仅对末代精英的收敛后 polish。final_fitness
+    # 只降不升；未开启或档案为空时跳过（逐位等于非 memetic）。
+    if (
+        memetic["solution"] is not None
+        and float(memetic["fitness"]) < final_fitness - stage_cfg.polish_eps
+    ):
+        final = memetic["solution"]
         problem.evaluate(final)
         final_fitness = float(problem.scalar_fitness(final))
         final_n_hard, final_excess_m = problem.hard_stats(final)
@@ -1838,5 +1916,34 @@ def run_selective_muas(
             "polish_gain": float(polish.fitness_gain),
             "polish_converged": bool(polish.converged),
             "polish_budget_hit": bool(polish.budget_hit),
+            # memetic M1 精英档案诊断（2026-10-19）。enabled=False 时
+            # n_polish/n_accepted=0、final_fitness=None、trajectory=[]，
+            # 行为逐位等于非 memetic 基线。trajectory 长度 == len(cost_history)，
+            # 与搜索期曲线逐代对齐，供「搜索期内路由在降」出图（+inf 记为 None）。
+            # gain = 首次精英 polish → 档案最优的严格改进量。
+            "memetic_enabled": bool(memetic["enabled"]),
+            "memetic_K": int(stage_cfg.memetic_K),
+            "memetic_n_polish": int(memetic["n_polish"]),
+            "memetic_n_accepted": int(memetic["n_accepted"]),
+            "memetic_first_fitness": (
+                float(memetic["first_fitness"])
+                if memetic["first_fitness"] is not None else None
+            ),
+            "memetic_final_fitness": (
+                float(memetic["fitness"])
+                if memetic["solution"] is not None else None
+            ),
+            "memetic_gain": (
+                float(memetic["first_fitness"] - memetic["fitness"])
+                if (memetic["first_fitness"] is not None
+                    and memetic["solution"] is not None)
+                else None
+            ),
+            "memetic_last_improve_gen": memetic["last_improve_gen"],
+            "memetic_trajectory": (
+                [None if not math.isfinite(x) else float(x)
+                 for x in memetic["trajectory"]]
+                if memetic["enabled"] else []
+            ),
         },
     )

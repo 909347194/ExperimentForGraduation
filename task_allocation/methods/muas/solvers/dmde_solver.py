@@ -86,6 +86,12 @@ class DMDEConfig:
     # 围绕修复后的可行子空间展开，而非未修复空间。依赖评估器提供的
     # ``lamarckian_reencode`` 方法；缺失或失败时静默回退到原行为。
     lamarckian: bool = True
+    # 代际回调（memetic M1 精英档案，2026-10-19）：每代收敛记录后调用
+    # ``gen_callback(gen, best_individual)``，供进化循环内对当代精英做
+    # 解码后局部搜索（``run_selective_muas`` 的 M1 档案借此落地）。
+    # 默认 ``None`` ⇒ 纯 DMDE 行为逐位不变、零开销。回调抛出的任何异常
+    # 都被吞掉——memetic 钩子不得破坏纯 DMDE 的数值确定性。
+    gen_callback: Callable[[int, Any], None] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -258,6 +264,15 @@ class DMDESolver(BaseOptimizer):
 
             # 记录收敛曲线
             cost_history.append(best_individual.fitness)
+
+            # memetic 代际回调（M1 精英档案）：给钩子一次对当代精英下手的
+            # 机会。纯 DMDE（gen_callback=None）时零开销、零行为变化；
+            # 钩子异常被吞，保证 DMDE 数值确定性不受 memetic 影响。
+            if cfg.gen_callback is not None:
+                try:
+                    cfg.gen_callback(gen, best_individual)
+                except Exception:
+                    pass
 
             # 日志
             if cfg.verbose and gen % cfg.log_interval == 0:

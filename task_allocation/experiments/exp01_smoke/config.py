@@ -228,6 +228,13 @@ def build_config_bundle(cfg: Mapping[str, Any]) -> ConfigBundle:
         polish_max_rounds=int(m.get("polish_max_rounds", 30)),
         polish_max_evals=int(m.get("polish_max_evals", 2000)),
         polish_eps=float(m.get("polish_eps", 1e-6)),
+        # 2026-10-19 memetic M1 精英档案：搜索期内每 memetic_K 代对精英
+        # 跑一次 polish，路由改进前移进搜索期。默认关（基线不动）；
+        # exp01 memetic 变体显式开。
+        polish_in_loop=bool(m.get("polish_in_loop", False)),
+        memetic_K=int(m.get("memetic_K", 20)),
+        memetic_max_rounds=int(m.get("memetic_max_rounds", 6)),
+        memetic_max_evals=int(m.get("memetic_max_evals", 500)),
     )
 
     s = _section(cfg, "solver")

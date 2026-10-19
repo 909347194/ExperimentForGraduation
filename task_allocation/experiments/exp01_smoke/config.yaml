@@ -270,6 +270,16 @@ muas:
     polish_max_rounds: 30   # 无改进即停的轮数上限
     polish_max_evals: 2000  # 真实评估数预算（缓存命中不计；防单周期耗时爆炸）
     polish_eps: 1.0e-6      # 严格改进阈值（绝对；吸收浮点求和噪声）
+    # memetic M1 精英档案（2026-10-19）：开启后每 memetic_K 代在 DE 进化
+    # 循环内对当代精英跑一次 polish，维护 best-polished 档案，把路由改进
+    # 前移进搜索期（治 DMDE 早平后路由优化留到收敛后）。不改基因型、无
+    # 反映射；交付解取「收敛后 polish」与「档案最优」的更优者。默认关
+    # （非 memetic 基线不动）；exp01 memetic 变体显式开此二项。
+    # M2（Lamarckian 反射写回）见报告「讨论与展望」，暂不启用。
+    polish_in_loop: false
+    memetic_K: 20           # 每 K 代触发一次精英 polish（>=1）
+    memetic_max_rounds: 6   # 搜索期内强化的从紧轮数预算（first-improvement 早停）
+    memetic_max_evals: 500  # 搜索期内强化的从紧评估预算（控单周期耗时）
 
 # ── 约束开关（实验可配置：每类约束独立开关 + 独立惩罚权重）─────────
 # 置 false → 该约束既不参与可行性判定、也不计入惩罚，用于消融对比与
