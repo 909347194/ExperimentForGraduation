@@ -467,6 +467,19 @@ def build_solution(f: RunFacts) -> dict[str, Any]:
                 "final_bottleneck_s": (r.muas or {}).get("final_bottleneck_s"),
                 "final_n_hard": (r.muas or {}).get("final_n_hard"),
                 "final_excess_m": (r.muas or {}).get("final_excess_m"),
+                # 解码后局部搜索 polish 诊断（2026-10-19）：
+                # before=DMDE 交付解适应度，after=打磨后，gain=严格改进量。
+                # 缺省空值（旧数据/空转周期）。
+                "polish_enabled": (r.muas or {}).get("polish_enabled"),
+                "polish_rounds": (r.muas or {}).get("polish_rounds"),
+                "polish_candidates": (r.muas or {}).get("polish_candidates"),
+                "polish_evals": (r.muas or {}).get("polish_evals"),
+                "polish_accepted": (r.muas or {}).get("polish_accepted"),
+                "polish_fitness_before": (r.muas or {}).get("polish_fitness_before"),
+                "polish_fitness_after": (r.muas or {}).get("polish_fitness_after"),
+                "polish_gain": (r.muas or {}).get("polish_gain"),
+                "polish_converged": (r.muas or {}).get("polish_converged"),
+                "polish_budget_hit": (r.muas or {}).get("polish_budget_hit"),
             }
             for r in f.records
         ],

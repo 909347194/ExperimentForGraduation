@@ -13,7 +13,12 @@
                completed_at − latest——后者是周期末记账时刻，见 M4 瞬移语义；
                容差 max(20s,2%)：存在 ≤18s 评价—交付残差（机制待插桩，
                已量化为 info 行）；**latest 判定翻转零容差 FAIL**
-               （迟到标记必须 ≡ ETA−latest，容差不适用于判定本身）；
+               （迟到标记必须 ≡ ETA−latest，容差不适用于判定本身）——
+               唯一例外是「方向不确定带」内的边界翻转（降级 WARN）：
+               地形距离方向相关（M 项），运行端共享缓存先查先得、
+               检查端按正向全新查询，同一条腿可差 ~1%（实测 197m=13s）；
+               若 latest 落在该腿正/反向距离张成的 ETA 区间内，翻转
+               由口径分裂解释，不计 FAIL；带外翻转仍零容差。
                等待非负；完成时刻 = 周期推进时刻
   E 奖励守恒   Σf1（规划端折减）≈ Σ R·max(0,1−L/W)（交付端实际迟到）
   F 池守恒     n_total = n_remain + n_new + n_release；逐周期水位递推闭合
@@ -139,7 +144,8 @@ def main(results_name: str = "results") -> int:
     lat_ok, wait_ok, quant_ok = True, True, True
     eta_bad = []
     residuals: list[float] = []   # 评价—执行迟到残差（rec − exp），仅量化不判罪
-    flip_bad: list[tuple] = []    # latest 判定翻转（零容差 FAIL）
+    flip_bad: list[tuple] = []    # latest 判定翻转且**方向不可解释**（零容差 FAIL）
+    flip_warn: list[tuple] = []   # latest 判定翻转但落在方向不确定带内（WARN）
     for c in cycles:
         t_cur = float(c["current_time"])
         comp = {int(x) for x in c.get("completed_ids", [])}
@@ -172,32 +178,66 @@ def main(results_name: str = "results") -> int:
             continue
         lb = {int(k): float(v) for k, v in (cmeta.get("lateness_by_task") or {}).items()}
         for tour in c["tours"]:
-            t_cursor = float(c["current_time"])  # 本周期规划起始时刻
+            # 方向不确定带（M 项口径分裂的定量化，2026-10-19）：
+            # 地形跟随航程方向相关（爬升规则从起点扫描），运行端 ETA 的
+            # 对称缓存对同一条腿可能取正向或反向值（代价矩阵有序查询先到
+            # 先得），检查端按正向全新查询——同腿可差 ~1%（实测 197m≈13s）。
+            # 每航次用两个全新缓存分别只查正/反向距离，张成 ETA 区间
+            # [eta_lo, eta_hi]；latest 落在带内的判定翻转由口径分裂解释
+            # （WARN），带外翻转仍零容差 FAIL。
+            legs: list[tuple[int, tuple, tuple]] = []
             prev = tuple(float(v) for v in tour["start"])
             for tid in tour["task_ids"]:
                 t = tasks[int(tid)]
                 p = (float(t["x"]), float(t["y"]), float(t["z"]))
-                t_cursor += dist(prev, p) / speed
-                if t_cursor < float(t["earliest"]):
-                    t_cursor = float(t["earliest"])
-                exp_late = max(0.0, t_cursor - float(t["latest"]))
-                rec = lb.get(int(tid), 0.0)
+                legs.append((int(tid), prev, p))
+                prev = p
+            dist_f = make_distance_fn(estimator)  # 全新缓存：本航次只查正向
+            dist_b = make_distance_fn(estimator)  # 全新缓存：本航次只查反向
+            d_f = [dist_f(a, b) for _, a, b in legs]
+            d_b = [dist_b(b, a) for _, a, b in legs]
+
+            def _simulate(ds: list[float]) -> dict[int, float]:
+                cur = float(c["current_time"])  # 本周期规划起始时刻
+                out: dict[int, float] = {}
+                for (tid, _, _), d in zip(legs, ds):
+                    t = tasks[tid]
+                    cur += d / speed
+                    if cur < float(t["earliest"]):
+                        cur = float(t["earliest"])
+                    out[tid] = max(0.0, cur - float(t["latest"]))
+                    cur += service
+                return out
+
+            late_f = _simulate(d_f)                          # 正向口径（标准重算）
+            late_lo = _simulate([min(x, y) for x, y in zip(d_f, d_b)])
+            late_hi = _simulate([max(x, y) for x, y in zip(d_f, d_b)])
+            for tid, _, _ in legs:
+                rec = lb.get(tid, 0.0)
+                exp = late_f[tid]
                 # 容差 max(20s, 2%)：已实测存在 ≤18s 的评价—交付残差（方向混合、
                 # 逐腿距离/任务集/顺序/基准均已排除，机制待插桩定位），属 WARN 级
-                tol = max(20.0, 0.02 * max(exp_late, 1.0))
-                if abs(rec - exp_late) > tol:
+                tol = max(20.0, 0.02 * max(exp, 1.0))
+                if abs(rec - exp) > tol:
                     lat_ok = False
-                    eta_bad.append((c["cycle"], tid, round(rec, 1), round(exp_late, 1)))
-                t_cursor += service
-                prev = p
-                residuals.append(rec - exp_late)
+                    eta_bad.append((c["cycle"], tid, round(rec, 1), round(exp, 1)))
+                residuals.append(rec - exp)
                 # latest 判定翻转：零容差 FAIL——评价端与执行端对「是否
                 # 迟到」的结论必须一致（容差只适用于迟到秒数，不适用于
                 # 判定本身；否则 15s 迟到可被 20s 容差吞成「按时」）。
-                if (rec > 1e-9) != (exp_late > 1e-9):
+                # 例外：latest 落在方向不确定带 [eta_lo, eta_hi] 内的翻转
+                # 由口径分裂解释（WARN）——两种方向取值下结论就不同。
+                rec_late = rec > 1e-9
+                if rec_late and late_hi[tid] <= 1e-9:
                     flip_bad.append(
-                        (c["cycle"], tid, round(rec, 1), round(exp_late, 1))
-                    )
+                        (c["cycle"], tid, round(rec, 1), round(exp, 1)))
+                elif (not rec_late) and late_lo[tid] > 1e-9:
+                    flip_bad.append(
+                        (c["cycle"], tid, round(rec, 1), round(exp, 1)))
+                elif rec_late != (late_lo[tid] > 1e-9) or \
+                        rec_late != (late_hi[tid] > 1e-9):
+                    flip_warn.append(
+                        (c["cycle"], tid, round(rec, 1), round(exp, 1)))
     if residuals:
         arr = sorted(abs(r) for r in residuals)
         p50 = arr[len(arr) // 2]
@@ -206,6 +246,9 @@ def main(results_name: str = "results") -> int:
               f"（≤20s 为评价口径微差，不翻转 latest 判定）")
     check("D latest 判定无翻转（零容差：迟到标记 ≡ ETA−latest）",
           not flip_bad, str(flip_bad[:3]))
+    if flip_warn:
+        check("D latest 翻转均在方向不确定带内（口径分裂可解释）",
+              False, str(flip_warn[:3]), warn=True)
     check("D 迟到秒数=仿真ETA−latest（容差 max(20s,2%)，残差见 info 行）",
           lat_ok, str(eta_bad[:3]), warn=True)
     check("D 等待非负", wait_ok)

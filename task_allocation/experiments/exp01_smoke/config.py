@@ -219,6 +219,15 @@ def build_config_bundle(cfg: Mapping[str, Any]) -> ConfigBundle:
         prune_wait_bonus=float(m.get("prune_wait_bonus", 1.0)),
         wait_scale=float(m.get("wait_scale", 3600.0)),
         lamarckian=bool(m.get("lamarckian", True)),
+        # 2026-10-19 解码后局部搜索 polish（relocate/swap/插入位，
+        # 过同一修复链、仅严格改进才接受）；默认开，消融显式关
+        polish_enabled=bool(m.get("polish_enabled", True)),
+        polish_moves=tuple(
+            m.get("polish_moves", ["relocate", "swap", "position"])
+        ),
+        polish_max_rounds=int(m.get("polish_max_rounds", 30)),
+        polish_max_evals=int(m.get("polish_max_evals", 2000)),
+        polish_eps=float(m.get("polish_eps", 1e-6)),
     )
 
     s = _section(cfg, "solver")

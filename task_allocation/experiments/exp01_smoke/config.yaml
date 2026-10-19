@@ -255,6 +255,21 @@ muas:
     # 可行子空间展开。关闭则退化为围绕未修复空间搜索。
     # 注：终点机巢不进编码（方案 A），由解码后内层最小费用流精确求解。
     lamarckian: true
+    # 解码后局部搜索 polish（2026-10-19）：DMDE 收敛后对 best_assignment 做
+    # relocate / swap / 插入位局部搜索，每个候选都过**同一** build_solution
+    # 修复链（evaluator.evaluate），仅严格改进（< 当前 − eps）才接受。
+    # 治「收敛曲线第 3 代躺平」的两个根因：① big-M 阶梯适应度下差分算子对
+    # 换机/换序级改善不可见（T9 换机省 27.9km 仅折 2.8 适应度单位 vs 单
+    # 任务 2.8e5，梯度比 1e-5）；② Lamarckian 回写冻结归属（只写起始基因
+    # 通道，闲置槽成死维度）。局部搜索直接在解空间操作，绕过编码—回写冻结。
+    # 搜索期口径不受影响（cost_history/best_fitness 仍是 DMDE 曲线）；
+    # 交付解若被打磨得更优则采用之（final_fitness 只降不升）。
+    # 消融对照：polish_enabled: false（git 历史里的旧 results/ 即该口径）。
+    polish_enabled: true
+    polish_moves: [relocate, swap, position] # 扫描优先级：结构性收益最大的排首
+    polish_max_rounds: 30   # 无改进即停的轮数上限
+    polish_max_evals: 2000  # 真实评估数预算（缓存命中不计；防单周期耗时爆炸）
+    polish_eps: 1.0e-6      # 严格改进阈值（绝对；吸收浮点求和噪声）
 
 # ── 约束开关（实验可配置：每类约束独立开关 + 独立惩罚权重）─────────
 # 置 false → 该约束既不参与可行性判定、也不计入惩罚，用于消融对比与

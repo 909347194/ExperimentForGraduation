@@ -52,6 +52,13 @@ from task_allocation.methods.muas.problem import (
 )
 from task_allocation.methods.muas.representation.encoder import Gene, Individual
 from task_allocation.methods.muas.solvers.dmde_solver import DMDEConfig, DMDESolver
+from task_allocation.methods.muas.solvers.local_search import (
+    DEFAULT_MOVES,
+    MOVE_POSITION,
+    MOVE_RELOCATE,
+    MOVE_SWAP,
+    polish_assignment,
+)
 
 __all__ = [
     "MUASStageConfig",
@@ -60,6 +67,7 @@ __all__ = [
     "MUASAssignmentEvaluator",
     "select_participating_uavs",
     "run_selective_muas",
+    "polish_assignment",
 ]
 
 # 参与 UAV 的选择策略
@@ -164,6 +172,20 @@ class MUASStageConfig:
     current_time: float = 0.0
     # 适应度缓存（DMDE 会重复评估同一个体）
     use_cache: bool = True
+    # 解码后局部搜索 polish（2026-10-19）：DMDE 收敛后对 best_assignment
+    # 做 relocate / swap / 插入位局部搜索，候选一律过 evaluator.evaluate
+    # （与 DMDE 个体同一 build_solution 修复链），仅严格改进才接受。
+    # 治「曲线第 3 代躺平」的两个根因：① big-M 阶梯适应度下差分算子对
+    # 换机/换序级改善不可见（T9 换机省 27.9km 仅折 2.8 单位 vs 单任务
+    # 2.8e5）；② Lamarckian 回写只写起始基因通道致归属冻结。局部搜索
+    # 直接在解空间操作，绕过编码—回写冻结构悟。
+    # 默认开启（生产口径）；消融对照显式传 False。
+    polish_enabled: bool = True
+    # 启用的移动类型（顺序即扫描优先级；relocate 结构性收益最大排首）
+    polish_moves: tuple[str, ...] = DEFAULT_MOVES
+    polish_max_rounds: int = 30     # 无改进即停的轮数上限
+    polish_max_evals: int = 2000    # 真实评估数预算（缓存命中不计）
+    polish_eps: float = 1e-6        # 严格改进阈值（绝对；吸收浮点求和噪声）
 
     def __post_init__(self) -> None:
         if self.max_participating_uavs is not None and self.max_participating_uavs < 1:
@@ -179,6 +201,19 @@ class MUASStageConfig:
                 'reflow_rescue_scope 必须是 "fleet" 或 "participating"，'
                 f"当前为 {self.reflow_rescue_scope!r}"
             )
+        bad = [m for m in self.polish_moves
+               if m not in (MOVE_RELOCATE, MOVE_SWAP, MOVE_POSITION)]
+        if bad:
+            raise ValueError(
+                "polish_moves 只能含 relocate/swap/position，"
+                f"当前含未知项 {bad!r}"
+            )
+        if self.polish_max_rounds < 1:
+            raise ValueError("polish_max_rounds 必须 >= 1")
+        if self.polish_max_evals < 1:
+            raise ValueError("polish_max_evals 必须 >= 1")
+        if self.polish_eps < 0:
+            raise ValueError("polish_eps 不能为负")
 
 
 @dataclass(frozen=True)
@@ -1722,6 +1757,23 @@ def run_selective_muas(
     final_fitness = float(problem.scalar_fitness(final))
     final_n_hard, final_excess_m = problem.hard_stats(final)
 
+    # 解码后局部搜索 polish（2026-10-19）：对 best_assignment 做
+    # relocate / swap / 插入位，候选过**同一** build_solution 修复链
+    # （evaluator.evaluate），仅严格改进才接受。搜索期口径不受影响
+    # （cost_history / best_fitness 仍是 DMDE 曲线）；交付解若被打磨
+    # 得更优则采用之——final_fitness 只降不升。
+    polish = polish_assignment(
+        evaluator, list(result.best_assignment), stage_cfg
+    )
+    if (
+        polish.n_accepted_total > 0
+        and polish.best_fitness < final_fitness - stage_cfg.polish_eps
+    ):
+        final = polish.best_solution
+        problem.evaluate(final)
+        final_fitness = float(problem.scalar_fitness(final))
+        final_n_hard, final_excess_m = problem.hard_stats(final)
+
     model_type = (
         "balanced" if len(participating) == len(task_list)
         else "srp" if len(participating) < len(task_list)
@@ -1771,5 +1823,20 @@ def run_selective_muas(
             # 消「记录 best_fitness 与重算目标差 6.5~13.6」（auto big_m
             # 漂移）——审计脚本 N 项据此交叉验证。
             "fitness_weights": dict(final.meta.get("fitness_weights") or {}),
+            # 解码后局部搜索 polish 诊断（2026-10-19）。口径三分：
+            # best_fitness/cost_history = DMDE 搜索期；final_* = 交付解；
+            # polish_* = 「DMDE 原始交付解 → 打磨后交付解」的改进量
+            # （before=DMDE 解适应度，after=打磨后，gain=严格改进量；
+            # 0 = 邻域已最优或未开启）。final_fitness 只降不升。
+            "polish_enabled": bool(stage_cfg.polish_enabled),
+            "polish_rounds": int(polish.n_rounds),
+            "polish_candidates": int(polish.n_candidates),
+            "polish_evals": int(polish.n_evals),
+            "polish_accepted": {k: int(v) for k, v in polish.n_accepted.items()},
+            "polish_fitness_before": float(polish.base_fitness),
+            "polish_fitness_after": float(polish.best_fitness),
+            "polish_gain": float(polish.fitness_gain),
+            "polish_converged": bool(polish.converged),
+            "polish_budget_hit": bool(polish.budget_hit),
         },
     )
