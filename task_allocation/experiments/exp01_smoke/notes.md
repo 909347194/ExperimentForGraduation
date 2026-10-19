@@ -554,3 +554,39 @@ f(s) = -F1 + λ·F2 + w_time · F3 ,   F3 = max_k T_k
 - 定位（report.tex §1.2）：本实验 = 冒烟 + 正确性验证台 + 口径标定台 +
   回归基线；不承担性能对照（exp05）、长程吞吐（专门滚动实验）、
   选择层规模压缩（exp02）。
+
+## 解码后局部搜索 polish（2026-10-19）
+
+**动机**：DMDE 收敛曲线早平（见下「早收敛五因」），次级目标（路径/迟到）优化动力不足。
+用户在 2026-10-18 裁定落地 A 级改进：解码后局部搜索。
+
+**实现**（`methods/muas/solvers/local_search.py::polish_assignment`）：
+- 三类移动：relocate（改派任务归属）/ swap（交换两任务归属）/ position（插入位）；
+- 每个候选解经与搜索期**同一**修复链（`build_solution`）重建，仅当四层适应度
+  **严格改进**（delta > eps=1e-6）才接受；
+- `MUASStageConfig` 新增 `polish_enabled / polish_moves / polish_max_rounds=30 /
+  polish_max_evals=2000 / polish_eps`；yaml + config.py 同步灌入；
+- `solve()` 在 `build_solution(best_assignment)` 后调用，diagnostics 增 `final_*` 与
+  扁平 `polish_*` 字段（`polish_rounds/candidates/evals/accepted/gain/
+  fitness_before/after/converged/budget_hit`），metrics.py 透传。
+
+**实测（3 seed 复跑 + 审计全 PASS）**：
+| seed | 参与周期 | 接受(relocate/swap/position) | 增益(×10⁶) | 收敛 | 预算命中 |
+|---|---|---|---|---|---|
+| 42 | 3 | 13 / 0 / 0 | 2.56 | 是(3/3) | 0 |
+| 43 | 3 | 24 / 1 / 0 | 3.41 | 是(3/3) | 0 |
+| 44 | 7(有效3) | 16 / 1 / 0 | 2.34 | 是(7/7) | 0 |
+| 合计 | 13 | 53 / 2 / 0 | 8.30 | 全收敛 | 0 |
+
+- relocate 绝对主力（51/53）：SRP 首轮预抢 ~96% 奖励并冻结归属，少数任务落次优机位，
+  polish 在解空间级改派到更近 UAV/槽位；
+- position 0 次：被修复链 EDD 重排中和（插入位后重排恢复原序）→ 印证「插入位」由重排自动处理；
+- 增益集中在周期 1（初始 30 任务批量到达），seed42 单周期增益 1.18×10⁶；
+- 所有移动过修复链，未引入物理违约，审计 N2 仍全通过；
+- 247 tests 全绿（236 既有 + 11 `test_polish_local_search.py`）。
+
+**早收敛五因**（report.tex §2.6 已写）：① big-M 阶梯函数主导（步长 ~2.8e5 vs 路径 ~173）；
+② SRP 编码首轮预抢 ~96% 奖励；③ Lamarckian 回写冻结归属（闲置槽=死维度）；
+④ 差分算子对翻盘收益（λ×27.9km≈2.8 单位）盲；⑤ 尾部毫厘震荡（极差 0.008%）。
+**分工结论**：DMDE 负责「对」（可行交付结构），polish 负责「好」（次级目标精修）。
+
