@@ -590,3 +590,38 @@ f(s) = -F1 + λ·F2 + w_time · F3 ,   F3 = max_k T_k
 ④ 差分算子对翻盘收益（λ×27.9km≈2.8 单位）盲；⑤ 尾部毫厘震荡（极差 0.008%）。
 **分工结论**：DMDE 负责「对」（可行交付结构），polish 负责「好」（次级目标精修）。
 
+## memetic M1 精英档案（2026-10-19）
+
+**动机**：post-hoc polish 把路由改进留到 DMDE 收敛后；用户裁定「让 DMDE 搜索期内也优化路由」，
+落地 M1（精英档案）：把精英 polish 前移进 DE 进化循环。
+
+**实现**：
+- `dmde_solver.py`：`DMDEConfig` 加通用代际钩子 `gen_callback(gen, best_individual)`，
+  每代收敛记录后调用；默认 None ⇒ 纯 DMDE 逐位不变；钩子异常被吞（不破坏确定性）。
+- `muas_stage.py::run_selective_muas`：开 `polish_in_loop` 后每 `memetic_K` 代对当代精英跑一次
+  polish（从紧预算 `memetic_max_rounds=6 / memetic_max_evals=500`，first-improvement 早停+缓存，
+  实测仅 +7% 耗时），维护 best-polished 档案（assignment/fitness/solution）；
+  轨迹按代记录（长度 == len(cost_history)，供「搜索期内路由在降」出图）。
+  **不改基因型**（M1 无反映射）；交付解取「收敛后 polish」与「档案最优」的更优者。
+- 开关默认全关（基线不动）；`memetic_K=20`、`polish_in_loop` 经 yaml/config.py 灌入。
+
+**关键不变量（已测）**：同种子下开/关的 DMDE 曲线 `cost_history` **逐位相同**——钩子 RNG-free、
+不改群体，故纯 DMDE 搜索期轨迹不变（`test_memetic_inloop.py` 锁死）。
+
+**三 seed 实测（memetic vs 基线 post-polish；审计全 PASS：22/23、22/23、22/24）**：
+| seed | 完成 | 按时率 | 迟到 | 总奖励 | memetic 接受移动 | 档案增益 | 末次改进代 |
+|---|---|---|---|---|---|---|---|
+| 42 | 60→60 | 88.3→91.7% | 7→5 | 324.23→328.35 | 79 | 8.09e5 | 60/60/100/20 |
+| 43 | 60→60 | 96.7→98.3% | 2→1 | 350.46→351.13 | 79 | 3.40e5 | 60/60/40 |
+| 44 | 60→60 | 90.0→90.0% | 6→6 | 279.57→279.57 | 73 | 6.63e4 | 40/60/20×5 |
+
+- 均值：按时率 91.7→93.3%（+1.7pp）、迟到 15→12、奖励 954.3→959.0；完成/废飞/淘汰/不可达全不变。
+- **「搜索期内路由在降」证据**：档案末次改进代多为 40–100（K=20 的 polish 点），非仅 gen100，
+  即 DE 循环中段档案已被持续压低——对冲「收敛曲线早平」。
+- seed44 无 headline 变化：周期 4–7 每周期仅 1 任务（单任务归属已最优，无路由空间），
+  档案增益（6.6e4）主要是降路径不改按时/奖励；交付解与基线等价（择优未更优）。
+- 255 tests 全绿（247 + 8 `test_memetic_inloop.py`）。
+
+**M2（Lamarckian 反射写回）**：让路由改进回流 DE 群体（真 memetic）。卡在 SRP 编码未必能表示
+任意 polished assignment 的反映射问题，改动大、回归风险高，**本次不碰**，写入报告「讨论与展望/后续工作」。
+
