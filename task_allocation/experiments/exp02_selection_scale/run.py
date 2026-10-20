@@ -126,7 +126,18 @@ def selection_config_from(
     )
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    import argparse
+
+    ap = argparse.ArgumentParser(description="exp02_selection_scale：规模压缩与标定扫描")
+    ap.add_argument("--no-plots", action="store_true",
+                    help="跳过出图（只落 metrics/run_meta json）")
+    ap.add_argument("--formats", default=None,
+                    help="逗号分隔出图格式（缺省读 config.yaml 的 plot.formats）")
+    ap.add_argument("--dpi", type=int, default=None,
+                    help="出图 dpi（缺省读 config.yaml 的 plot.dpi）")
+    args = ap.parse_args(argv)
+
     cfg_path = EXP_DIR / "config.yaml"
     cfg = load_config(cfg_path)
     out_dir = EXP_DIR / cfg["experiment"]["output_dir"]
@@ -401,6 +412,27 @@ def main() -> int:
         encoding="utf-8",
     )
     print(f"[exp02] wrote {out_dir / 'metrics.json'}")
+
+    # ── 出图（plot/ 只负责绘制，产物落 figures_dir；--no-plots 只跳绘制）──
+    if not args.no_plots:
+        figures_dir = EXP_DIR / str(
+            cfg["experiment"].get("figures_dir", "results/figures")
+        )
+        plot_cfg = cfg.get("plot") or {}
+        formats = tuple(
+            f.strip().lower().lstrip(".")
+            for f in (args.formats or ",".join(plot_cfg.get("formats") or ["png"])).split(",")
+            if f.strip()
+        )
+        dpi = int(args.dpi or plot_cfg.get("dpi", 200) or 200)
+        try:
+            if str(EXP_DIR) not in sys.path:
+                sys.path.insert(0, str(EXP_DIR))
+            from plot import make_plots  # 延迟导入：不出图时不引 matplotlib
+
+            make_plots(metrics, {}, figures_dir, formats=formats, dpi=dpi)
+        except Exception as exc:  # 出图失败不阻断数值产物
+            print(f"[exp02][warn] 出图失败（json 已落盘）：{exc!r}")
     return 0
 
 

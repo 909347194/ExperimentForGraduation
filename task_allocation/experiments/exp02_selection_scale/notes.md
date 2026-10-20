@@ -140,5 +140,32 @@ postcheck 均零拒绝（2×25km 散布 ≤ 80km 航程），规模完全由候�
   改动涉及 exp01 生产基线，需按消融流程评估后再定（见 exp04）。
 - `quota_a5 ≡ quota_a2.5` 的发现提示：`max_ratio` 旋钮应与 capability
   联动文档化（pipeline.py 的 effective_cap 已支持，缺显式度量和说明）。
-- 把本表的「吞吐-耗时-质量」曲线做成 report 层插图（exp02/plot 暂空，
-  可复用 exp01 的 plot 骨架）。
+- ~~把本表的「吞吐-耗时-质量」曲线做成 report 层插图~~ **[2026-10-20 完成，
+  见下节]**：plot/ 已建成（6 张图）+ report.tex 已编译（latexmk -xelatex，9 页）。
+
+## 图表与报告（2026-10-20 增补）
+
+`plot/` 按 exp01_smoke 同款骨架建成（registry 唯一事实来源、theme 唯一
+import pyplot、base 只含 audit+declutter——本实验无逐周期数据故无 dem/geo）：
+
+| 层 | 图 id | 说明 | 数据来源 |
+|---|---|---|---|
+| setup | `setup_params` | 实验设定总览：场景 / 变体矩阵 / 选择机制 / 求解预算 | `config.yaml 全段 + metrics.json 的 scales[].selection 字段` |
+| report | `r01_tradeoff` | 吞吐—耗时—质量权衡：全变体扫描散点（x=二阶段耗时，y=交付收益 F1） | `metrics.json 的 scales[] 全字段（variant × N × F1 × t_muas）` |
+| report | `r02_compression` | 规模压缩与 N 解耦：候选数 / 选择数 / 执行数 / 压缩比随 N 的演化 | `metrics.json 的 scales[].selection.{n_tasks_in,capability_preselect_k,n_selected} + muas.n_executed + compression_ratio` |
+| report | `r03_time_breakdown` | 耗时分解与惰性边：二阶段耗时与 N 无关，O(n²) 构建瓶颈已除 | `metrics.json 的 scales[].t_{hint,selection,build,muas}_ms + lazy_edges` |
+| report | `r04_bottleneck` | 瓶颈定位：候选名额 α 无感、选择数被 max_ratio·K 封顶 | `metrics.json 的 scales[]（quota_a2.5 vs quota_a5 同 sel 对照 + selection.capability_marginal_limit）` |
+| report | `r05_capability` | 能力驱动标定：k≈cap(t) 时质量保持率高、加速比大，cap(t) 是天然平衡点 | `metrics.json 的 scales[]（cap_x* 阶梯的 k / F1 / t_muas + full_baseline 参考） |
+
+用法（与 exp01 同口径）：
+
+- `python run.py` 末尾自动出图（config 的 `plot.formats/dpi`；`--no-plots` 跳过；
+  `--formats pdf --dpi 200` 覆盖）
+- `python render_from_json.py png [--figure r01_tradeoff] [--group report]`
+  从已落盘 metrics.json 补出图（不重跑求解；600s 超时打断后用它恢复）
+- `python plot/report/r01_tradeoff.py [--pdf] [--dpi N]` 单图独立调试
+
+`report.tex`（latexmk -xelatex 编译，9 页，零 Overfull 警告）：
+实验设置（目标/定位与证据边界/场景/变体矩阵/计时口径）→ 主要结果
+（17 格总表 + 6 条结论 + 已知边界）→ 图表（6 张全收）→ 附：数据与复现。
+报告明确四条证据边界（对照非方法学基线、单 seed、轻预算、N=200 上界外推）。

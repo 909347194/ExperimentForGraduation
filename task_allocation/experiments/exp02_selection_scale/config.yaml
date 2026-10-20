@@ -2,6 +2,7 @@ experiment:
   name: exp02_selection_scale
   seed: 42
   output_dir: results
+  figures_dir: results/figures
   plot_dir: plot
 
 # 目的：在 |T_t| >> K_avail 的规模下量化第一阶段的压缩收益与代价
@@ -30,12 +31,16 @@ problem:
   w_nest_capacity: 1.0
 
 # y_j 剔除规则（论文 §4.2）：λ·节省 > R^eff·(1+margin) 才剔除
+# （2026-10-20 合并：原文件此段与文末 stage 段重复键，PyYAML 后者静默
+#  覆盖前者——polish 预算实际取文末值；现合并为单一权威段）
 stage:
   prune_unprofitable: true
   prune_max_rounds: 8
   prune_margin: 0.0
   prune_wait_bonus: 1.0
   wait_scale: 3600.0
+  polish_max_rounds: 20
+  polish_max_evals: 800
 
 tasks:
   source: synthetic
@@ -116,14 +121,10 @@ solver:
   pop_size: 20
   max_generations: 40
 
-stage:
-  prune_unprofitable: true
-  prune_max_rounds: 8
-  prune_margin: 0.0
-  prune_wait_bonus: 1.0
-  wait_scale: 3600.0
-  polish_max_rounds: 20
-  polish_max_evals: 800
+# 出图（plot/ 只负责绘制，产物落 experiment.figures_dir）
+plot:
+  formats: [png]   # 默认仅 PNG；render_from_json.py 可补 pdf 等矢量格式
+  dpi: 300
 
 run:
   save_results: true
