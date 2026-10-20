@@ -1,0 +1,61 @@
+<Slide style={{ width: 1280, height: 720, background: '#FFFFFF', position: 'relative', fontFamily: 'Source Han Sans CN, Microsoft YaHei, sans-serif' }}>
+  <Box style={{ position: 'absolute', top: 0, left: 0, width: 1280, height: 12, background: '#1E4FA8' }} />
+  <Box style={{ position: 'absolute', top: 30, left: 40, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+    <Box style={{ width: 6, height: 34, background: '#1E4FA8' }} />
+    <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#0E3F8C' }}>证据边界与下一步计划</Text>
+  </Box>
+  <Text style={{ position: 'absolute', top: 78, left: 60, fontSize: 15, color: '#8B97A8' }}>已成立的是内部有效性；外部有效性是当前最大的证据缺口</Text>
+
+  <Box style={{ position: 'absolute', top: 116, left: 40, width: 640, flexDirection: 'column', gap: 14 }}>
+    {[
+      { t: '外部基线未补——答不了「优于谁」', d: 'baselines 目录全部占位；full MUAS 只是同一求解器的质量上界参照，不是竞品。这是答辩最可能被攻击的点。', c: '#D9534F' },
+      { t: '联合域未测——两组实验各覆盖一半工况', d: 'exp01 机多任务少（压缩机制空转）、exp02 任务大但无滚动到达。真实生产是「机队规模 × 任务压力 × Poisson 滚动」叠加：余航程衰减使 cap(t) 逐周期收缩，与任务积压增长的交互从未被测量（exp06 已建设计骨架）。', c: '#D9534F' },
+      { t: '标定结论有附加条件', d: 'exp02 为单 seed、40 代轻预算——量的是「吞吐-耗时-质量」曲线形状，不是生产级解质量；生产化（选择数接 cap(t)）须走 exp04 消融评估后落地。', c: '#BA7517' },
+    ].map((g) => (
+      <Box key={g.t} style={{ background: '#F7F9FC', border: '1px solid #D6DCE5', borderLeft: '4px solid ' + g.c, borderRadius: 10, padding: '14px 20px' }}>
+        <Text style={{ fontSize: 17.5, fontWeight: 'bold', color: '#1A2230' }}>{g.t}</Text>
+        <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.7, marginTop: 6 }}>{g.d}</Text>
+      </Box>
+    ))}
+
+    <Box style={{ background: '#F0F5FC', borderLeft: '4px solid #1E4FA8', borderRadius: 8, padding: '13px 20px' }}>
+      <Text style={{ fontSize: 15.5, fontWeight: 'bold', color: '#0E3F8C', lineHeight: 1.65 }}>
+        本方法的定位：本质是「软时间窗带奖励的 VRPTW」——物理违约 0、迟到占 99.98%，说明可行域窄在零迟到而非物理不可行。这决定了外部基线的选型（软时间窗 VRPTW 启发式），与主指标的呈现方式（(完成率, 航程) Pareto 前沿）。
+      </Text>
+    </Box>
+  </Box>
+
+  <Box style={{ position: 'absolute', top: 116, left: 704, width: 536, height: 534, background: '#F7F9FC', border: '1px solid #D6DCE5', borderRadius: 12, padding: '22px 26px', flexDirection: 'column' }}>
+    <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#0E3F8C' }}>下一步计划（按优先级）</Text>
+    <Box style={{ marginTop: 16, flexDirection: 'column', gap: 16, flex: 1 }}>
+      {[
+        { p: 'P0', tag: '论文前必补', t: '外部基线 + 联合域首轮', d: '贪心构造 + 软时间窗 VRPTW 启发式各一；exp06 联合域首轮（约 40 分钟）验证「积压增长 vs cap(t) 衰减」形态', c: '#D9534F' },
+        { p: 'P1', tag: '方法改进', t: '抛光扩域 → 搜索多样性', d: 'polish 邻域扩展（2-opt / 跨机 relocate，过同一修复链）→ 多起点置换（治编码顺序依赖）→ 停滞重启 + 闲置维再 init', c: '#1E4FA8' },
+        { p: 'P2', tag: '口径与生产化', t: '标定结论落地与文档化', d: 'mode=primary 生产化走 exp04 消融；max_ratio 与 capability 联动写入文档；主指标按 (完成率, 航程) Pareto 前沿呈现', c: '#5F5E5A' },
+      ].map((s) => (
+        <Box key={s.p} style={{ flexDirection: 'row', gap: 14, alignItems: 'flex-start' }}>
+          <Box style={{ width: 52, height: 52, borderRadius: 10, background: s.c, alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#FFFFFF' }}>{s.p}</Text>
+          </Box>
+          <Box style={{ flex: 1, flexDirection: 'column' }}>
+            <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Text style={{ fontSize: 17, fontWeight: 'bold', color: '#1A2230' }}>{s.t}</Text>
+              <Text style={{ fontSize: 12, fontWeight: 'bold', color: s.c }}>{s.tag}</Text>
+            </Box>
+            <Text style={{ fontSize: 13.5, color: '#4A5568', lineHeight: 1.65, marginTop: 5 }}>{s.d}</Text>
+          </Box>
+        </Box>
+      ))}
+    </Box>
+    <Box style={{ background: '#0E3F8C', borderRadius: 8, padding: '12px 18px' }}>
+      <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#FFFFFF', lineHeight: 1.6 }}>
+        判断：科学故事已成立——分层可扩展有标定曲线、顺序依赖有对症解法；当前优先补外部有效性证据，而非继续改算法。
+      </Text>
+    </Box>
+  </Box>
+
+  <Box style={{ position: 'absolute', bottom: 0, left: 0, width: 1280, height: 44, background: '#F7F9FC', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: '0 40px', borderTop: '1px solid #E5E7EB' }}>
+    <Text style={{ fontSize: 13, color: '#8B97A8' }}>动态滚动的多机巢多无人机协同任务分配 · 进展汇报</Text>
+    <Text style={{ fontSize: 15, color: '#1E4FA8', fontWeight: 'bold' }}>15 / 16</Text>
+  </Box>
+</Slide>

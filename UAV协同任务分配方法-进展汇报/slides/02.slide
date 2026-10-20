@@ -1,0 +1,41 @@
+<Slide style={{ width: 1280, height: 720, background: '#FFFFFF', position: 'relative', fontFamily: 'Source Han Sans CN, Microsoft YaHei, sans-serif' }}>
+  <Box style={{ position: 'absolute', top: 0, left: 0, width: 1280, height: 12, background: '#1E4FA8' }} />
+
+  <Box style={{ position: 'absolute', top: 110, left: 40, width: 356, height: 540, background: '#0E3F8C', borderRadius: 12, padding: '44px 36px', flexDirection: 'column' }}>
+    <Text style={{ fontSize: 38, fontWeight: 'bold', color: '#FFFFFF' }}>汇报提纲</Text>
+    <Text style={{ fontSize: 15, color: '#B5D4F4', letterSpacing: 4, marginTop: 8 }}>CONTENTS</Text>
+    <Box style={{ width: 44, height: 3, background: '#FFC107', marginTop: 20 }} />
+    <Text style={{ fontSize: 17, color: '#DCE7F5', lineHeight: 1.9, marginTop: 28 }}>
+      围绕「动态任务池 × 多机巢 × 选择性执行」三个关键词，先讲清问题与方法骨架，再用两组实验支撑核心主张，最后坦诚当前的证据边界。
+    </Text>
+    <Text style={{ fontSize: 14, color: '#85B7EB', lineHeight: 1.8, marginTop: 22 }}>
+      汇报约 15 分钟，公式与数据均可回溯到论文第 3 章与实验记录。
+    </Text>
+  </Box>
+
+  <Box style={{ position: 'absolute', top: 110, left: 428, width: 812, height: 540, flexDirection: 'column', justifyContent: 'space-between' }}>
+    {[
+      { n: '01', t: '研究问题与总体框架', d: '任务动态到达与持续滞留、无人机状态动态变化、任务规模与执行能力失配——静态一次性规划失效，引出两阶段分层滚动框架', p: 'P3–P5' },
+      { n: '02', t: '第一阶段：动态任务选择', d: '基础优先级预筛选 + 边际收益增量选择 + 快速可行性检查，把任务池压缩为规模可控的候选集', p: 'P6–P7' },
+      { n: '03', t: '第二阶段：选择性 MUAS 与 DMDE', d: '多机巢选择性分配的组合优化模型、四层准字典序适应度、改进离散映射差分进化与终点机巢精确求解', p: 'P8–P10' },
+      { n: '04', t: '实验验证与下一步', d: 'exp01 多 seed 阶梯（方向一致可复现）、exp02 规模标定（求解规模与 N 解耦）、性能瓶颈消除、证据边界与计划', p: 'P11–P15' },
+    ].map((it) => (
+      <Box key={it.n} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 20, background: '#F0F5FC', borderRadius: 10, padding: '18px 22px', border: '1px solid #D6DCE5', borderLeft: '4px solid #1E4FA8' }}>
+        <Box style={{ width: 54, height: 54, background: '#1E4FA8', borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ fontSize: 22, fontWeight: 'bold', color: '#FFFFFF' }}>{it.n}</Text>
+        </Box>
+        <Box style={{ flex: 1, flexDirection: 'column' }}>
+          <Text style={{ fontSize: 21, fontWeight: 'bold', color: '#1A2230' }}>
+            {it.t}<span style={{ fontSize: 15, fontWeight: 'normal', color: '#3D7BD9' }}>　{it.p}</span>
+          </Text>
+          <Text style={{ fontSize: 15, color: '#4A5568', lineHeight: 1.6, marginTop: 6 }}>{it.d}</Text>
+        </Box>
+      </Box>
+    ))}
+  </Box>
+
+  <Box style={{ position: 'absolute', bottom: 0, left: 0, width: 1280, height: 44, background: '#F7F9FC', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: '0 40px', borderTop: '1px solid #E5E7EB' }}>
+    <Text style={{ fontSize: 13, color: '#8B97A8' }}>动态滚动的多机巢多无人机协同任务分配 · 进展汇报</Text>
+    <Text style={{ fontSize: 15, color: '#1E4FA8', fontWeight: 'bold' }}>02 / 16</Text>
+  </Box>
+</Slide>

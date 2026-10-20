@@ -1,0 +1,42 @@
+<Slide style={{ width: 1280, height: 720, background: '#FFFFFF', position: 'relative', fontFamily: 'Source Han Sans CN, Microsoft YaHei, sans-serif' }}>
+  <Box style={{ position: 'absolute', top: 0, left: 0, width: 1280, height: 12, background: '#1E4FA8' }} />
+  <Box style={{ position: 'absolute', top: 30, left: 40, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+    <Box style={{ width: 6, height: 34, background: '#1E4FA8' }} />
+    <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#0E3F8C' }}>广域巡检场景下的五大挑战</Text>
+  </Box>
+  <Text style={{ position: 'absolute', top: 78, left: 60, fontSize: 15, color: '#8B97A8' }}>静态一次性规划失效——分配决策必须在滚动周期内反复重做</Text>
+
+  <Box style={{ position: 'absolute', top: 116, left: 40, width: 660, flexDirection: 'column' }}>
+    <Box style={{ background: '#FFFFFF', border: '1px solid #D6DCE5', borderRadius: 10, padding: 10 }}>
+      <Image src="assets/fig_exp01_dynamics.png" style={{ width: 638, height: 343, objectFit: 'cover', borderRadius: 6 }} />
+    </Box>
+    <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.7, marginTop: 12 }}>
+      左图为本文方法在滚动协议下的一次<span style={{ fontWeight: 'bold' }}>真实运行轨迹</span>（任务 × 周期状态矩阵）：任务陆续到达（灰）→ 池内待处理（橙）→ 被选择执行并完成（绿）。任务流持续到来、部分任务滞留数个周期，正是右侧五类挑战共同作用的直接体现。
+    </Text>
+  </Box>
+
+  <Box style={{ position: 'absolute', top: 116, left: 728, width: 512, height: 534, flexDirection: 'column', justifyContent: 'space-between' }}>
+    {[
+      { n: '1', t: '任务动态到达与持续滞留', d: '任务池按周期演化 T(t+1)=remain∪new∪release，滞留任务需要等待补偿，不能静默丢失' },
+      { n: '2', t: '无人机可用状态动态变化', d: '起降、充电、故障使可用集每周期不同，规划必须基于当前真实状态而非初始快照' },
+      { n: '3', t: '多机巢起降与终点选择', d: '异源起飞、异巢终止：起点由停靠状态确定，终点机巢是决策变量且受泊位容量约束' },
+      { n: '4', t: '任务数量与执行能力不匹配', d: '任务数远超单周期能力承载，既不能全量求解，也不能非物理地拒绝任务' },
+      { n: '5', t: '任务价值与空间执行代价并存', d: '高价值任务可能伴随高三维航程代价，收益与代价必须放在一起权衡' },
+    ].map((c) => (
+      <Box key={c.n} style={{ flexDirection: 'row', gap: 14, alignItems: 'flex-start', background: '#F0F5FC', borderRadius: 8, padding: '12px 16px', borderLeft: '4px solid #1E4FA8' }}>
+        <Box style={{ width: 30, height: 30, borderRadius: 15, background: '#1E4FA8', alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#FFFFFF' }}>{c.n}</Text>
+        </Box>
+        <Box style={{ flex: 1, flexDirection: 'column' }}>
+          <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#1A2230' }}>{c.t}</Text>
+          <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.55, marginTop: 4 }}>{c.d}</Text>
+        </Box>
+      </Box>
+    ))}
+  </Box>
+
+  <Box style={{ position: 'absolute', bottom: 0, left: 0, width: 1280, height: 44, background: '#F7F9FC', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: '0 40px', borderTop: '1px solid #E5E7EB' }}>
+    <Text style={{ fontSize: 13, color: '#8B97A8' }}>动态滚动的多机巢多无人机协同任务分配 · 进展汇报</Text>
+    <Text style={{ fontSize: 15, color: '#1E4FA8', fontWeight: 'bold' }}>04 / 16</Text>
+  </Box>
+</Slide>

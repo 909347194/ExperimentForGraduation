@@ -1,0 +1,91 @@
+<Slide style={{ width: 1280, height: 720, background: '#FFFFFF', position: 'relative', fontFamily: 'Source Han Sans CN, Microsoft YaHei, sans-serif' }}>
+  <Box style={{ position: 'absolute', top: 0, left: 0, width: 1280, height: 12, background: '#1E4FA8' }} />
+  <Box style={{ position: 'absolute', top: 30, left: 40, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+    <Box style={{ width: 6, height: 34, background: '#1E4FA8' }} />
+    <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#0E3F8C' }}>exp01：多 seed 阶梯——改进方向一致且可复现</Text>
+  </Box>
+  <Text style={{ position: 'absolute', top: 78, left: 60, fontSize: 15, color: '#8B97A8' }}>长程滚动 24 周期 · Poisson λ=5 · 3 seed 全新复跑（当前代码版本）</Text>
+
+  <Box style={{ position: 'absolute', top: 116, left: 40, width: 380, height: 534, background: '#0E3F8C', borderRadius: 12, padding: '34px 30px', flexDirection: 'column' }}>
+    <Text style={{ fontSize: 15, color: '#85B7EB', letterSpacing: 2 }}>按时率（memetic 口径，n=3）</Text>
+    <Text style={{ fontSize: 78, fontWeight: 'bold', color: '#FFFFFF', lineHeight: 1.15, marginTop: 6 }}>93.3<span style={{ fontSize: 34 }}>%</span></Text>
+    <Text style={{ fontSize: 17, color: '#B5D4F4', marginTop: 2 }}>± 3.6（83.9 → 91.7 → 93.3）</Text>
+    <Box style={{ width: 44, height: 3, background: '#FFC107', marginTop: 22 }} />
+    <Box style={{ marginTop: 22, flexDirection: 'column', gap: 14 }}>
+      {[
+        ['任务完成', '60 / 60 = 100%'],
+        ['废飞 · 淘汰 · 不可达', '全部为 0'],
+        ['物理违约（22423 次评估）', '0 次'],
+        ['平均迟到深度', '575 s（−22%）'],
+      ].map((r) => (
+        <Box key={r[0]} style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text style={{ fontSize: 14, color: '#B5D4F4' }}>{r[0]}</Text>
+          <Text style={{ fontSize: 17, fontWeight: 'bold', color: '#FFFFFF' }}>{r[1]}</Text>
+        </Box>
+      ))}
+    </Box>
+    <Text style={{ fontSize: 14, color: '#DCE7F5', lineHeight: 1.7, marginTop: 26 }}>
+      「不被完成只有物理约束被违反」在全部 9 个实验格成立：能力范围内解决更多当下的任务，而非凑完成率。
+    </Text>
+  </Box>
+
+  <Box style={{ position: 'absolute', top: 116, left: 444, width: 796, flexDirection: 'column' }}>
+    <Table
+      style={{ width: 796, height: 240 }}
+      defaultTextStyle={{ fontSize: 15, textAlign: 'center', color: '#1A2230' }}
+      defaultCellStyle={{
+        border: { left: { width: 1, color: '#D6DCE5' }, right: { width: 1, color: '#D6DCE5' }, top: { width: 1, color: '#D6DCE5' }, bottom: { width: 1, color: '#D6DCE5' } },
+      }}
+      cells={[
+        [
+          { text: '配置（3 seed 均值±std）', textStyle: { bold: true, color: '#FFFFFF' }, cellStyle: { background: { color: '#1E4FA8' } } },
+          { text: '按时率 %', textStyle: { bold: true, color: '#FFFFFF' }, cellStyle: { background: { color: '#1E4FA8' } } },
+          { text: '迟到数', textStyle: { bold: true, color: '#FFFFFF' }, cellStyle: { background: { color: '#1E4FA8' } } },
+          { text: '平均迟到 s', textStyle: { bold: true, color: '#FFFFFF' }, cellStyle: { background: { color: '#1E4FA8' } } },
+          { text: '总奖励', textStyle: { bold: true, color: '#FFFFFF' }, cellStyle: { background: { color: '#1E4FA8' } } },
+          { text: '总航程 km', textStyle: { bold: true, color: '#FFFFFF' }, cellStyle: { background: { color: '#1E4FA8' } } },
+        ],
+        ['N 无抛光', '83.9 ± 2.1', '9.7 ± 1.2', '736', '309.8', '1723.7'],
+        [{ text: 'P 生产（+polish）', textStyle: { bold: true } }, { text: '91.7 ± 3.6', textStyle: { bold: true, color: '#1E4FA8' } }, { text: '5.0 ± 2.2', textStyle: { bold: true } }, '732', '318.1', '1693.0'],
+        [{ text: 'M memetic（M1）', cellStyle: { background: { color: '#F0F5FC' } } }, { text: '93.3 ± 3.6', textStyle: { bold: true, color: '#1E4FA8' }, cellStyle: { background: { color: '#F0F5FC' } } }, { text: '4.0 ± 2.2', textStyle: { bold: true }, cellStyle: { background: { color: '#F0F5FC' } } }, { text: '575', cellStyle: { background: { color: '#F0F5FC' } } }, { text: '319.7', cellStyle: { background: { color: '#F0F5FC' } } }, { text: '1662.9', cellStyle: { background: { color: '#F0F5FC' } } }],
+        [
+          { text: 'P − N', textStyle: { bold: true, color: '#3B6D11' } },
+          { text: '+7.8 pp', textStyle: { bold: true, color: '#3B6D11' } },
+          { text: '−4.7', textStyle: { bold: true, color: '#3B6D11' } },
+          { text: '−4', textStyle: { color: '#3B6D11' } },
+          { text: '+8.3', textStyle: { color: '#3B6D11' } },
+          { text: '−30.7', textStyle: { color: '#3B6D11' } },
+        ],
+        [
+          { text: 'M − P', textStyle: { bold: true, color: '#3B6D11' }, cellStyle: { background: { color: '#F7F9FC' } } },
+          { text: '+1.7 pp', textStyle: { bold: true, color: '#3B6D11' }, cellStyle: { background: { color: '#F7F9FC' } } },
+          { text: '−1.0', textStyle: { bold: true, color: '#3B6D11' }, cellStyle: { background: { color: '#F7F9FC' } } },
+          { text: '−157', textStyle: { color: '#3B6D11' }, cellStyle: { background: { color: '#F7F9FC' } } },
+          { text: '+1.6', textStyle: { color: '#3B6D11' }, cellStyle: { background: { color: '#F7F9FC' } } },
+          { text: '−30.1', textStyle: { color: '#3B6D11' }, cellStyle: { background: { color: '#F7F9FC' } } },
+        ],
+      ]}
+    />
+
+    <Box style={{ marginTop: 16, background: '#F7F9FC', border: '1px solid #D6DCE5', borderRadius: 10, padding: '14px 18px' }}>
+      <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#0E3F8C' }}>每 seed 增益：方向 3/3 一致，幅度差 4 倍</Text>
+      <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.75, marginTop: 6 }}>
+        s42：polish <span style={{ fontWeight: 'bold', color: '#1E4FA8' }}>+6.7pp</span>、memetic +3.3pp；　s43：+13.3pp、+1.7pp；　s44：+3.3pp、<span style={{ fontWeight: 'bold', color: '#D9534F' }}>+0.0pp</span>
+      </Text>
+      <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.75, marginTop: 4 }}>
+        s44 零增益机制已定性：单任务周期无路由改进空间，档案增益只降路径、被持平规则拒收——论文按 seed-dependent 报区间「+0~+3.3pp，均值 +1.7pp」，不报单点。
+      </Text>
+    </Box>
+
+    <Box style={{ marginTop: 14, background: '#F0F5FC', borderLeft: '4px solid #1E4FA8', borderRadius: 8, padding: '12px 18px' }}>
+      <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#0E3F8C', lineHeight: 1.6 }}>
+        判断：抛光与 memetic 的改进不是单 seed 巧合——方向全部一致；同时幅度依赖 seed，说明「后验抛光能修多少」取决于 DMDE 收敛解离局部最优的距离。
+      </Text>
+    </Box>
+  </Box>
+
+  <Box style={{ position: 'absolute', bottom: 0, left: 0, width: 1280, height: 44, background: '#F7F9FC', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: '0 40px', borderTop: '1px solid #E5E7EB' }}>
+    <Text style={{ fontSize: 13, color: '#8B97A8' }}>动态滚动的多机巢多无人机协同任务分配 · 进展汇报</Text>
+    <Text style={{ fontSize: 15, color: '#1E4FA8', fontWeight: 'bold' }}>12 / 16</Text>
+  </Box>
+</Slide>

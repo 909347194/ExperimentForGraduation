@@ -1,0 +1,66 @@
+<Slide style={{ width: 1280, height: 720, background: '#FFFFFF', position: 'relative', fontFamily: 'Source Han Sans CN, Microsoft YaHei, sans-serif' }}>
+  <Box style={{ position: 'absolute', top: 0, left: 0, width: 1280, height: 12, background: '#1E4FA8' }} />
+
+  <Text style={{ position: 'absolute', top: 130, right: 60, fontSize: 330, fontWeight: 'bold', color: '#E8EFF8', lineHeight: 1 }}>04</Text>
+
+  <Box style={{ position: 'absolute', top: 200, left: 80, width: 760, flexDirection: 'column' }}>
+    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+      <Box style={{ width: 40, height: 4, background: '#FFC107' }} />
+      <Text style={{ fontSize: 17, color: '#3D7BD9', letterSpacing: 5 }}>CHAPTER 04</Text>
+    </Box>
+    <Text style={{ fontSize: 44, fontWeight: 'bold', color: '#0E3F8C', marginTop: 18 }}>实验验证与下一步</Text>
+    <Box style={{ marginTop: 34, flexDirection: 'column', gap: 18 }}>
+      <Box style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
+        <Box style={{ width: 8, height: 8, borderRadius: 4, background: '#1E4FA8', marginTop: 11 }} />
+        <Text style={{ fontSize: 19, color: '#1A2230', lineHeight: 1.7, flex: 1 }}>
+          exp01 多 seed 阶梯：改进方向 <span style={{ fontWeight: 'bold' }}>3/3 seed 一致</span>、可逐位复现，幅度 seed-dependent
+        </Text>
+      </Box>
+      <Box style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
+        <Box style={{ width: 8, height: 8, borderRadius: 4, background: '#1E4FA8', marginTop: 11 }} />
+        <Text style={{ fontSize: 19, color: '#1A2230', lineHeight: 1.7, flex: 1 }}>
+          exp02 规模标定：<span style={{ fontWeight: 'bold' }}>求解规模与任务规模 N 解耦</span>，瓶颈定位到选择名额而非候选比例
+        </Text>
+      </Box>
+    </Box>
+    <Text style={{ fontSize: 16, color: '#4A5568', lineHeight: 1.8, marginTop: 30 }}>
+      评估口径：长程滚动 24 周期、Poisson λ=5 到达；「任务不被完成只有物理约束被违反」——完成只认物理约束，迟到计奖励折减而非废飞。所有数字来自实验 metrics 原始记录，可复现。
+    </Text>
+    <Box style={{ marginTop: 24, flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+      <Box style={{ padding: '7px 16px', background: '#1E4FA8', borderRadius: 6 }}>
+        <Text style={{ fontSize: 14, color: '#FFFFFF', fontWeight: 'bold' }}>P12 · exp01</Text>
+      </Box>
+      <Box style={{ padding: '7px 16px', background: '#1E4FA8', borderRadius: 6 }}>
+        <Text style={{ fontSize: 14, color: '#FFFFFF', fontWeight: 'bold' }}>P13 · exp02</Text>
+      </Box>
+      <Box style={{ padding: '7px 16px', background: '#1E4FA8', borderRadius: 6 }}>
+        <Text style={{ fontSize: 14, color: '#FFFFFF', fontWeight: 'bold' }}>P14 · 性能瓶颈</Text>
+      </Box>
+      <Box style={{ padding: '7px 16px', background: '#1E4FA8', borderRadius: 6 }}>
+        <Text style={{ fontSize: 14, color: '#FFFFFF', fontWeight: 'bold' }}>P15 · 边界与计划</Text>
+      </Box>
+    </Box>
+  </Box>
+
+  <Box style={{ position: 'absolute', top: 480, right: 80, width: 360, flexDirection: 'column', alignItems: 'flex-end', gap: 12 }}>
+    {['按时率 93.3% ± 3.6', '完成 60/60 · 废飞 0', '求解规模与 N 解耦'].map((k) => (
+      <Box key={k} style={{ padding: '8px 18px', background: '#F0F5FC', borderRadius: 18, border: '1px solid #D6DCE5' }}>
+        <Text style={{ fontSize: 15, color: '#1E4FA8', fontWeight: 'bold' }}>{k}</Text>
+      </Box>
+    ))}
+  </Box>
+
+  <Box style={{ position: 'absolute', bottom: 76, left: 80, flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+    {['01', '02', '03', '04'].map((n, i) => (
+      <Box key={n} style={{ padding: '6px 16px', borderRadius: 14, background: i === 3 ? '#1E4FA8' : '#F0F5FC' }}>
+        <Text style={{ fontSize: 14, fontWeight: 'bold', color: i === 3 ? '#FFFFFF' : '#8B97A8' }}>{n}</Text>
+      </Box>
+    ))}
+    <Text style={{ fontSize: 14, color: '#8B97A8', marginLeft: 8 }}>研究问题 · 方法两阶段 · 实验验证</Text>
+  </Box>
+
+  <Box style={{ position: 'absolute', bottom: 0, left: 0, width: 1280, height: 44, background: '#F7F9FC', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: '0 40px', borderTop: '1px solid #E5E7EB' }}>
+    <Text style={{ fontSize: 13, color: '#8B97A8' }}>动态滚动的多机巢多无人机协同任务分配 · 进展汇报</Text>
+    <Text style={{ fontSize: 15, color: '#1E4FA8', fontWeight: 'bold' }}>11 / 16</Text>
+  </Box>
+</Slide>

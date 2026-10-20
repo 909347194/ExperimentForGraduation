@@ -1,0 +1,80 @@
+<Slide style={{ width: 1280, height: 720, background: '#FFFFFF', position: 'relative', fontFamily: 'Source Han Sans CN, Microsoft YaHei, sans-serif' }}>
+  <Box style={{ position: 'absolute', top: 0, left: 0, width: 1280, height: 12, background: '#1E4FA8' }} />
+  <Box style={{ position: 'absolute', top: 28, left: 40, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+    <Box style={{ width: 6, height: 34, background: '#1E4FA8' }} />
+    <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#0E3F8C' }}>总体求解框架：分层滚动闭环</Text>
+  </Box>
+  <Box style={{ position: 'absolute', top: 74, left: 60, padding: '6px 18px', background: '#0E3F8C', borderRadius: 6 }}>
+    <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#FFFFFF' }}>核心主张：快速任务选择缩空间 + 精细 MUAS 组合优化</Text>
+  </Box>
+
+  <Box style={{ position: 'absolute', top: 128, left: 60 }}>
+    <svg width={1160} height={296} viewBox='0 0 1160 296'>
+      <rect x='18' y='102' width='142' height='92' rx='10' fill='#F0F5FC' stroke='#1E4FA8' strokeWidth='1.2' />
+      <text x='89' y='140' font-size='16' font-weight='bold' fill='#0E3F8C' text-anchor='middle'>动态任务池</text>
+      <text x='89' y='166' font-size='13' fill='#4A5568' text-anchor='middle'>滚动到达 · 滞留留池</text>
+      <line x1='160' y1='148' x2='216' y2='148' stroke='#1E4FA8' strokeWidth='1.8' markerEnd='url(#ah1)' />
+      <rect x='220' y='30' width='332' height='236' rx='12' fill='#FFFFFF' stroke='#1E4FA8' strokeWidth='1.2' />
+      <rect x='220' y='30' width='332' height='44' rx='12' fill='#1E4FA8' />
+      <rect x='220' y='58' width='332' height='16' fill='#1E4FA8' />
+      <text x='386' y='58' font-size='16' font-weight='bold' fill='#FFFFFF' text-anchor='middle'>第一阶段 · 动态任务选择</text>
+      <rect x='240' y='90' width='292' height='40' rx='7' fill='#F0F5FC' stroke='#3D7BD9' strokeWidth='0.8' />
+      <text x='386' y='115' font-size='14' fill='#1A2230' text-anchor='middle'>优先级预筛选 Top-αK ∩ cap(t)</text>
+      <line x1='386' y1='130' x2='386' y2='144' stroke='#3D7BD9' strokeWidth='1.2' markerEnd='url(#ah2)' />
+      <rect x='240' y='146' width='292' height='40' rx='7' fill='#F0F5FC' stroke='#3D7BD9' strokeWidth='0.8' />
+      <text x='386' y='171' font-size='14' fill='#1A2230' text-anchor='middle'>边际收益增量选择 Δ = ΔB / ΔC</text>
+      <line x1='386' y1='186' x2='386' y2='200' stroke='#3D7BD9' strokeWidth='1.2' markerEnd='url(#ah2)' />
+      <rect x='240' y='202' width='292' height='40' rx='7' fill='#F0F5FC' stroke='#3D7BD9' strokeWidth='0.8' />
+      <text x='386' y='227' font-size='14' fill='#1A2230' text-anchor='middle'>快速可行性检查</text>
+      <line x1='552' y1='148' x2='606' y2='148' stroke='#1E4FA8' strokeWidth='1.8' markerEnd='url(#ah1)' />
+      <text x='579' y='136' font-size='13' font-weight='bold' fill='#1E4FA8' text-anchor='middle'>候选集</text>
+      <rect x='610' y='30' width='332' height='236' rx='12' fill='#FFFFFF' stroke='#1E4FA8' strokeWidth='1.2' />
+      <rect x='610' y='30' width='332' height='44' rx='12' fill='#0E3F8C' />
+      <rect x='610' y='58' width='332' height='16' fill='#0E3F8C' />
+      <text x='776' y='58' font-size='16' font-weight='bold' fill='#FFFFFF' text-anchor='middle'>第二阶段 · 选择性 MUAS</text>
+      <rect x='630' y='90' width='292' height='40' rx='7' fill='#F0F5FC' stroke='#3D7BD9' strokeWidth='0.8' />
+      <text x='776' y='115' font-size='14' fill='#1A2230' text-anchor='middle'>统一编码 + DMDE 进化搜索</text>
+      <line x1='776' y1='130' x2='776' y2='144' stroke='#3D7BD9' strokeWidth='1.2' markerEnd='url(#ah2)' />
+      <rect x='630' y='146' width='292' height='40' rx='7' fill='#F0F5FC' stroke='#3D7BD9' strokeWidth='0.8' />
+      <text x='776' y='171' font-size='14' fill='#1A2230' text-anchor='middle'>解码 + 可行性修复（Lamarckian 回写）</text>
+      <line x1='776' y1='186' x2='776' y2='200' stroke='#3D7BD9' strokeWidth='1.2' markerEnd='url(#ah2)' />
+      <rect x='630' y='202' width='292' height='40' rx='7' fill='#F0F5FC' stroke='#3D7BD9' strokeWidth='0.8' />
+      <text x='776' y='227' font-size='14' fill='#1A2230' text-anchor='middle'>终点机巢：最小费用流精确求解</text>
+      <line x1='942' y1='148' x2='996' y2='148' stroke='#1E4FA8' strokeWidth='1.8' markerEnd='url(#ah1)' />
+      <rect x='1000' y='102' width='142' height='92' rx='10' fill='#E8EFF8' stroke='#1E4FA8' strokeWidth='1.2' />
+      <text x='1071' y='140' font-size='16' font-weight='bold' fill='#0E3F8C' text-anchor='middle'>执行与反馈</text>
+      <text x='1071' y='166' font-size='13' fill='#4A5568' text-anchor='middle'>状态更新 · 事件重规划</text>
+      <path d='M 1071,194 L 1071,266 L 89,266 L 89,198' fill='none' stroke='#3D7BD9' strokeWidth='1.6' strokeDasharray='7 5' markerEnd='url(#ah1)' />
+      <text x='580' y='286' font-size='14' fill='#3D7BD9' text-anchor='middle'>周期 t+1：任务池更新 T(t+1) = remain ∪ new ∪ release，UAV 状态同步更新</text>
+      <defs>
+        <marker id='ah1' viewBox='0 0 10 10' refX='8' refY='5' markerWidth='7' markerHeight='7' orient='auto-start-reverse'>
+          <path d='M2 1L8 5L2 9' fill='none' stroke='#1E4FA8' strokeWidth='1.6' strokeLinecap='round' strokeLinejoin='round' />
+        </marker>
+        <marker id='ah2' viewBox='0 0 10 10' refX='8' refY='5' markerWidth='6' markerHeight='6' orient='auto-start-reverse'>
+          <path d='M2 1L8 5L2 9' fill='none' stroke='#3D7BD9' strokeWidth='1.4' strokeLinecap='round' strokeLinejoin='round' />
+        </marker>
+      </defs>
+    </svg>
+  </Box>
+
+  <Box style={{ position: 'absolute', top: 442, left: 60, width: 1160, flexDirection: 'row', gap: 20 }}>
+    {[
+      { t: '第一阶段：轻量不构造成组合问题', d: '只为「值得考虑的任务」快速排序与筛选，落选任务留池下周期再评——避免对整个动态任务池做昂贵组合搜索，同时保住与执行代价的联系。', tag: '缩空间' },
+      { t: '第二阶段：四类决策联合优化', d: '任务是否执行 y × 归属 x × 访问顺序 π × 终点机巢 z 联合确定；起点固定、终点可选、允许部分空闲——这是多机巢动态滚动的 MTSP 变体。', tag: '精优化' },
+      { t: '滚动闭环：能力范围内做更多', d: '完成出池、未选留池、故障释放、新任务到达；迟到不等于废飞，完成口径只认物理约束——保证长程运行下的任务不丢失。', tag: '闭环运行' },
+    ].map((c) => (
+      <Box key={c.tag} style={{ flex: 1, background: '#F7F9FC', border: '1px solid #D6DCE5', borderTop: '4px solid #1E4FA8', borderRadius: 10, padding: '14px 18px', flexDirection: 'column' }}>
+        <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text style={{ fontSize: 17, fontWeight: 'bold', color: '#0E3F8C' }}>{c.t}</Text>
+          <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#FFFFFF', background: '#3D7BD9', padding: '3px 10px', borderRadius: 10 }}>{c.tag}</Text>
+        </Box>
+        <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.6, marginTop: 8 }}>{c.d}</Text>
+      </Box>
+    ))}
+  </Box>
+
+  <Box style={{ position: 'absolute', bottom: 0, left: 0, width: 1280, height: 44, background: '#F7F9FC', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: '0 40px', borderTop: '1px solid #E5E7EB' }}>
+    <Text style={{ fontSize: 13, color: '#8B97A8' }}>动态滚动的多机巢多无人机协同任务分配 · 进展汇报</Text>
+    <Text style={{ fontSize: 15, color: '#1E4FA8', fontWeight: 'bold' }}>05 / 16</Text>
+  </Box>
+</Slide>
