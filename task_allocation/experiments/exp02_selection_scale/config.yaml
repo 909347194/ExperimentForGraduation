@@ -18,6 +18,10 @@ problem:
   nest_capacity: 4
   # 关键变量：可用机数固定为 8，任务规模远大于它 → |T_t| >> K_avail
   n_uavs: 8
+  # 满电航程（m）：2026-10-20 起与 exp01 口径对齐（80 km）。
+  # 旧版用 1e9（不真实）→ cap(t) 恒不瓶颈、往返预筛恒过、
+  # 「按机队能力标定规模」的机制从未被真正检验过；本节即修此。
+  uav_max_range: 80000.0
   # 与 exp01_smoke 保持一致的模型权重（单位：收益当量 / 米）
   allow_unassigned: true
   allow_idle_uav: true
@@ -62,14 +66,71 @@ selection:
   synergy_radius: 5000.0
   wait_scale: 3600.0
 
-# 第二阶段只对候选集求解，规模受 Top-αK 限制，用中等算力即可
+# 规模标定扫描（2026-10-20 新增，对应 notes 结论 2）：
+# 候选/选择规模政策 × 能力预算系数。两族对照——
+#   quota_*：纯机数名额（旧口径），k = ⌈α·K⌉，与机队吞吐能力脱钩；
+#   cap_x*：能力驱动（capability mode=primary），规模 = min(cap(t), 扩张上限)，
+#           cap(t) = ⌊budget_scale·Σ remaining_range / 单任务中位代价⌋
+#           —— 跟着机队总吞吐走，正是 notes 结论 2 要求的标定方式。
+# max_expand_factor 防 c̃ 过小时规模失控（相对机数名额的扩张倍数上限）。
+# 取点说明（2026-10-20 驻巢修复后重标）：B=8×80km=640km、任务中位代价
+# ~15km ⇒ cap(×1.0)≈42（与 full baseline 34/50 执行同量级）。变点取
+# 0.25/0.5/1.0 ⇒ cap≈10/21/42，与机数名额 20/40 交错形成对照曲线；
+# 其中 quota_a5(40) 与 cap_x1(42) 近似等规模，可直接对比「同规模下
+# 两种标定口径的选择质量」。k≈80/128 等更右端取点与相邻点曲线形状
+# 重复且单格求解 5~25 min，不入矩阵；不压缩极点由 full_baseline 承担。
+variants:
+  - name: quota_a2.5
+    alpha: 2.5
+    capability:
+      mode: intersect
+  - name: quota_a5
+    alpha: 5.0
+    capability:
+      mode: intersect
+  - name: cap_x0.25
+    alpha: 2.5
+    capability:
+      mode: primary
+      budget_scale: 0.25
+      max_expand_factor: 25
+  - name: cap_x0.5
+    alpha: 2.5
+    capability:
+      mode: primary
+      budget_scale: 0.5
+      max_expand_factor: 25
+  - name: cap_x1
+    alpha: 2.5
+    capability:
+      mode: primary
+      budget_scale: 1.0
+      max_expand_factor: 25
+
+# 第二阶段只对候选集求解，规模受候选上限限制，用中等算力即可。
+# 2026-10-20：max_generations 60→40、polish 预算 2000→800（单格求解随
+# 候选数超线性涨：k=64 时 60 代 + 2000 评估约 5 min/格）。exp02 量的是
+# 「吞吐-耗时-质量」权衡曲线的形状，不是生产级解质量（那由 exp01 以
+# 100 代 + 2000 评估的口径给出）；全格同预算，横向可比。
 solver:
   pop_size: 20
-  max_generations: 60
+  max_generations: 40
+
+stage:
+  prune_unprofitable: true
+  prune_max_rounds: 8
+  prune_margin: 0.0
+  prune_wait_bonus: 1.0
+  wait_scale: 3600.0
+  polish_max_rounds: 20
+  polish_max_evals: 800
 
 run:
   save_results: true
   verbose: true
   # 对照实验：把 MUAS 直接跑在全量任务上（不经过第一阶段），
-  # 用于量化分层省下的时间。规模上限防止跑爆。
-  full_muas_baseline_scales: [50]
+  # 用作每个规模的质量上界与耗时参照。2026-10-20 起跑 N=50/100 两点
+  # （旧版只跑 N=50，无法给出质量-规模的完整对照）；N=200 的 full
+  # 单格求解 ~25 min、代价不成比例，不测——该规模的「无压缩上界」
+  # 由 N=50/100 的损失比例外推说明（机制不随 N 变，见 notes）。
+  full_muas_baseline_scales: [50, 100]

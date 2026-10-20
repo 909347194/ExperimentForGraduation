@@ -46,10 +46,10 @@ from task_allocation.methods.muas.constraints.nest_capacity import (
     free_slots,
 )
 from task_allocation.methods.muas.cost.cost_matrix import (
-    CostMatrixBuildResult,
     build_pairwise_costs,
 )
 from task_allocation.methods.muas.cost.dem_terrain import DEMTerrain
+from task_allocation.methods.muas.cost.lazy_pairwise import make_lazy_pairwise
 from task_allocation.methods.muas.cost.vertical_section import (
     VerticalSectionCostEstimator,
     make_distance_fn,
@@ -231,41 +231,6 @@ class CycleRecord:
         }
 
 
-def _subset_cost_build(
-    cb: CostMatrixBuildResult,
-    all_tasks: Sequence[Task],
-    selected: Sequence[Task],
-) -> CostMatrixBuildResult:
-    """把全量代价矩阵裁到候选子集（避免重复估算，O(n²) 只算一次）。
-
-    ``provider.pairwise`` 是全量字典，子集查询命中同样成立，因此直接复用。
-
-    机巢块（``task_nest`` / ``uav_nest``）的**列维是机巢、不随任务子集变化**，
-    只裁任务行；终点机巢进编码依赖这两个块，不能丢。
-    """
-    if not selected:
-        return CostMatrixBuildResult(
-            provider=cb.provider,
-            uav_target=np.zeros((cb.uav_target.shape[0], 0)),
-            task_task=np.zeros((0, 0)),
-            task_nest=np.zeros((0, getattr(cb, "n_nests", 0))),
-            uav_nest=getattr(cb, "uav_nest", np.zeros((0, 0))),
-            n_nests=getattr(cb, "n_nests", 0),
-            distance_fn=getattr(cb, "distance_fn", None),
-        )
-    pos = {t.id: i for i, t in enumerate(all_tasks)}
-    rows = [pos[t.id] for t in selected]
-    return CostMatrixBuildResult(
-        provider=cb.provider,
-        uav_target=cb.uav_target[:, rows],
-        task_task=cb.task_task[np.ix_(rows, rows)],
-        task_nest=cb.task_nest[rows, :] if cb.task_nest.shape[0] else cb.task_nest,
-        uav_nest=cb.uav_nest,
-        n_nests=cb.n_nests,
-        distance_fn=getattr(cb, "distance_fn", None),
-    )
-
-
 class RollingHorizon:
     """滚动时域编排器。
 
@@ -427,15 +392,18 @@ class RollingHorizon:
             self.records.append(record)
             return record
 
-        # 5) 三维地理代价（O(n²)，本周期只算一次）
-        cb = build_pairwise_costs(
+        # 5) 第一阶段前的惰性代价表（延迟构建，2026-10-20）：
+        # 旧流程在这里对**全量** T_t 建 O(n²) 三维矩阵，而第一阶段只触碰
+        # O(n·K + k²) 条边——exp02 实测 N=200 时全量建矩阵占端到端
+        # 85.6%（9752/11391 ms），Top-αK 省下的搜索时间被它吃光。
+        # 改为按需计算 + 缓存的活视图：值与全量 eager 建表逐位一致
+        # （同估算器/同坐标/同方向），一阶段用完再只对候选子集建矩阵。
+        lazy = make_lazy_pairwise(
             tasks,
             self.fleet.all(),
             nests=self.nests,
-            dem=self.dem,
             estimator=self.estimator,
             nest_offset=self.nest_offset,
-            distance_fn=self._distance_fn,
         )
 
         # 6) 第一阶段：动态任务选择 → T_t^sel
@@ -466,15 +434,15 @@ class RollingHorizon:
             current_time=self._time,
             forced_task_ids=forced_ids,
         )
-        cost_hint = self._cost_hint(tasks, avail, cb)
+        cost_hint = self._cost_hint(tasks, avail, lazy)
         sel = run_selection(
             tasks,
             self.fleet.all(),
             config=sel_config,
             cost_hint=cost_hint,
-            pairwise_cost=cb.provider.pairwise,
+            pairwise_cost=lazy,
             # 统一距离口径：第一阶段用与代价矩阵/ETA 同一把 DEM 尺子
-            distance_fn=cb.distance_fn,
+            distance_fn=self._distance_fn,
         )
         record.selection = dict(sel.diagnostics)
         record.selection["replan"] = replan
@@ -498,7 +466,19 @@ class RollingHorizon:
         self.pool.mark_selected(sel.selected_ids)
 
         # 7) 第二阶段：选择性多机巢 MUAS → T_t^exec
-        cb_sel = _subset_cost_build(cb, tasks, selected)
+        # 只对候选子集建 4 个矩阵（pairwise 与一阶段共享同一张惰性表，
+        # 一阶段算过的边直接命中、不重复估算）；provider.pairwise 即活视图，
+        # 任何范围外查询按需解析，值与全量 eager 建表一致。
+        cb_sel = build_pairwise_costs(
+            selected,
+            self.fleet.all(),
+            nests=self.nests,
+            dem=self.dem,
+            estimator=self.estimator,
+            nest_offset=self.nest_offset,
+            distance_fn=self._distance_fn,
+            pairwise_source=lazy,
+        )
         # 事件驱动：不可用机巢（NEST_UNAVAILABLE）从终点候选集剔除
         stage_cfg = replace(
             self.stage_cfg, excluded_nest_ids=set(replan_ctx.unavailable_nest_ids)
@@ -672,14 +652,19 @@ class RollingHorizon:
         self,
         tasks: Sequence[Task],
         avail: Sequence[UAV],
-        cb: CostMatrixBuildResult,
+        pairwise: Mapping[tuple[int, int], float],
     ) -> dict[int, float]:
-        """第一阶段用的粗粒度执行代价 C_i(t)：最近可用 UAV 到该任务的三维代价。"""
+        """第一阶段用的粗粒度执行代价 C_i(t)：最近可用 UAV 到该任务的三维代价。
+
+        ``pairwise`` 为一阶段前的惰性表（:func:`make_lazy_pairwise`）；
+        这里发起的 n·K 次查询即它的首批缓存条目（有序对 UAV→任务，
+        与全量 eager 建表同方向同值）。
+        """
         hint: dict[int, float] = {}
         for t in tasks:
             best = float("inf")
             for u in avail:
-                c = cb.provider.cost(-(1 + u.id), t.id)
+                c = pairwise[(-(1 + u.id), t.id)]
                 if c < best:
                     best = c
             hint[t.id] = best if np.isfinite(best) else 1e6

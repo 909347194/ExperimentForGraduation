@@ -253,8 +253,21 @@ def build_cost_provider(
         positions[nest_offset + n.id] = n.position
     for u in uavs:
         positions[-(1 + u.id)] = u.position
+    if pairwise is None:
+        pw: Mapping[tuple[int, int], float] = {}
+    elif isinstance(pairwise, dict):
+        # 快照：调用方后续改动不影响 provider（历史行为）
+        pw = dict(pairwise)
+    else:
+        # 非 dict 的 Mapping 直通共享。本项目唯一的此类输入是惰性活视图
+        # :class:`~task_allocation.methods.muas.cost.lazy_pairwise.LazyPairwiseCost`：
+        # ① 其语义是「只增缓存的值视图」，快照无意义；
+        # ② dict() 物化会把没问过的边全部算出来（O(n²) 回潮），必须禁止；
+        # ③ 缺项查询按其 KeyError/False 语义回落，与普通字典缺项一致。
+        # （不 import 具体类：cost 包的 __init__ 会拉 cost_matrix → 回环。）
+        pw = pairwise
     return CostProvider(
-        pairwise=dict(pairwise or {}),
+        pairwise=pw,
         positions=positions,
         nest_offset=nest_offset,
         distance_fn=distance_fn,
