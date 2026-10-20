@@ -1,0 +1,75 @@
+<Slide style={{ width: 1280, height: 720, background: '#FFFFFF', position: 'relative', fontFamily: 'Source Han Sans CN, Microsoft YaHei, sans-serif' }}>
+  <Box style={{ position: 'absolute', top: 0, left: 0, width: 960, height: 12, background: '#1E4FA8' }} />
+  <Box style={{ position: 'absolute', top: 0, right: 0, width: 320, height: 12, background: '#3D7BD9' }} />
+
+  <Box style={{ position: 'absolute', top: 96, left: 80, width: 1120, flexDirection: 'column', alignItems: 'center' }}>
+    <Text style={{ fontSize: 20, color: '#3D7BD9', letterSpacing: 8 }}>硕士学位论文 · 进展汇报</Text>
+    <Text style={{ fontSize: 50, fontWeight: 'bold', color: '#0E3F8C', textAlign: 'center', lineHeight: 1.35, marginTop: 22 }}>
+      动态滚动的多机巢多无人机<br />协同任务分配方法
+    </Text>
+    <Text style={{ fontSize: 16, color: '#8B97A8', marginTop: 18, textAlign: 'center' }}>
+      Dynamic Rolling Multi-Nest Multi-UAV Collaborative Task Allocation: A Hierarchical Framework
+    </Text>
+    <Box style={{ marginTop: 24, flexDirection: 'row', gap: 14 }}>
+      <Box style={{ padding: '7px 22px', background: '#E8EFF8', borderRadius: 18 }}>
+        <Text style={{ fontSize: 17, color: '#1E4FA8', fontWeight: 'bold' }}>分层求解框架的构建与实验验证</Text>
+      </Box>
+      <Box style={{ padding: '7px 22px', background: '#F0F5FC', borderRadius: 18 }}>
+        <Text style={{ fontSize: 17, color: '#4A5568' }}>进展 · 结果 · 下一步</Text>
+      </Box>
+    </Box>
+  </Box>
+
+  <Box style={{ position: 'absolute', bottom: 96, left: 80 }}>
+    <svg width={1120} height={228} viewBox='0 0 1120 228'>
+      <path d='M 0,150 C 180,96 320,130 480,100 S 760,130 900,92 S 1060,116 1120,100 L 1120,228 L 0,228 Z' fill='#F0F5FC' />
+      <path d='M 0,150 C 180,96 320,130 480,100 S 760,130 900,92 S 1060,116 1120,100' fill='none' stroke='#D6DCE5' strokeWidth='1' />
+      <path d='M 0,182 C 150,124 260,164 410,132 S 700,174 860,124 S 1050,152 1120,134 L 1120,228 L 0,228 Z' fill='#E8EFF8' />
+      <path d='M 0,182 C 150,124 260,164 410,132 S 700,174 860,124 S 1050,152 1120,134' fill='none' stroke='#3D7BD9' strokeWidth='1.2' />
+      <path d='M 0,208 C 200,168 380,196 560,172 S 880,200 1120,168 L 1120,228 L 0,228 Z' fill='#DCE7F5' />
+      <path d='M 128,158 Q 320,38 556,116' fill='none' stroke='#1E4FA8' strokeWidth='1.6' strokeDasharray='7 5' />
+      <path d='M 556,116 Q 770,26 972,110' fill='none' stroke='#1E4FA8' strokeWidth='1.6' strokeDasharray='7 5' />
+      <path d='M 972,110 Q 1060,72 1108,96' fill='none' stroke='#3D7BD9' strokeWidth='1.4' strokeDasharray='6 5' />
+      <circle cx='252' cy='86' r='5' fill='#FFC107' />
+      <circle cx='416' cy='64' r='5' fill='#FFC107' />
+      <circle cx='668' cy='54' r='5' fill='#FFC107' />
+      <circle cx='862' cy='68' r='5' fill='#FFC107' />
+      <circle cx='180' cy='120' r='4' fill='#FFC107' opacity='0.75' />
+      <circle cx='510' cy='96' r='4' fill='#FFC107' opacity='0.75' />
+      <circle cx='760' cy='86' r='4' fill='#FFC107' opacity='0.75' />
+      <circle cx='1020' cy='120' r='4' fill='#FFC107' opacity='0.75' />
+      <path d='M 330,76 l 11,5 l -11,5 l 3,-5 Z' fill='#1E4FA8' />
+      <path d='M 762,48 l 11,5 l -11,5 l 3,-5 Z' fill='#1E4FA8' />
+      <g>
+        <rect x='114' y='146' width='18' height='14' rx='2' fill='#1E4FA8' />
+        <path d='M 110,146 L 123,136 L 136,146 Z' fill='#0E3F8C' />
+      </g>
+      <g>
+        <rect x='547' y='104' width='18' height='14' rx='2' fill='#1E4FA8' />
+        <path d='M 543,104 L 556,94 L 569,104 Z' fill='#0E3F8C' />
+      </g>
+      <g>
+        <rect x='963' y='98' width='18' height='14' rx='2' fill='#1E4FA8' />
+        <path d='M 959,98 L 972,88 L 985,98 Z' fill='#0E3F8C' />
+      </g>
+      <text x='152' y='178' font-size='14' fill='#4A5568'>机巢（异源起飞）</text>
+      <text x='600' y='140' font-size='14' fill='#4A5568'>终点机巢择优降落</text>
+      <text x='330' y='112' font-size='14' fill='#1E4FA8'>三维航程航线</text>
+      <text x='470' y='44' font-size='14' fill='#B8860B'>动态到达任务</text>
+    </svg>
+  </Box>
+  <Box style={{ position: 'absolute', bottom: 268, right: 96, background: '#FFFFFF', border: '1px solid #D6DCE5', borderRadius: 8, padding: '8px 16px', flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+    <Text style={{ fontSize: 13, color: '#4A5568' }}><span style={{ color: '#FFC107' }}>●</span> 任务（Poisson 滚动到达）</Text>
+    <Text style={{ fontSize: 13, color: '#1E4FA8', fontWeight: 'bold' }}>– –</Text>
+    <Text style={{ fontSize: 13, color: '#4A5568' }}>航次（UAV 起点固定 · 终点可选）</Text>
+  </Box>
+  <Box style={{ position: 'absolute', bottom: 102, left: 110, flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+    <Text style={{ fontSize: 13.5, color: '#8B97A8', fontWeight: 'bold' }}>DEM</Text>
+    <Text style={{ fontSize: 13.5, color: '#8B97A8' }}>三维地形剖面（垂直切面航程口径）</Text>
+  </Box>
+
+  <Box style={{ position: 'absolute', bottom: 24, left: 80, width: 1120, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+    <Text style={{ fontSize: 16, color: '#4A5568' }}>汇报人：XXX<span style={{ color: '#D6DCE5' }}>　|　</span>指导教师：XXX</Text>
+    <Text style={{ fontSize: 16, color: '#4A5568' }}>2026 年 10 月</Text>
+  </Box>
+</Slide>

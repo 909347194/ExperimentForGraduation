@@ -1,0 +1,58 @@
+<Slide style={{ width: 1280, height: 720, background: '#FFFFFF', position: 'relative', fontFamily: 'Source Han Sans CN, Microsoft YaHei, sans-serif' }}>
+  <Box style={{ position: 'absolute', top: 0, left: 0, width: 1280, height: 12, background: '#1E4FA8' }} />
+  <Box style={{ position: 'absolute', top: 30, left: 40, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+    <Box style={{ width: 6, height: 34, background: '#1E4FA8' }} />
+    <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#0E3F8C' }}>性能瓶颈定位与消除：代价矩阵延迟构建</Text>
+  </Box>
+  <Text style={{ position: 'absolute', top: 78, left: 60, fontSize: 15, color: '#8B97A8' }}>一阶段前不再对全量任务建 O(n²) 矩阵——惰性代价表按需估算并缓存</Text>
+
+  <Box style={{ position: 'absolute', top: 116, left: 40, width: 400, height: 534, flexDirection: 'column' }}>
+    <Box style={{ background: '#F0F5FC', border: '1px solid #D6DCE5', borderRadius: 12, padding: '24px 26px', flexDirection: 'column' }}>
+      <Text style={{ fontSize: 15, color: '#4A5568' }}>O(n²) 矩阵构建占端到端比例（N=200）</Text>
+      <Box style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 14, marginTop: 10 }}>
+        <Text style={{ fontSize: 62, fontWeight: 'bold', color: '#D9534F', lineHeight: 1 }}>85.6<span style={{ fontSize: 26 }}>%</span></Text>
+        <Text style={{ fontSize: 30, color: '#8B97A8', paddingBottom: 6 }}>→</Text>
+        <Text style={{ fontSize: 62, fontWeight: 'bold', color: '#3B6D11', lineHeight: 1 }}>3.7<span style={{ fontSize: 26 }}>%</span></Text>
+      </Box>
+      <Box style={{ height: 10, background: '#D6DCE5', borderRadius: 5, marginTop: 16 }}>
+        <Box style={{ width: '4.3%', height: 10, background: '#3B6D11', borderRadius: 5 }} />
+      </Box>
+      <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.7, marginTop: 14 }}>
+        现算边数 2 164 / 43 264（<span style={{ fontWeight: 'bold' }}>5.0%</span>）；子集构建 66ms，对比全量预建约 16.8s
+      </Text>
+    </Box>
+
+    <Box style={{ marginTop: 16, background: '#F7F9FC', border: '1px solid #D6DCE5', borderRadius: 10, padding: '14px 20px', flexDirection: 'column' }}>
+      <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#0E3F8C' }}>机制：惰性代价表 LazyPairwiseCost</Text>
+      <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.7, marginTop: 6 }}>
+        映射协议 + 按需估算 + 缓存，一阶段只触 O(n·K + k²) 条边；候选确定后仅对子集精建 4 个代价矩阵。值与全量建表<span style={{ fontWeight: 'bold' }}>逐位一致</span>。
+      </Text>
+    </Box>
+
+    <Box style={{ marginTop: 14, background: '#0E3F8C', borderRadius: 10, padding: '13px 20px' }}>
+      <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#FFFFFF', lineHeight: 1.6 }}>
+        无损验证：7 个实验格与旧代码逐位复现（bit-exact）——性能优化不改变任何决策结果，两阶段耗时分解见右图。
+      </Text>
+    </Box>
+  </Box>
+
+  <Box style={{ position: 'absolute', top: 116, left: 464, width: 776, flexDirection: 'column' }}>
+    <Box style={{ background: '#FFFFFF', border: '1px solid #D6DCE5', borderRadius: 10, padding: 8 }}>
+      <Image src="assets/fig_exp02_time.png" style={{ width: 760, height: 278, objectFit: 'cover', borderRadius: 6 }} />
+    </Box>
+    <Text style={{ fontSize: 14, color: '#8B97A8', marginTop: 8 }}>
+      耗时分解（t_hint / t_selection / t_build / t_muas）：构建与选择阶段开销可忽略，耗时集中在第二阶段求解
+    </Text>
+    <Box style={{ marginTop: 14, background: '#F7F9FC', border: '1px solid #D6DCE5', borderLeft: '4px solid #1E4FA8', borderRadius: 8, padding: '14px 20px' }}>
+      <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#0E3F8C' }}>设计判断</Text>
+      <Text style={{ fontSize: 14.5, color: '#4A5568', lineHeight: 1.75, marginTop: 6 }}>
+        瓶颈消除后，选择阶段的职能从「成本控制器」变为「质量控制器」：候选名额不再是耗时瓶颈，真正的代价在第二阶段随 k² 增长的求解——这正是「k ≈ cap(t) 是甜点、超过后收益速衰」标定结论的机理来源，也解释了 exp02 中 k=40→41 的边际收益骤减。
+      </Text>
+    </Box>
+  </Box>
+
+  <Box style={{ position: 'absolute', bottom: 0, left: 0, width: 1280, height: 44, background: '#F7F9FC', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: '0 40px', borderTop: '1px solid #E5E7EB' }}>
+    <Text style={{ fontSize: 13, color: '#8B97A8' }}>动态滚动的多机巢多无人机协同任务分配 · 进展汇报</Text>
+    <Text style={{ fontSize: 15, color: '#1E4FA8', fontWeight: 'bold' }}>14 / 16</Text>
+  </Box>
+</Slide>

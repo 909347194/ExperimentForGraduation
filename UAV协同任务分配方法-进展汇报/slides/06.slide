@@ -1,0 +1,57 @@
+<Slide style={{ width: 1280, height: 720, background: '#FFFFFF', position: 'relative', fontFamily: 'Source Han Sans CN, Microsoft YaHei, sans-serif' }}>
+  <Box style={{ position: 'absolute', top: 0, left: 0, width: 1280, height: 12, background: '#1E4FA8' }} />
+
+  <Text style={{ position: 'absolute', top: 130, right: 60, fontSize: 330, fontWeight: 'bold', color: '#E8EFF8', lineHeight: 1 }}>02</Text>
+
+  <Box style={{ position: 'absolute', top: 200, left: 80, width: 760, flexDirection: 'column' }}>
+    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+      <Box style={{ width: 40, height: 4, background: '#FFC107' }} />
+      <Text style={{ fontSize: 17, color: '#3D7BD9', letterSpacing: 5 }}>CHAPTER 02</Text>
+    </Box>
+    <Text style={{ fontSize: 44, fontWeight: 'bold', color: '#0E3F8C', marginTop: 18 }}>第一阶段：动态任务选择</Text>
+    <Box style={{ marginTop: 34, flexDirection: 'column', gap: 18 }}>
+      <Box style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
+        <Box style={{ width: 8, height: 8, borderRadius: 4, background: '#1E4FA8', marginTop: 11 }} />
+        <Text style={{ fontSize: 19, color: '#1A2230', lineHeight: 1.7, flex: 1 }}>
+          <span style={{ fontWeight: 'bold' }}>不构造成全局组合优化问题</span>——采用轻量化的「预筛选 + 增量选择 + 可行性检查」三步机制
+        </Text>
+      </Box>
+      <Box style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
+        <Box style={{ width: 8, height: 8, borderRadius: 4, background: '#1E4FA8', marginTop: 11 }} />
+        <Text style={{ fontSize: 19, color: '#1A2230', lineHeight: 1.7, flex: 1 }}>
+          候选规模受<span style={{ fontWeight: 'bold' }}>机数名额与能力承载数双重上界</span>控制，选择与后续执行代价保持联系
+        </Text>
+      </Box>
+    </Box>
+    <Text style={{ fontSize: 16, color: '#4A5568', lineHeight: 1.8, marginTop: 30 }}>
+      该阶段的目的不是直接确定最终执行任务，而是将原始动态任务池缩减为规模可控的候选集合，使后续边际选择与 MUAS 精细优化无需面对全部任务；落选任务留池、下周期再评。
+    </Text>
+    <Box style={{ marginTop: 24, flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+      <Box style={{ padding: '7px 16px', background: '#1E4FA8', borderRadius: 6 }}>
+        <Text style={{ fontSize: 14, color: '#FFFFFF', fontWeight: 'bold' }}>P7 · 优先级预筛选与边际收益选择</Text>
+      </Box>
+    </Box>
+  </Box>
+
+  <Box style={{ position: 'absolute', top: 480, right: 80, width: 360, flexDirection: 'column', alignItems: 'flex-end', gap: 12 }}>
+    {['基础优先级评价', '边际收益增量选择', '快速可行性检查'].map((k) => (
+      <Box key={k} style={{ padding: '8px 18px', background: '#F0F5FC', borderRadius: 18, border: '1px solid #D6DCE5' }}>
+        <Text style={{ fontSize: 15, color: '#1E4FA8', fontWeight: 'bold' }}>{k}</Text>
+      </Box>
+    ))}
+  </Box>
+
+  <Box style={{ position: 'absolute', bottom: 76, left: 80, flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+    {['01', '02', '03', '04'].map((n, i) => (
+      <Box key={n} style={{ padding: '6px 16px', borderRadius: 14, background: i === 1 ? '#1E4FA8' : '#F0F5FC' }}>
+        <Text style={{ fontSize: 14, fontWeight: 'bold', color: i === 1 ? '#FFFFFF' : '#8B97A8' }}>{n}</Text>
+      </Box>
+    ))}
+    <Text style={{ fontSize: 14, color: '#8B97A8', marginLeft: 8 }}>研究问题 · 方法两阶段 · 实验验证</Text>
+  </Box>
+
+  <Box style={{ position: 'absolute', bottom: 0, left: 0, width: 1280, height: 44, background: '#F7F9FC', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: '0 40px', borderTop: '1px solid #E5E7EB' }}>
+    <Text style={{ fontSize: 13, color: '#8B97A8' }}>动态滚动的多机巢多无人机协同任务分配 · 进展汇报</Text>
+    <Text style={{ fontSize: 15, color: '#1E4FA8', fontWeight: 'bold' }}>06 / 16</Text>
+  </Box>
+</Slide>
