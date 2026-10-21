@@ -30,6 +30,7 @@
 from __future__ import annotations
 
 import math
+import itertools
 from dataclasses import dataclass, field, replace
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -68,6 +69,7 @@ __all__ = [
     "select_participating_uavs",
     "run_selective_muas",
     "polish_assignment",
+    "enumerate_reference_participating",
 ]
 
 # 参与 UAV 的选择策略
@@ -75,6 +77,7 @@ POLICY_CHEAPEST = "cheapest"     # 按「到最近任务的最小代价」升序
 POLICY_FIRST = "first"           # 按登记顺序取前 K 架（便于复现）
 POLICY_MARGINAL = "marginal"     # 边际出动决策：覆盖代价边际下降 ≤ 出动代价则跳过该机（非停机）
 POLICY_DEMAND = "demand"         # 需求感知：贪心最大覆盖，保证每个选中任务都有可达参与机
+POLICY_DEMAND_MARGINAL = "demand_marginal"  # 三层选机：设施选址预选 + 字典序边际精修（exp04 B2）
 
 
 @dataclass
@@ -153,6 +156,22 @@ class MUASStageConfig:
     #   "fleet"（默认）：救援池扩到全可用机队，落地存在量化；
     #   "participating"：历史口径，仅在参与集内改派（消融对照）。
     reflow_rescue_scope: str = "fleet"
+    # 解码模式（exp04 B1 对照臂）：
+    #   "repair_chain"（默认，生产口径）：现状反应式修复链——
+    #     _consolidate → _prune → _repair_range → _choose_end_nests（≤6 轮
+    #     不动点）→ _complete_coverage → _reorder_for_deadlines →
+    #     _prune_zero_reward → _repair_range → _choose_end_nests →
+    #     _repair_range。exp01/exp02 既有结果 bit-exact 不变。
+    #   "constructive"：构造式解码（_build_constructive）——把「救援」前置为
+    #     主解码：逐任务按基因组顺序做可行性内联插入（优先 DMDE 指派机 →
+    #     其它参与机 → 全机队闲置机开单 = 第3层安全网），不可行才 y_j=0；
+    #     终点机巢/时间窗为耦合子问题，保留 ≤3 轮小迭代（不承诺单趟）。
+    #   三条红线（exp04 notes B1）：cost_vector/assignment 结构必须引导插入
+    #   （不得退化成 cost 排序键贪心，否则 DMDE 退化为排列编码 GA）；巢/
+    #   时间窗留小迭代；默认关、gated A/B。两种模式共用同一批 helper
+    #   （_tour_cost/_range_limit/_window_ok/_choose_end_nests/
+    #   _reorder_for_deadlines/_assemble），口径一致。
+    decode_mode: str = "repair_chain"
     # 终点机巢决策的求解方式：master 分支恒为方案 A（分层求解）——
     #   DMDE 只搜任务分配与访问顺序，终点机巢由内层子问题
     #   solve_end_nest_assignment 精确求解（容量约束下最优），返航代价经
@@ -207,9 +226,15 @@ class MUASStageConfig:
         if self.marginal_tour_cap is not None and self.marginal_tour_cap < 1:
             raise ValueError("marginal_tour_cap 必须 >= 1 或为 None（None=按航程自动推导）")
         if self.participating_policy not in (
-            POLICY_CHEAPEST, POLICY_FIRST, POLICY_MARGINAL, POLICY_DEMAND
+            POLICY_CHEAPEST, POLICY_FIRST, POLICY_MARGINAL, POLICY_DEMAND,
+            POLICY_DEMAND_MARGINAL
         ):
             raise ValueError(f"未知的参与 UAV 选择策略：{self.participating_policy}")
+        if self.decode_mode not in ("repair_chain", "constructive"):
+            raise ValueError(
+                'decode_mode 必须是 "repair_chain" 或 "constructive"，'
+                f"当前为 {self.decode_mode!r}"
+            )
         if str(self.reflow_rescue_scope).lower() not in ("fleet", "participating"):
             raise ValueError(
                 'reflow_rescue_scope 必须是 "fleet" 或 "participating"，'
@@ -319,6 +344,24 @@ def select_participating_uavs(
         ordered = _greedy_demand_coverage(
             avail, n_tasks, config, uav_target, row_of_uav, k
         )
+    elif config.participating_policy == POLICY_DEMAND_MARGINAL:
+        # 三层选机（exp04 B2）：第1层设施选址预选（贪心最大覆盖）+
+        # 第2层字典序边际精修。第3层安全网在解码端（reflow fleet /
+        # 构造式原生覆盖），不在此处——「不漏可达任务」由解码保证，
+        # 选机层只做效率预筛。
+        # γ=0（未配出动代价）时预选即终选，保持可复现。
+        preselected = _greedy_demand_coverage(
+            avail, n_tasks, config, uav_target, row_of_uav, k
+        )
+        if (
+            uav_target is not None
+            and len(preselected) > 1
+            and float(config.participation_cost) > 0.0
+        ):
+            return _select_by_lexicographic_marginal(
+                preselected, config, uav_target, row_of_uav, n_tasks
+            )
+        return preselected
     else:
         def cheapest_cost(u: UAV) -> float:
             row = row_of_uav.get(u.id) if row_of_uav else None
@@ -622,6 +665,80 @@ def _select_by_marginal_takeoff(
     return picked
 
 
+def _capacity_served_count(sub: np.ndarray, n_tasks: int, cap: int | None) -> int:
+    """容量受限下 ``sub`` 的 j 架机最多能服务几个任务（贪心：便宜的先占位）。
+
+    ``cap=None``：无容量口径——有任一有限代价行即算可服务。
+    ``cap=k``：每架至多串 k 个——按 (代价, 行, 列) 升序贪心分配，不可达
+    （inf）行不占位。与 :func:`_covering_cost` 同一分配语义，只是把
+    「总代价」换成「可服务计数」，供字典序边际的第一维使用。
+    """
+    if sub.shape[0] == 0 or n_tasks <= 0:
+        return 0
+    if cap is None:
+        return int(sum(1 for t in range(n_tasks) if np.isfinite(sub[:, t]).any()))
+    j = sub.shape[0]
+    pairs = sorted(
+        (float(sub[u, t]), u, t) for u in range(j) for t in range(n_tasks)
+    )
+    load = [0] * j
+    done = [False] * n_tasks
+    served = 0
+    for c, u, t in pairs:
+        if done[t] or load[u] >= cap or not np.isfinite(c):
+            continue
+        done[t] = True
+        load[u] += 1
+        served += 1
+    return served
+
+
+def _select_by_lexicographic_marginal(
+    ordered: Sequence[UAV],
+    config: "MUASStageConfig",
+    uav_target: np.ndarray,
+    row_of_uav: Mapping[int, int] | None,
+    n_tasks: int,
+) -> list[UAV]:
+    """字典序边际出动决策（exp04 B2 第2层精修）。
+
+    边际贡献按**字典序** ``(Δ可服务任务数, −Δ覆盖代价)`` 度量——与四层
+    适应度同构：先看多派一架能多服务几个任务（T1 收益层），同数时才看
+    覆盖代价下降（T3 成本层）。跳过边际 ``≤ (0, γ)`` 的机（γ =
+    ``participation_cost``，折算进成本维；第一架无条件纳入保非空）。
+    gain 非单调 ⇒ 跳过该机**继续试下一架**，不停机（同
+    ``_select_by_marginal_takeoff`` 的教训）。
+
+    与纯成本边际（``_select_by_marginal_takeoff``）的区别：可服务数放在
+    代价之前，避免「省一点航程但不多服务任何任务」的机被误派——这是
+    「承诺该紧」在选机层的落点：多派一架必须换来可服务的增量。
+    """
+    cap = _resolve_tour_cap(ordered, uav_target, n_tasks, config.marginal_tour_cap)
+    gamma = float(config.participation_cost)
+    picked: list[UAV] = []
+    rows: list[int] = []
+    for u in ordered:
+        row = row_of_uav.get(u.id) if row_of_uav else None
+        if row is None or row >= uav_target.shape[0]:
+            continue
+        if not picked:
+            picked.append(u)
+            rows.append(row)
+            continue
+        prev = uav_target[rows][:, :n_tasks]
+        cur = uav_target[rows + [row]][:, :n_tasks]
+        d_served = _capacity_served_count(cur, n_tasks, cap) - _capacity_served_count(
+            prev, n_tasks, cap
+        )
+        d_cost = _covering_cost(prev, n_tasks, cap) - _covering_cost(
+            cur, n_tasks, cap
+        )
+        if d_served > 0 or (d_served == 0 and d_cost > gamma):
+            picked.append(u)
+            rows.append(row)
+    return picked
+
+
 # ---------------------------------------------------------------------------
 # 评估器：assignment → AllocationSolution → fitness
 # ---------------------------------------------------------------------------
@@ -674,6 +791,10 @@ class MUASAssignmentEvaluator:
         self._lambda = float(problem.config.lambda_cost)
         self._cache: dict[tuple, EvalResult] = {}
         self.n_evals = 0
+        # 构造式解码（decode_mode="constructive"）的诊断出口：上一轮
+        # build_solution 中 y_j=0 证明性暂缓的任务 id（供上层对账；
+        # repair_chain 模式下恒为空列表）。
+        self.last_constructive_deferred: list[int] = []
 
     # ---- 翻译 ----------------------------------------------------------
 
@@ -686,6 +807,10 @@ class MUASAssignmentEvaluator:
         方案 A：终点机巢 z_ub 不在编码内，由 :meth:`_choose_end_nests`
         经内层最小费用流精确求解。
         """
+        # exp04 B1：解码模式分流。默认 repair_chain（生产口径，bit-exact）；
+        # constructive 为 gated 对照臂（构造式解码，救援前置为主解码）。
+        if str(self.config.decode_mode).lower() == "constructive":
+            return self._build_constructive(assignment)
         routes_local: dict[int, list[int]] = {}
         seen: set[int] = set()
         for uav_idx, task_idx in assignment:
@@ -1238,6 +1363,239 @@ class MUASAssignmentEvaluator:
 
         return work, ends
 
+    # ---- 构造式解码（exp04 B1；decode_mode="constructive"）----------------
+
+    def _feasible_insert(
+        self,
+        uav_id: int,
+        seq: Sequence[int],
+        tid: int,
+        require_window: bool = False,
+    ) -> list[int] | None:
+        """``tid`` 插入 ``seq`` 的最优**可行**位；不可行返回 None。
+
+        位置按插入代价最小选（归属由基因组定、位置可重算——与 repair_chain
+        的 ``_reorder_for_deadlines`` 同性质，是 B1 对照臂的语义差异之一）；
+        返航腿按最近巢保守估（终点巢此时未定，实际只会更远或相等）。
+        ``require_window``：True 时同时校验该位时间窗（救援/补全路径用，
+        与 ``_complete_coverage`` 的 ``require_window=True`` 同口径；主插入
+        路径默认 False，与 repair_chain「先装后重排」保持 parity）。
+        """
+        best_pos: int | None = None
+        best_cost = float("inf")
+        limit = self._range_limit(uav_id)
+        for pos in range(len(seq) + 1):
+            cand = list(seq[:pos]) + [tid] + list(seq[pos:])
+            c = self._tour_cost(uav_id, cand, None)
+            if c > limit + 1e-6:
+                continue
+            if require_window and not self._window_ok(uav_id, cand, pos):
+                continue
+            if c < best_cost - 1e-12:
+                best_cost, best_pos = c, pos
+        if best_pos is None:
+            return None
+        return list(seq[:best_pos]) + [tid] + list(seq[best_pos:])
+
+    def _rescue_task(
+        self,
+        tid: int,
+        routes: dict[int, list[int]],
+        exclude: set[int],
+        require_window: bool = True,
+    ) -> bool:
+        """构造式解码的出列任务救援（第3层安全网，Fix⑥ 内化）。
+
+        顺序即优先级：① 插入其它**非空**航次的最优可行位（代价最小）；
+        ② 闲置机开单任务航次——先参与集内、再（``reflow_rescue_scope="fleet"``
+        时）全可用机队。可达即执行（存在量化），但不得制造新违约；
+        全部不可行返回 False（调用方记 y_j=0 证明性暂缓，不谎报完成）。
+        与 ``_reflow_task`` 的区别：本函数只做「插入 + 闲置开单」两级
+        （换机腾位 Fix⑦ 留给 repair_chain 的 _reflow_task，构造式臂不复制
+        该补丁——少一层打补丁正是 B1 要检验的假设）。
+        """
+        # ① 现有非空航次（参与机；exclude 外的）
+        best: tuple[float, int, list[int]] | None = None
+        for uid in sorted(routes):
+            if uid in exclude or not routes.get(uid):
+                continue
+            new_seq = self._feasible_insert(
+                uid, routes[uid], tid, require_window=require_window
+            )
+            if new_seq is None:
+                continue
+            c = self._tour_cost(uid, new_seq, None)
+            if best is None or c < best[0] - 1e-12:
+                best = (c, uid, new_seq)
+        if best is not None:
+            routes[best[1]] = best[2]
+            return True
+        # ② 闲置机开单：参与集优先，其次全机队（fleet 口径）
+        part_ids = {u.id for u in self.participating}
+        pools: list[Sequence[UAV]] = [self.participating]
+        if str(self.config.reflow_rescue_scope).lower() == "fleet":
+            extra = [u for u in self.available_uavs if u.id not in part_ids]
+            if extra:
+                pools.append(extra)
+        for pool in pools:
+            for u in sorted(pool, key=lambda x: x.id):
+                uid = u.id
+                if uid in exclude or routes.get(uid):
+                    continue
+                if not getattr(u, "is_available", True):
+                    continue
+                if (
+                    self._tour_cost(uid, [tid], None)
+                    <= self._range_limit(uid) + 1e-6
+                    and (
+                        not require_window
+                        or self._window_ok(uid, [tid], 0)
+                    )
+                ):
+                    routes[uid] = [tid]
+                    return True
+        return False
+
+    def _build_constructive(
+        self, assignment: Iterable[tuple[int, int]]
+    ) -> AllocationSolution:
+        """构造式解码（exp04 B1，``decode_mode="constructive"``）。
+
+        与 repair_chain 的分工：repair_chain 先按基因组装航次、再反应式修复
+        （合并→删→救→重排→删→闸 六道 pass）；本函数把「救援」前置为**主
+        解码**，逐任务做可行性内联插入：
+
+        1. 初始航次 = assignment 的逐机顺序——**完整保留 DMDE 结构信号**
+           （归属与顺序先验；红线1：不把 cost_vector 当排序键）；
+        2. 逐任务重建航次：仅当「插入后航程 ≤ 预算」才留下（位置按代价
+           最优，与 repair_chain 的 _reorder 同性质），不可行的任务出列；
+        3. 出列任务救援：其它参与机最优可行位 → 全机队闲置机开单（第3层
+           安全网）→ 仍不可行 y_j=0 证明性暂缓（不谎报完成）；
+        4. 终点机巢（内层 MCF）与时间窗是**耦合子问题**：≤3 轮小迭代
+           （选巢 → 超航程则剔「节省最多」任务重救 → 重排 → 再闸）；
+           红线2：不承诺单趟。
+
+        与 repair_chain 共用同一批 helper，口径一致；产出航次全部满足
+        航程约束，时间窗由 _reorder_for_deadlines 同款处理。
+        """
+        # 1) 基因组 → 逐机航次（保留 assignment 顺序；一任务一机去重）
+        routes_local: dict[int, list[int]] = {}
+        seen: set[int] = set()
+        for uav_idx, task_idx in assignment:
+            uav_idx, task_idx = int(uav_idx), int(task_idx)
+            if uav_idx < 0 or uav_idx >= len(self.participating):
+                continue
+            if task_idx < 0 or task_idx >= len(self.tasks):
+                continue
+            if task_idx in seen:
+                continue
+            seen.add(task_idx)
+            routes_local.setdefault(uav_idx, []).append(task_idx)
+        # assignment 未覆盖的选中任务（极端情形）进待救队列，保「候选即候选」
+        # （转任务 ID：滚动场景下 t.id 是跨周期全局计数，≠ self.tasks 下标）
+        pending = [
+            self._task_ids[i] for i in range(len(self.tasks)) if i not in seen
+        ]
+
+        routes: dict[int, list[int]] = {}
+        for uav_idx, tids in routes_local.items():
+            routes[self.participating[uav_idx].id] = [
+                self._task_ids[i] for i in tids
+            ]
+
+        deferred: list[int] = []
+
+        # 2) 逐任务重建航次（航程可行性内联；不可行出列救援）
+        for uid in sorted(routes):
+            kept: list[int] = []
+            for tid in list(routes[uid]):
+                new_kept = self._feasible_insert(uid, kept, tid)
+                if new_kept is None:
+                    if not self._rescue_task(tid, routes, exclude={uid}):
+                        deferred.append(tid)
+                else:
+                    kept = new_kept
+            routes[uid] = kept
+
+        # 3) 待救任务（未被 assignment 覆盖者）
+        for tid in pending:
+            if not self._rescue_task(tid, routes, exclude=set()):
+                deferred.append(tid)
+
+        # 4) 巢 + 时间窗小迭代（耦合子问题，≤3 轮；不动点即收敛）
+        ends: dict[int, int | None] = (
+            self._choose_end_nests(routes) if routes else {}
+        )
+        prev_state: tuple | None = None
+        for _ in range(3):
+            for uid in sorted(routes):
+                if not routes.get(uid):
+                    continue
+                limit = self._range_limit(uid)
+                while (
+                    routes[uid]
+                    and self._tour_cost(uid, routes[uid], ends.get(uid))
+                    > limit + 1e-6
+                ):
+                    best_pos: int | None = None
+                    best_saving = float("-inf")
+                    for pos in range(len(routes[uid])):
+                        saving = self._removal_saving(
+                            uid, routes[uid], pos, ends.get(uid)
+                        )
+                        if saving is not None and saving > best_saving:
+                            best_saving, best_pos = saving, pos
+                    if best_pos is None:
+                        break
+                    tid = routes[uid].pop(best_pos)
+                    if not self._rescue_task(tid, routes, exclude={uid}):
+                        deferred.append(tid)
+            routes = self._reorder_for_deadlines(routes)
+            ends = self._choose_end_nests(routes) if routes else {}
+            state = (
+                tuple((k, tuple(v)) for k, v in sorted(routes.items())),
+                tuple(sorted((k, str(v)) for k, v in ends.items())),
+            )
+            if state == prev_state:
+                break
+            prev_state = state
+
+        # deferred 全程持有**任务 ID**（steps 2-4 均从 routes 取 tid）；
+        # 严禁再经 _task_ids 二次映射——滚动场景 t.id 是全局计数，越界。
+        self.last_constructive_deferred = list(dict.fromkeys(deferred))
+        return self._assemble(routes, ends)
+
+    def greedy_constructive_routes(
+        self, participating_ids: Sequence[int]
+    ) -> dict[int, list[int]]:
+        """无基因组的构造式航线（exp04 B3 枚举参照的固定解码器）。
+
+        与 :meth:`_build_constructive` 同机制但**不读基因组**：每个选中
+        任务在给定参与子集上按「最优可行插入代价」全局贪心
+        （facility-location 式），不可行走与构造式解码相同的救援链
+        （参与机 → 全机队闲置）。用于枚举参照——把「选哪些机」的质量
+        从 DMDE 搜索中隔离出来。
+
+        注意（B3 边界）：本方法度量**选机质量**（固定解码器下的代理适应
+        度），不是全流程质量；DMDE 的搜索增量由 B1/B2 主指标体现。
+        """
+        routes: dict[int, list[int]] = {int(uid): [] for uid in participating_ids}
+        for tid in self._task_ids:
+            best: tuple[float, int, list[int]] | None = None
+            for uid in sorted(routes):
+                new_seq = self._feasible_insert(uid, routes[uid], tid)
+                if new_seq is None:
+                    continue
+                c = self._tour_cost(uid, new_seq, None)
+                if best is None or c < best[0] - 1e-12:
+                    best = (c, uid, new_seq)
+            if best is not None:
+                routes[best[1]] = best[2]
+                continue
+            # 安全网：参与集内闲置 → 全机队闲置（fleet 口径）
+            self._rescue_task(tid, routes, exclude=set())
+        return {uid: seq for uid, seq in routes.items() if seq}
+
     def _arrival_time_of(
         self,
         uav_id: int,
@@ -1648,6 +2006,89 @@ class MUASAssignmentEvaluator:
         if len(new_genes) != len(child.genes):
             return None
         return Individual(genes=new_genes, model_type=child.model_type)
+
+
+# ---------------------------------------------------------------------------
+# 小 N 近精确枚举参照（exp04 B3）
+# ---------------------------------------------------------------------------
+
+
+def enumerate_reference_participating(
+    evaluator: MUASAssignmentEvaluator,
+    heuristic_ids: Sequence[int],
+    *,
+    max_avail: int = 12,
+    max_tasks: int = 10,
+    max_subsets: int = 5000,
+) -> dict[str, Any]:
+    """小 N 近精确枚举参照：量化启发式选机离最优子集差多远（exp04 B3）。
+
+    仅在 ``len(avail) <= max_avail`` 且 ``N <= max_tasks`` 时执行
+    （组合爆炸防护；子集总数超 ``max_subsets`` 时按确定性步长抽样，
+    ``sampled=True`` 随结果报告）。枚举可用机的**同架次预算**子集
+    （|S| = len(heuristic_ids)——隔离选机质量；架次预算本身的合理性
+    归 B2 的 γ 边际准则，不在此混入），对每个子集用
+    :meth:`MUASAssignmentEvaluator.greedy_constructive_routes` 固定解码
+    + 终点 MCF + 问题层评价取代理适应度（四层字典序，惩罚型小者优），
+    最优子集为参照。启发式子集必入列（防抽样错过）。
+
+    **边界声明（必须随结果一起报告）**：参照系固定解码器为贪心构造
+    （不含 DMDE 搜索），度量的是**选机质量**，不是全流程质量；DMDE
+    的搜索增量由 B1/B2 主指标体现。
+
+    Returns:
+        ``{executed, n_subsets, sampled, heuristic, reference, gap}``；
+        规模超限时 ``executed=False`` 且仅含 ``reason`` 键。
+        ``gap = f_heuristic − f_reference``（适应度惩罚型，小者优，
+        故 gap ≥ 0；gap ≈ 0 表示启发式已达同预算最优）。
+    """
+    avail = [
+        u for u in evaluator.available_uavs if getattr(u, "is_available", True)
+    ]
+    n_tasks = len(evaluator.tasks)
+    heur = sorted(int(x) for x in heuristic_ids)
+    k = len(heur)
+    if k <= 0 or n_tasks <= 0:
+        return {"executed": False, "reason": "degenerate"}
+    if len(avail) > int(max_avail) or n_tasks > int(max_tasks):
+        return {"executed": False, "reason": "scale"}
+
+    def _proxy(subset_ids: Sequence[int]) -> dict[str, Any]:
+        routes = evaluator.greedy_constructive_routes(subset_ids)
+        ends = evaluator._choose_end_nests(routes) if routes else {}
+        sol = evaluator._assemble(routes, ends)
+        evaluator.problem.evaluate(sol)
+        return {
+            "uav_ids": [int(x) for x in subset_ids],
+            "fitness": float(evaluator.problem.scalar_fitness(sol)),
+            "n_executed": len(sol.executed_task_ids),
+        }
+
+    ids = sorted(int(u.id) for u in avail)
+    combos = list(itertools.combinations(ids, k))
+    sampled = False
+    if len(combos) > int(max_subsets):
+        step = math.ceil(len(combos) / int(max_subsets))
+        combos = combos[::step]
+        sampled = True
+    if heur not in combos:
+        combos.append(heur)
+
+    best: dict[str, Any] | None = None
+    for combo in combos:
+        cur = _proxy(combo)
+        if best is None or cur["fitness"] < best["fitness"] - 1e-12:
+            best = cur
+    h = _proxy(heur)
+    gap = float(h["fitness"] - best["fitness"]) if best is not None else 0.0
+    return {
+        "executed": True,
+        "n_subsets": len(combos),
+        "sampled": sampled,
+        "heuristic": h,
+        "reference": best,
+        "gap": gap,
+    }
 
 
 # ---------------------------------------------------------------------------
