@@ -11,17 +11,18 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from .greedy import GreedySolver
+from .random_assign import RandomAssignSolver
+from .vrptw import VRPTWInsertionSolver
+
 if TYPE_CHECKING:
     from task_allocation.methods.muas.base import BaseOptimizer
 
-# 实现具体 baseline 后在此注册，例如：
-# from .greedy import GreedySolver
-# from .random_assign import RandomAssignSolver
-# REGISTRY = {
-#     "greedy": GreedySolver,
-#     "random": RandomAssignSolver,
-# }
-REGISTRY: dict[str, type] = {}
+REGISTRY: dict[str, type] = {
+    "random": RandomAssignSolver,
+    "greedy": GreedySolver,
+    "vrptw": VRPTWInsertionSolver,
+}
 
 
 def get_baseline(name: str) -> type:

@@ -46,6 +46,7 @@ from task_allocation.common.types import (
 from task_allocation.methods.muas.constraints.nest_capacity import (
     solve_end_nest_assignment,
 )
+from task_allocation.methods.muas.base import BaseOptimizer
 from task_allocation.methods.muas.cost.cost_matrix import CostMatrixBuildResult
 from task_allocation.methods.muas.problem import (
     MUASProblemConfig,
@@ -58,6 +59,7 @@ from task_allocation.methods.muas.solvers.local_search import (
     MOVE_POSITION,
     MOVE_RELOCATE,
     MOVE_SWAP,
+    PolishResult,
     polish_assignment,
 )
 
@@ -2108,6 +2110,7 @@ def run_selective_muas(
     solver_config: DMDEConfig | None = None,
     nest_offset: int = 1_000_000,
     current_time: float | None = None,
+    solver: BaseOptimizer | None = None,
 ) -> MUASStageResult:
     """执行第二阶段：选择性多机巢 MUAS 求解。
 
@@ -2122,6 +2125,14 @@ def run_selective_muas(
         solver_config:  DMDE 超参。
         current_time:   当前时刻；给出则覆盖 ``stage_config.current_time``
                         （等待补偿需要它，滚动层每周期都会变）。
+        solver:      对比求解器注入（``task_allocation/baselines/``，
+                        exp05_baselines 用）。None = 默认 DMDE（主算法，
+                        行为逐位不变）。注入求解器若在 ``extra["solution"]``
+                        返回 :class:`AllocationSolution`（预构建解通道，
+                        构造式启发式的交付形态），则以之为交付解、不再走
+                        assignment 解码修复链与 polish——基线的构造策略
+                        即其方法本身；否则退回 assignment 解码通道。
+                        两种通道共用同一套 ``problem.evaluate`` 约束评价。
 
     Returns:
         :class:`MUASStageResult`
@@ -2246,8 +2257,14 @@ def run_selective_muas(
 
         solver_cfg.gen_callback = _memetic_hook
 
-    solver = DMDESolver(config=solver_cfg)
-    result = solver.solve(
+    # 求解器装配：solver=None（默认）= DMDE 主算法；注入对比求解器时
+    # 直接用之（上方 lamarckian 并入 / memetic 钩子是 DMDE 搜索机制的
+    # 一部分，构造式基线不消费——DMDEConfig 仅供 DMDESolver 读取）。
+    if solver is not None:
+        solver_obj: BaseOptimizer = solver
+    else:
+        solver_obj = DMDESolver(config=solver_cfg)
+    result = solver_obj.solve(
         cost_matrix=cm,
         n_uavs=len(participating),
         n_targets=len(task_list),
@@ -2265,40 +2282,57 @@ def run_selective_muas(
     # 曲线（``cost_history``）与 ``best_fitness`` 保持搜索期口径自洽
     # （``cost_history[-1] == best_fitness``）；交付解自身的适应度另记
     # ``final_fitness`` 及成分，供审计用快照权重独立重算对账。
-    final = evaluator.build_solution(result.best_assignment)
-    problem.evaluate(final)
-    final_fitness = float(problem.scalar_fitness(final))
-    final_n_hard, final_excess_m = problem.hard_stats(final)
-
-    # 解码后局部搜索 polish（2026-10-19）：对 best_assignment 做
-    # relocate / swap / 插入位，候选过**同一** build_solution 修复链
-    # （evaluator.evaluate），仅严格改进才接受。搜索期口径不受影响
-    # （cost_history / best_fitness 仍是 DMDE 曲线）；交付解若被打磨
-    # 得更优则采用之——final_fitness 只降不升。
-    polish = polish_assignment(
-        evaluator, list(result.best_assignment), stage_cfg
-    )
-    if (
-        polish.n_accepted_total > 0
-        and polish.best_fitness < final_fitness - stage_cfg.polish_eps
-    ):
-        final = polish.best_solution
+    prebuilt = (result.extra or {}).get("solution")
+    if isinstance(prebuilt, AllocationSolution):
+        # 预构建解通道（构造式基线，exp05_baselines）：extra["solution"] 即
+        # 交付解——不走 assignment 解码修复链 / polish / memetic 档案，
+        # 基线的构造策略就是其方法本身；约束评价仍统一走 problem.evaluate。
+        final = prebuilt
+        problem.evaluate(final)
+        final_fitness = float(problem.scalar_fitness(final))
+        final_n_hard, final_excess_m = problem.hard_stats(final)
+        polish = PolishResult(
+            best_assignment=[],
+            base_fitness=final_fitness,
+            best_fitness=final_fitness,
+            best_solution=final,
+            n_accepted={},
+        )
+    else:
+        final = evaluator.build_solution(result.best_assignment)
         problem.evaluate(final)
         final_fitness = float(problem.scalar_fitness(final))
         final_n_hard, final_excess_m = problem.hard_stats(final)
 
-    # memetic M1 档案择优：交付解取「收敛后 polish」与「搜索期内精英档案
-    # 最优」的更优者。档案是搜索期内多代精英逐一打磨的 best（都过同一修复
-    # 链，fitness 可比），常优于仅对末代精英的收敛后 polish。final_fitness
-    # 只降不升；未开启或档案为空时跳过（逐位等于非 memetic）。
-    if (
-        memetic["solution"] is not None
-        and float(memetic["fitness"]) < final_fitness - stage_cfg.polish_eps
-    ):
-        final = memetic["solution"]
-        problem.evaluate(final)
-        final_fitness = float(problem.scalar_fitness(final))
-        final_n_hard, final_excess_m = problem.hard_stats(final)
+        # 解码后局部搜索 polish（2026-10-19）：对 best_assignment 做
+        # relocate / swap / 插入位，候选过**同一** build_solution 修复链
+        # （evaluator.evaluate），仅严格改进才接受。搜索期口径不受影响
+        # （cost_history / best_fitness 仍是 DMDE 曲线）；交付解若被打磨
+        # 得更优则采用之——final_fitness 只降不升。
+        polish = polish_assignment(
+            evaluator, list(result.best_assignment), stage_cfg
+        )
+        if (
+            polish.n_accepted_total > 0
+            and polish.best_fitness < final_fitness - stage_cfg.polish_eps
+        ):
+            final = polish.best_solution
+            problem.evaluate(final)
+            final_fitness = float(problem.scalar_fitness(final))
+            final_n_hard, final_excess_m = problem.hard_stats(final)
+
+        # memetic M1 档案择优：交付解取「收敛后 polish」与「搜索期内精英档案
+        # 最优」的更优者。档案是搜索期内多代精英逐一打磨的 best（都过同一修复
+        # 链，fitness 可比），常优于仅对末代精英的收敛后 polish。final_fitness
+        # 只降不升；未开启或档案为空时跳过（逐位等于非 memetic）。
+        if (
+            memetic["solution"] is not None
+            and float(memetic["fitness"]) < final_fitness - stage_cfg.polish_eps
+        ):
+            final = memetic["solution"]
+            problem.evaluate(final)
+            final_fitness = float(problem.scalar_fitness(final))
+            final_n_hard, final_excess_m = problem.hard_stats(final)
 
     model_type = (
         "balanced" if len(participating) == len(task_list)

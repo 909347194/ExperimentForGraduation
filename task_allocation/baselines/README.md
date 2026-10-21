@@ -117,10 +117,26 @@ run:
 | 名称 | 文件 | 状态 | 说明 |
 |------|------|------|------|
 | （接口） | `methods/muas/base/` | active | BaseOptimizer / SolverResult |
-| random | `random_assign.py` | planned | 占位，待实现 |
-| greedy | `greedy.py` | planned | 占位，待实现 |
+| random | `random_assign.py` | active | 随机可行分配（性能下界）；构造期航程门 |
+| greedy | `greedy.py` | active | 收益/代价比贪心插入（不卡时间窗） |
+| vrptw | `vrptw.py` | active | Solomon 插入式 VRPTW 启发（硬时间窗） |
+| （公共构件） | `construct.py` | active | 航段代价/时间窗游标/终点贪心选巢/Result 组装 |
 | pmx_de | — | planned | 文献对比，后续迁入 |
 | sort_de | — | planned | 文献对比，后续迁入 |
+
+已实现的三个构造式基线（2026-10-21，exp05_baselines 接入）共同约定：
+
+1. **预构建解通道**：构造式解自带路由与终点机巢，经
+   `SolverResult.extra["solution"]` 交付；`run_selective_muas(solver=...)`
+   识别后直接作为交付解，不走 assignment 解码修复链 / polish / memetic
+   ——基线的构造策略就是其方法本身；约束评价仍统一走
+   `problem.evaluate`（与主算法同一套评价口径）。
+2. **构造期硬可行**：航次闭合代价 ≤ 剩余航程（与 `_repair_range` 同口径），
+   一任务一机；VRPTW 另卡硬时间窗（greedy/random 不卡——与生产口径
+   「迟到不是废飞」一致）。
+3. **终点机巢**：贪心取「容量余量优先、代价最小」的可行巢（逐机无协调），
+   与本文方法方案 A（容量约束下最小费用流联合最优）形成对照。
+4. `best_assignment` 记真实 (uav_id, task_id) 对（不进解码器）。
 
 ---
 

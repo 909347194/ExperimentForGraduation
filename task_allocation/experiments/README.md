@@ -212,4 +212,4 @@ experiments/expXX_*/  → 一次具体设定的编排、配置与产物
 | `exp02_selection_scale` | active | 第一阶段选择规模–时间–质量 | 3.5.3 |
 | `exp03_event_rolling` | planned | 动态事件 + 滚动适应性（仅 notes） | 3.5.6 |
 | `exp04_ablation` | planned | 内部机制消融与终点策略（仅 notes） | 3.5.5 |
-| `exp05_baselines` | planned | 构造性基线与欧氏对照（仅 notes） | 3.5.4 |
+| `exp05_baselines` | active | 整体方法对照：构造性基线 + 欧氏同架构对照 | 3.5.4 |
