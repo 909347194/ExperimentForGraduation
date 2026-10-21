@@ -109,17 +109,20 @@ def select_by_marginal_gain(
     config: MarginalConfig | None = None,
     pairwise_cost: dict[tuple[int, int], float] | None = None,
     capability_cap: int | None = None,
-    limit_override: int | None = None,
+    n_sel_override: int | None = None,
     forced_task_ids: set[int] | None = None,
     distance_fn: Callable[[Sequence[float], Sequence[float]], float] | None = None,
 ) -> list[ScoredTask]:
     """边际收益增量选择（论文 3.4）。
 
+    选择任务数 ``n_sel``：``n_sel_override`` > ``max_selected`` >
+    ``⌈max_ratio·K⌉``（K = 可用 UAV 数），再与 ``capability_cap`` 取交。
+
     Args:
         capability_cap: 能力预算可承载数 cap(t)（:mod:`.capability`）。
-            非 None 时选择数上限取 ``min(⌈max_ratio·K_avail⌉, capability_cap)``
+            非 None 时选择数上限取 ``min(⌈max_ratio·K⌉, cap(t))``
             （intersect 口径），与候选预筛选同口径——规模跟着机队能力走。
-        limit_override: 直接指定选择数上限，优先级高于 ``max_selected`` 与
+        n_sel_override: 直接指定选择数上限 n_sel，优先级高于 ``max_selected`` 与
             ``capability_cap``。供 :func:`capability.effective_cap` 在
             ``mode="primary"`` 下使用，使规模得以**超过**机数名额。
         forced_task_ids: 强制纳入的任务 id（Fix②）。非 None 时优先于
@@ -130,19 +133,19 @@ def select_by_marginal_gain(
     """
     cfg = config or MarginalConfig()
     n_avail = sum(1 for u in uavs if u.is_available)
-    if limit_override is not None:
-        limit = max(1, int(limit_override))
+    if n_sel_override is not None:
+        n_sel = max(1, int(n_sel_override))
     else:
-        limit = cfg.max_selected
-        if limit is None:
-            limit = (
+        n_sel = cfg.max_selected
+        if n_sel is None:
+            n_sel = (
                 max(1, int(np.ceil(cfg.max_ratio * max(n_avail, 1))))
                 if n_avail > 0
                 else 0
             )
-        if capability_cap is not None and limit > 0:
-            limit = max(1, min(limit, int(capability_cap)))
-    if limit <= 0 or not candidates:
+        if capability_cap is not None and n_sel > 0:
+            n_sel = max(1, min(n_sel, int(capability_cap)))
+    if n_sel <= 0 or not candidates:
         for s in candidates:
             s.selected = False
         return []
@@ -152,7 +155,7 @@ def select_by_marginal_gain(
     selected_tasks: list[Task] = []
     selected_scored: list[ScoredTask] = []
 
-    while remaining and len(selected_tasks) < limit:
+    while remaining and len(selected_tasks) < n_sel:
         best_id = None
         best_eff = float("-inf")
         best_ratio = -1.0

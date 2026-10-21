@@ -3,7 +3,7 @@
 
 候选规模的完整规则（论文 3.3）：
 
-    k = min(⌈α · K_avail⌉, cap(t))
+    n_cand = min(⌈α · K⌉, cap(t))
 
 即"机数名额"与"能力预算可承载数"（:mod:`.capability`）取交；
 ``hard_cap`` 为 None 时退回纯机数名额（消融对比用）。
@@ -131,27 +131,31 @@ def compute_priorities(
 
 def top_alpha_preselect(
     scored: list[ScoredTask],
-    n_avail_uavs: int,
+    n_avail: int,
     alpha: float = 2.5,
     hard_cap: int | None = None,
-    k_override: int | None = None,
+    n_cand_override: int | None = None,
 ) -> list[ScoredTask]:
-    """Top-αK 候选预筛选（论文 3.3）。
+    """Top-α 候选预筛选（论文 3.3）。
+
+    候选任务数 ``n_cand = ⌈α·K⌉``，其中 ``K`` 为可用 UAV 数（``n_avail``）；
+    ``alpha`` 是**机数倍率**，与任务总数无关。
 
     Args:
         hard_cap: 能力预算可承载数 cap(t)（:func:`capability.capability_task_cap`）。
-            非 None 时候选数取 ``min(⌈α·K_avail⌉, hard_cap)``（intersect 口径，
+            非 None 时候选数取 ``min(⌈α·K⌉, cap(t))``（intersect 口径，
             能力只能收紧）；None 时退回纯机数名额。
-        k_override: 直接指定候选数 k，优先级高于 ``alpha`` 与 ``hard_cap``。
-            供 :func:`capability.effective_cap` 在 ``mode="primary"`` 下使用，
-            使规模得以**超过**机数名额（解决"能力充裕时欠选"）。
+        n_cand_override: 直接指定候选数 n_cand，优先级高于 ``alpha`` 与
+            ``hard_cap``。供 :func:`capability.effective_cap` 在
+            ``mode="primary"`` 下使用，使规模得以**超过**机数名额
+            （解决"能力充裕时欠选"）。
     """
-    if n_avail_uavs <= 0 or not scored:
+    if n_avail <= 0 or not scored:
         return []
-    if k_override is not None:
-        k = max(1, int(k_override))
+    if n_cand_override is not None:
+        n_cand = max(1, int(n_cand_override))
     else:
-        k = max(1, int(np.ceil(alpha * n_avail_uavs)))
+        n_cand = max(1, int(np.ceil(alpha * n_avail)))
         if hard_cap is not None:
-            k = max(1, min(k, int(hard_cap)))
-    return scored[: min(k, len(scored))]
+            n_cand = max(1, min(n_cand, int(hard_cap)))
+    return scored[: min(n_cand, len(scored))]

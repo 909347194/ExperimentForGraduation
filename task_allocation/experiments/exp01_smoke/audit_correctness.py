@@ -22,8 +22,8 @@
                等待非负；完成时刻 = 周期推进时刻
   E 奖励守恒   Σf1（规划端折减）≈ Σ R·max(0,1−L/W)（交付端实际迟到）
   F 池守恒     n_total = n_remain + n_new + n_release；逐周期水位递推闭合
-  G 选择漏斗   逐级单调不增；n_selected ≤ max_ratio·K_avail
-  H 参与机数   K ≤ min(K_avail, 任务数)（SRP 不变式 K ≤ M−1）
+  G 选择漏斗   逐级单调不增；n_selected ≤ ⌈max_ratio·K⌉
+  H 参与机数   参与机数 ≤ min(K, 任务数 N)（SRP 不变式：实例机数 ≤ N−1）
   I 收敛单调   cost_history（best fitness）非增
   N 适应度可复算（治 auto big_m 漂移，2026-10-18 拆双口径）：
                N1 搜索期自洽 cost_history[-1] == muas.best_fitness；
@@ -306,7 +306,7 @@ def main(results_name: str = "results") -> int:
         n_sel = sel.get("n_selected") or 0
         if n_sel > math.ceil(max_ratio * k) and k > 0:
             funnel_bad.append((c["cycle"], f"n_selected={n_sel} > {max_ratio}·K={max_ratio*k}"))
-    check("G 选择漏斗单调 + Top-αK 上限", not funnel_bad, str(funnel_bad[:3]))
+    check("G 选择漏斗单调 + n_cand 上限", not funnel_bad, str(funnel_bad[:3]))
 
     # ── H 参与机数（SRP 不变式）────────────────────────────────
     k_bad = []
@@ -319,7 +319,7 @@ def main(results_name: str = "results") -> int:
             k_bad.append((c["cycle"], kp, ka))
         if kt is not None and kp > max(kt, 0):
             k_bad.append((c["cycle"], f"K={kp} > M−1={kt}"))
-    check("H 参与机数 K ≤ min(K_avail, 任务数)", not k_bad, str(k_bad[:3]))
+    check("H 参与机数 ≤ min(K, 任务数 N)", not k_bad, str(k_bad[:3]))
 
     # ── I 收敛单调 ──────────────────────────────────────────────
     mono_bad = []

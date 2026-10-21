@@ -5,8 +5,10 @@
 
 旧规则只按机数定名额：
 
-    候选数   k = ⌈α · K_avail⌉
-    选择数   limit = ⌈max_ratio · K_avail⌉
+    候选任务数   n_cand = ⌈α · K⌉
+    选择任务数   n_sel  = ⌈max_ratio · K⌉
+
+（K = 可用 UAV 数；两个倍率乘的都是**机数**，与任务总数无关。）
 
 在机队航程充裕时欠选（预算还剩很多却封顶）、航程紧张时过筛（先放进来再裁）。
 本模块给出能力预算可承载的任务数上界：
@@ -19,16 +21,16 @@
 
   * ``intersect``（默认，保守）：取交集，能力只能**收紧**
 
-        k     = min(⌈α · K_avail⌉,         cap(t))
-        limit = min(⌈max_ratio · K_avail⌉, cap(t))
+        n_cand = min(⌈α · K⌉,         cap(t))
+        n_sel  = min(⌈max_ratio · K⌉, cap(t))
 
     只治"过筛"（航程紧张时提前收编）；航程充裕时仍以机数名额为硬天花板，
     **不会超名额**，"欠选"问题依旧存在。
 
   * ``primary``（能力为主）：cap(t) 直接定规模，名额降为兜底
 
-        k     = cap(t)，并按 max_expand_factor · ⌈α · K_avail⌉ 封顶（未设则不封顶）
-        limit = 同理（相对 ⌈max_ratio · K_avail⌉）
+        n_cand = cap(t)，并按 max_expand_factor · ⌈α · K⌉ 封顶（未设则不封顶）
+        n_sel  = 同理（相对 ⌈max_ratio · K⌉）
 
     航程紧张时按 cap(t) 收编、航程充裕时允许**超过名额**多选，
     两个方向的失真同时被修正。``max_expand_factor`` 防止 c̃ 过小时规模失控。
@@ -53,7 +55,7 @@
 
 1. γ 出动经济性停机（``participating_policy="marginal"``）——那是二阶段的
    主动裁量（"能飞但不值得飞"），属架构设计的自由度，不是记账误差；
-2. SRP 不变式 ``K ≤ M-1`` —— 依赖 M（待定的候选数）有循环性，且任务少时
+2. SRP 不变式 ``K ≤ N−1`` —— 依赖 N（待定的候选/任务数）有循环性，且任务少时
    cap 本就不受限，忽略无害。
 """
 
@@ -215,11 +217,11 @@ def effective_cap(
 ) -> int:
     """把「机数名额 quota」与「能力承载数 cap(t)」合成为最终规模上界。
 
-    候选预筛选（名额 = ⌈α·K⌉）与边际选择（名额 = ⌈max_ratio·K⌉）共用本函数，
-    保证两处口径一致。
+    候选预筛选（名额 = ⌈α·K⌉ → n_cand）与边际选择（名额 = ⌈max_ratio·K⌉
+    或 ``max_selected`` → n_sel）共用本函数，保证两处口径一致。
 
     Args:
-        quota: 机数名额（⌈α·K_avail⌉ 或 ⌈max_ratio·K_avail⌉ / ``max_selected``）。
+        quota: 机数名额（⌈α·K⌉ 或 ⌈max_ratio·K⌉ / ``max_selected``）。
         cap:   :func:`capability_task_cap` 的能力承载数；``None`` 表示能力未启用。
         config: 旋钮；``mode`` 决定合成方式。
 
@@ -242,8 +244,8 @@ def effective_cap(
         return quota
     cap = max(1, int(cap))
     if mode == "primary":
-        k = cap
+        n = cap
         if cfg.max_expand_factor is not None:
-            k = min(k, int(np.ceil(float(cfg.max_expand_factor) * quota)))
-        return max(1, k)
+            n = min(n, int(np.ceil(float(cfg.max_expand_factor) * quota)))
+        return max(1, n)
     return max(1, min(quota, cap))

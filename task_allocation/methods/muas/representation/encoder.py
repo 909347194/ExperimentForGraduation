@@ -8,14 +8,14 @@
 对应论文：
     公式 (3-3): 矩阵关系三元组 g_s = (U_i, T_j, C(i,j))
     公式 (3-4): 巡游关系三元组 g'_s = (T_j, T_{j+1}, Tc(j,j+1))
-    规则 3.1 (N=M):  U 和 T 均不重复，一一对应。
-    规则 3.2 (N>M):  U 不重复，T 可重复，每个 T 至少出现一次。
-    规则 3.3 (N<M):  U 可重复（巡游），T 不重复，每个 U 至少出现一次。
+    规则 3.1 (K=N):  U 和 T 均不重复，一一对应。
+    规则 3.2 (K>N):  U 不重复，T 可重复，每个 T 至少出现一次。
+    规则 3.3 (K<N):  U 可重复（巡游），T 不重复，每个 U 至少出现一次。
 
 数据结构：
     一个个体（Individual）是一组三元组基因的列表。
     每个基因 (Gene) = (uav_id, target_id, cost_value)。
-    对于 N<M 的巡游关系，额外存储 target-to-target 的代价。
+    对于 K<N 的巡游关系，额外存储 target-to-target 的代价。
 """
 
 from __future__ import annotations
@@ -102,9 +102,9 @@ class Individual:
         每个分量的语义稳定：
 
             ``[0, K)``    起始基因代价（UAV i → 首个任务），按 UAV 下标升序
-            ``[K, M)``    巡游基因代价（任务 → 任务），按出现顺序
+            ``[K, N)``    巡游基因代价（任务 → 任务），按出现顺序
 
-        ``K`` = UAV 数、``M`` = 任务数，基因总数恒为 ``M``。方案 A 口径：
+        ``K`` = UAV 数、``N`` = 任务数，基因总数恒为 ``N``。方案 A 口径：
         终点机巢不进编码（由解码后内层最小费用流精确求解，返航代价进 F2），
         因此没有终止基因段；「终点进编码」的联合变体在 pro 分支实现。
         """
@@ -146,19 +146,19 @@ class PopulationEncoder:
         n_targets: int,
     ) -> None:
         """Args:
-            cost_matrix: 代价矩阵 ``(K+M, M)``（方案 A：列只有任务，无机巢列）。
-            n_uavs:     UAV 数 K。
-            n_targets:  任务数 M。
+            cost_matrix: 代价矩阵 ``(K+N, N)``（方案 A：列只有任务，无机巢列）。
+            n_uavs:     UAV 数 K（实例机数，≤ 本周期可用机数）。
+            n_targets:  任务数 N。
         """
         self._cm = cost_matrix
-        self._n = n_uavs
-        self._m = n_targets
+        self._n_uavs = n_uavs
+        self._n_targets = n_targets
 
     @property
     def model_type(self) -> str:
-        if self._n == self._m:
+        if self._n_uavs == self._n_targets:
             return "balanced"
-        elif self._n > self._m:
+        elif self._n_uavs > self._n_targets:
             return "overloaded"
         else:
             return "srp"
@@ -185,12 +185,12 @@ class PopulationEncoder:
 
         return [method() for _ in range(pop_size)]
 
-    # ---- N=M: 规则 3.1 -----------------------------------------------------
+    # ---- K=N: 规则 3.1 -----------------------------------------------------
 
     def _generate_balanced(self) -> Individual:
         """规则 3.1: U 和 T 均不重复，一一对应。"""
-        n = self._n
-        targets = list(range(n))
+        n_targets = self._n_targets
+        targets = list(range(n_targets))
         random.shuffle(targets)
 
         genes = []
@@ -200,34 +200,34 @@ class PopulationEncoder:
 
         return Individual(genes=genes, model_type="balanced")
 
-    # ---- N>M: 规则 3.2 -----------------------------------------------------
+    # ---- K>N: 规则 3.2 -----------------------------------------------------
 
     def _generate_overloaded(self) -> Individual:
         """规则 3.2: U 不重复，T 可重复，每个 T 至少出现一次。"""
-        n, m = self._n, self._m
+        n_uavs, n_targets = self._n_uavs, self._n_targets
 
         # 首先保证每个目标至少分配一个 UAV
-        uav_indices = list(range(n))
+        uav_indices = list(range(n_uavs))
         random.shuffle(uav_indices)
 
         genes = []
-        # 前 m 个 UAV 各分配一个不同目标
-        for idx in range(m):
+        # 前 n_targets 个 UAV 各分配一个不同目标
+        for idx in range(n_targets):
             uav_id = uav_indices[idx]
             target_id = idx
             cost = float(self._cm[uav_id, target_id])
             genes.append(Gene(uav_id=uav_id, target_id=target_id, cost=cost))
 
         # 剩余 UAV 随机分配到任意目标
-        for idx in range(m, n):
+        for idx in range(n_targets, n_uavs):
             uav_id = uav_indices[idx]
-            target_id = random.randint(0, m - 1)
+            target_id = random.randint(0, n_targets - 1)
             cost = float(self._cm[uav_id, target_id])
             genes.append(Gene(uav_id=uav_id, target_id=target_id, cost=cost))
 
         return Individual(genes=genes, model_type="overloaded")
 
-    # ---- N<M: 规则 3.3 -----------------------------------------------------
+    # ---- K<N: 规则 3.3 -----------------------------------------------------
 
     def _generate_srp(self) -> Individual:
         """规则 3.3: U 可重复（巡游），T 不重复，每个 U 至少出现一次。
@@ -238,18 +238,18 @@ class PopulationEncoder:
         解码端（``muas_stage.SelectiveMUAS._consolidate`` 合并修复），
         与方案"在编码或解码中增加表达方式"一致。
         """
-        n, m = self._n, self._m
+        n_uavs, n_targets = self._n_uavs, self._n_targets
 
         # 将目标随机分配给 UAV（每个 UAV 至少一个目标）
-        targets = list(range(m))
+        targets = list(range(n_targets))
         random.shuffle(targets)
 
-        # 分组：前 n 个目标各分配给一个 UAV，剩余目标随机分配
+        # 分组：前 n_uavs 个目标各分配给一个 UAV，剩余目标随机分配
         uav_groups: dict[int, list[int]] = {}
-        for i in range(n):
+        for i in range(n_uavs):
             uav_groups[i] = [targets[i]]
-        for i in range(n, m):
-            uav_id = random.randint(0, n - 1)
+        for i in range(n_uavs, n_targets):
+            uav_id = random.randint(0, n_uavs - 1)
             uav_groups[uav_id].append(targets[i])
 
         # 对每组内目标按最近邻排序（贪心 TSP）
@@ -264,7 +264,7 @@ class PopulationEncoder:
                 else:
                     # 后续目标：Target -> Target（巡游代价）
                     prev_tgt = ordered[seq - 1]
-                    cost = float(self._cm[self._n + prev_tgt, tgt_id])
+                    cost = float(self._cm[self._n_uavs + prev_tgt, tgt_id])
                     genes.append(Gene(uav_id=-1, target_id=tgt_id, cost=cost))
 
         return Individual(genes=genes, model_type="srp")
@@ -282,7 +282,7 @@ class PopulationEncoder:
 
         while remaining:
             last = ordered[-1]
-            next_tgt = min(remaining, key=lambda t: self._cm[self._n + last, t])
+            next_tgt = min(remaining, key=lambda t: self._cm[self._n_uavs + last, t])
             ordered.append(next_tgt)
             remaining.remove(next_tgt)
 

@@ -133,9 +133,9 @@ class DMDESolver(BaseOptimizer):
         """执行 DMDE 求解。
 
         Args:
-            cost_matrix: 代价矩阵 ``(K+M, M)``（方案 A：列只有任务）。
-            n_uavs:      UAV 数量。
-            n_targets:   目标数量。
+            cost_matrix: 代价矩阵 ``(K+N, N)``（方案 A：列只有任务）。
+            n_uavs:      UAV 数 K（实例机数，≤ 可用机数）。
+            n_targets:   任务数 N。
             **kwargs:
                 fitness_evaluator: 适应度评估器（必须）。
                 uavs: UAV 列表（可选，用于评估器）。

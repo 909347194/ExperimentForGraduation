@@ -3,13 +3,13 @@
 
 【process 层 · 求解过程 ①】
 
-回答「一个周期里，候选任务怎么被逐级收敛到 T_sel、机制参数起没起作用」。
+回答「一个周期里，候选任务怎么被逐级收敛到入选名单 n_sel、机制参数起没起作用」。
 验证论文 §3 两阶段选择链路：T_t^exec ⊆ T_t^sel ⊆ T_t。
 
 六联面板（由原 ``selection_funnel`` + ``selection_detail`` 合并而来，
 面板信息无丢失）::
 
-    (a) 选择漏斗          逐级筛选任务数（T_t → 优先级 → 预筛 → 边际 → T_sel → T_exec）
+    (a) 选择漏斗          逐级筛选任务数（T_t → 优先级 → 预筛 → 边际 → 入选 n_sel → 执行）
     (b) 各级保留率        相对 T_t 的保留百分比
     (c) 预选上限咬合      capability_cap vs 池内任务数（上限远大于池内 → 该级从未咬合）
     (d) 池输入输出守恒    n_in = n_selected + n_rejected_prefilter
@@ -141,10 +141,12 @@ def plot_task_selection(
         ax_cap.annotate(f"{v}", (xi, v), textcoords="offset points",
                         xytext=(0, -13), ha="center", fontsize=FS["tick"],
                         color=PALETTE["new"])
-    k0 = sel[0].get("capability_preselect_k")
+    # 2026-10-21 符号统一：诊断键 capability_preselect_k/marginal_limit →
+    # capability_n_cand/n_sel；旧存档 json 仍可渲染（回退读旧键）。
+    k0 = sel[0].get("capability_n_cand", sel[0].get("capability_preselect_k"))
     if k0:
         ax_cap.axhline(int(k0), color="0.5", linewidth=0.9, linestyle=":")
-        ax_cap.text(n - 0.55, int(k0) + 1.2, f"preselect_k = {int(k0)}",
+        ax_cap.text(n - 0.55, int(k0) + 1.2, f"n_cand = {int(k0)}",
                     ha="right", fontsize=FS["footnote"], color="0.45")
     ax_cap.set_xticks(x, labels)
     ax_cap.set_ylim(0, max(max(cap), max(n_in), 1) * 1.3)
@@ -153,7 +155,7 @@ def plot_task_selection(
 
     # ── (d) 池输入输出守恒 ───────────────────────────────────────
     ax_cons.bar(x, n_sel, 0.5, color=PALETTE["executed"], edgecolor="white",
-                linewidth=0.6, label="进入 T_sel")
+                linewidth=0.6, label="进入 n_sel")
     ax_cons.bar(x, n_rej, 0.5, bottom=n_sel, color=PALETTE["release"],
                 edgecolor="white", linewidth=0.6, label="预筛拦截")
     for xi, a, b in zip(x, n_sel, n_rej):
@@ -197,9 +199,10 @@ def plot_task_selection(
     ax_param.axis("off")
     s0 = sel[0]
     rows = [
-        ("preselect_k / marginal_limit",
-         f"{s0.get('capability_preselect_k')} / {s0.get('capability_marginal_limit')}",
-         "预选候选数 / 边际下限"),
+        ("n_cand / n_sel",
+         f"{s0.get('capability_n_cand', s0.get('capability_preselect_k'))} / "
+         f"{s0.get('capability_n_sel', s0.get('capability_marginal_limit'))}",
+         "候选任务数 / 选择任务数"),
         ("capability_budget",
          str(s0.get("capability_budget")),
          "机队能力预算（航程）"),

@@ -2,9 +2,9 @@
 """unique_filter.py — 规则 3.5：独占分配与掩码(Inf)行/列剔除
 
 对应论文：
-    规则 3.5a (N=M): 匹配后删除该基因所在行列（用 Inf 掩码）。
-    规则 3.5b (N>M): 匹配后删除该基因对应行（UAV 不重复）。
-    规则 3.5c (N<M): 匹配后删除目标列，用目标行替换 UAV 行。
+    规则 3.5a (K=N): 匹配后删除该基因所在行列（用 Inf 掩码）。
+    规则 3.5b (K>N): 匹配后删除该基因对应行（UAV 不重复）。
+    规则 3.5c (K<N): 匹配后删除目标列，用目标行替换 UAV 行。
 
     实际计算中用 Inf 重置行列，避免删除操作降低效率。
 """
@@ -17,7 +17,7 @@ INF = 1e12
 
 
 def mask_balanced(mask: np.ndarray, row: int, col: int) -> None:
-    """规则 3.5a: N=M 时，行和列均置 Inf。
+    """规则 3.5a: K=N 时，行和列均置 Inf。
 
     保证 UAV 与目标点一一对应不重复。
     """
@@ -26,7 +26,7 @@ def mask_balanced(mask: np.ndarray, row: int, col: int) -> None:
 
 
 def mask_overloaded(mask: np.ndarray, row: int, col: int) -> None:
-    """规则 3.5b: N>M 时，仅 UAV 所在行置 Inf。
+    """规则 3.5b: K>N 时，仅 UAV 所在行置 Inf。
 
     保证 UAV 不重复，但同一目标可被多个 UAV 执行。
     """
@@ -40,7 +40,7 @@ def mask_srp_upper(
     col: int,
     n_uavs: int,
 ) -> None:
-    """规则 3.5c: N<M 时，目标列置 Inf，UAV 行更新为巡游代价。
+    """规则 3.5c: K<N 时，目标列置 Inf，UAV 行更新为巡游代价。
 
     匹配 UAV -> Target 后：
     1. 目标列置 Inf（该目标已被分配）。

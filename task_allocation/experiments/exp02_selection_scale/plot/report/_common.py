@@ -103,9 +103,14 @@ def t_build_s(row: dict[str, Any]) -> float:
     return float(row.get("t_build_ms", 0.0)) / 1000.0
 
 
-def k_candidate(row: dict[str, Any]) -> int | None:
-    """候选名额（Top-αK 后规模；full_baseline 为 None）。"""
-    v = sel_of(row).get("capability_preselect_k")
+def n_candidate(row: dict[str, Any]) -> int | None:
+    """候选任务数 n_cand（优先级预筛后规模；full_baseline 为 None）。
+
+    2026-10-21 符号统一：诊断键 capability_preselect_k → capability_n_cand；
+    旧存档 json 回退读旧键，保证可重渲染。
+    """
+    sel = sel_of(row)
+    v = sel.get("capability_n_cand", sel.get("capability_preselect_k"))
     return None if v is None else int(v)
 
 
@@ -129,9 +134,14 @@ def cap_t(row: dict[str, Any]) -> int | None:
     return None if v is None else int(v)
 
 
-def marginal_limit(row: dict[str, Any]) -> int | None:
-    """选择数封顶值 ⌈max_ratio·K⌉（intersect 口径下真正的瓶颈）。"""
-    v = sel_of(row).get("capability_marginal_limit")
+def n_sel_cap(row: dict[str, Any]) -> int | None:
+    """选择数封顶值 n_sel = ⌈max_ratio·K⌉（intersect 口径下真正的瓶颈）。
+
+    2026-10-21 符号统一：诊断键 capability_marginal_limit → capability_n_sel；
+    旧存档 json 回退读旧键，保证可重渲染。
+    """
+    sel = sel_of(row)
+    v = sel.get("capability_n_sel", sel.get("capability_marginal_limit"))
     return None if v is None else int(v)
 
 

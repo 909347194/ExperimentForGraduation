@@ -128,7 +128,7 @@ def test_top_alpha_hard_cap_binds():
     tasks = [_task(i, float(i), 0.0) for i in range(10)]
     scored = _scored(tasks)
     # 无 cap：⌈2.5×4⌉ = 10 全放行
-    assert len(top_alpha_preselect(scored, n_avail_uavs=4, alpha=2.5)) == 10
+    assert len(top_alpha_preselect(scored, n_avail=4, alpha=2.5)) == 10
     # 能力承载 3 → 只留 3
     assert len(top_alpha_preselect(scored, 4, 2.5, hard_cap=3)) == 3
 
@@ -136,7 +136,7 @@ def test_top_alpha_hard_cap_binds():
 def test_top_alpha_without_hard_cap_keeps_alpha_rule():
     tasks = [_task(i, float(i), 0.0) for i in range(10)]
     scored = _scored(tasks)
-    got = top_alpha_preselect(scored, n_avail_uavs=2, alpha=2.5)
+    got = top_alpha_preselect(scored, n_avail=2, alpha=2.5)
     assert len(got) == 5  # ⌈2.5×2⌉，纯机数名额（消融对照口径）
 
 
@@ -145,14 +145,14 @@ def test_top_alpha_without_hard_cap_keeps_alpha_rule():
 # ---------------------------------------------------------------------------
 
 
-def test_marginal_limit_capped_by_capability():
+def test_n_sel_capped_by_capability():
     uavs = [_uav(0, 10000.0), _uav(1, 10000.0)]
     tasks = [_task(i, float(100 * (i + 1)), 0.0) for i in range(6)]
     scored = _scored(tasks)
-    # 无 cap：limit = ⌈2.0×2⌉ = 4
+    # 无 cap：n_sel = ⌈2.0×2⌉ = 4
     got = select_by_marginal_gain(scored, uavs, MarginalConfig())
     assert len(got) == 4
-    # 能力承载 2 → limit = min(4, 2) = 2
+    # 能力承载 2 → n_sel = min(4, 2) = 2
     got2 = select_by_marginal_gain(scored, uavs, MarginalConfig(), capability_cap=2)
     assert len(got2) == 2
 
@@ -311,7 +311,7 @@ def test_forced_tasks_bypass_capability_cap():
     assert d["n_forced_in"] == 1
     assert d["n_after_priority"] == 4  # cap(3) + 强制纳入(1)
     by_id = {s.task.id: s for s in result.scored}
-    assert by_id[4].filter_reason != "not_in_top_alpha"
+    assert by_id[4].filter_reason != "not_in_n_cand"
 
 
 # ---------------------------------------------------------------------------
@@ -378,7 +378,7 @@ def test_pipeline_primary_expands_beyond_alpha_quota():
     result = run(tasks, uavs, cfg)
     d = result.diagnostics
     assert d["capability_cap"] >= 12
-    assert d["capability_preselect_k"] >= 12
+    assert d["capability_n_cand"] >= 12
     assert d["n_after_priority"] == 12  # 名额 5 → primary 下扩容
 
 

@@ -151,7 +151,8 @@ def plot_fleet_state(
     avail = [int((c.get("muas") or {}).get("n_uav_avail") or 0) for c in cycles]
     coded = [int((c.get("muas") or {}).get("n_participating") or 0) for c in cycles]
     dispatched = _dispatched_per_cycle(solution, cycles)
-    k_mean = float(metrics.get("summary", {}).get("K_avail_mean") or 0.0)
+    _summary = metrics.get("summary", {})
+    avail_mean = float(_summary.get("K_mean", _summary.get("K_avail_mean")) or 0.0)
 
     # 机巢占用热力图数据
     nests = list(solution.get("nests") or [])

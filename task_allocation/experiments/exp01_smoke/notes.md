@@ -80,9 +80,9 @@ from plot import render_from_results as r; r('task_allocation/experiments/exp01_
 时间窗:周期相关 latest = 到达时刻 + U(3.5,7.0)×600s(≈2100~4200s)
 
 代表运行( seed=42 ):
-周期 1 @t= 600s | T_t=10(remain0/new10) K_avail=10 | T_sel=9 → T_exec=5(保留4) | F1=41.75 F2=138798m
-周期 2 @t=1200s | T_t=10(remain5/new 5) K_avail=10 | T_sel=8 → T_exec=3(保留5) | F1=23.42 F2= 97350m
-周期 3 @t=1800s | T_t=10(remain7/new 3) K_avail=10 | T_sel=7 → T_exec=3(保留4) | F1=15.33 F2= 84254m
+周期 1 @t= 600s | T_t=10(remain0/new10) K=10 | T_sel=9 → T_exec=5(保留4) | F1=41.75 F2=138798m
+周期 2 @t=1200s | T_t=10(remain5/new 5) K=10 | T_sel=8 → T_exec=3(保留5) | F1=23.42 F2= 97350m
+周期 3 @t=1800s | T_t=10(remain7/new 3) K=10 | T_sel=7 → T_exec=3(保留4) | F1=15.33 F2= 84254m
 
 代表汇总:完成 11/18(61.1%),平均等待 690s,总收益 67.1
 多 seed 汇总(5 次):完成 11.6±2.0/18(61.3%±6.2%),平均等待 674±48s,
@@ -492,7 +492,7 @@ f(s) = -F1 + λ·F2 + w_time · F3 ,   F3 = max_k T_k
 - **全链路记录与严格审查**:见同目录 `PIPELINE.md`(配置 → 代码 → 产物 → 图的
   追踪表、两组对照运行结果、方法侧 8 项 + 实验侧 8 项审查结论)。
 - **压力场景**(审查 E1,最高优先):当前 24 架机 / 32 泊位下容量、航程、
-  Top-αK 预筛**全是惰性的**——`n_uavs=32` + 关 `recharge_at_nest` +
+  候选预筛（n_cand）**全是惰性的**——`n_uavs=32` + 关 `recharge_at_nest` +
   放大 `spread_m`,让关键约束真正咬合。
 - **exp04 消融**(审查 E2):`event_replan` / `w_time` 两个创新点各跑一组开关对照
   (`end_nest_in_encoding` 旋钮已随方案 B 移至 pro 分支);目前无基线,尚不能支撑"优越性"论断。

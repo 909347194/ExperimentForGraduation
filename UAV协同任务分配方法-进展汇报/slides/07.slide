@@ -20,16 +20,17 @@
     </Box>
 
     <Box style={{ background: '#F7F9FC', border: '1px solid #D6DCE5', borderRadius: 10, padding: '16px 20px', flexDirection: 'column' }}>
-      <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#0E3F8C' }}>② 候选集：机数名额 × 能力承载数双重上界</Text>
-      <Box style={{ marginTop: 12, background: '#E8EFF8', borderRadius: 8, padding: '14px 16px', alignItems: 'center' }}>
-        <Text style={{ fontSize: 21, fontWeight: 'bold', color: '#0E3F8C' }}>
-          k = min<span style={{ fontSize: 15 }}>{"{"}ceil(α·K<span style={{ fontSize: 11 }}>avail</span>), cap(t){"}"} </span>
-          <span style={{ fontWeight: 'normal', color: '#4A5568' }}>　　</span>
-          cap(t) = floor( B(t) / c<span style={{ fontSize: 15 }}>med</span> )
+      <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#0E3F8C' }}>② 候选数 / 选择数：机数名额 × 能力承载数双重上界</Text>
+      <Box style={{ marginTop: 12, background: '#E8EFF8', borderRadius: 8, padding: '12px 16px', flexDirection: 'column', gap: 5, alignItems: 'center' }}>
+        <Text style={{ fontSize: 16.5, fontWeight: 'bold', color: '#0E3F8C' }}>
+          n_cand = min{"{"}ceil(α·K), cap(t){"}"}　　n_sel = min{"{"}ceil(max_ratio·K), cap(t){"}"}
+        </Text>
+        <Text style={{ fontSize: 13, color: '#4A5568' }}>
+          cap(t) = floor(B(t) / c_med)；K = 可用无人机数，α = 2.5、max_ratio = 2.0 均为机数倍率
         </Text>
       </Box>
       <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.7, marginTop: 10 }}>
-        机数名额（α=2.5）保护搜索复杂度；能力承载数只计<span style={{ fontWeight: 'bold' }}>可起飞子集</span>的剩余航程 B(t)——正在充电的机是幻影容量，不计入；紧急/释放任务可绕过名额强制纳入，但仍须过可行性检查
+        机数名额保护搜索复杂度；能力承载数只计<span style={{ fontWeight: 'bold' }}>可起飞子集</span>的剩余航程 B(t)——正在充电的机是幻影容量，不计入；紧急/释放任务可绕过名额强制纳入，但仍须过可行性检查
       </Text>
     </Box>
 
@@ -59,7 +60,7 @@
         </Text>
       </Box>
       <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.7, marginTop: 8 }}>
-        插入式快速估计：把任务 i 尝试插入已选序列的每条相邻边，取最小三维航程增量——<span style={{ fontWeight: 'bold' }}>不求解完整 MUAS</span>，与已选任务空间相近者因增量代价低而胜出
+        插入式快速估计：对「已选集合 + 最近机巢」的<span style={{ fontWeight: 'bold' }}>所有锚点对</span>试接入任务 i，取最小三维航程增量——不预设任何顺序、不求解完整 MUAS，与已选任务空间相近者因增量代价低而胜出
       </Text>
     </Box>
 

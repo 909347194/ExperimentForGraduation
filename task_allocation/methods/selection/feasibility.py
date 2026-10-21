@@ -172,12 +172,12 @@ def static_unreachable(
     """
     if not nests or max_range <= 0:
         return False
-    limit = margin * float(max_range)
+    range_limit = margin * float(max_range)
     p = task.position
     for n in nests:
         q = n.position
         d = float(distance_fn(q, p)) if distance_fn is not None else _euclid(q, p)
-        if 2.0 * d <= limit:
+        if 2.0 * d <= range_limit:
             return False
     return True
 

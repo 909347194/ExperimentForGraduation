@@ -134,7 +134,7 @@ FIGURES: tuple[Figure, ...] = (
         topic="compression",
         title="规模压缩与 N 解耦：候选数 / 选择数 / 执行数 / 压缩比随 N 的演化",
         needs=("metrics",),
-        source="metrics.json 的 scales[].selection.{n_tasks_in,capability_preselect_k,n_selected} + muas.n_executed + compression_ratio",
+        source="metrics.json 的 scales[].selection.{n_tasks_in,capability_n_cand,n_selected} + muas.n_executed + compression_ratio",
         func=plot_r02_compression,
     ),
     Figure(
@@ -152,7 +152,7 @@ FIGURES: tuple[Figure, ...] = (
         topic="calibration",
         title="瓶颈定位：候选名额 α 无感、选择数被 max_ratio·K 封顶",
         needs=("metrics",),
-        source="metrics.json 的 scales[]（quota_a2.5 vs quota_a5 同 sel 对照 + selection.capability_marginal_limit）",
+        source="metrics.json 的 scales[]（quota_a2.5 vs quota_a5 同 sel 对照 + selection.capability_n_sel）",
         func=plot_r04_bottleneck,
     ),
     Figure(

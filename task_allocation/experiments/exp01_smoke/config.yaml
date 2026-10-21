@@ -90,7 +90,7 @@ method:
 
 # ── 第一阶段：动态任务选择（论文 §3）──────────────────────────────
 selection:
-    alpha: 2.5 # 预筛选系数 α∈[2,3]：候选规模 Top-αK
+    alpha: 2.5 # 候选数的机数倍率 α∈[2,3]：n_cand = ⌈α·K⌉（K=可用机数，非任务数）
     weights: # 基础优先级 P_i(t) 的五项权重（会自动归一化）
         w_r: 0.30 # 任务收益
         w_u: 0.25 # 时间紧迫度
@@ -118,7 +118,7 @@ selection:
         late_tolerance_seconds: 1800.0
     marginal:
         eps: 1.0 # 边际代价地板，与距离同量纲（m）
-        max_selected: null # null → 由 max_ratio × K_avail 决定
+        max_selected: null # null → 由 max_ratio × K 决定（n_sel = ⌈max_ratio·K⌉）
         max_ratio: 2.0
         min_marginal_ratio: 0.0
         # Fix① 防饥饿：等待时长对终刀接受判据的乘性软加权（单位无关、有界）。
@@ -188,7 +188,7 @@ muas:
     late_reward_decay_seconds: 1800.0
     w_time: 0.0 # 最坏机航迹时间项权重（论文 §5(3) a·max(Σt) 负载均衡项）；0 = 关闭（默认双目标）
     default_service_time: 60.0 # 单任务作业时长（s）
-    # 参与规划的 UAV 上限；null → 自动取 min(K_avail, M-1) 以走 srp 巡游模型
+    # 参与规划的 UAV 上限；null → 自动取 min(K, N-1) 以走 srp 巡游模型
     max_participating_uavs: null
     participating_policy: demand # cheapest | first | marginal | demand
     # ── Fix④ 需求感知参与（policy=demand）──
@@ -216,9 +216,9 @@ muas:
     reflow_rescue_scope: fleet # fleet | participating
     # ── K 决策扩展旋钮（与 M 解耦，实验/消融用；默认不启用）──
     # 三者（max_participating_uavs / sortie_budget / participation_cost）共同决定
-    # 本周期参与机数 K；均不配置时退回旧行为 K = min(K_avail, M-1)。
+    # 本周期参与机数 K；均不配置时退回旧行为 K = min(可用机数, N-1)。
     # sortie_budget：本周期出动架次硬上限 S_t（独立天花板，与边际收益无关）。
-    #   null → 不设架次上限（仅受 max_participating_uavs / SRP 不变式 K≤M-1 约束）。
+    #   null → 不设架次上限（仅受 max_participating_uavs / SRP 不变式 K≤N-1 约束）。
     #   例：机巢同时只能起降 3 架 / 充电位有限 → 设 3。
     sortie_budget: null
     # participation_cost：每架固定出动代价 γ（起降/能耗/架次占用）。
