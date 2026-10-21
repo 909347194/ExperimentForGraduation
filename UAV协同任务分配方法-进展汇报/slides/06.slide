@@ -19,7 +19,7 @@
       <Box style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
         <Box style={{ width: 8, height: 8, borderRadius: 4, background: '#1E4FA8', marginTop: 11 }} />
         <Text style={{ fontSize: 19, color: '#1A2230', lineHeight: 1.7, flex: 1 }}>
-          候选规模受<span style={{ fontWeight: 'bold' }}>机数名额与能力承载数双重上界</span>控制，选择与后续执行代价保持联系
+          候选池与能力<span style={{ fontWeight: 'bold' }}>解耦</span>（n_cand=⌈αK⌉，富）；选择数由 <span style={{ fontWeight: 'bold' }}>cap(t)</span> 卡紧（n_sel），与后续执行代价保持联系
         </Text>
       </Box>
     </Box>
@@ -34,7 +34,7 @@
   </Box>
 
   <Box style={{ position: 'absolute', top: 480, right: 80, width: 360, flexDirection: 'column', alignItems: 'flex-end', gap: 12 }}>
-    {['基础优先级评价', '边际收益增量选择', '快速可行性检查'].map((k) => (
+    {['基础优先级排序', '能力定规模(cap)', '边际增量选择'].map((k) => (
       <Box key={k} style={{ padding: '8px 18px', background: '#F0F5FC', borderRadius: 18, border: '1px solid #D6DCE5' }}>
         <Text style={{ fontSize: 15, color: '#1E4FA8', fontWeight: 'bold' }}>{k}</Text>
       </Box>
