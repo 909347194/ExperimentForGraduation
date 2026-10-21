@@ -270,6 +270,14 @@ muas:
     polish_max_rounds: 30   # 无改进即停的轮数上限
     polish_max_evals: 2000  # 真实评估数预算（缓存命中不计；防单周期耗时爆炸）
     polish_eps: 1.0e-6      # 严格改进阈值（绝对；吸收浮点求和噪声）
+    # 解码模式（exp04 B1 对照臂，2026-10-21）：
+    #   repair_chain（默认，生产口径）= 现状反应式修复链（合并→删→救→重排→
+    #     删→闸）；exp01/exp02 既有结果 bit-exact 不变。
+    #   constructive = 构造式解码：把「救援」前置为主解码（逐任务可行性内联
+    #     插入，优先 DMDE 指派机 → 其它参与机 → 全机队闲置开单；巢/时间窗留
+    #     ≤3 轮小迭代）。仅 exp04 消融显式开启，A/B 后再定是否转正。
+    # 详见 experiments/exp04_ablation/notes.md 的 B1 节（三条红线）。
+    decode_mode: repair_chain # repair_chain | constructive
     # memetic M1 精英档案（2026-10-19）：开启后每 memetic_K 代在 DE 进化
     # 循环内对当代精英跑一次 polish，维护 best-polished 档案，把路由改进
     # 前移进搜索期（治 DMDE 早平后路由优化留到收敛后）。不改基因型、无

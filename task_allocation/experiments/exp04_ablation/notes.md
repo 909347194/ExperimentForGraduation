@@ -45,8 +45,50 @@
 | **A5** | 终点：固定返回起飞机巢（或最近巢启发式） | 相对 MCF 异源终点的航程/可行差异 |
 | **A6** | （可选）终点进编码方案 B | 仅讨论；默认不进主结论 |
 | **A7** | （可选）选择层关闭，候选=全池（小 N） | 与 exp02 叙事对齐的小规模机制对照 |
+| **B1a/b** | `muas.decode_mode = repair_chain`（默认）/ `constructive` | 构造式解码（救援前置为主解码）是否不劣于反应式修复链；红线：cost_vector 不当排序键、巢/时间窗留小迭代 |
+| **B2a/b/c** | 选机策略 `demand` / `marginal` / `demand_marginal`（字典序边际） | 三层选机（设施选址预选+边际精修+解码安全网）能否少派机而不掉完成率 |
+| **B3** | 小 N 近精确枚举参照（`selection_gap` 指标） | 量化启发式选机离同预算最优子集多远（边界：贪心构造代理，非全流程） |
 
 已有资产：exp01 下适应度 A1/A2/A3 类结果应 **迁移为本矩阵可复现条目**，避免论文只引用聊天式笔记。
+
+---
+
+## 新增对照臂（2026-10-21 用户裁定）：解码模式 + 选机三层架构
+
+> 动机：审查发现 `build_solution` 的修复链（`_consolidate` → `_repair_range` → `_complete_coverage` → `_reorder` → …）是 exp01 个案（T9/T10/T19/uav_9 弹回）驱动的**反应式补丁堆叠**；同时"任务少、无人机多"时 participating 预选的质量无从度量。本组对照臂把两件事做成可复现消融：**解码是否必须修了再修**、**选机启发式离最优多远**。
+
+### B1 解码模式：`decode_mode`（repair_chain vs constructive）
+
+| 项 | 内容 |
+|----|------|
+| 配置 | `muas.decode_mode = "repair_chain"`（默认，生产口径，exp01/exp02 结果 **bit-exact 不变**）\| `"constructive"`（对照臂，显式开启） |
+| 机制 | constructive 把「救援」前置为**主解码**：逐任务按基因组顺序做**可行性内联插入**——优先落在 DMDE 指派 UAV（指派失败才依次试其它参与机 → 全机队闲置机开单），不可行才 `y_j=0` 证明性暂缓；终点机巢（内层 MCF）与时间窗重排是耦合子问题，保留 **≤3 轮小迭代**，不承诺单趟 |
+| 红线1 | **cost_vector/assignment 的结构必须引导插入**（归属由基因组定、插入优先指派机）；不得退化成"按 cost 排序键的贪心"——否则 DMDE 退化为排列编码 GA，丢掉代价进基因做连续差分的根优势 |
+| 红线2 | 巢/时间窗耦合**保留小迭代**（选巢→超航程则剔最差任务重救→重排→再闸）；"单一"做不到字面意义，文档不夸大为单趟 |
+| 红线3 | 默认关、gated A/B；constructive 与 repair_chain 共用同一批 helper（`_tour_cost`/`_range_limit`/`_window_ok`/`_choose_end_nests`/`_reorder_for_deadlines`/`_assemble`），口径一致 |
+| 验证假设 H-B1 | constructive 在完成率/航程/硬违约上**不劣于** repair_chain；若劣 → 证明修复链有真价值，正文写"差异有限"；若持平 → 说明修复链是中性开销，可取构造式换取代码简洁 |
+
+### B2 选机三层架构：设施选址预选 + 字典序边际精修 + 解码端安全网
+
+| 层 | 机制 | 落点 |
+|----|------|------|
+| 第1层 预选 | 设施选址式贪心最大覆盖（`POLICY_DEMAND`）：保证每个选中任务有一架可达参与机 | `_greedy_demand_coverage` |
+| 第2层 精修 | **字典序边际出动**（新策略 `POLICY_DEMAND_MARGINAL`）：边际贡献按 `(Δ可服务任务数, −Δ覆盖代价)` 字典序度量——与四层适应度同构（T1 收益层优先、T3 成本层次之），跳过边际 `≤ (0, γ)` 的机（γ=`participation_cost`）；区别于纯成本边际（`POLICY_MARGINAL`），避免"省一点航程但不多服务任何任务"的机被误派 | `_select_by_lexicographic_marginal` |
+| 第3层 安全网 | "不漏可达任务"由**解码端**保证：repair_chain 模式下 `reflow_rescue_scope="fleet"`（Fix⑥）；constructive 模式下构造式插入原生覆盖全机队。选机层只做**效率预筛**，不承担覆盖正确性 | `_reflow_task` / `_build_constructive` |
+
+**验证假设 H-B2**：三层架构下 K 可显著小于可用机数（尤其任务少时机多，K≥N 区也能正确工作：N 个任务各派一次、多余机闲置），而完成率不降（安全网兜底）；字典序边际比纯成本边际少派机而不掉完成率。
+
+### B3 近精确枚举参照（小 N）：量化"启发式选机差多远"
+
+| 项 | 内容 |
+|----|------|
+| 问题 | participating 预选是启发式，没有参照就无法回答"离最优多远"——答辩最可能被攻击的点 |
+| 方法 | `enumerate_reference_participating(...)`：仅当 `len(avail) ≤ 12` 且 `N ≤ 10` 时执行（组合爆炸防护，子集总数封顶 5000）；枚举可用机的**同架次预算**子集（\|S\| = 启发式 K，隔离选机质量；架次预算本身的合理性归 B2 的 γ），对每个子集跑**固定解码器**（`greedy_constructive_routes` 无基因组构造 + 终点 MCF + 问题层评价）取代理适应度，最优子集为参照 |
+| 边界声明 | 参照系固定解码器为**贪心构造（不含 DMDE 搜索）**，度量的是**选机质量**，不是全流程质量；DMDE 的搜索增量由 B1/B2 主指标体现。报告须带此声明，不夸大为"全流程差距" |
+| 产出 | exp04 报告增 `selection_gap`：`{executed, heuristic_fitness, reference_fitness, gap, n_subsets}`；`gap = f_heuristic − f_reference`（适应度为惩罚型，小者优，故 gap ≥ 0） |
+| 成功标准 | gap 在多数周期接近 0（启发式接近同预算最优）；若 gap 持续大 → 第1/2层选机有真实改进空间，作为下一步工作 |
+
+> 三臂关系：B1 换解码、B2 换选机、B3 给 B2 提供参照系；B2 的第3层安全网在两种 decode_mode 下都必须成立（`test_constructive_decode.py` 锁定）。
 
 ---
 
@@ -115,3 +157,4 @@ python task_allocation/experiments/exp04_ablation/run.py --only A0,A1,A2a,A5
 1. 把 `ABLATION_fitness_tiers_2026-10-18.md` 映射到 A0/A1/A2/A3 配置指纹。  
 2. 实现 A5 固定返巢对照（论文多巢贡献的最小证据）。  
 3. 多 seed 汇总后再锁论文表。
+4. **B1/B2/B3 已实现（2026-10-21，`muas_stage.py`）**：`decode_mode` 开关 + `_build_constructive` 构造式解码；`POLICY_DEMAND_MARGINAL` + `_select_by_lexicographic_marginal` 字典序边际选机；`enumerate_reference_participating` 小 N 枚举参照。测试见 `task_allocation/tests/test_constructive_decode.py`。待办：exp04 `run.py` 尚未建立（本目录 status=planned），B1/B2 主指标与 B3 `selection_gap` 的报告接线在 run.py 落地时一并做；在那之前以 `--set muas.decode_mode=constructive` / `muas.participating_policy=demand_marginal` 走 exp01 `run_chunked.py` 预验形态。

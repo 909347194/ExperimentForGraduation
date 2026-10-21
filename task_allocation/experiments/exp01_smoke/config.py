@@ -235,6 +235,9 @@ def build_config_bundle(cfg: Mapping[str, Any]) -> ConfigBundle:
         memetic_K=int(m.get("memetic_K", 20)),
         memetic_max_rounds=int(m.get("memetic_max_rounds", 6)),
         memetic_max_evals=int(m.get("memetic_max_evals", 500)),
+        # exp04 B1 解码模式对照臂：默认 repair_chain（生产口径，bit-exact）；
+        # "constructive" = 构造式解码（救援前置为主解码），仅消融显式开启
+        decode_mode=str(m.get("decode_mode", "repair_chain")),
     )
 
     s = _section(cfg, "solver")
