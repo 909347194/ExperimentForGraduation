@@ -202,7 +202,11 @@ def test_pipeline_budget_respects_sortie_cap():
     d = result.diagnostics
     assert d["capability_budget"] == 1000.0  # 只计 1 架
     assert d["capability_cap"] == 1  # ⌊1000/540⌋
-    assert d["n_after_priority"] == 1
+    # 解耦后：cap(t) 收紧选择数 n_sel，但候选池 n_cand 不被收紧
+    assert d["n_after_priority"] == 5
+    assert d["candidate_cap_independent"] is True
+    assert d["n_after_marginal"] <= 1
+    assert len(result.selected) <= 1
 
 
 def test_horizon_syncs_stage_caps_into_budget():
@@ -265,7 +269,8 @@ def _pipeline_setup(rng_each: float = 1000.0):
     return tasks, uavs
 
 
-def test_pipeline_cap_reduces_candidates_and_selection():
+def test_pipeline_cap_tightens_selection_not_candidates():
+    """解耦后：cap(t) 收紧选择数 n_sel，但不再收紧候选池 n_cand。"""
     tasks, uavs = _pipeline_setup(rng_each=1000.0)
     cfg = SelectionConfig()
     result = run(tasks, uavs, cfg)
@@ -274,8 +279,9 @@ def test_pipeline_cap_reduces_candidates_and_selection():
     assert d["capability_enabled"] is True
     assert d["capability_cap"] == 3
     assert d["capability_budget"] == 2000.0
-    assert d["n_after_priority"] == 3
-    assert d["n_after_marginal"] <= 3
+    assert d["n_after_priority"] == 5  # 候选池不被 cap 收紧（解耦）
+    assert d["candidate_cap_independent"] is True
+    assert d["n_after_marginal"] <= 3  # 选择数被 cap 收紧
     assert len(result.selected) <= 3
 
 
@@ -300,18 +306,22 @@ def test_pipeline_disabled_keeps_count_behavior():
     assert d["n_after_priority"] == 5  # ⌈2.5×2⌉，与能力无关
 
 
-def test_forced_tasks_bypass_capability_cap():
-    """事件驱动强制纳入任务绕过候选上限（含能力上界），仍进后续过滤。"""
-    tasks, uavs = _pipeline_setup(rng_each=1000.0)
+def test_forced_tasks_bypass_prescreen_and_get_priority():
+    """事件驱动强制纳入任务绕过 Top-αK 预筛（即使排名靠后、池已满仍被拉入），
+    并在终刀获强优先——保证不停饿。候选池已与 cap 解耦，故不再测"绕过能力上界"。"""
+    # 10 任务，n_cand = ⌈2.5×2⌉ = 5；末位任务(最远)会被预筛裁掉，强制纳入应拉回。
+    uavs = [_uav(0, 1e6), _uav(1, 1e6)]
+    xs = [500.0 + 50.0 * i for i in range(10)]
+    tasks = [_task(i, x, 0.0) for i, x in enumerate(xs)]
     cfg = SelectionConfig()
-    cfg.forced_task_ids = {4}  # 优先级最低、必被 cap 裁掉的任务
+    cfg.forced_task_ids = {9}  # 最远、优先级最低
     result = run(tasks, uavs, cfg)
     d = result.diagnostics
-    assert d["capability_cap"] == 3
+    assert d["capability_cap"] >= 10  # 充裕预算，cap 不绑定候选
     assert d["n_forced_in"] == 1
-    assert d["n_after_priority"] == 4  # cap(3) + 强制纳入(1)
+    assert d["n_after_priority"] == 6  # ⌈αK⌉=5 + 强制(1)
     by_id = {s.task.id: s for s in result.scored}
-    assert by_id[4].filter_reason != "not_in_n_cand"
+    assert by_id[9].filter_reason != "not_in_n_cand"
 
 
 # ---------------------------------------------------------------------------
@@ -349,7 +359,8 @@ def test_effective_cap_rejects_unknown_mode():
 
 
 # ---------------------------------------------------------------------------
-# primary 模式端到端：能力充裕时候选/选择数可超过 ⌈αK⌉ 名额
+# primary 模式端到端：能力充裕时选择数 n_sel 可超过 ⌈αK⌉ 名额；候选池受
+# 可行性下限 n_cand≥n_sel 抬升（仍不被 cap 直接收紧，体现解耦）
 # ---------------------------------------------------------------------------
 
 
@@ -371,7 +382,8 @@ def test_pipeline_intersect_never_exceeds_alpha_quota():
 
 
 def test_pipeline_primary_expands_beyond_alpha_quota():
-    """primary + 充裕预算：候选数扩容到全部 12 个（超过名额 5）。"""
+    """primary + 充裕预算：选择数/候选池扩容到全部 12 个（候选池受可行性下限
+    n_cand≥n_sel 抬升至 12，不再被 cap 直接收紧）。"""
     tasks, uavs = _many_tasks_setup()
     cfg = SelectionConfig()
     cfg.capability.mode = "primary"
@@ -383,21 +395,24 @@ def test_pipeline_primary_expands_beyond_alpha_quota():
 
 
 def test_pipeline_primary_max_expand_factor_clamps_expansion():
-    """primary + max_expand_factor=2.0：最多扩到 ⌈2.0×5⌉ = 10。"""
+    """primary + max_expand_factor=2.0：选择数 n_sel 扩到 ⌈2.0×4⌉ = 8；
+    候选池受可行性下限抬升至 8（不再按 max_expand·αK=10 独立扩张）。"""
     tasks, uavs = _many_tasks_setup()
     cfg = SelectionConfig()
     cfg.capability.mode = "primary"
     cfg.capability.max_expand_factor = 2.0
     result = run(tasks, uavs, cfg)
-    assert result.diagnostics["n_after_priority"] == 10
+    assert result.diagnostics["n_after_priority"] == 8
 
 
 def test_pipeline_primary_still_shrinks_when_tight():
-    """primary 下预算紧张仍按 cap(t) 收编（与 intersect 同向，不失控）。"""
+    """primary 下预算紧张：选择数 n_sel 按 cap(t)=3 收编（能力卡口生效）；
+    候选池 n_cand 仍保持 ⌈αK⌉=5（不再被 cap 收紧——解耦后的正确行为）。"""
     tasks, uavs = _many_tasks_setup(rng_each=1000.0)  # B=2000, c̃≈555 → cap=3
     cfg = SelectionConfig()
     cfg.capability.mode = "primary"
     result = run(tasks, uavs, cfg)
     d = result.diagnostics
     assert d["capability_cap"] == 3
-    assert d["n_after_priority"] == 3
+    assert d["n_after_priority"] == 5
+    assert d["candidate_cap_independent"] is True

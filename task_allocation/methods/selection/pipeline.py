@@ -1,23 +1,28 @@
 # -*- coding: utf-8 -*-
 """pipeline.py — 动态任务选择流水线。
 
-顺序：基础优先级 → 能力上界计算 cap(t) → 候选预筛选 → [事件驱动 / 防饥饿强制纳入]
-      → 初步可行性过滤 → 边际收益选择 → 候选集检查 → 淘汰原因诊断
+顺序：基础优先级 → 能力上界计算 cap(t) → 候选预筛选（与 cap 解耦）→ [事件驱动 / 防饥饿强制纳入]
+      → 初步可行性过滤 → 边际收益选择（n_sel 卡 cap）→ 候选集检查 → 淘汰原因诊断
 
-规模决策原则：候选/选择规模 = 合成(机数名额, 机队能力预算可承载数 cap(t))，
-合成方式由 :mod:`.capability` 的 ``mode`` 决定（:func:`.capability.effective_cap`）：
+规模决策原则（候选/选择**解耦**，论文 3.3 修订）：
 
-    intersect（默认）：min{名额, cap(t)} —— 能力只能**收紧**，绝不超名额。
-        航程紧张时按 cap(t) 提前收编；航程充裕时仍以机数名额为硬天花板，
-        "欠选"问题依旧存在。
-    primary：以 cap(t) 为主定规模、名额降为兜底（可按 max_expand_factor 封顶）。
-        紧张时收编、充裕时允许**超名额**多选，双向失真同时修正。
+  * 候选池 n_cand（机制3 搜索输入）**该富**：n_cand = ⌈α·K⌉，只受计算预算
+    ``capability.max_candidate_pool`` 与任务总数 N 约束；**cap(t) 既不收紧也不
+    扩张**。富池缓解排序误差、给边际增益发现协同留空间；机队越紧张、cap(t) 越小，
+    相对富余越大（纠正旧版"紧张时 n_cand 塌成 cap"的倒挂）。cap 对候选的唯一
+    耦合是可行性下限 n_cand ≥ n_sel（见 pipeline 实现）。
+  * 选择数 n_sel（真实承诺）**该紧**：n_sel = 合成(⌈max_ratio·K⌉, cap(t))，
+    合成方式由 :mod:`.capability` 的 ``mode`` 决定、且**只作用于 n_sel**：
+        intersect（默认）：min{名额, cap(t)} —— 能力只能收紧，绝不超派；
+        primary：以 cap(t) 为主定规模、名额降为兜底（防 c̃ 过小失控）。
+    这里才是能力约束真正该卡住的地方。
 
 符号口径（全文统一）：**K** = 可用 UAV 数，**N** = 任务数，
 **n_cand** = 候选任务数，**n_sel** = 选择任务数，**cap(t)** = 能力承载数。
-名额定义：n_cand = ⌈α·K⌉；n_sel = ⌈max_ratio·K⌉（或 ``max_selected``）。
-cap(t) 已是吞吐上界（⌊Σ remaining_range / 单任务中位代价⌋，见 :mod:`.capability`）；
-``capability.fallback_when_disabled=True`` 时即便关闭能力模块也按此上界收敛（Fix③）。
+名额定义：n_cand = ⌈α·K⌉（能力无关）；n_sel = ⌈max_ratio·K⌉（或 ``max_selected``）。
+cap(t) 已是吞吐上界（⌊Σ remaining_range / 单任务中位代价⌋，见 :mod:`.capability`），
+**仅约束 n_sel**；``capability.fallback_when_disabled=True`` 时即便关闭能力模块
+也按此上界收敛（Fix③）。
 注意：事件驱动（``forced_task_ids``）与防饥饿（:class:`AntiStarvationConfig`）的
 强制纳入都会**绕过**上述规模上界追加候选，并在终刀获强优先（Fix②，保证不停饿）。
 """
@@ -73,8 +78,9 @@ class SelectionConfig:
     priority: PriorityConfig = field(default_factory=PriorityConfig)
     feasibility: FeasibilityConfig = field(default_factory=FeasibilityConfig)
     marginal: MarginalConfig = field(default_factory=MarginalConfig)
-    # 能力驱动规模：候选/选择数 = min(机数名额, 能力预算可承载数)。
-    # enabled=False 时退回纯机数名额（消融对比）。
+    # 能力驱动规模：仅约束选择数 n_sel = 合成(⌈max_ratio·K⌉, cap(t))；
+    # 候选池 n_cand 已与 cap(t) 解耦（见 pipeline 顶部说明）。
+    # enabled=False 时 n_sel 退回纯机数名额（消融对比）。
     capability: CapabilityScaleConfig = field(default_factory=CapabilityScaleConfig)
     # 硬性不停饿兜底（Fix②）：老化/临期任务强制纳入，保证不无限期推迟。
     anti_starvation: AntiStarvationConfig = field(default_factory=AntiStarvationConfig)
@@ -163,18 +169,41 @@ def run(
         diagnostics["capability_fallback"] = True
     diagnostics["capability_enabled"] = cfg.capability.enabled
 
-    # 候选数 n_cand = 合成(机数名额 ⌈α·K⌉, 能力上界 cap(t))；两种 mode 见 capability.effective_cap
+    # ── 选择数 n_sel（真实承诺，该紧）：cap(t) 在此真正卡住 ───────────────
+    # intersect（默认）：min{名额, cap(t)}，能力只能收紧、绝不超派；
+    # primary：cap(t) 可超过机数名额（宽松承诺）。两种 mode 见 capability.effective_cap。
+    if marginal.max_selected is not None:
+        marginal_quota = int(marginal.max_selected)
+    else:
+        marginal_quota = (
+            max(1, int(math.ceil(marginal.max_ratio * n_avail))) if n_avail > 0 else 0
+        )
+    n_sel = effective_cap(marginal_quota, capability_cap, cfg.capability)
+    diagnostics["capability_n_sel"] = n_sel
+
+    # ── 候选池 n_cand（机制3 搜索输入，该富）：与 cap(t) 解耦 ─────────────
+    # n_cand = ⌈α·K⌉，只受计算预算上限 max_candidate_pool 与任务总数 N 约束；
+    # cap(t) 不收紧也不扩张。唯一的 cap 耦合是可行性下限 n_cand ≥ n_sel
+    # （primary 模式 cap 超过机数名额时触发），保证候选池装得下承诺数；
+    # 默认 intersect 模式 n_sel ≤ ⌈max_ratio·K⌉ < ⌈αK⌉，下限自然满足，cap
+    # 完全不触碰候选——纠正了旧版"机队紧张时 n_cand 塌成 cap"的倒挂。
     alpha_quota = (
         max(1, int(math.ceil(cfg.priority.alpha * n_avail))) if n_avail > 0 else 0
     )
-    n_cand = effective_cap(alpha_quota, capability_cap, cfg.capability)
+    n_cand = alpha_quota
+    if n_avail > 0:
+        n_cand = max(n_cand, n_sel)
+    if cfg.capability.max_candidate_pool is not None:
+        n_cand = min(n_cand, int(cfg.capability.max_candidate_pool))
+    n_cand = min(n_cand, len(scored_all))
     diagnostics["capability_n_cand"] = n_cand
+    diagnostics["candidate_cap_independent"] = capability_cap is None or n_cand >= alpha_quota
 
     preselected = top_alpha_preselect(
         scored_all,
         n_avail=n_avail,
         alpha=cfg.priority.alpha,
-        hard_cap=capability_cap,
+        hard_cap=None,
         n_cand_override=n_cand,
     )
 
@@ -202,15 +231,8 @@ def run(
     diagnostics["n_after_prefilter"] = len(passed)
     diagnostics["n_rejected_prefilter"] = len(rejected_pre)
 
-    # 选择数 n_sel = 合成(机数名额 max_selected 或 ⌈max_ratio·K⌉, 能力上界 cap(t))
-    if marginal.max_selected is not None:
-        marginal_quota = int(marginal.max_selected)
-    else:
-        marginal_quota = (
-            max(1, int(math.ceil(marginal.max_ratio * n_avail))) if n_avail > 0 else 0
-        )
-    n_sel = effective_cap(marginal_quota, capability_cap, cfg.capability)
-    diagnostics["capability_n_sel"] = n_sel
+    # n_sel 已在候选阶段前计算（pipeline 顶部）：cap(t) 是唯一能力卡口，
+    # 候选池 n_cand 仅受可行性下限 n_cand ≥ n_sel 抬升，详见上方注释。
 
     chosen = select_by_marginal_gain(
         passed,
