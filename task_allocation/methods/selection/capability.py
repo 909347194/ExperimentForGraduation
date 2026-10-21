@@ -1,41 +1,43 @@
 # -*- coding: utf-8 -*-
-"""capability.py — 机队能力预算与候选规模的能力驱动上界（论文 3.3）。
+"""capability.py — 机队能力预算与「选择数」的能力驱动上界（论文 3.3）。
 
-设计原则：**候选/选择规模跟着机队能力（剩余航程预算）走，而不是只跟机数走**。
+设计原则（论文修订版）：**候选池与选择数对能力上界 cap(t) 的语义不同，必须解耦**。
 
-旧规则只按机数定名额：
+- 候选池 n_cand（机制3 的搜索输入）**该富**：只受「计算预算 + 优先级排序质量」
+  约束，cap(t) 既不收紧也不扩张。富一点的池子能缓解排序误差、给边际增益
+  发现协同组合留空间；机队越紧张、cap(t) 越小，越需要更大的相对富余。
+- 选择数 n_sel（真正消耗航程/时间窗的承诺）**该紧**：cap(t) 是其唯一硬卡口，
+  n_sel = min(⌈max_ratio·K⌉, cap(t))（intersect）。这是能力约束真正该卡住的地方。
 
-    候选任务数   n_cand = ⌈α · K⌉
-    选择任务数   n_sel  = ⌈max_ratio · K⌉
+旧实现把同一个 cap(t) 与同一个 mode 同时作用于 n_cand 与 n_sel：在 intersect 下
+机队紧张时两者一起塌成 cap，候选池失去搜索余量——与「该富」原则相反。本模块现在
+只产出**选择数 n_sel** 的能力上界；n_cand 由 pipeline 直接以 ⌈α·K⌉（受
+``max_candidate_pool`` 计算上限约束）生成，不经此处。
 
-（K = 可用 UAV 数；两个倍率乘的都是**机数**，与任务总数无关。）
-
-在机队航程充裕时欠选（预算还剩很多却封顶）、航程紧张时过筛（先放进来再裁）。
-本模块给出能力预算可承载的任务数上界：
+cap(t) 公式不变：
 
     B(t)  = budget_scale · budget_factor · Σ_{u ∈ U_t^avail} remaining_range(u)
     c̃     = 粗代价的 quantile 分位数（默认中位数）
     cap(t) = max(min_cap, ⌊B(t) / c̃⌋)
 
-名额与 cap(t) 的合成方式由 ``CapabilityScaleConfig.mode`` 决定（两种）：
+选择数 n_sel 与 cap(t) 的合成方式由 ``CapabilityScaleConfig.mode`` 决定（两种）：
 
-  * ``intersect``（默认，保守）：取交集，能力只能**收紧**
+  * ``intersect``（默认，紧承诺）：取交集，能力只能**收紧**
 
-        n_cand = min(⌈α · K⌉,         cap(t))
-        n_sel  = min(⌈max_ratio · K⌉, cap(t))
+        n_sel = min(⌈max_ratio · K⌉, cap(t))
 
-    只治"过筛"（航程紧张时提前收编）；航程充裕时仍以机数名额为硬天花板，
-    **不会超名额**，"欠选"问题依旧存在。
+    航程紧张时按 cap(t) 收编（承诺收紧）；航程充裕时仍以机数名额为硬天花板，
+    **绝不超派**，"欠选"问题依旧存在（但候选池不受限，见上）。
 
-  * ``primary``（能力为主）：cap(t) 直接定规模，名额降为兜底
+  * ``primary``（能力为主，宽松承诺）：cap(t) 直接定规模，名额降为兜底
 
-        n_cand = cap(t)，并按 max_expand_factor · ⌈α · K⌉ 封顶（未设则不封顶）
-        n_sel  = 同理（相对 ⌈max_ratio · K⌉）
+        n_sel = cap(t)，并按 max_expand_factor · ⌈max_ratio · K⌉ 封顶（未设则不封顶）
 
     航程紧张时按 cap(t) 收编、航程充裕时允许**超过名额**多选，
-    两个方向的失真同时被修正。``max_expand_factor`` 防止 c̃ 过小时规模失控。
+    两种方向的失真同时被修正。``max_expand_factor`` 防止 c̃ 过小时规模失控。
+    （候选池 n_cand 不由此扩展，仅受可行性下限 n_cand ≥ n_sel 抬升。）
 
-合成统一由 :func:`effective_cap` 负责，候选预筛选与边际选择共用同一口径。
+合成统一由 :func:`effective_cap` 负责，**仅用于选择数 n_sel**（候选已解耦）。
 两种模式下能力都只在【规模】这一维生效；
 单任务可达性（prefilter）与机群预算硬闸门（postcheck）仍由 feasibility 负责，
 本模块不重复其职责。
@@ -107,6 +109,11 @@ class CapabilityScaleConfig:
     # 仅 mode="primary" 生效：相对机数名额的最大扩张倍数，防止 c̃ 过小时规模失控。
     # None = 不设扩张上限（规模完全由 cap(t) 决定）。
     max_expand_factor: float | None = None
+    # 候选池计算预算上限（仅约束 n_cand）：候选与 cap(t) 解耦后，n_cand 不再被
+    # 能力收紧，富余多少完全由"计算预算 + 排序质量"决定；此旋钮即"计算预算"上限，
+    # 防止机制3 的 O(n_cand·n_sel·insert) 随 ⌈α·K⌉ 失控。None = 不设计算上限
+    # （仅受 ⌈α·K⌉ 与任务总数 N 约束）。
+    max_candidate_pool: int | None = None
     # Fix③：即便本模块 ``enabled=False``，也按吞吐上界
     #   cap(t)=⌊Σ remaining_range / 单任务中位代价⌋
     # 收敛候选规模，避免 "2.5×机数" 永远不瓶颈、aging 排序失效。
@@ -217,8 +224,9 @@ def effective_cap(
 ) -> int:
     """把「机数名额 quota」与「能力承载数 cap(t)」合成为最终规模上界。
 
-    候选预筛选（名额 = ⌈α·K⌉ → n_cand）与边际选择（名额 = ⌈max_ratio·K⌉
-    或 ``max_selected`` → n_sel）共用本函数，保证两处口径一致。
+    仅用于**选择数 n_sel**（名额 = ⌈max_ratio·K⌉ 或 ``max_selected``）。
+    候选池 n_cand 已与 cap(t) 解耦，由 pipeline 直接以 ⌈α·K⌉ 生成、不经本函数，
+    故本函数只产出"紧承诺"规模，保证选择口径一致。
 
     Args:
         quota: 机数名额（⌈α·K⌉ 或 ⌈max_ratio·K⌉ / ``max_selected``）。

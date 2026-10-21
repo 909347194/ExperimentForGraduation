@@ -1,12 +1,14 @@
 # -*- coding: utf-8 -*-
 """priority.py — 基础优先级评价与 Top-α 预筛选（论文 3.2–3.3）。
 
-候选规模的完整规则（论文 3.3）：
+候选规模的完整规则（论文 3.3 修订，与 cap(t) 解耦）：
 
-    n_cand = min(⌈α · K⌉, cap(t))
+    n_cand = ⌈α · K⌉
 
-即"机数名额"与"能力预算可承载数"（:mod:`.capability`）取交；
-``hard_cap`` 为 None 时退回纯机数名额（消融对比用）。
+即"机数名额"仅由机数决定；候选池**不再与能力上界 cap(t) 取交**（cap 既不收紧
+也不扩张），富余完全由计算预算（``capability.max_candidate_pool``）与任务总数约束。
+``hard_cap`` 在生产流水线中已不再传入（恒为 None）；保留该形参仅作独立调用兼容，
+非 None 时仍按 min(⌈αK⌉, cap) 收紧（仅供消融 / 单测）。
 """
 
 from __future__ import annotations
@@ -142,9 +144,9 @@ def top_alpha_preselect(
     ``alpha`` 是**机数倍率**，与任务总数无关。
 
     Args:
-        hard_cap: 能力预算可承载数 cap(t)（:func:`capability.capability_task_cap`）。
-            非 None 时候选数取 ``min(⌈α·K⌉, cap(t))``（intersect 口径，
-            能力只能收紧）；None 时退回纯机数名额。
+        hard_cap: 历史形参；生产流水线已不再用它收紧候选（候选与 cap 解耦，恒传
+            None）。保留以兼容独立调用：非 None 时仍按 ``min(⌈α·K⌉, cap(t))`` 收紧
+            （仅供消融 / 单测，不反映解耦后的生产语义）。
         n_cand_override: 直接指定候选数 n_cand，优先级高于 ``alpha`` 与
             ``hard_cap``。供 :func:`capability.effective_cap` 在
             ``mode="primary"`` 下使用，使规模得以**超过**机数名额

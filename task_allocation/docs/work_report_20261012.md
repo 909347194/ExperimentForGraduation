@@ -39,8 +39,8 @@
 ```
 B(t)   = budget_scale · budget_factor · Σ 剩余航程(可起飞子集)
 cap(t) = max(min_cap, ⌊B(t) / c̃⌋)     ← c̃ = 粗代价分位数（默认中位）
-候选数 = min(⌈α·K_avail⌉, cap(t))       ← 原：纯 ⌈αK⌉
-选择数 = min(⌈max_ratio·K_avail⌉, cap(t)) ← 原：纯 ⌈2K⌉
+候选数 = ⌈α·K_avail⌉（与 cap(t) 解耦，能力无关；仅受 max_candidate_pool 计算上限约束）  ← 修订：不再与 cap 取交
+选择数 = min(⌈max_ratio·K_avail⌉, cap(t)) ← 能力卡口只在此生效
 ```
 
 - 粗代价口径与基础优先级 C_i(t) 同源（cost_hint 优先，回退最近可用机距离）
