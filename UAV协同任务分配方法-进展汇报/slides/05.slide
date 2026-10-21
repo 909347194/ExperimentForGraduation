@@ -18,16 +18,16 @@
       <rect x='220' y='30' width='332' height='44' rx='12' fill='#1E4FA8' />
       <rect x='220' y='58' width='332' height='16' fill='#1E4FA8' />
       <text x='386' y='58' font-size='16' font-weight='bold' fill='#FFFFFF' text-anchor='middle'>第一阶段 · 动态任务选择</text>
-      <rect x='240' y='90' width='292' height='44' rx='7' fill='#F0F5FC' stroke='#3D7BD9' strokeWidth='0.8' />
-      <text x='386' y='118' font-size='14' fill='#1A2230' text-anchor='middle'>优先级预筛选 n_cand ∩ cap(t)</text>
-      <line x1='386' y1='134' x2='386' y2='148' stroke='#3D7BD9' strokeWidth='1.2' markerEnd='url(#ah2)' />
-      <rect x='240' y='148' width='292' height='44' rx='7' fill='#F0F5FC' stroke='#3D7BD9' strokeWidth='0.8' />
-      <text x='386' y='176' font-size='14' fill='#1A2230' text-anchor='middle'>边际收益增量选择 Δ = ΔB / ΔC</text>
-      <line x1='386' y1='192' x2='386' y2='206' stroke='#3D7BD9' strokeWidth='1.2' markerEnd='url(#ah2)' />
-      <rect x='240' y='206' width='292' height='44' rx='7' fill='#F0F5FC' stroke='#3D7BD9' strokeWidth='0.8' />
-      <text x='386' y='234' font-size='14' fill='#1A2230' text-anchor='middle'>快速可行性检查</text>
-      <line x1='552' y1='148' x2='606' y2='148' stroke='#1E4FA8' strokeWidth='1.8' markerEnd='url(#ah1)' />
-      <text x='579' y='136' font-size='13' font-weight='bold' fill='#1E4FA8' text-anchor='middle'>候选集</text>
+      <rect x='240' y='86' width='292' height='38' rx='7' fill='#F0F5FC' stroke='#3D7BD9' strokeWidth='0.8' />
+      <text x='386' y='110' font-size='13.5' fill='#1A2230' text-anchor='middle'>① 优先级排序 P_i（五因素）</text>
+      <rect x='240' y='130' width='292' height='38' rx='7' fill='#F0F5FC' stroke='#3D7BD9' strokeWidth='0.8' />
+      <text x='386' y='154' font-size='13.5' fill='#1A2230' text-anchor='middle'>② 规模：n_cand富 / n_sel卡cap</text>
+      <rect x='240' y='174' width='292' height='38' rx='7' fill='#F0F5FC' stroke='#3D7BD9' strokeWidth='0.8' />
+      <text x='386' y='198' font-size='13.5' fill='#1A2230' text-anchor='middle'>③ 边际增益 Δ = ΔB / ΔC</text>
+      <rect x='240' y='218' width='292' height='38' rx='7' fill='#F0F5FC' stroke='#3D7BD9' strokeWidth='0.8' />
+      <text x='386' y='242' font-size='13.5' fill='#1A2230' text-anchor='middle'>两道闸门 prefilter / postcheck</text>
+      <line x1='552' y1='237' x2='606' y2='237' stroke='#1E4FA8' strokeWidth='1.8' markerEnd='url(#ah1)' />
+      <text x='579' y='225' font-size='13' font-weight='bold' fill='#1E4FA8' text-anchor='middle'>选择集</text>
       <rect x='610' y='30' width='332' height='236' rx='12' fill='#FFFFFF' stroke='#1E4FA8' strokeWidth='1.2' />
       <rect x='610' y='30' width='332' height='44' rx='12' fill='#0E3F8C' />
       <rect x='610' y='58' width='332' height='16' fill='#0E3F8C' />

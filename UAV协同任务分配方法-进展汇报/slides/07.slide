@@ -20,10 +20,10 @@
     </Box>
 
     <Box style={{ background: '#F7F9FC', border: '1px solid #D6DCE5', borderRadius: 10, padding: '16px 20px', flexDirection: 'column' }}>
-      <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#0E3F8C' }}>② 候选数 / 选择数：机数名额 × 能力承载数双重上界</Text>
+      <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#0E3F8C' }}>② 候选池（能力无关）/ 选择数（卡 cap）：机数名额 × 能力上界解耦</Text>
       <Box style={{ marginTop: 12, background: '#E8EFF8', borderRadius: 8, padding: '12px 16px', flexDirection: 'column', gap: 5, alignItems: 'center' }}>
         <Text style={{ fontSize: 16.5, fontWeight: 'bold', color: '#0E3F8C' }}>
-          n_cand = min{"{"}ceil(α·K), cap(t){"}"}　　n_sel = min{"{"}ceil(max_ratio·K), cap(t){"}"}
+          n_cand = ceil(α·K)（能力无关）　　n_sel = min{"{"}ceil(max_ratio·K), cap(t){"}"}
         </Text>
         <Text style={{ fontSize: 13, color: '#4A5568' }}>
           cap(t) = floor(B(t) / c_med)；K = 可用无人机数，α = 2.5、max_ratio = 2.0 均为机数倍率
@@ -36,7 +36,7 @@
 
     <Box style={{ background: '#F0F5FC', border: '1px solid #D6DCE5', borderRadius: 10, padding: '12px 20px', flexDirection: 'row', alignItems: 'center', gap: 10 }}>
       <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#0E3F8C' }}>机制串联：</Text>
-      {['按 P_i 排序', '双重上界截断', '边际比逐个纳入', '可行性弹回'].map((s, i) => (
+      {['按 P_i 排序', 'n_cand 候选(富)', '闸门① prefilter', 'n_sel 边际纳入(紧)', '闸门② postcheck'].map((s, i) => (
         <Box key={s} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           {i > 0 && <Text style={{ fontSize: 16, color: '#3D7BD9', fontWeight: 'bold' }}>→</Text>}
           <Box style={{ padding: '6px 12px', background: '#FFFFFF', borderRadius: 14, border: '1px solid #3D7BD9' }}>
@@ -56,7 +56,7 @@
         </Text>
         <Text style={{ fontSize: 16, color: '#1E4FA8', marginTop: 6 }}>
           ΔC<span style={{ fontSize: 11 }}>i</span> = min<span style={{ fontSize: 12 }}>{"{"} C<span style={{ fontSize: 10 }}>ai</span> + C<span style={{ fontSize: 10 }}>ib</span> − C<span style={{ fontSize: 10 }}>ab</span> {"}"}
-          </span>（相邻边插入，统一 DEM 三维航程）
+          </span>（所有锚点对插入，统一 DEM 三维航程）
         </Text>
       </Box>
       <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.7, marginTop: 8 }}>
@@ -65,9 +65,9 @@
     </Box>
 
     <Box style={{ background: '#F7F9FC', border: '1px solid #D6DCE5', borderRadius: 10, padding: '13px 20px', flexDirection: 'column' }}>
-      <Text style={{ fontSize: 17, fontWeight: 'bold', color: '#0E3F8C' }}>④ 快速可行性检查（粗粒度，弹回不淘汰）</Text>
+      <Text style={{ fontSize: 17, fontWeight: 'bold', color: '#0E3F8C' }}>④ 两道可行性闸门（粗粒度，弹回不淘汰）</Text>
       <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.7, marginTop: 6 }}>
-        是否有可用机 · 基本可达性 · 剩余航程 · 时间窗明显冲突 · 三维地形不可达——明显不可行才不进候选，否则留池下周期再评
+        闸门① prefilter：是否有可用机 · 单任务往返可达 · 三维地形不可达；闸门② postcheck：机群剩余航程预算——仅物理不可行才不进候选，否则留池下周期再评；时间窗迟到由适应度折减、非参选资格
       </Text>
     </Box>
 
