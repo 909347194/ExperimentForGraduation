@@ -30,7 +30,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 import numpy as np
 
@@ -255,6 +255,7 @@ class RollingHorizon:
         solver_config: DMDEConfig | None = None,
         event_config: EventTriggerConfig | None = None,
         nest_offset: int = 1_000_000,
+        solver_factory: Callable[[], Any] | None = None,
     ) -> None:
         self.pool = pool
         self.fleet = fleet
@@ -268,6 +269,10 @@ class RollingHorizon:
         self.solver_cfg = solver_config or DMDEConfig()
         self.event_cfg = event_config or EventTriggerConfig()
         self.nest_offset = nest_offset
+        # 对比求解器注入（exp05_baselines）：None = 默认 DMDE（主算法，
+        # 行为逐位不变）；非 None 时每周期调用工厂取一个求解器实例传给
+        # run_selective_muas（同一滚动外壳 + 每周期调用基线，见 exp05 notes）。
+        self.solver_factory = solver_factory
         # 统一距离口径（DEM 三维航程）：整场运行**共用一个记忆化缓存**——
         # 任务与机巢位置固定，跨周期、跨阶段重复查同一条边时直接命中，
         # 避免每周期重算 O(n²) 段长（垂直切面 0.37 ms/段，不复用会线性放大）。
@@ -494,6 +499,7 @@ class RollingHorizon:
             solver_config=self.solver_cfg,
             nest_offset=self.nest_offset,
             current_time=self._time,
+            solver=(self.solver_factory() if self.solver_factory is not None else None),
         )
         solution = stage.solution
         record.muas = dict(stage.diagnostics)
