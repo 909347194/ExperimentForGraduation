@@ -2,8 +2,9 @@
 logs/
 *.log
 
-# 动画图件（GIF 体积大且可由 results/*.json 经 render_from_json.py 重新生成）
-task_allocation/experiments/exp01_smoke/results/figures/*.gif
+# 图件（PNG/GIF 体积大，且均可由 results/*.json 经 render_from_json.py 重新生成）
+task_allocation/experiments/exp01_smoke/results*/figures/*.gif
+task_allocation/experiments/exp01_smoke/results*/figures/*.png
 
 # LaTeX 编译中间文件
 *.aux
@@ -16,3 +17,6 @@ task_allocation/experiments/exp01_smoke/results/figures/*.gif
 __pycache__/
 *.py[cod]
 .workbuddy/
+
+# Office 临时锁文件（~$ 前缀，文档打开时生成，关闭后自动消失）
+~$*
