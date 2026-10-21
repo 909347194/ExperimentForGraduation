@@ -81,7 +81,8 @@ class VRPTWInsertionSolver(BaseOptimizer):
 
         for task in pending:
             tid = int(task.id)
-            best: tuple[float, int, int] | None = None
+            # (c1, task_id, uav_id, pos)：四元组结构统一，平局时确定性 tie-break
+            best: tuple[float, int, int, int] | None = None
             for uav in ctx.uavs:
                 seq = routes[uav.id]
                 speed = max(float(getattr(uav, "speed", 0.0) or 0.0), 1e-6)
@@ -98,12 +99,12 @@ class VRPTWInsertionSolver(BaseOptimizer):
                     c1 = self._alpha_d * max(delta, 0.0) + (
                         self._alpha_t * speed * delay_s
                     )
-                    cand = (float(c1), tid, pos)
+                    cand = (float(c1), tid, int(uav.id), pos)
                     if best is None or cand < best:
-                        best = (cand[0], uav.id, pos)
+                        best = cand
             if best is None:
                 continue  # 无可行插入 → 本周期暂缓
-            _, uid, pos = best
+            _, _, uid, pos = best
             routes[uid].insert(pos, tid)
 
         solution = ctx.finalize(routes)
