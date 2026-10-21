@@ -3,15 +3,15 @@
 
 【report 层 · 结论与论文插图】
 
-回答「Top-αK 的截断规模该按什么标定？」——原结论 2 说「α 需按机队总吞吐
+回答「候选预筛的截断规模该按什么标定？」——原结论 2 说「α 需按机队总吞吐
 标定」；本扫描给出更精确的答案：intersect 口径下候选名额 ⌈α·K⌉ 提到 40
 毫无用处，因为**选择数被 ⌈max_ratio·K⌉=16 封顶**。
 
 双联面板：
 
-    (a) 候选 k vs 选择 sel（名额族）   每组 N 下两变体的候选名额
+    (a) 候选 n_cand vs 选择 n_sel（名额族）   每组 N 下两变体的候选名额
                       （20 / 40，浅柱）与最终选择数（16 / 16，深柱）；
-                      红色虚线为 ⌈max_ratio·K⌉=16 的封顶线——sel 触线即停。
+                      红色虚线为 ⌈max_ratio·K⌉=16 的封顶线——n_sel 触线即停。
     (b) 名额族 F1 对照   同 sel 下两变体交付收益几乎相同
                       （133.2 vs 129.1 @ N=50，差异 < 4%），
                       说明候选名额在该区间是「死旋钮」。
@@ -20,7 +20,7 @@
 修正后的标定口径（选择数接到 cap(t)、候选名额只需 ≥ 选择数）见图 r05。
 
 数据来源：``metrics.json`` 的
-``scales[].selection.{capability_preselect_k,n_selected,capability_marginal_limit}``
+``scales[].selection.{capability_n_cand,n_selected,capability_n_sel}``
 与 ``muas.f1_reward``。
 """
 
@@ -50,9 +50,9 @@ from ._common import (
     color,
     f1,
     grouped,
-    k_candidate,
     label,
-    marginal_limit,
+    n_candidate,
+    n_sel_cap,
     sel_n,
     scales_present,
 )
@@ -78,18 +78,18 @@ def plot_r04_bottleneck(
 
     fig, (ax_a, ax_b) = plt.subplots(1, 2, figsize=(FIG_WIDE, 4.3))
 
-    # ── (a) 候选 k vs 选择 sel ───────────────────────────────────
+    # ── (a) 候选 n_cand vs 选择 n_sel ─────────────────────────────
     width = 0.34
     for i, v in enumerate(_QUOTA):
-        ks = [k_candidate(g[n].get(v, {})) or 0 for n in ns]
+        ks = [n_candidate(g[n].get(v, {})) or 0 for n in ns]
         ss = [sel_n(g[n].get(v, {})) for n in ns]
         pos = xs + (i - 0.5) * width
         ax_a.bar(pos, ks, width * 0.9, color=color(v), alpha=0.40,
                  edgecolor="white", linewidth=0.6, zorder=2,
-                 label=f"{label(v)}｜候选 k")
+                 label=f"{label(v)}｜候选 n_cand")
         ax_a.bar(pos, ss, width * 0.45, color=color(v),
                  edgecolor="white", linewidth=0.6, zorder=3,
-                 label=f"{label(v)}｜选择 sel")
+                 label=f"{label(v)}｜选择 n_sel")
         for p, k, s in zip(pos, ks, ss):
             ax_a.annotate(f"{k}", xy=(p, k), xytext=(0, 2),
                           textcoords="offset points", ha="center",
@@ -101,7 +101,7 @@ def plot_r04_bottleneck(
     # 封顶线
     lim_v = None
     for n in ns:
-        mv = marginal_limit(g[n].get(_QUOTA[0], {}))
+        mv = n_sel_cap(g[n].get(_QUOTA[0], {}))
         if mv is not None:
             lim_v = mv
             break
@@ -110,7 +110,7 @@ def plot_r04_bottleneck(
                      zorder=4)
         ax_a.text(xs[-1] + 0.42, lim_v, f" max_ratio·K 上取整={lim_v} 封顶",
                   color="#e45756", fontsize=FS["annotation"], va="center")
-    style_axes(ax_a, title="(a) 名额族：候选 k 翻倍、选择 sel 触顶不动",
+    style_axes(ax_a, title="(a) 名额族：候选 n_cand 翻倍、选择 n_sel 触顶不动",
                xlabel="任务规模 N", ylabel="任务数")
     ax_a.set_xticks(xs, [str(n) for n in ns])
     ax_a.set_ylim(bottom=0, top=48)
@@ -135,7 +135,7 @@ def plot_r04_bottleneck(
                     ax_b.annotate(f"{d:+.1f}%", xy=(p, y / 2.0), ha="center",
                                   fontsize=FS["annotation"], color="white",
                                   fontweight="bold")
-    style_axes(ax_b, title="(b) 名额族 F1：同 sel 下几无差异（标注为相对差）",
+    style_axes(ax_b, title="(b) 名额族 F1：同 n_sel 下几无差异（标注为相对差）",
                xlabel="任务规模 N", ylabel="交付收益 F1")
     ax_b.set_xticks(xs, [str(n) for n in ns])
     ax_b.set_ylim(bottom=0)
@@ -147,7 +147,7 @@ def plot_r04_bottleneck(
     footnote(fig,
              "数据来源：results/metrics.json 的 scales[]（quota_a2.5 / quota_a5 两变体）。"
              "intersect 口径下 capability 只能收紧不能放宽：候选名额 α·K 上取整从 20 提到 40，"
-             "选择数仍被 max_ratio·K 上取整=16 封顶（capability_marginal_limit），故 F1 差异 < 4%。"
+             "选择数仍被 max_ratio·K 上取整=16 封顶（capability_n_sel），故 F1 差异 < 4%。"
              "修正口径（mode=primary，选择数接到 cap(t)）见图 r05。单 seed（42）。")
 
     stem = Path(out_dir) / "R04_bottleneck"

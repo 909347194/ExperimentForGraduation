@@ -74,7 +74,7 @@ _NOT_ARRIVED, _IN_POOL, _DONE_NOW, _DONE_BEFORE, _EXPIRED, _OFF_POOL = range(6)
 #: (b) 面板的流量序列：(图例名, 取数函数, 颜色)
 _FLOW_SERIES = (
     ("新到 new", lambda c: (c.get("pool_counts") or {}).get("n_new"), PALETTE["new"]),
-    ("选中 T_sel", lambda c: (c.get("selection") or {}).get("n_selected"),
+    ("选中 n_sel", lambda c: (c.get("selection") or {}).get("n_selected"),
      PALETTE["selected"]),
     ("完成", lambda c: c.get("n_completed"), PALETTE["executed"]),
     ("延期滞留", lambda c: c.get("n_deferred"), PALETTE["deferred"]),

@@ -7,7 +7,7 @@
 
 三联面板（x = 任务规模 N，分类轴）：
 
-    (a) 候选名额 k   Top-αK 截断后的候选规模。机数名额族恒为 20/40、
+    (a) 候选名额 n_cand   优先级预筛截断后的候选规模。机数名额族恒为 20/40、
                       能力族恒为 cap(t)=10/20/40——**全部与 N 无关**（平线）；
                       全量对照 = N 自身（斜线）。
     (b) 选择数 sel / 执行数 exec   最终参与 MUAS 与真正交付的任务数
@@ -19,7 +19,7 @@
 （a）应是与全量斜线平行的斜线。
 
 数据来源：``metrics.json`` 的
-``scales[].selection.{capability_preselect_k,n_selected}`` +
+``scales[].selection.{capability_n_cand,n_selected}`` +
 ``muas.n_executed`` + ``compression_ratio``。
 """
 
@@ -50,7 +50,7 @@ from ._common import (
     compression,
     exec_n,
     grouped,
-    k_candidate,
+    n_candidate,
     label,
     sel_n,
     variants_present,
@@ -96,10 +96,10 @@ def plot_r02_compression(
 
     fig, (ax_a, ax_b, ax_c) = plt.subplots(1, 3, figsize=(FIG_WIDE, 4.2))
 
-    # ── (a) 候选名额 k ───────────────────────────────────────────
+    # ── (a) 候选任务数 n_cand ─────────────────────────────────────
     seen_a: set[tuple[float, float]] = set()
     for v in variants:
-        ys = [k_candidate(g[n].get(v, {})) for n in ns]
+        ys = [n_candidate(g[n].get(v, {})) for n in ns]
         _line(ax_a, xs, ys, v, seen=seen_a)
     # 全量对照 = N 自身
     ax_a.plot(xs, ns, marker="s", markersize=4.5, linewidth=1.5,
@@ -108,8 +108,8 @@ def plot_r02_compression(
         ax_a.annotate(f"{n}", xy=(x, n), xytext=(0, 6),
                       textcoords="offset points", ha="center",
                       fontsize=FS["annotation"] - 0.5, color=color(_FULL))
-    style_axes(ax_a, title="(a) 候选名额 k：全部与 N 无关",
-               xlabel="任务规模 N", ylabel="候选任务数 k")
+    style_axes(ax_a, title="(a) 候选名额 n_cand：全部与 N 无关",
+               xlabel="任务规模 N", ylabel="候选任务数 n_cand")
     ax_a.set_yscale("log")
     ax_a.set_ylim(8, 260)
 
@@ -151,7 +151,7 @@ def plot_r02_compression(
     for v in variants:
         ys = [compression(g[n].get(v, {})) for n in ns]
         _line(ax_c, xs, ys, v, annotate=True, seen=seen_c)
-    style_axes(ax_c, title="(c) 压缩比 N/sel：随 N 线性增长",
+    style_axes(ax_c, title="(c) 压缩比 N/n_sel：随 N 线性增长",
                xlabel="任务规模 N", ylabel="压缩比（×）")
 
     for ax in (ax_a, ax_b, ax_c):
@@ -166,8 +166,8 @@ def plot_r02_compression(
                  fontsize=FS["suptitle"])
     fig.tight_layout(rect=(0, 0.055, 1, 0.93))
     footnote(fig,
-             "数据来源：results/metrics.json 的 scales[]。k = selection.capability_preselect_k"
-             "（Top-αK 后候选规模）；sel = n_selected（最终参与 MUAS）；exec = muas.n_executed"
+             "数据来源：results/metrics.json 的 scales[]。n_cand = selection.capability_n_cand"
+             "（Top-α 预筛后候选规模）；sel = n_selected（最终参与 MUAS）；exec = muas.n_executed"
              "（真正交付）。漏斗为 N → Top-k → k → k：驻巢修复后往返预筛与 postcheck 零拒绝，"
              "规模完全由候选/选择名额决定。单 seed（42）。")
 

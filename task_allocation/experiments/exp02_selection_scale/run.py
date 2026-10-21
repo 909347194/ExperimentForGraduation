@@ -2,11 +2,11 @@
 """exp02_selection_scale 入口：量化第一阶段「任务选择」的规模压缩收益与标定。
 
 问题背景（Chapter3_README §1(4)）：
-    当 |T_t| >> K_avail(t) 时，把全部任务直接交给精细组合优化会显著扩大
-    搜索空间。第一阶段用 Top-αK 把 T_t 压到 T_t^sel，据称能提高实时性。
+    当 |T_t| >> K(t) 时，把全部任务直接交给精细组合优化会显著扩大
+    搜索空间。第一阶段用候选预筛把 T_t 压到 T_t^sel，据称能提高实时性。
 
-exp01_smoke 跑在「机多任务少」一侧（10 任务 / 24 机，αK=60），Top-αK 从不
-触发，无法验证该机制。本实验固定 K_avail=8，把任务规模拉到 50/100/200，
+exp01_smoke 跑在「机多任务少」一侧（10 任务 / 24 机，αK=60），n_cand 预筛从不
+触发，无法验证该机制。本实验固定 K=8（可用无人机数），把任务规模拉到 50/100/200，
 分别测量：
 
     T_hint    cost_hint（最近可用机，惰性表 O(n·K) 条边）
@@ -216,7 +216,7 @@ def main(argv: list[str] | None = None) -> int:
     variants = list(cfg.get("variants") or [{"name": "default", "alpha": None}])
     baseline_scales = set(cfg["run"].get("full_muas_baseline_scales") or [])
 
-    print(f"[exp02] K_avail={n_uavs}, n_nests={problem_cfg['n_nests']}, "
+    print(f"[exp02] K={n_uavs}, n_nests={problem_cfg['n_nests']}, "
           f"max_range={max_range/1000:.0f}km, variants={[v['name'] for v in variants]}")
 
     results: list[dict[str, Any]] = []
@@ -391,7 +391,7 @@ def main(argv: list[str] | None = None) -> int:
     metrics = {
         "status": "ok",
         "experiment": cfg["experiment"]["name"],
-        "K_avail": n_uavs,
+        "K": n_uavs,
         "uav_max_range_m": max_range,
         "scales": results,
     }

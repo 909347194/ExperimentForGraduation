@@ -23,7 +23,7 @@
       N  < M → srp（UAV 巡游，任务不重复）
 
     本问题要求「一任务一机」，因此 **overloaded 不可用**（它会把同一任务
-    分给多架 UAV）。故参与规划的 UAV 数 K 恒取 < 任务数 M（即 srp 巡游模型），
+    分给多架 UAV）。故参与规划的 UAV 数 K 恒小于任务数 N（即 srp 巡游模型），
     其余可用 UAV 本周期保持空闲 —— 这正是论文允许的 ``U_t^exec ⊆ U_t^avail``。
 """
 
@@ -84,11 +84,11 @@ class MUASStageConfig:
     # 参与本周期规划的 UAV 数上限；None 表示自动（保证 K < 任务数以走 srp 模型）
     max_participating_uavs: int | None = None
     participating_policy: str = POLICY_CHEAPEST
-    # 参与机数 K 与任务数解耦（修复「K 顶格 M-1 → M-K 恒小、巡游顺序维度塌缩」）：
+    # 参与机数 K 与任务数解耦（修复「K 顶格 N-1 → N-K 恒小、巡游顺序维度塌缩」）：
     #   sortie_budget        本周期出动架次上限 S_t（可由滚动层按起降/充电能力推导）；
     #   participation_cost   每架固定出动代价 γ（起降/能耗/架次占用）；
     #   participating_policy="marginal" 时按「覆盖代价边际下降 ≤ γ 即停」内生定 K。
-    # 三者都缺省时退化为旧规则（尽量多派，上界 M-1）。
+    # 三者都缺省时退化为旧规则（尽量多派，上界 N-1）。
     sortie_budget: int | None = None
     participation_cost: float = 0.0
     # marginal 估计器的单机服务容量：一架机一次出动最多串几个任务。
@@ -272,25 +272,25 @@ def select_participating_uavs(
 ) -> list[UAV]:
     """挑选本周期参与规划的 UAV（``U_t^exec`` 的候选）。
 
-    参与机数 K 的确定**与任务数解耦**，按三层裁剪：
+    参与机数 K 的确定**与任务数解耦**，按三层裁剪（K ⊆ 可用机数）：
 
-    1. **SRP 模型不变式**：``K ≤ M-1``（保证一任务一机且允许巡游；
-       ``M=1`` 时 ``K=1``）。显式配置同样裁剪到该上界——旧实现只裁 auto
-       不裁显式值，``K≥M`` 会走进 balanced/overloaded 路径；
+    1. **SRP 模型不变式**：``K ≤ N-1``（保证一任务一机且允许巡游；
+       ``N=1`` 时 ``K=1``）。显式配置同样裁剪到该上界——旧实现只裁 auto
+       不裁显式值，``K≥N`` 会走进 balanced/overloaded 路径；
     2. **运营预算**：``sortie_budget``（出动架次上限）与
-       ``max_participating_uavs``（硬上限），与 M 无关地压低 K；
+       ``max_participating_uavs``（硬上限），与 N 无关地压低 K；
     3. **出动经济性**（``participating_policy="marginal"``）：按「该机是几个
        任务的最近机」降序逐个纳入，第 j 架带来的「容量受限覆盖代价」边际下降
        ≤ ``participation_cost`` γ 时**跳过该机继续试下一架**（不是停机——
        gain 非单调，零增益机之后仍可能有正增益机）。
 
-    旧 auto 规则在机队充裕时总是顶格 ``K=M-1``，使 ``M-K`` 塌缩为常数、
-    巡游顺序搜索维度名存实亡；解耦后 K 可显著小于 M-1，支撑 M≫K 的
-    长航次巡游实例（顺序维度 = M-K 个巡游基因）。
+    旧 auto 规则在机队充裕时总是顶格 ``K=N-1``，使 ``N-K`` 塌缩为常数、
+    巡游顺序搜索维度名存实亡；解耦后 K 可显著小于 N-1，支撑 N≫K 的
+    长航次巡游实例（顺序维度 = N-K 个巡游基因）。
 
     Args:
         uavs:             可用无人机（``U_t^avail``）。
-        n_tasks:          候选任务数 M。
+        n_tasks:          候选任务数 N。
         config:           编排参数（含 K 决策旋钮）。
         uav_target:       ``(n_rows, n_tasks)`` 代价矩阵，供 cheapest/marginal 策略。
         row_of_uav:       ``{uav_id: 矩阵行号}``。
@@ -381,7 +381,7 @@ def _greedy_demand_coverage(
 
     Args:
         avail:       可用 UAV（``U_t^avail``）。
-        n_tasks:     选中任务数 M。
+        n_tasks:     选中任务数 N。
         config:      编排参数（含 demand 旋钮）。
         uav_target:  ``(n_rows, n_tasks)`` 代价矩阵，行 = 可用 UAV。
         row_of_uav:  ``{uav_id: 矩阵行号}``。
@@ -1608,8 +1608,8 @@ class MUASAssignmentEvaluator:
         Args:
             child:        获胜的子代个体（``inverse_phi`` 译出、已被评价）。
             solution:     本次评价用到的修复后 ``AllocationSolution``。
-            cost_matrix:  代价矩阵 ``(K+M, M)``（与编码同布局）。
-            n_uavs/n_targets: 维度 K / M。
+            cost_matrix:  代价矩阵 ``(K+N, N)``（与编码同布局）。
+            n_uavs/n_targets: 维度 K / N。
 
         Returns:
             回写后的新个体；长度不一致或异常时返回 ``None``（调用方回退到原 child）。

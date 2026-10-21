@@ -11,7 +11,7 @@
 三联面板（等宽字体参数表，与 exp01 S01 同风格；本实验无地图小图——
 单周期扫描没有场景空间图件）::
 
-    (a) 场景与问题参数      K_avail / 机巢 / 航程 / 任务规模与生成 / 种子
+    (a) 场景与问题参数      K / 机巢 / 航程 / 任务规模与生成 / 种子
     (b) 变体矩阵            两个标定族的名额与能力参数（intersect / primary）
     (c) 求解预算与口径      DMDE 超参 / polish 预算 / 距离与适应度口径
 
@@ -104,12 +104,12 @@ def plot_setup_params(
     variants = list(cfg.get("variants") or [])
 
     scales = [int(s) for s in (cfg.get("scales") or [])]
-    k_avail = int(metrics.get("K_avail", problem.get("n_uavs", 0)))
+    k_avail = int(metrics.get("K", metrics.get("K_avail", problem.get("n_uavs", 0))))
     max_range_km = float(metrics.get("uav_max_range_m", 0.0)) / 1000.0
 
     # (a) 场景与问题参数
     rows_a = [
-        ("可用无人机 K_avail", f"{k_avail} 架"),
+        ("可用无人机 K", f"{k_avail} 架"),
         ("机巢数 / 容量", f"{problem.get('n_nests', '—')} 个 / 每巢 {problem.get('nest_capacity', '—')} 架"),
         ("满电航程", f"{max_range_km:g} km（每周期末充电恢复）"),
         ("任务规模 N", " / ".join(str(s) for s in scales)),
@@ -140,7 +140,7 @@ def plot_setup_params(
     rows_c = [
         ("DMDE", f"pop={solver.get('pop_size', '—')} × gens={solver.get('max_generations', '—')}"),
         ("polish", f"≤{stage.get('polish_max_rounds', '—')} 轮 / ≤{stage.get('polish_max_evals', '—')} 评估"),
-        ("选择机制", f"优先级→Top-αK→可行性→边际收益；α={_fmt(sel_cfg.get('alpha'))}"),
+        ("选择机制", f"优先级→n_cand 预筛→可行性→边际收益；α={_fmt(sel_cfg.get('alpha'))}"),
         ("capability", "cap(t)=下取整(budget_scale·B/c)，c=最近机代价中位数"),
         ("距离口径", "垂直切面 DEM 三维航程（全链路程统一 CostProvider）"),
         ("适应度", "四层准字典序：硬违约→收益→迟到→航程"),
@@ -152,7 +152,7 @@ def plot_setup_params(
     _draw_param_table(axes[1], "(b) 变体矩阵（两个标定族）", rows_b)
     _draw_param_table(axes[2], "(c) 求解预算与口径", rows_c)
     fig.suptitle(
-        f"exp02_selection_scale 实验设定：K_avail={k_avail}，N ∈ {scales}，"
+        f"exp02_selection_scale 实验设定：K={k_avail}，N ∈ {scales}，"
         f"{len(variants)} 个变体",
         fontsize=FS["suptitle"],
     )

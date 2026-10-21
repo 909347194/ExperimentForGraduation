@@ -203,7 +203,7 @@ def plot_outcome_summary(
         ("总收益 F1（折减后）", f"{summary.get('total_reward', 0.0):.1f}"),
         ("总路径代价", f"{summary.get('total_cost', 0.0) / 1000:.1f} km"),
         ("平均等待", f"{summary.get('avg_wait', 0.0):.0f} s"),
-        ("平均可用机数", f"{summary.get('K_avail_mean', 0.0):.1f}"),
+        ("平均可用机数 K", f"{summary.get('K_mean', summary.get('K_avail_mean', 0.0)):.1f}"),
         ("求解总耗时", f"{summary.get('solve_time_ms', 0.0) / 1000:.1f} s"),
         ("运行口径", "单 seed（调试）" if n_seeds <= 1 else f"{n_seeds} seeds 均值"),
     ]

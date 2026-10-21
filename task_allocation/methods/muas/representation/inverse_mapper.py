@@ -5,7 +5,7 @@
     - 温度自适应反映射：top_k 随温度动态调节（早期探索多、后期开发多）。
     - 匹配后扰动：swap + reassign，概率与温度正相关。
     - SRP 巡游扰动：swap/insert/reverse，打破贪心顺序。
-    - 基因长度：balanced/overloaded = n_uavs，SRP = M（方案 A，无终止基因）。
+    - 基因长度：balanced/overloaded = n_uavs，SRP = N（方案 A，无终止基因）。
 
 方案 A 口径：反映射只解码「UAV 归属 + 访问顺序」；终点机巢不进编码，
 由解码后内层最小费用流精确求解（见 solvers.muas_stage._choose_end_nests）。
@@ -133,11 +133,11 @@ def _inverse_phi_standard(
         for uav_id, tgt_id, cost in repaired:
             genes.append(Gene(uav_id=uav_id, target_id=tgt_id, cost=cost))
 
-    # N>M 后处理：确保每个目标至少被一个 UAV 访问
+    # K>N 后处理：确保每个目标至少被一个 UAV 访问
     if model_type == "overloaded":
         _ensure_all_targets_covered(genes, cm_work, n_uavs, n_targets, rng)
 
-    # N=M 保险：确保目标一一对应（修复任何可能的重复/漏分配）
+    # K=N 保险：确保目标一一对应（修复任何可能的重复/漏分配）
     if model_type == "balanced":
         _repair_balanced_unique(genes, cm_work)
 
@@ -151,7 +151,7 @@ def _repair_balanced_unique(
     """balanced 模型保险：修复重复目标为缺失目标，保证一一对应。
 
     正常情况下反映射的掩码机制已经保证互斥，此处作为防御性检查，
-    防止任何上游扰动破坏 N=M 的一一对应关系。
+    防止任何上游扰动破坏 K=N 的一一对应关系。
     """
     seen: set[int] = set()
     dup_idx: list[int] = []
@@ -187,9 +187,9 @@ def _ensure_all_targets_covered(
     n_targets: int,
     rng: np.random.Generator,
 ) -> None:
-    """N>M 后处理：确保每个目标至少被一个 UAV 访问。
+    """K>N 后处理：确保每个目标至少被一个 UAV 访问。
 
-    对应规则 3.2（N>M）：每个目标至少被分配一个 UAV。
+    对应规则 3.2（K>N）：每个目标至少被分配一个 UAV。
     如果某个目标未被覆盖，将代价最高的重复 UAV 重分配给该目标。
     """
     covered_targets = set(g.target_id for g in genes)
@@ -286,7 +286,7 @@ def _perturb_genes(
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# SRP 反映射 (N<M 巡游模型)
+# SRP 反映射 (K<N 巡游模型)
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 def _inverse_phi_srp(
@@ -297,17 +297,17 @@ def _inverse_phi_srp(
     rng: np.random.Generator,
     temperature: float = 0.5,
 ) -> Individual:
-    """SRP 反映射（N<M 巡游模型）。
+    """SRP 反映射（K<N 巡游模型）。
 
     扰动后强制做段结构规范化（见 :func:`normalize_srp_segments`）。
 
     访问顺序对齐原文（Ming 2017 §4.1 Rule 1 + Rule 2(c)）：
-    1. 巡游段 ``[K, M)`` 的每一位独立地在「当前已访问目标」的行上做最近邻
+    1. 巡游段 ``[K, N)`` 的每一位独立地在「当前已访问目标」的行上做最近邻
        匹配（详见 :func:`_match_tour_edge`），使**顺序由 DE 的连续向量决定**，
        而非历史实现中的「按任务编号顺序 + 贪心最近追加」。
     2. 匹配后再执行扰动（swap/insert/reverse），进一步打破确定性。
 
-    方案 A 口径：只解码「UAV 归属 + 访问顺序」，基因总数恒为 ``M``；
+    方案 A 口径：只解码「UAV 归属 + 访问顺序」，基因总数恒为 ``N``；
     终点机巢由解码后内层最小费用流求解，不进编码。
     """
     cm_work = cost_matrix.copy().astype(float)
@@ -379,17 +379,17 @@ def _inverse_phi_srp(
 
     # Ming 2017 §4.1 Rule 2(c)「迭代行替换」+ Rule 1「最近邻匹配」。
     #
-    #   每个巡游基因位 j ∈ [0, M-K) 拥有自己的连续代价值 cv = cost_vector[K + j]；
+    #   每个巡游基因位 j ∈ [0, N-K) 拥有自己的连续代价值 cv = cost_vector[K + j]；
     #   匹配所用的**行**由上一轮已访问目标决定 —— 即把「UAV 起点行」替换为
     #   「当前已访问目标行」（原文：uses current visited target point as the
     #   UAV's new start point），列限定为未访问任务。
     #
     # 于是「接下来访问哪个任务」与「挂在哪条航线尾」都由 DE 的连续向量决定，
     # 访问顺序真正进入进化搜索空间。旧实现此处只做「按任务编号顺序取任务 +
-    # 贪心最近追加」，完全不读 cost_vector[K, M)，使该区段成为死维度。
+    # 贪心最近追加」，完全不读 cost_vector[K, N)，使该区段成为死维度。
     #
-    # 复杂度：每位的候选矩阵为 K×(剩余任务数)，整体 O(K·(M-K)^2)；数值全部由
-    # numpy 完成，规模被第一阶段的 Top-αK 选中集合封顶。
+    # 复杂度：每位的候选矩阵为 K×(剩余任务数)，整体 O(K·(N-K)^2)；数值全部由
+    # numpy 完成，规模被第一阶段的候选预筛（n_cand）封顶。
     for j in range(len(remaining_targets)):
         cv_idx = n_uavs + j
         cv = (
@@ -428,7 +428,7 @@ def _inverse_phi_srp(
     # ── 第四阶段：段结构规范化 ──
     # reverse / insert 扰动会把 uav_id >= 0 的起始基因卷进子序列
     # （实测出现过起始顺序 [0, 2, 1]），必须先重建严格的航次分段。
-    # 方案 A：不生成终止基因，基因总数恒为 M。
+    # 方案 A：不生成终止基因，基因总数恒为 N。
     genes = normalize_srp_segments(genes, cm_work, n_uavs, n_targets)
 
     return Individual(genes=genes, model_type="srp")
@@ -456,8 +456,8 @@ def _match_tour_edge(
 
     Args:
         cv:             该巡游基因位的连续代价值（来自 DE 差分/交叉后的向量）。
-        cost_matrix:    扩展代价矩阵 ``(K+M, M+B)``。
-        n_uavs:         UAV 数 K。
+        cost_matrix:    扩展代价矩阵 ``(K+N, N+B)``。
+        n_uavs:         UAV 数 K（实例机数，≤ 可用机数）。
         uav_last_target:``{uav_id: 该航线当前最后一个任务下标}``。
         candidates:     未访问任务下标列表。
         temperature:    温度；``< 0.1`` 时纯开发（取最近），否则 softmax 采样。

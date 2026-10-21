@@ -8,7 +8,7 @@
     <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#FFFFFF' }}>核心主张：快速任务选择缩空间 + 精细 MUAS 组合优化</Text>
   </Box>
 
-  <Box style={{ position: 'absolute', top: 128, left: 60 }}>
+  <Box style={{ position: 'absolute', top: 112, left: 60 }}>
     <svg width={1160} height={296} viewBox='0 0 1160 296'>
       <rect x='18' y='102' width='142' height='92' rx='10' fill='#F0F5FC' stroke='#1E4FA8' strokeWidth='1.2' />
       <text x='89' y='140' font-size='16' font-weight='bold' fill='#0E3F8C' text-anchor='middle'>动态任务池</text>
@@ -18,28 +18,28 @@
       <rect x='220' y='30' width='332' height='44' rx='12' fill='#1E4FA8' />
       <rect x='220' y='58' width='332' height='16' fill='#1E4FA8' />
       <text x='386' y='58' font-size='16' font-weight='bold' fill='#FFFFFF' text-anchor='middle'>第一阶段 · 动态任务选择</text>
-      <rect x='240' y='90' width='292' height='40' rx='7' fill='#F0F5FC' stroke='#3D7BD9' strokeWidth='0.8' />
-      <text x='386' y='115' font-size='14' fill='#1A2230' text-anchor='middle'>优先级预筛选 Top-αK ∩ cap(t)</text>
-      <line x1='386' y1='130' x2='386' y2='144' stroke='#3D7BD9' strokeWidth='1.2' markerEnd='url(#ah2)' />
-      <rect x='240' y='146' width='292' height='40' rx='7' fill='#F0F5FC' stroke='#3D7BD9' strokeWidth='0.8' />
-      <text x='386' y='171' font-size='14' fill='#1A2230' text-anchor='middle'>边际收益增量选择 Δ = ΔB / ΔC</text>
-      <line x1='386' y1='186' x2='386' y2='200' stroke='#3D7BD9' strokeWidth='1.2' markerEnd='url(#ah2)' />
-      <rect x='240' y='202' width='292' height='40' rx='7' fill='#F0F5FC' stroke='#3D7BD9' strokeWidth='0.8' />
-      <text x='386' y='227' font-size='14' fill='#1A2230' text-anchor='middle'>快速可行性检查</text>
+      <rect x='240' y='90' width='292' height='44' rx='7' fill='#F0F5FC' stroke='#3D7BD9' strokeWidth='0.8' />
+      <text x='386' y='118' font-size='14' fill='#1A2230' text-anchor='middle'>优先级预筛选 n_cand ∩ cap(t)</text>
+      <line x1='386' y1='134' x2='386' y2='148' stroke='#3D7BD9' strokeWidth='1.2' markerEnd='url(#ah2)' />
+      <rect x='240' y='148' width='292' height='44' rx='7' fill='#F0F5FC' stroke='#3D7BD9' strokeWidth='0.8' />
+      <text x='386' y='176' font-size='14' fill='#1A2230' text-anchor='middle'>边际收益增量选择 Δ = ΔB / ΔC</text>
+      <line x1='386' y1='192' x2='386' y2='206' stroke='#3D7BD9' strokeWidth='1.2' markerEnd='url(#ah2)' />
+      <rect x='240' y='206' width='292' height='44' rx='7' fill='#F0F5FC' stroke='#3D7BD9' strokeWidth='0.8' />
+      <text x='386' y='234' font-size='14' fill='#1A2230' text-anchor='middle'>快速可行性检查</text>
       <line x1='552' y1='148' x2='606' y2='148' stroke='#1E4FA8' strokeWidth='1.8' markerEnd='url(#ah1)' />
       <text x='579' y='136' font-size='13' font-weight='bold' fill='#1E4FA8' text-anchor='middle'>候选集</text>
       <rect x='610' y='30' width='332' height='236' rx='12' fill='#FFFFFF' stroke='#1E4FA8' strokeWidth='1.2' />
       <rect x='610' y='30' width='332' height='44' rx='12' fill='#0E3F8C' />
       <rect x='610' y='58' width='332' height='16' fill='#0E3F8C' />
       <text x='776' y='58' font-size='16' font-weight='bold' fill='#FFFFFF' text-anchor='middle'>第二阶段 · 选择性 MUAS</text>
-      <rect x='630' y='90' width='292' height='40' rx='7' fill='#F0F5FC' stroke='#3D7BD9' strokeWidth='0.8' />
-      <text x='776' y='115' font-size='14' fill='#1A2230' text-anchor='middle'>统一编码 + DMDE 进化搜索</text>
-      <line x1='776' y1='130' x2='776' y2='144' stroke='#3D7BD9' strokeWidth='1.2' markerEnd='url(#ah2)' />
-      <rect x='630' y='146' width='292' height='40' rx='7' fill='#F0F5FC' stroke='#3D7BD9' strokeWidth='0.8' />
-      <text x='776' y='171' font-size='14' fill='#1A2230' text-anchor='middle'>解码 + 可行性修复（Lamarckian 回写）</text>
-      <line x1='776' y1='186' x2='776' y2='200' stroke='#3D7BD9' strokeWidth='1.2' markerEnd='url(#ah2)' />
-      <rect x='630' y='202' width='292' height='40' rx='7' fill='#F0F5FC' stroke='#3D7BD9' strokeWidth='0.8' />
-      <text x='776' y='227' font-size='14' fill='#1A2230' text-anchor='middle'>终点机巢：最小费用流精确求解</text>
+      <rect x='630' y='90' width='292' height='44' rx='7' fill='#F0F5FC' stroke='#3D7BD9' strokeWidth='0.8' />
+      <text x='776' y='118' font-size='14' fill='#1A2230' text-anchor='middle'>统一编码 + DMDE 进化搜索</text>
+      <line x1='776' y1='134' x2='776' y2='148' stroke='#3D7BD9' strokeWidth='1.2' markerEnd='url(#ah2)' />
+      <rect x='630' y='148' width='292' height='44' rx='7' fill='#F0F5FC' stroke='#3D7BD9' strokeWidth='0.8' />
+      <text x='776' y='176' font-size='14' fill='#1A2230' text-anchor='middle'>解码 + 可行性修复（Lamarckian 回写）</text>
+      <line x1='776' y1='192' x2='776' y2='206' stroke='#3D7BD9' strokeWidth='1.2' markerEnd='url(#ah2)' />
+      <rect x='630' y='206' width='292' height='44' rx='7' fill='#F0F5FC' stroke='#3D7BD9' strokeWidth='0.8' />
+      <text x='776' y='234' font-size='14' fill='#1A2230' text-anchor='middle'>终点机巢：最小费用流精确求解</text>
       <line x1='942' y1='148' x2='996' y2='148' stroke='#1E4FA8' strokeWidth='1.8' markerEnd='url(#ah1)' />
       <rect x='1000' y='102' width='142' height='92' rx='10' fill='#E8EFF8' stroke='#1E4FA8' strokeWidth='1.2' />
       <text x='1071' y='140' font-size='16' font-weight='bold' fill='#0E3F8C' text-anchor='middle'>执行与反馈</text>

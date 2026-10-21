@@ -4,18 +4,18 @@
 
 ## 目的
 
-在 `|T_t| >> K_avail` 的规模下，量化第一阶段「动态任务选择」的规模压缩收益，
+在 `|T_t| >> K` 的规模下，量化第一阶段「动态任务选择」的规模压缩收益，
 并对候选/选择规模的标定口径（机数名额 vs 机队能力）做对照扫描。
 
-`exp01_smoke` 跑在「机多任务少」一侧（10 任务 / 24 机，αK=60），Top-αK 从不
-触发，无法验证该机制；本实验固定 `K_avail=8`（8 巢 × 容量 4），任务规模扫
+`exp01_smoke` 跑在「机多任务少」一侧（10 任务 / 24 机，⌈α·K⌉=60），n_cand
+截断从不触发，无法验证该机制；本实验固定 `K=8`（8 巢 × 容量 4），任务规模扫
 50/100/200，机队满电航程 80 km（与 exp01 同口径）。
 
 对应论文 Chapter3_README §1(4) 与 §3.3。
 
 ## 成功标准
 
-1. Top-αK 的截断真实发生，候选规模随 `α·K_avail` 而非任务规模变化；
+1. 候选数 n_cand 的截断真实发生，候选规模随 `α·K` 而非任务规模变化；
 2. 第二阶段耗时不随 `N` 增长；
 3. 与「不经过第一阶段、直接全量 MUAS」的对照相比有可量化收益；
 4. （2026-10-20 增补）规模标定口径可对比：机数名额族 vs 能力驱动族在
@@ -55,14 +55,14 @@
 另修：第一阶段选择现注入统一距离尺子 `distance_fn`（旧版 selection 的
  depot 腿走欧氏直线，与代价矩阵口径分裂，P1-1）。
 
-## 实测结果（seed=42；K_avail=8；B=8×80km=640km；cap(×1.0)≈41）
+## 实测结果（seed=42；K=8；B=8×80km=640km；cap(×1.0)≈41）
 
 求解预算（全格同口径）：DMDE pop=20 × 40 代 + polish ≤800 评估。
 T = 端到端（hint + sel + build + muas）。edges = 惰性表实际现算边数。
 F2 = 路径代价（f2_cost，km，含返航腿）；pol = polish 实际消耗评估数
 （800 即触顶，说明该格搜索仍有改进空间、被预算截断）。
 
-| N | variant | cap(t) | 候选k | sel | exec | F1 | F2(km) | T/s | muas/s | edges | pol |
+| N | variant | cap(t) | 候选 n_cand | n_sel | exec | F1 | F2(km) | T/s | muas/s | edges | pol |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | 50 | quota_a2.5 | 41 | 20 | 16 | 16 | 133.2 | 162.1 | 25.9 | 25.3 | 964 | 625 |
 | 50 | quota_a5 | 41 | 40 | 16 | 16 | 129.1 | 151.8 | 27.3 | 26.5 | 1544 | 601 |
@@ -87,9 +87,9 @@ F2 = 路径代价（f2_cost，km，含返航腿）；pol = polish 实际消耗�
 属性，下次运行正确；本表的评估预算以 DMDE 构造值（pop×gens=800 + 灭绝
 重评）与 pol 列为准。
 
-漏斗（全部格子一致）：`N → Top-k → k → k`——驻巢修复后往返预筛与
-postcheck 均零拒绝（2×25km 散布 ≤ 80km 航程），规模完全由候选/选择
-名额决定。`filter_reasons` 只剩 `not_in_top_alpha`。
+漏斗（全部格子一致）：`N → n_cand → n_sel → exec`——驻巢修复后往返预筛与
+postcheck 均零拒绝（2×25km 散布 ≤ 80km 航程），规模完全由候选/选择数
+决定。`filter_reasons` 只剩 `not_in_n_cand`。
 
 ## 结论
 
@@ -98,25 +98,25 @@ postcheck 均零拒绝（2×25km 散布 ≤ 80km 航程），规模完全由候�
 1. **压缩真实发生且与 N 解耦。** 机数名额族候选数恒为 20（α=2.5）或 40
    （α=5），不随 N 变化；压缩比 3.1×→6.3×→12.5×（α=2.5）随 N 线性增长。
    能力族 cap(t)=10/20/40 由 `B/c̃` 决定，同样与 N 无关（41/40/40）。
-2. **第二阶段耗时与 N 无关（固定 k）。** k=16 时 muas 25.3/25.2/25.0 s
-   （N=50/100/200），三次测量极差 < 2%；耗时只随 k 涨（k=10→41 时
+2. **第二阶段耗时与 N 无关（固定 n_sel）。** n_sel=16 时 muas 25.3/25.2/25.0 s
+   （N=50/100/200），三次测量极差 < 2%；耗时只随 n_sel 涨（n_sel=10→41 时
    10.4→139.6 s）。
 3. **延迟构建后 O(n²) 瓶颈消失。** N=200：hint 0.57 s + sel 0.32 s +
    build 0.07 s = 0.96 s（占端到端 3.7%），而旧版全量建矩阵一项就要
    9.8 s（占 85.6%）。惰性表现算边数为全量的 5.0%（2164/43,264）。
    端到端耗时现在由二阶段求解主导（96%），这正是分层要保护的对象。
-4. **规模标定的真正瓶颈不是 α，是选择名额 max_ratio·K。**
+4. **规模标定的真正瓶颈不是 α，是选择数 n_sel=⌈max_ratio·K⌉。**
    `quota_a2.5` 与 `quota_a5` 结果几乎相同（F1 133.2 vs 129.1，同为
-   sel=16）：intersect 口径下候选名额 ⌈α·K⌉ 提到 40 毫无用处，因为
-   **选择数被 ⌈max_ratio·K⌉=16 封顶**（`capability_marginal_limit=16`）。
+   n_sel=16）：intersect 口径下候选数 n_cand=⌈α·K⌉ 提到 40 毫无用处，因为
+   **选择数被 ⌈max_ratio·K⌉=16 封顶**（`capability_n_sel=16`）。
    原结论 2「α 需按机队总吞吐标定」应修正为：**选择数必须接到 cap(t)**
-   （`mode=primary`），候选名额只需 ≥ 选择数。
-5. **能力驱动口径把「压缩损失」大部分买回来。** 以 k≈cap(t) 为规模：
+   （`mode=primary`），候选数只需 ≥ 选择数。
+5. **能力驱动口径把「压缩损失」大部分买回来。** 以 n_sel≈cap(t) 为规模：
    N=50：F1 273.7 = 全量的 93.5%，耗时 141 s = 全量的 87%（1.15×）；
    N=100：F1 297.3 = 全量的 83.4%，耗时 140 s = 全量的 13%（**7.6×**）。
-   生产口径（k=16）只有全量的 45.5%/36.8%。k 超过 cap(t) 后收益迅速
+   生产口径（n_sel=16）只有全量的 45.5%/36.8%。n_sel 超过 cap(t) 后收益迅速
    衰减（41→50：F1 +7%，耗时 +16%），cap(t) 就是天然的平衡点。
-6. **k 固定时 F1 随 N 上升**（cap_x1：273.7→297.3→336.7）——候选池
+6. **n_sel 固定时 F1 随 N 上升**（cap_x1：273.7→297.3→336.7）——候选池
    越大，同等规模下选到的任务越好；这是分层的第二个收益维度
    （旧版退化构型下完全看不到）。
 
@@ -127,7 +127,7 @@ postcheck 均零拒绝（2×25km 散布 ≤ 80km 航程），规模完全由候�
   机制不随 N 变（结论 2 已证明耗时与 N 无关）。
 - **轻求解预算**：40 代 + 800 评估（exp01 生产为 100 代 + 2000）。
   exp02 量的是权衡曲线形状，不是生产级解质量；各格同预算、横向可比。
-- k≈80/128 等更右端取点与相邻点曲线形状重复，未入矩阵（运行时预算）。
+- cap(t)≈80/128 等更右端取点与相邻点曲线形状重复，未入矩阵（运行时预算）。
 - 单 seed（42）；多种子稳健性未做（exp01 侧已做 3 seed）。
 - 本轮重跑中途曾用「UAV 驻原点 + 80km」构型跑过一版（cap(t)=16、
   预筛误杀 24/50），数据已弃用；驻巢修复后的才是本表。
@@ -135,8 +135,8 @@ postcheck 均零拒绝（2×25km 散布 ≤ 80km 航程），规模完全由候�
 ## 下一步
 
 - 论文口径建议：生产配置的 `selection.capability.mode` 由 `intersect`
-  改评 `primary`（`budget_scale≈1.0`），选择数随 cap(t) 走；候选名额
-  `α` 只需覆盖选择数（α·K ≥ cap(t) 即可，不必再按吞吐放大 α 本身）。
+  改评 `primary`（`budget_scale≈1.0`），选择数 n_sel 随 cap(t) 走；候选数
+  倍率 `α` 只需覆盖选择数（⌈α·K⌉ ≥ cap(t) 即可，不必再按吞吐放大 α 本身）。
   改动涉及 exp01 生产基线，需按消融流程评估后再定（见 exp04）。
 - `quota_a5 ≡ quota_a2.5` 的发现提示：`max_ratio` 旋钮应与 capability
   联动文档化（pipeline.py 的 effective_cap 已支持，缺显式度量和说明）。
@@ -152,10 +152,10 @@ import pyplot、base 只含 audit+declutter——本实验无逐周期数据故�
 |---|---|---|---|
 | setup | `setup_params` | 实验设定总览：场景 / 变体矩阵 / 选择机制 / 求解预算 | `config.yaml 全段 + metrics.json 的 scales[].selection 字段` |
 | report | `r01_tradeoff` | 吞吐—耗时—质量权衡：全变体扫描散点（x=二阶段耗时，y=交付收益 F1） | `metrics.json 的 scales[] 全字段（variant × N × F1 × t_muas）` |
-| report | `r02_compression` | 规模压缩与 N 解耦：候选数 / 选择数 / 执行数 / 压缩比随 N 的演化 | `metrics.json 的 scales[].selection.{n_tasks_in,capability_preselect_k,n_selected} + muas.n_executed + compression_ratio` |
+| report | `r02_compression` | 规模压缩与 N 解耦：候选数 / 选择数 / 执行数 / 压缩比随 N 的演化 | `metrics.json 的 scales[].selection.{n_tasks_in,capability_n_cand,n_selected} + muas.n_executed + compression_ratio` |
 | report | `r03_time_breakdown` | 耗时分解与惰性边：二阶段耗时与 N 无关，O(n²) 构建瓶颈已除 | `metrics.json 的 scales[].t_{hint,selection,build,muas}_ms + lazy_edges` |
-| report | `r04_bottleneck` | 瓶颈定位：候选名额 α 无感、选择数被 max_ratio·K 封顶 | `metrics.json 的 scales[]（quota_a2.5 vs quota_a5 同 sel 对照 + selection.capability_marginal_limit）` |
-| report | `r05_capability` | 能力驱动标定：k≈cap(t) 时质量保持率高、加速比大，cap(t) 是天然平衡点 | `metrics.json 的 scales[]（cap_x* 阶梯的 k / F1 / t_muas + full_baseline 参考） |
+| report | `r04_bottleneck` | 瓶颈定位：候选数 α 无感、选择数被 max_ratio·K 封顶 | `metrics.json 的 scales[]（quota_a2.5 vs quota_a5 同 n_sel 对照 + selection.capability_n_sel）` |
+| report | `r05_capability` | 能力驱动标定：n_sel≈cap(t) 时质量保持率高、加速比大，cap(t) 是天然平衡点 | `metrics.json 的 scales[]（cap_x* 阶梯的 n_sel / F1 / t_muas + full_baseline 参考） |
 
 用法（与 exp01 同口径）：
 

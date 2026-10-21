@@ -162,9 +162,9 @@ K 会自然取满 `K_avail`,**不构成算法缺陷**。
 
 - 基因类型用 `uav_id` 哨兵值:`≥0` 起始 / `-1` 巡游 / **`-2` 终止(终点机巢)**。
   `Gene` 是 frozen dataclass,**不新增字段**。
-- 代价矩阵列从 `M` 扩到 `M+B`:`[:K, M:]` = UAV→机巢(空航次用),
-  `[K:, M:]` = 任务→机巢(终止基因在此匹配)。
-- `cost_vector` 布局:`[0,K)` 起始 / `[K,K+M)` 巡游 / `[K+M,K+M+K)` 终止。
+- 代价矩阵列从 `N` 扩到 `N+B`:`[:K, N:]` = UAV→机巢(空航次用),
+  `[K:, N:]` = 任务→机巢(终止基因在此匹配)。
+- `cost_vector` 布局:`[0,K)` 起始 / `[K,K+N)` 巡游 / `[K+N,K+N+K)` 终止。
   终止分量参与 `mutate_population`,终点因此是**进化结果**。
 - 终点**以编码为主、启发式为兜底**:`_choose_end_nests` 仅在编码终点
   违反容量时才改派(由 `check_nest_capacity` 判定)。
@@ -336,7 +336,7 @@ K 会自然取满 `K_avail`,**不构成算法缺陷**。
 | 6.2 | `exp03_rolling_dynamic` | 滚动闭环:完成率、平均等待、`K_avail(t)` 利用率、故障恢复 | 阶段 2 | [ ] |
 | 6.3 | `exp04_ablation` | 消融:去掉 W / G / ΔC / 3D 地形代价 | 阶段 1 | [ ] |
 | 6.4 | `exp05_solver_compare` | 对比:DMDE vs greedy vs random | 阶段 4 | [ ] |
-| 6.5 | 指标规范化 | `metrics.json` 字段:`n_completed`、`completion_rate`、`avg_wait`、`total_cost`、`solve_time_ms`、`K_avail_mean` | - | [x] exp01 已产出 |
+| 6.5 | 指标规范化 | `metrics.json` 字段:`n_completed`、`completion_rate`、`avg_wait`、`total_cost`、`solve_time_ms`、`K_mean` | - | [x] exp01 已产出 |
 
 **规模提醒**:`build_pairwise_costs` 实测约 **260 μs/对**,O(n²)。任务数 100 → 约 2.7 s,
 300 → 约 24 s。设计 exp02 规模上限时先算这笔账;若要上更大规模,优先做代价矩阵
@@ -385,7 +385,7 @@ K 会自然取满 `K_avail`,**不构成算法缺陷**。
 ## 9. 风险与提示
 
 1. **`repair_rules` 仍是质量瓶颈**。三个小文件决定连续个体如何稳定映射到可行离散解。
-   建议补单测,尤其是 `overloaded`(N>M)与 `balanced`(N=M)的差异
+   建议补单测,尤其是 `overloaded`(K>N)与 `balanced`(K=N)的差异
    —— 虽然本问题走 srp,但换规模时可能落到别的分支。
 2. **三维可达性工作量不确定**。建议先做「离地余量 + 禁飞区掩膜」的轻量版,
    完整航迹搜索留给第 4 章。

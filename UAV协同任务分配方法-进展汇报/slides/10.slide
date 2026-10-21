@@ -8,7 +8,7 @@
 
   <Box style={{ position: 'absolute', top: 98, left: 60 }}>
     <svg width={1160} height={252} viewBox='0 0 1160 252'>
-      <text x='20' y='26' font-size='16' font-weight='bold' fill='#0E3F8C'>离散层：三元组基因 (U_i, T_j, C(i,j)) —— 按 UAV 分段，每任务恰出现一次，基因总数恒 M</text>
+      <text x='20' y='26' font-size='16' font-weight='bold' fill='#0E3F8C'>离散层：三元组基因 (U_i, T_j, C(i,j)) —— 按 UAV 分段，每任务恰出现一次，基因总数恒 N</text>
       <rect x='60' y='42' width='96' height='42' rx='6' fill='#1E4FA8' />
       <text x='108' y='68' font-size='14' fill='#FFFFFF' text-anchor='middle'>U0→T3</text>
       <rect x='160' y='42' width='112' height='42' rx='6' fill='#B5D4F4' />
@@ -37,9 +37,9 @@
       <rect x='60' y='166' width='250' height='38' rx='6' fill='#1E4FA8' />
       <text x='185' y='190' font-size='14' fill='#FFFFFF' text-anchor='middle'>起始基因代价 [0, K)</text>
       <rect x='314' y='166' width='480' height='38' rx='6' fill='#3D7BD9' />
-      <text x='554' y='190' font-size='14' fill='#FFFFFF' text-anchor='middle'>巡游基因代价（任务→任务） [K, M)</text>
+      <text x='554' y='190' font-size='14' fill='#FFFFFF' text-anchor='middle'>巡游基因代价（任务→任务） [K, N)</text>
       <rect x='798' y='166' width='304' height='38' rx='6' fill='#D6DCE5' strokeDasharray='5 4' />
-      <text x='950' y='190' font-size='14' fill='#4A5568' text-anchor='middle'>终止段（主方案为空） [M, M+K)</text>
+      <text x='950' y='190' font-size='14' fill='#4A5568' text-anchor='middle'>终止段（主方案为空） [N, N+K)</text>
       <text x='30' y='234' font-size='14' fill='#4A5568'>差分算子作用于连续代价——其差分具有「三维航程差」的物理意义，搜索方向由地形代价引导；临时结果经逆映射还原为可行离散个体。</text>
     </svg>
   </Box>

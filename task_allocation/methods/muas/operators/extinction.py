@@ -89,8 +89,8 @@ def apply_extinction(
         cost_vectors:       种群代价值矩阵。
         best_idx:           最优个体索引。
         cost_matrix:        代价矩阵（用于生成新个体）。
-        n_uavs:             UAV 数量。
-        n_targets:          目标数量。
+        n_uavs:             UAV 数 K（实例机数，≤ 可用机数）。
+        n_targets:          任务数 N。
         model_type:         分配模型类型。
         env_pressure_max:   最大环境压力（0~0.3）。
         rng:                随机数生成器。

@@ -5,12 +5,12 @@
 
 回答「候选规模按机数名额还是机队能力标定？」——能力驱动口径
 （``mode=primary``，选择数接到 cap(t)=⌊budget_scale·B/c̃⌋）把压缩损失
-大部分买回来，且 k 超过 cap(t) 后收益迅速衰减。
+大部分买回来，且 n_cand 超过 cap(t) 后收益迅速衰减。
 
-双联面板（x = 候选/选择规模 k，对数轴）：
+双联面板（x = 候选/选择规模 n_cand / n_sel，对数轴）：
 
-    (a) 绝对口径   y = F1。能力族三点（k=10/20/40）沿曲线爬升，
-                      全量对照为同 N 红色虚线；cap_x1（k≈cap(t)=40）
+    (a) 绝对口径   y = F1。能力族三点（n_cand=10/20/40）沿曲线爬升，
+                      全量对照为同 N 红色虚线；cap_x1（n_cand≈cap(t)=40）
                       达到全量的 93.5%（N=50）/ 83.4%（N=100）。
                       灰色带 = cap(t) 附近（40±2）。
     (b) 相对口径（仅 N=50/100，有全量对照）   左轴 = 质量保持率 %（实心），
@@ -18,7 +18,7 @@
                       13% 的耗时拿到 83.4% 的质量（7.6× 加速）；
                       N=50 为 87% 耗时 / 93.5% 质量（1.15×）。
 
-读图要点：(a) 中 k 从 41 加到 50（全量）只多 7% F1 却多 16% 耗时——
+读图要点：(a) 中 n_cand 从 41 加到 50（全量）只多 7% F1 却多 16% 耗时——
 cap(t) 右侧收益速衰，即「天然平衡点」。
 
 数据来源：``metrics.json`` 的 ``scales[]``（cap_x* 阶梯 + quota_a2.5 +
@@ -110,8 +110,8 @@ def plot_r05_capability(
                           fontsize=FS["annotation"], color="#2f6b3a")
     ax_a.set_xscale("log")
     ax_a.set_xlim(8, 210)
-    style_axes(ax_a, title="(a) 绝对口径：交付收益 vs 规模 k",
-               xlabel="候选/选择规模 k（对数轴）", ylabel="交付收益 F1")
+    style_axes(ax_a, title="(a) 绝对口径：交付收益 vs 规模 n_cand/n_sel",
+               xlabel="候选/选择规模 n_cand / n_sel（对数轴）", ylabel="交付收益 F1")
 
     # ── (b) 相对口径：保持率（左轴）/ 耗时比（右轴）──────────────
     for v in variants:
@@ -148,7 +148,7 @@ def plot_r05_capability(
     ax_b.set_xlim(8, 210)
     ax_b.set_ylim(0, 108)
     style_axes(ax_b, title="(b) 相对口径：保持率（实心）与耗时比（空心）同轴",
-               xlabel="候选/选择规模 k（对数轴）",
+               xlabel="候选/选择规模 n_cand / n_sel（对数轴）",
                ylabel="保持率 / 耗时比（%，对同 N 全量）")
 
     # 图例

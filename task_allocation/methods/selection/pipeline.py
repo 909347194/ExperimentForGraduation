@@ -13,7 +13,9 @@
     primary：以 cap(t) 为主定规模、名额降为兜底（可按 max_expand_factor 封顶）。
         紧张时收编、充裕时允许**超名额**多选，双向失真同时修正。
 
-名额定义：候选数 = ⌈α·K_avail⌉；选择数 = ⌈max_ratio·K_avail⌉（或 max_selected）。
+符号口径（全文统一）：**K** = 可用 UAV 数，**N** = 任务数，
+**n_cand** = 候选任务数，**n_sel** = 选择任务数，**cap(t)** = 能力承载数。
+名额定义：n_cand = ⌈α·K⌉；n_sel = ⌈max_ratio·K⌉（或 ``max_selected``）。
 cap(t) 已是吞吐上界（⌊Σ remaining_range / 单任务中位代价⌋，见 :mod:`.capability`）；
 ``capability.fallback_when_disabled=True`` 时即便关闭能力模块也按此上界收敛（Fix③）。
 注意：事件驱动（``forced_task_ids``）与防饥饿（:class:`AntiStarvationConfig`）的
@@ -56,7 +58,7 @@ class AntiStarvationConfig:
 
     即便优先级/边际选择因名额或几何代价把某任务反复挤出，只要它等待超过
     ``force_after_seconds`` 或逼近 ``latest`` 时间窗（剩余 ≤ ``deadline_slack``），
-    就强制纳入候选集（绕过 Top-αK 预筛）并在终刀获得强优先，保证不会被无限期推迟。
+    就强制纳入候选集（绕过 n_cand 预筛）并在终刀获得强优先，保证不会被无限期推迟。
 
     ``enabled`` 默认 ``False`` —— 仅显式开启时改变选择行为，保持既有实验/测试基线。
     """
@@ -77,7 +79,7 @@ class SelectionConfig:
     # 硬性不停饿兜底（Fix②）：老化/临期任务强制纳入，保证不无限期推迟。
     anti_starvation: AntiStarvationConfig = field(default_factory=AntiStarvationConfig)
     current_time: float = 0.0
-    # 事件驱动强制纳入：紧急 / 故障释放的任务绕过 Top-αK 预筛（仍过可行性过滤）
+    # 事件驱动强制纳入：紧急 / 故障释放的任务绕过 n_cand 预筛（仍过可行性过滤）
     forced_task_ids: set[int] = field(default_factory=set)
 
     def __post_init__(self) -> None:
@@ -110,7 +112,7 @@ def run(
     }
 
     # Fix②：老化 / 临期任务强制纳入集合（与事件驱动的 forced_task_ids 取并），
-    # 绕过 Top-αK 预筛，并在终刀获得强优先，保证不会无限期推迟。
+    # 绕过 n_cand 预筛，并在终刀获得强优先，保证不会无限期推迟。
     forced_ids = set(cfg.forced_task_ids)
     if cfg.anti_starvation.enabled:
         asv = cfg.anti_starvation
@@ -161,19 +163,19 @@ def run(
         diagnostics["capability_fallback"] = True
     diagnostics["capability_enabled"] = cfg.capability.enabled
 
-    # 候选数 = 合成(机数名额 ⌈α·K⌉, 能力上界 cap(t))；两种 mode 见 capability.effective_cap
+    # 候选数 n_cand = 合成(机数名额 ⌈α·K⌉, 能力上界 cap(t))；两种 mode 见 capability.effective_cap
     alpha_quota = (
         max(1, int(math.ceil(cfg.priority.alpha * n_avail))) if n_avail > 0 else 0
     )
-    preselect_k = effective_cap(alpha_quota, capability_cap, cfg.capability)
-    diagnostics["capability_preselect_k"] = preselect_k
+    n_cand = effective_cap(alpha_quota, capability_cap, cfg.capability)
+    diagnostics["capability_n_cand"] = n_cand
 
     preselected = top_alpha_preselect(
         scored_all,
-        n_avail_uavs=n_avail,
+        n_avail=n_avail,
         alpha=cfg.priority.alpha,
         hard_cap=capability_cap,
-        k_override=preselect_k,
+        n_cand_override=n_cand,
     )
 
     # 事件驱动 + 防饥饿强制纳入（绕过 Top-αK 预筛上限）；终刀里再获强优先
@@ -192,7 +194,7 @@ def run(
     pre_ids = {s.task.id for s in preselected}
     for s in scored_all:
         if s.task.id not in pre_ids and s.filter_reason is None:
-            s.filter_reason = "not_in_top_alpha"
+            s.filter_reason = "not_in_n_cand"
 
     passed, rejected_pre = prefilter(
         preselected, uavs, cfg.feasibility, cost_hint=cost_hint, distance_fn=distance_fn
@@ -200,15 +202,15 @@ def run(
     diagnostics["n_after_prefilter"] = len(passed)
     diagnostics["n_rejected_prefilter"] = len(rejected_pre)
 
-    # 选择数 = 合成(机数名额 max_selected 或 ⌈max_ratio·K⌉, 能力上界 cap(t))
+    # 选择数 n_sel = 合成(机数名额 max_selected 或 ⌈max_ratio·K⌉, 能力上界 cap(t))
     if marginal.max_selected is not None:
         marginal_quota = int(marginal.max_selected)
     else:
         marginal_quota = (
             max(1, int(math.ceil(marginal.max_ratio * n_avail))) if n_avail > 0 else 0
         )
-    marginal_limit = effective_cap(marginal_quota, capability_cap, cfg.capability)
-    diagnostics["capability_marginal_limit"] = marginal_limit
+    n_sel = effective_cap(marginal_quota, capability_cap, cfg.capability)
+    diagnostics["capability_n_sel"] = n_sel
 
     chosen = select_by_marginal_gain(
         passed,
@@ -216,7 +218,7 @@ def run(
         marginal,
         pairwise_cost=pairwise_cost,
         capability_cap=capability_cap,
-        limit_override=marginal_limit,
+        n_sel_override=n_sel,
         distance_fn=distance_fn,
     )
     diagnostics["n_after_marginal"] = len(chosen)

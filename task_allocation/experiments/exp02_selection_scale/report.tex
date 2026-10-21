@@ -42,20 +42,20 @@
 
 \begin{abstract}
 \noindent 本报告记录 exp02\_selection\_scale 实验的设置与结果。实验针对
-Chapter3\_README \S 1(4) 的待验证命题——当 $|T_t| \gg K_{\mathrm{avail}}$ 时，
-第一阶段「动态任务选择」的 Top-$\alpha K$ 压缩能否提高实时性——在真实 DEM 地形
-（SRTM/ASTER 级高程数据，200\,m 采样）上固定 $K_{\mathrm{avail}}=8$、满电航程
+Chapter3\_README \S 1(4) 的待验证命题——当 $|T_t| \gg K$ 时，
+第一阶段「动态任务选择」的候选压缩（$n_{\mathrm{cand}}=\lceil\alpha K\rceil$）能否提高实时性——在真实 DEM 地形
+（SRTM/ASTER 级高程数据，200\,m 采样）上固定 $K=8$、满电航程
 80\,km，将任务规模扫到 50/100/200，并对两种规模标定口径（机数名额族
 \texttt{quota\_*} vs 机队能力驱动族 \texttt{cap\_x*}）做 17 格对照扫描。
-结果显示：(1)~压缩真实发生且与 $N$~\textbf{解耦}——候选名额恒为
+结果显示：(1)~压缩真实发生且与 $N$~\textbf{解耦}——候选数恒为
 20/40 或 $\mathrm{cap}(t)=10/20/40$，不随任务规模变化；
-(2)~第二阶段耗时与 $N$~\textbf{无关}（固定 $k=16$ 时 25.3/25.2/25.0\,s，
+(2)~第二阶段耗时与 $N$~\textbf{无关}（固定 $n_{\mathrm{sel}}=16$ 时 25.3/25.2/25.0\,s，
 三次测量极差 $<2\%$）；(3)~原结论「$\alpha$ 需按机队总吞吐标定」被修正为
-更精确的答案——intersect 口径下\textbf{真正瓶颈是选择名额
-$\lceil \mathrm{max\_ratio}\cdot K \rceil = 16$ 而非 $\alpha$}
+更精确的答案——intersect 口径下\textbf{真正瓶颈是选择数
+$n_{\mathrm{sel}}=\lceil \mathrm{max\_ratio}\cdot K \rceil = 16$ 而非 $\alpha$}
 （\texttt{quota\_a2.5} 与 \texttt{quota\_a5} 结果几乎相同）；
 (4)~能力驱动口径（选择数接到 $\mathrm{cap}(t)$）把压缩损失大部分买回来：
-$k \approx \mathrm{cap}(t)$ 时 F1 达全量的 93.5\%（$N{=}50$）/ 83.4\%（$N{=}100$），
+$n_{\mathrm{sel}} \approx \mathrm{cap}(t)$ 时 F1 达全量的 93.5\%（$N{=}50$）/ 83.4\%（$N{=}100$），
 而耗时仅为其 87\%/13\%（$N{=}100$ 加速 7.6$\times$），$\mathrm{cap}(t)$ 即
 「质量—耗时」的天然平衡点。实验同时验证了代价矩阵延迟构建（惰性表）的效果：
 $N{=}200$ 时一阶段仅现算 2,164 条边（全量的 5.0\%），端到端 $O(n^2)$ 构建占比
@@ -75,13 +75,13 @@ $N{=}200$ 时一阶段仅现算 2,164 条边（全量的 5.0\%），端到端 $O
 对应论文 Chapter3\_README \S 1(4) 与 \S 3.3。待验证命题：
 
 \begin{quote}
-当 $|T_t| \gg K_{\mathrm{avail}}(t)$ 时，把全部任务直接交给精细组合优化会显著扩大
-搜索空间；第一阶段用 Top-$\alpha K$ 把 $T_t$ 压到 $T_t^{\mathrm{sel}}$，
+当 $|T_t| \gg K(t)$ 时，把全部任务直接交给精细组合优化会显著扩大
+搜索空间；第一阶段用 $n_{\mathrm{cand}}=\lceil\alpha K\rceil$ 把 $T_t$ 压到 $T_t^{\mathrm{sel}}$，
 据称能提高实时性。
 \end{quote}
 
-\texttt{exp01\_smoke} 跑在「机多任务少」一侧（10 任务 / 24 机，$\alpha K = 60$），
-Top-$\alpha K$ 从不触发，无法验证该机制。本实验固定 $K_{\mathrm{avail}} = 8$
+\texttt{exp01\_smoke} 跑在「机多任务少」一侧（10 任务 / 24 机，$\lceil\alpha K\rceil = 60$），
+$n_{\mathrm{cand}}$ 截断从不触发，无法验证该机制。本实验固定 $K = 8$
 （8 巢 × 容量 4），把任务规模拉到 50/100/200，测量四个量：
 
 \begin{itemize}
@@ -146,8 +146,8 @@ $\mathrm{cap}(t) \approx 41$、预筛零误杀，与全量对照的执行数同�
 \toprule
 变体 & 族 & $\alpha$ & capability 模式 & 含义 \\
 \midrule
-\texttt{quota\_a2.5} & 名额族 & 2.5 & intersect（收紧） & $k = \lceil \alpha K \rceil = 20$ \\
-\texttt{quota\_a5}   & 名额族 & 5.0 & intersect（收紧） & $k = \lceil \alpha K \rceil = 40$ \\
+\texttt{quota\_a2.5} & 名额族 & 2.5 & intersect（收紧） & $n_{\mathrm{cand}} = \lceil \alpha K \rceil = 20$ \\
+\texttt{quota\_a5}   & 名额族 & 5.0 & intersect（收紧） & $n_{\mathrm{cand}} = \lceil \alpha K \rceil = 40$ \\
 \texttt{cap\_x0.25}  & 能力族 & 2.5 & primary（定规模）  & 规模 $= \mathrm{cap}(t) \approx 10$ \\
 \texttt{cap\_x0.5}   & 能力族 & 2.5 & primary（定规模）  & 规模 $= \mathrm{cap}(t) \approx 20$ \\
 \texttt{cap\_x1}     & 能力族 & 2.5 & primary（定规模）  & 规模 $= \mathrm{cap}(t) \approx 40$ \\
@@ -159,7 +159,7 @@ $\mathrm{cap}(t) \approx 41$、预筛零误杀，与全量对照的执行数同�
 两种口径的本质差异：
 
 \begin{itemize}
-  \item \textbf{机数名额族（旧口径）}：候选规模 $k = \lceil \alpha K \rceil$ 只跟
+  \item \textbf{机数名额族（旧口径）}：候选规模 $n_{\mathrm{cand}} = \lceil \alpha K \rceil$ 只跟
         \emph{机器数}走，与机队吞吐能力脱钩；capability 以 \texttt{intersect}
         模式只能收紧不能放宽；
   \item \textbf{机队能力驱动族（待评口径）}：规模由
@@ -200,13 +200,13 @@ $\mathrm{cap}(t) \approx 41$、预筛零误杀，与全量对照的执行数同�
 
 \begin{table}[H]
 \centering
-\caption{实测结果（seed = 42；$K_{\mathrm{avail}}=8$；$B = 8 \times 80\,\mathrm{km} = 640$\,km；$\mathrm{cap}(\times 1.0) \approx 41$）}
+\caption{实测结果（seed = 42；$K=8$；$B = 8 \times 80\,\mathrm{km} = 640$\,km；$\mathrm{cap}(\times 1.0) \approx 41$）}
 \label{tab:main}
 \footnotesize
 \setlength{\tabcolsep}{3.5pt}
 \begin{tabular}{rrlrrrrrrrrr}
 \toprule
-N & 变体 & cap($t$) & 候选$k$ & sel & exec & F1 & F2(km) & $T$/s & muas/s & edges & pol \\
+N & 变体 & cap($t$) & 候选$n_{\mathrm{cand}}$ & $n_{\mathrm{sel}}$ & exec & F1 & F2(km) & $T$/s & muas/s & edges & pol \\
 \midrule
 50 & \texttt{quota\_a2.5} & 41 & 20 & 16 & 16 & 133.2 & 162.1 & 25.9 & 25.3 & 964 & 625 \\
 50 & \texttt{quota\_a5}   & 41 & 40 & 16 & 16 & 129.1 & 151.8 & 27.3 & 26.5 & 1544 & 601 \\
@@ -235,7 +235,7 @@ N & 变体 & cap($t$) & 候选$k$ & sel & exec & F1 & F2(km) & $T$/s & muas/s & 
 pol = polish 实际消耗评估数（800 即触顶，说明该格搜索仍有改进空间、被预算截断）。
 漏斗（全部格子一致）：$N \to \mathrm{Top}\text{-}k \to k \to k$——驻巢修复后
 往返预筛与 postcheck 均零拒绝（$2 \times 25$\,km 散布 $\le 80$\,km 航程），
-规模完全由候选/选择名额决定，\texttt{filter\_reasons} 只剩 \texttt{not\_in\_top\_alpha}。
+规模完全由候选/选择数决定，\texttt{filter\_reasons} 只剩 \texttt{not\_in\_top\_alpha}。
 
 \subsection{结论}
 
@@ -246,29 +246,29 @@ pol = polish 实际消耗评估数（800 即触顶，说明该格搜索仍有改
         或 40（$\alpha = 5$），不随 $N$ 变化；压缩比 $3.1\times \to 6.3\times \to 12.5\times$
         （$\alpha = 2.5$）随 $N$ 线性增长。能力族 $\mathrm{cap}(t) = 10/20/40$
         由 $B/\tilde{c}$ 决定，同样与 $N$ 无关（41/40/40）。
-  \item \textbf{第二阶段耗时与 $N$ 无关（固定 $k$）。} $k = 16$ 时 muas
+  \item \textbf{第二阶段耗时与 $N$ 无关（固定 $n_{\mathrm{sel}}$）。} $n_{\mathrm{sel}} = 16$ 时 muas
         25.3/25.2/25.0\,s（$N = 50/100/200$），三次测量极差 $< 2\%$；
-        耗时只随 $k$ 涨（$k: 10 \to 41$ 时 $10.4 \to 139.5$\,s）。
+        耗时只随 $n_{\mathrm{sel}}$ 涨（$n_{\mathrm{sel}}: 10 \to 41$ 时 $10.4 \to 139.5$\,s）。
   \item \textbf{延迟构建后 $O(n^2)$ 瓶颈消失。} $N = 200$：hint 0.57\,s +
         sel 0.32\,s + build 0.07\,s = 0.96\,s（占端到端 3.7\%），而旧版
         全量建矩阵一项就要 9.8\,s（占 85.6\%）。惰性表现算边数为全量的
         5.0\%（2,164/43,264）。端到端耗时现在由二阶段求解主导（96\%），
         这正是分层要保护的对象。
-  \item \textbf{规模标定的真正瓶颈不是 $\alpha$，是选择名额
-        $\lceil \mathrm{max\_ratio} \cdot K \rceil = 16$。}
+  \item \textbf{规模标定的真正瓶颈不是 $\alpha$，是选择数
+        $n_{\mathrm{sel}}=\lceil \mathrm{max\_ratio} \cdot K \rceil = 16$。}
         \texttt{quota\_a2.5} 与 \texttt{quota\_a5} 结果几乎相同
-        （F1 133.2 vs 129.1，同为 sel = 16）：intersect 口径下候选名额
-        $\lceil \alpha K \rceil$ 提到 40 毫无用处，因为选择数被
-        \texttt{capability\_marginal\_limit} $= 16$ 封顶。
+        （F1 133.2 vs 129.1，同为 $n_{\mathrm{sel}} = 16$）：intersect 口径下候选数
+        $n_{\mathrm{cand}}=\lceil \alpha K \rceil$ 提到 40 毫无用处，因为选择数被
+        \texttt{capability\_n\_sel} $= 16$ 封顶。
         原结论「$\alpha$ 需按机队总吞吐标定」应修正为：\textbf{选择数必须接到
-        $\mathrm{cap}(t)$}（\texttt{mode=primary}），候选名额只需 $\ge$ 选择数。
-  \item \textbf{能力驱动口径把「压缩损失」大部分买回来。} 以 $k \approx \mathrm{cap}(t)$
+        $\mathrm{cap}(t)$}（\texttt{mode=primary}），候选数只需 $\ge$ 选择数。
+  \item \textbf{能力驱动口径把「压缩损失」大部分买回来。} 以 $n_{\mathrm{sel}} \approx \mathrm{cap}(t)$
         为规模：$N{=}50$：F1 273.7 = 全量的 93.5\%，耗时 141\,s = 全量的 87\%（1.15×）；
         $N{=}100$：F1 297.3 = 全量的 83.4\%，耗时 140\,s = 全量的 13\%（\textbf{7.6×}）。
-        生产口径（$k = 16$）只有全量的 45.5\%/36.8\%。$k$ 超过 $\mathrm{cap}(t)$ 后
+        生产口径（$n_{\mathrm{sel}} = 16$）只有全量的 45.5\%/36.8\%。$n_{\mathrm{sel}}$ 超过 $\mathrm{cap}(t)$ 后
         收益迅速衰减（$41 \to 50$：F1 $+7\%$，耗时 $+16\%$），
         $\mathrm{cap}(t)$ 就是天然的平衡点。
-  \item \textbf{$k$ 固定时 F1 随 $N$ 上升}（\texttt{cap\_x1}：
+  \item \textbf{$n_{\mathrm{sel}}$ 固定时 F1 随 $N$ 上升}（\texttt{cap\_x1}：
         273.7 $\to$ 297.3 $\to$ 336.7）——候选池越大，同等规模下选到的任务越好；
         这是分层的第二个收益维度（旧版退化构型下完全看不到）。
 \end{enumerate}
@@ -305,7 +305,7 @@ S01 为实验设定总览（口径基准），R01--R05 为结论层插图（可�
 \caption{吞吐—耗时—质量权衡：全变体扫描全景。(a)~绝对口径：二阶段耗时
 （对数轴）vs 交付收益 F1，红色虚线为同 $N$ 全量对照；(b)~相对口径：
 耗时比 vs 质量保持率（对同 $N$ 全量），右下为优。能力族（绿/青/橙）沿
-「掉质量换耗时」的曲线分布，$k \approx \mathrm{cap}(t)$ 的 \texttt{cap\_x1}
+「掉质量换耗时」的曲线分布，$n_{\mathrm{sel}} \approx \mathrm{cap}(t)$ 的 \texttt{cap\_x1}
 位于曲线拐点；名额族（蓝/紫）全部挤在左上角——质量保持率低且耗时并不更低
 （被 $\lceil \mathrm{max\_ratio} \cdot K \rceil = 16$ 封顶）。}
 \label{fig:tradeoff}
@@ -317,8 +317,8 @@ S01 为实验设定总览（口径基准），R01--R05 为结论层插图（可�
 \centering
 \includegraphics[width=\textwidth]{R02_compression.png}
 \caption{规模压缩：候选/选择/执行与压缩比随 $N$ 的演化。
-(a)~候选名额 $k$ 全部与 $N$ 无关（平线；全量对照为斜线）；
-(b)~选择数（浅柱）与执行数（深柱）——漏斗 $N \to k \to \mathrm{sel} \to \mathrm{exec}$
+(a)~候选数 $n_{\mathrm{cand}}$ 全部与 $N$ 无关（平线；全量对照为斜线）；
+(b)~选择数（浅柱）与执行数（深柱）——漏斗 $N \to n_{\mathrm{cand}} \to n_{\mathrm{sel}} \to \mathrm{exec}$
 的末两级；(c)~压缩比随 $N$ 线性增长（名额族 $3.1\times \to 12.5\times$）。}
 \label{fig:compression}
 \end{figure}
@@ -328,7 +328,7 @@ S01 为实验设定总览（口径基准），R01--R05 为结论层插图（可�
 \begin{figure}[H]
 \centering
 \includegraphics[width=\textwidth]{R03_time_breakdown.png}
-\caption{耗时分解。(a)~二阶段耗时固定 $k$ 与 $N$ 无关（$k{=}16$：
+\caption{耗时分解。(a)~二阶段耗时固定 $n_{\mathrm{sel}}$ 与 $N$ 无关（$n_{\mathrm{sel}}{=}16$：
 25.3/25.2/25.0\,s，极差 $<2\%$）；(b)~一阶段三项耗时全程百毫秒~秒级
 （$N{=}200$ 合计 0.96\,s = 端到端 3.7\%）；(c)~惰性表现算边数沿 $O(N)$
 增长，全量矩阵沿 $O(N^2)$（斜率 2 参考线），$N{=}200$ 时惰性 2,164 条
@@ -336,29 +336,29 @@ S01 为实验设定总览（口径基准），R01--R05 为结论层插图（可�
 \label{fig:time}
 \end{figure}
 
-\subsection{瓶颈定位：选择名额而非 $\alpha$}
+\subsection{瓶颈定位：选择数封顶而非候选倍率}
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=\textwidth]{R04_bottleneck.png}
-\caption{瓶颈定位。(a)~名额族候选 $k$ 翻倍（$20 \to 40$）、选择 sel 触顶不动
+\caption{瓶颈定位。(a)~名额族候选 $n_{\mathrm{cand}}$ 翻倍（$20 \to 40$）、选择 $n_{\mathrm{sel}}$ 触顶不动
 （16/16/16），红色虚线为 $\lceil \mathrm{max\_ratio} \cdot K \rceil = 16$ 封顶线；
-(b)~同 sel 下两变体 F1 几无差异（标注为相对差，最大 $-8.3\%$）——
-候选名额在该区间是「死旋钮」。修正口径（选择数接到 $\mathrm{cap}(t)$）见图~\ref{fig:capability}。}
+(b)~同 $n_{\mathrm{sel}}$ 下两变体 F1 几无差异（标注为相对差，最大 $-8.3\%$）——
+候选数在该区间是「死旋钮」。修正口径（选择数接到 $\mathrm{cap}(t)$）见图~\ref{fig:capability}。}
 \label{fig:bottleneck}
 \end{figure}
 
-\subsection{能力驱动标定：$\mathrm{cap}(t)$ 是天然平衡点（成功标准 3/4）}
+\subsection{能力驱动标定：cap(t) 是天然平衡点（成功标准 3/4）}
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=\textwidth]{R05_capability.png}
 \caption{能力驱动标定（灰色带 = $\mathrm{cap}(t) \pm 3$）。
-(a)~绝对口径：交付收益 vs 规模 $k$，\texttt{cap\_x1}（$k \approx \mathrm{cap}(t) = 40$）
+(a)~绝对口径：交付收益 vs 规模 $n_{\mathrm{sel}}$，\texttt{cap\_x1}（$n_{\mathrm{sel}} \approx \mathrm{cap}(t) = 40$）
 达到全量的 93.5\%（$N{=}50$）/ 83.4\%（$N{=}100$）；
 (b)~相对口径：质量保持率（实心）与耗时比（空心）同轴，\texttt{cap\_x1} 在
 $N{=}100$ 用 13\% 的耗时拿到 83.4\% 的质量（7.6$\times$ 加速）。
-$k$ 从 41 加到 50（全量）只多 7\% F1 却多 16\% 耗时——$\mathrm{cap}(t)$
+$n_{\mathrm{sel}}$ 从 41 加到 50（全量）只多 7\% F1 却多 16\% 耗时——$\mathrm{cap}(t)$
 右侧收益速衰，即「天然平衡点」。}
 \label{fig:capability}
 \end{figure}

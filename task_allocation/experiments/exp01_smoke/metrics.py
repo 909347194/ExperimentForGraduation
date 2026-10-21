@@ -136,7 +136,7 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
     total_cost = total_f2 - w_penalty * total_penalty
     total_reward = sum(float(r.muas.get("f1_reward", 0.0) or 0.0) for r in records)
     solve_ms = sum(float(r.muas.get("solve_seconds", 0.0) or 0.0) for r in records) * 1000.0
-    k_avail = [r.selection.get("n_uav_avail", 0) for r in records]
+    avail_counts = [r.selection.get("n_uav_avail", 0) for r in records]
     # 实际跑的周期数：收敛早停后可能 < 配置的 n_cycles 安全上限；吞吐/报告
     # 一律以真实周期数为准（跑满时 len(records) 与配置一致，旧口径不变）。
     n_cycles = len(records) or int(f.bundle.horizon.n_cycles)
@@ -293,7 +293,7 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
             "total_penalty": round(total_penalty, 3),
             "total_f2": round(total_f2, 3),
             "solve_time_ms": round(solve_ms, 2),
-            "K_avail_mean": (sum(k_avail) / len(k_avail)) if k_avail else 0.0,
+            "K_mean": (sum(avail_counts) / len(avail_counts)) if avail_counts else 0.0,
             "n_deferred_last": records[-1].muas.get("n_deferred", 0) if records else 0,
             "n_remaining_pool": len(f.pool),
             "wall_seconds": round(f.wall_seconds, 3),
@@ -351,7 +351,7 @@ _SEED_AGG_KEYS = (
     "total_reward",
     "total_cost",
     "solve_time_ms",
-    "K_avail_mean",
+    "K_mean",
     "n_deferred_last",
     "n_remaining_pool",
     "wall_seconds",
@@ -513,7 +513,7 @@ def print_cycle_report(records: Sequence[Any]) -> None:
             f"(remain {r.pool_counts.get('n_remain', 0)}/"
             f"new {r.pool_counts.get('n_new', 0)}/"
             f"release {r.pool_counts.get('n_release', 0)}) "
-            f"K_avail={r.selection.get('n_uav_avail', 0)} | "
+            f"K={r.selection.get('n_uav_avail', 0)} | "
             f"T_sel={muas.get('n_selected', 0)} → "
             f"T_exec={muas.get('n_executed', 0)}"
             f"(保留 {muas.get('n_deferred', 0)}) | "

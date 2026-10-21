@@ -309,12 +309,13 @@ class SelectiveMUASProblem:
 
     @property
     def model_mode(self) -> str:
-        n, m = self.n_uavs, self.n_tasks
-        if m == 0:
+        # 符号口径：K = UAV 数（实例机数），N = 任务数。
+        n_uavs, n_tasks = self.n_uavs, self.n_tasks
+        if n_tasks == 0:
             return "empty"
-        if n == m and not self.config.allow_unassigned:
+        if n_uavs == n_tasks and not self.config.allow_unassigned:
             return "balanced"
-        if n > m:
+        if n_uavs > n_tasks:
             return "overloaded"
         return "selective_srp"
 

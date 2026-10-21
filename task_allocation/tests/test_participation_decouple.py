@@ -1,17 +1,17 @@
 # -*- coding: utf-8 -*-
-"""参与机数 K 与任务数 M 解耦（select_participating_uavs）的常驻回归测试。
+"""参与机数 K 与任务数 N 解耦（select_participating_uavs）的常驻回归测试。
 
 锁定的契约：
 
-1. **SRP 不变式**：K ≤ M-1（显式 max_participating_uavs 同样裁剪；
-   旧实现只裁 auto 不裁显式值，K≥M 会走进无终点编码的 balanced/overloaded 路径）；
-2. **运营预算解耦**：sortie_budget（出动架次上限）与 M 无关地压低 K；
+1. **SRP 不变式**：K ≤ N-1（显式 max_participating_uavs 同样裁剪；
+   旧实现只裁 auto 不裁显式值，K≥N 会走进无终点编码的 balanced/overloaded 路径）；
+2. **运营预算解耦**：sortie_budget（出动架次上限）与 N 无关地压低 K；
 3. **出动经济性**（policy="marginal"）：按「该机是几个任务的最近机」降序逐个
    纳入，容量受限覆盖代价的边际下降 ≤ participation_cost γ 时**跳过该机继续**
    （gain 非单调：零增益机之后仍可能有正增益机，故不得 break）；
-4. **退化兼容**：三旋钮缺省时行为与旧规则一致（尽量多派，上界 M-1）。
+4. **退化兼容**：三旋钮缺省时行为与旧规则一致（尽量多派，上界 N-1）。
 
-背景：旧 auto 规则在机队充裕时 K 恒等于 M-1，M-K 塌缩为常数（实测 ≡1），
+背景：旧 auto 规则在机队充裕时 K 恒等于 N-1，N-K 塌缩为常数（实测 ≡1），
 巡游顺序搜索维度名存实亡，「顺序随 DMDE 联合优化」的主张失去实例支撑。
 
 2026-10-12 修复（审查报告 docs/review_marginal_sortie_20261012.md）后锁定：

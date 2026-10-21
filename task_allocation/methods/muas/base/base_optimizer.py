@@ -74,8 +74,8 @@ class BaseOptimizer(ABC):
 
         Args:
             cost_matrix: 代价矩阵（由 muas/cost 或实验准备阶段提供）。
-            n_uavs:      UAV 数量。
-            n_targets:   任务/目标数量。
+            n_uavs:      UAV 数 K（实例机数，≤ 可用机数）。
+            n_targets:   任务数 N。
             **kwargs:    求解器特定参数；常见键：
                          - fitness_evaluator: 适应度评估回调
                          - problem: SelectiveMUASProblem 实例（可选）
