@@ -47,6 +47,7 @@ from task_allocation.methods.muas.constraints.nest_capacity import (
     solve_end_nest_assignment,
 )
 from task_allocation.methods.muas.base import BaseOptimizer
+from task_allocation.methods.muas.coverage_gate import audit_coverage, repair_coverage
 from task_allocation.methods.muas.cost.cost_matrix import CostMatrixBuildResult
 from task_allocation.methods.muas.problem import (
     MUASProblemConfig,
@@ -124,6 +125,16 @@ class MUASStageConfig:
     # 更深」的盆地；而 W=1800 已单独消灭零奖励交付（7→0），靶病不存在。
     # 开关保留供 exp02（|T|≫K）压力场评估。
     prune_zero_reward: bool = False
+    # ── 覆盖门禁（2026-10-22，合法解 = 物理硬约束 + 覆盖门禁）────────
+    # True：build_solution 末态（最后一次 _repair_range 之后、_assemble
+    # 之前）对 S 内未交付任务做一阶检验并**修到不动点**（能救必救：插入
+    # 现有航次 / 空闲机开班），gate_stats 落 solution.meta——
+    # voluntary_skip 由构造归零。False（默认）：不修复；仅当
+    # problem.lexicographic_coverage=True 时做纯审计分账（n_skip 进
+    # 适应度 W_skip 层），不改解。判定口径详见 coverage_gate.py。
+    coverage_gate: bool = False
+    # 修复不动点的防御性轮数上限（不挤出 ⇒ 通常一轮收敛）。
+    coverage_gate_max_rounds: int = 8
     # 剔除判据的裕度：仅当 λ·节省 > 收益 × (1 + margin) 时才剔除
     prune_margin: float = 0.0
     # 等待补偿（论文 §3.2 的 W_i(t)）：任务滞留越久越不容易被剔除，
@@ -883,7 +894,24 @@ class MUASAssignmentEvaluator:
         # 的 16 次弹回全部源于此（超限仅 27.58 m = 0.034%）。
         routes, end_nests = self._repair_range(routes, end_nests)
 
-        return self._assemble(routes, end_nests)
+        # ── 覆盖门禁（2026-10-22）终态挂点：最后一次 _repair_range 之后、
+        # _assemble 之前（其后仅 problem.evaluate 不改 routes，终态安全）。
+        #   coverage_gate=True  → 能救必救修到不动点（skip 构造归零）；
+        #   否则 lexicographic_coverage=True → 纯审计分账（W_skip 层消费）。
+        gate_stats: dict[str, Any] | None = None
+        if bool(getattr(self.config, "coverage_gate", False)):
+            routes, end_nests, gs = repair_coverage(
+                self.problem, routes, end_nests,
+                max_rounds=int(getattr(self.config, "coverage_gate_max_rounds", 8)),
+            )
+            gate_stats = gs.to_dict()
+        elif bool(getattr(self.problem.config, "lexicographic_coverage", False)):
+            gate_stats = audit_coverage(self.problem, routes, end_nests).to_dict()
+
+        sol = self._assemble(routes, end_nests)
+        if gate_stats is not None:
+            sol.meta["gate_stats"] = gate_stats
+        return sol
 
     # -- 航次内重排（时间窗可行性）--------------------------------------
     def _window_enabled(self) -> bool:
@@ -2362,6 +2390,14 @@ def run_selective_muas(
             },
             "n_executed": len(final.executed_task_ids),
             "n_deferred": len(task_list) - len(final.executed_task_ids),
+            # 覆盖门禁分账（2026-10-22）：gate_stats 与 S 内漏装名单。
+            #   n_skip = voluntary_skip（能装没装；gate 修复下恒 0）
+            #   n_shortfall = 一阶检验能力不足（允许不交付）
+            "gate_stats": dict(final.meta.get("gate_stats") or {}),
+            "deferred_ids": sorted(
+                t.id for t in task_list
+                if t.id not in set(final.executed_task_ids)
+            ),
             "f1_reward": final.f1_reward,
             "f2_cost": final.f2_cost,
             "feasible": final.feasible,
