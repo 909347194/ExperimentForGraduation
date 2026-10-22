@@ -49,6 +49,19 @@ CSV_COLUMNS = (
     "n_voluntary_skip",
     "n_capacity_shortfall",
     "n_gate_rescued",
+    "completion_rate_final",
+    "on_time_rate_final",
+    "path_per_completion_m",
+    "elimination_rate",
+    "unreachable_rate",
+    "quota_utilization",
+    "quota_full_cycle_ratio",
+    "avg_backlog",
+    "max_backlog",
+    "n_deferred_delivery",
+    "deferred_delivery_ratio",
+    "n_hard_violations_total",
+    "s_coverage_rate",
     "throughput_per_cycle",
     "n_cycles",
     "n_active_cycles",
@@ -114,6 +127,61 @@ def build_summary(
     n_voluntary_skip = _gate_sum("n_skip")
     n_capacity_shortfall = _gate_sum("n_shortfall")
     n_gate_rescued = _gate_sum("n_rescued")
+    # ── 论文主表口径 v2（2026-10-22 指标体系，与 exp01 同源）──────────
+    # η_final 分母排除物理不可达、**保留超期淘汰**；
+    # 按时率 = 最终交付中按时比例（迟到交付计完成、不计按时）。
+    n_final_denom = n_arrived - n_unreachable
+    completion_rate_final = (len(completed) / n_final_denom) if n_final_denom else 0.0
+    on_time_rate_final = (
+        (len(completed) - n_late) / len(completed) if completed else 0.0
+    )
+    path_per_completion_m = (total_path_m / len(completed)) if completed else 0.0
+    elimination_rate = (n_eliminated / n_final_denom) if n_final_denom else 0.0
+    unreachable_rate = (n_unreachable / n_arrived) if n_arrived else 0.0
+    # 过程指标 v2：名额利用率 / 积压 / 跨周期推迟
+    sel_caps = [int((r.selection or {}).get("capability_n_sel") or 0) for r in records]
+    sel_used = [int((r.muas or {}).get("n_selected") or 0) for r in records]
+    quota_cap_total = sum(sel_caps)
+    quota_utilization = (sum(sel_used) / quota_cap_total) if quota_cap_total else 0.0
+    n_quota_cycles = sum(1 for c in sel_caps if c > 0)
+    quota_full_cycle_ratio = (
+        sum(1 for u, c in zip(sel_used, sel_caps) if c > 0 and u >= c)
+        / n_quota_cycles
+    ) if n_quota_cycles else 0.0
+    backlog_sizes = [
+        int(((getattr(r, "pool_counts", None) or {}).get("n_total", 0)))
+        + int(((getattr(r, "pool_counts", None) or {}).get("n_executing", 0)))
+        for r in records
+    ]
+    avg_backlog = (sum(backlog_sizes) / len(backlog_sizes)) if backlog_sizes else 0.0
+    max_backlog = max(backlog_sizes) if backlog_sizes else 0
+    arrive_cycle_of = {
+        t.id: cyc
+        for cyc, ts in (getattr(batch, "arrivals", None) or {}).items()
+        for t in ts
+    }
+    deliver_cycle_of = {tid: r.cycle for r in records for tid in r.executed_ids}
+    n_deferred_delivery = sum(
+        1 for tid, dc in deliver_cycle_of.items() if arrive_cycle_of.get(tid, dc) < dc
+    )
+    deferred_delivery_ratio = (
+        n_deferred_delivery / len(completed) if completed else 0.0
+    )
+    # 方法诊断 v2：硬违约累计 + S 内覆盖率（分母 = |S| − 一阶 shortfall）
+    n_hard_violations_total = sum(
+        int((r.muas or {}).get("final_n_hard") or 0) for r in records
+    )
+    s_cov_rates: list[float] = []
+    for r in records:
+        sel_ids = set((r.selection or {}).get("selected_ids") or [])
+        if not sel_ids:
+            continue
+        short = int(((r.muas or {}).get("gate_stats") or {}).get("n_shortfall", 0) or 0)
+        denom = len(sel_ids) - short
+        if denom <= 0:
+            continue
+        s_cov_rates.append(len(set(r.executed_ids) & sel_ids) / denom)
+    s_coverage_rate = (sum(s_cov_rates) / len(s_cov_rates)) if s_cov_rates else 0.0
 
     # 硬违约归因（弹回标签聚合，供 notes 归因分析）
     infeasible_tag_counts: dict[str, int] = {}
@@ -185,6 +253,22 @@ def build_summary(
         "n_voluntary_skip": n_voluntary_skip,
         "n_capacity_shortfall": n_capacity_shortfall,
         "n_gate_rescued": n_gate_rescued,
+        # ── 论文主表 v2 ──
+        "completion_rate_final": round(completion_rate_final, 6),
+        "on_time_rate_final": round(on_time_rate_final, 6),
+        "path_per_completion_m": round(path_per_completion_m, 3),
+        "elimination_rate": round(elimination_rate, 6),
+        "unreachable_rate": round(unreachable_rate, 6),
+        # ── 过程指标 v2 ──
+        "quota_utilization": round(quota_utilization, 6),
+        "quota_full_cycle_ratio": round(quota_full_cycle_ratio, 6),
+        "avg_backlog": round(avg_backlog, 3),
+        "max_backlog": int(max_backlog),
+        "n_deferred_delivery": n_deferred_delivery,
+        "deferred_delivery_ratio": round(deferred_delivery_ratio, 6),
+        # ── 方法诊断 v2 ──
+        "n_hard_violations_total": n_hard_violations_total,
+        "s_coverage_rate": round(s_coverage_rate, 6),
         "throughput_per_cycle": round(len(completed) / n_cycles, 6),
         "n_cycles": n_cycles,
         "n_active_cycles": n_active_cycles,

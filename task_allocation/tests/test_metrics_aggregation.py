@@ -55,11 +55,13 @@ class _FakeTask:
 
 class _FakeRecord:
     def __init__(self, cycle, muas=None, executed=(), late=(), infeasible=(),
-                 expired=(), unreachable=(), lateness=None):
+                 expired=(), unreachable=(), lateness=None,
+                 selection_extra=None, pool_counts=None):
         self.cycle = cycle
         self.current_time = 600.0 * cycle
         self.muas = dict(muas or {})
-        self.selection = {"n_uav_avail": 10}
+        self.selection = {"n_uav_avail": 10, **(selection_extra or {})}
+        self.pool_counts = dict(pool_counts or {})
         self.executed_ids = list(executed)
         self.late_ids = list(late)
         self.infeasible_ids = list(infeasible)
@@ -92,7 +94,7 @@ class _FakePool:
         return {"counts": {}}
 
 
-def _facts(records, tasks, completed, w_penalty=1.0, decay_w=600.0):
+def _facts(records, tasks, completed, w_penalty=1.0, decay_w=600.0, arrivals=None):
     bundle = SimpleNamespace(
         experiment={"name": "test"},
         problem={"uav_speed": 15.0, "uav_max_range": 80000.0},
@@ -118,6 +120,7 @@ def _facts(records, tasks, completed, w_penalty=1.0, decay_w=600.0):
             initial=list(tasks),
             all_tasks=lambda: list(tasks),
             per_cycle_counts=lambda: {1: len(tasks)},
+            arrivals=(dict(arrivals) if arrivals is not None else {1: list(tasks)}),
         ),
         records=list(records),
         pool=_FakePool(completed, remaining=len(tasks) - len(completed)),
@@ -229,6 +232,68 @@ def test_zero_reward_accounting_disabled_decay():
     assert s["n_zero_reward_delivery"] == 0, s
     assert abs(s["effective_completion_rate"] - 1.0) < 1e-9, s
     assert abs(s["reward_yield"] - 1.0) < 1e-9, s
+
+
+# ---------------------------------------------------------------------------
+# v2 指标体系（2026-10-22）：主表 / 过程 / 方法诊断
+# ---------------------------------------------------------------------------
+
+def test_final_completion_rate_excludes_unreachable():
+    """η_final 分母排除物理不可达、保留超期淘汰；按时率按最终交付口径。"""
+    t0 = _FakeTask(0, 5.0, 0.0, 6000.0, completed_at=600.0)
+    t1 = _FakeTask(1, 5.0, 0.0, 6000.0, completed_at=None)   # 超期淘汰 → 进分母
+    t2 = _FakeTask(2, 5.0, 0.0, 6000.0, completed_at=None)   # 物理不可达 → 不进分母
+    records = [
+        _FakeRecord(1, muas={"feasible": True}, executed=[0],
+                    expired=[1], unreachable=[2]),
+    ]
+    m = exp01_metrics.build_metrics(_facts(records, [t0, t1, t2], [t0]))
+    s = m["summary"]
+    assert abs(s["completion_rate_final"] - 0.5) < 1e-5, s   # 1 / (3−1)
+    assert abs(s["completion_rate"] - 1 / 3) < 1e-5, s       # 旧口径不动
+    assert abs(s["elimination_rate"] - 0.5) < 1e-5, s        # 1 / (3−1)
+    assert abs(s["unreachable_rate"] - 1 / 3) < 1e-5, s
+    assert abs(s["on_time_rate_final"] - 1.0) < 1e-5, s      # 交付 1、按时 1
+    assert abs(s["path_per_completion_m"] - s["total_path_m"]) < 1e-5, s
+
+
+def test_quota_utilization_backlog_and_s_coverage():
+    """名额利用率（Σused/Σcap）、积压均值/峰值、S 内覆盖率分账。"""
+    t0 = _FakeTask(0, 5.0, 0.0, 6000.0, completed_at=600.0)
+    t1 = _FakeTask(1, 5.0, 0.0, 6000.0, completed_at=1200.0)
+    records = [
+        _FakeRecord(1, muas={"n_selected": 18, "final_n_hard": 1}, executed=[0],
+                    selection_extra={"capability_n_sel": 20, "selected_ids": [0, 1]},
+                    pool_counts={"n_total": 30, "n_executing": 2}),
+        _FakeRecord(2, muas={"n_selected": 20}, executed=[1],
+                    selection_extra={"capability_n_sel": 20, "selected_ids": [1]},
+                    pool_counts={"n_total": 40, "n_executing": 3}),
+    ]
+    m = exp01_metrics.build_metrics(_facts(records, [t0, t1], [t0, t1]))
+    s = m["summary"]
+    assert abs(s["quota_utilization"] - 38 / 40) < 1e-5, s
+    assert abs(s["quota_full_cycle_ratio"] - 0.5) < 1e-5, s
+    assert abs(s["avg_backlog"] - (32 + 43) / 2) < 1e-2, s
+    assert s["max_backlog"] == 43, s
+    assert s["n_hard_violations_total"] == 1, s
+    # 周期1：S={0,1} 交付{0} ⇒ 0.5；周期2：S={1} 交付{1} ⇒ 1.0；均值 0.75
+    assert abs(s["s_coverage_rate"] - 0.75) < 1e-5, s
+
+
+def test_deferred_delivery_cross_cycle():
+    """跨周期推迟：交付周期 > 到达周期才算（“或早或晚”口径）。"""
+    t0 = _FakeTask(0, 5.0, 0.0, 6000.0, completed_at=600.0)
+    t1 = _FakeTask(1, 5.0, 0.0, 6000.0, completed_at=1200.0)
+    records = [
+        _FakeRecord(1, executed=[0]),
+        _FakeRecord(2, executed=[1]),
+    ]
+    m = exp01_metrics.build_metrics(
+        _facts(records, [t0, t1], [t0, t1], arrivals={1: [t0, t1]})
+    )
+    s = m["summary"]
+    assert s["n_deferred_delivery"] == 1, s   # t1 周期1到达、周期2交付
+    assert abs(s["deferred_delivery_ratio"] - 0.5) < 1e-5, s
 
 
 if __name__ == "__main__":

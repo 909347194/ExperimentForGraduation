@@ -201,6 +201,69 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
     n_voluntary_skip = _gate_sum("n_skip")
     n_capacity_shortfall = _gate_sum("n_shortfall")
     n_gate_rescued = _gate_sum("n_rescued")
+    # ── 论文主表口径 v2（2026-10-22 指标体系）────────────────────────
+    # 「可完成的最终都应完成，只是或早或晚；在此前提下控成本与时效」。
+    # η_final 分母排除物理不可达（问题固有、不归算法能力），
+    # **保留超期淘汰**（可做却永久丢失=失败，淘汰率单列正因如此）。
+    n_final_denom = n_arrived - n_unreachable
+    completion_rate_final = (len(completed) / n_final_denom) if n_final_denom else 0.0
+    # 按时率（最终交付口径）：迟到交付计完成、不计按时（与“做没做完”分开）
+    on_time_rate_final = (
+        (len(completed) - n_late) / len(completed) if completed else 0.0
+    )
+    path_per_completion_m = (total_cost / len(completed)) if completed else 0.0
+    elimination_rate = (n_eliminated / n_final_denom) if n_final_denom else 0.0
+    unreachable_rate = (n_unreachable / n_arrived) if n_arrived else 0.0
+
+    # ── 过程指标 v2：名额利用率 / 积压 / 跨周期推迟 ────────────────────
+    sel_caps = [int((r.selection or {}).get("capability_n_sel") or 0) for r in records]
+    sel_used = [int((r.muas or {}).get("n_selected") or 0) for r in records]
+    quota_cap_total = sum(sel_caps)
+    quota_utilization = (sum(sel_used) / quota_cap_total) if quota_cap_total else 0.0
+    n_quota_cycles = sum(1 for c in sel_caps if c > 0)
+    quota_full_cycle_ratio = (
+        sum(1 for u, c in zip(sel_used, sel_caps) if c > 0 and u >= c)
+        / n_quota_cycles
+    ) if n_quota_cycles else 0.0
+    # 积压 = 每周期在池未终态（规划池 + 执行中）
+    backlog_sizes = [
+        int(((getattr(r, "pool_counts", None) or {}).get("n_total", 0)))
+        + int(((getattr(r, "pool_counts", None) or {}).get("n_executing", 0)))
+        for r in records
+    ]
+    avg_backlog = (sum(backlog_sizes) / len(backlog_sizes)) if backlog_sizes else 0.0
+    max_backlog = max(backlog_sizes) if backlog_sizes else 0
+    # 跨周期推迟（“或早或晚”的直接证据）：交付周期 > 到达周期。
+    # 到达周期取自 batch.arrivals 的周期映射，交付周期 = executed_ids 所在周期。
+    arrive_cycle_of = {
+        t.id: cyc
+        for cyc, ts in (getattr(f.batch, "arrivals", None) or {}).items()
+        for t in ts
+    }
+    deliver_cycle_of = {tid: r.cycle for r in records for tid in r.executed_ids}
+    n_deferred_delivery = sum(
+        1 for tid, dc in deliver_cycle_of.items() if arrive_cycle_of.get(tid, dc) < dc
+    )
+    deferred_delivery_ratio = (
+        n_deferred_delivery / len(completed) if completed else 0.0
+    )
+    # ── 方法诊断 v2：硬违约累计 + S 内覆盖率 ─────────────────────────
+    n_hard_violations_total = sum(
+        int((r.muas or {}).get("final_n_hard") or 0) for r in records
+    )
+    # S 内覆盖率（逐周期均值）：交付∩S / 可装的 S；分母 = |S| − 一阶 shortfall。
+    # gate 开启时按构造恒 1.0（验证指标，非观测指标）。
+    s_cov_rates: list[float] = []
+    for r in records:
+        sel_ids = set((r.selection or {}).get("selected_ids") or [])
+        if not sel_ids:
+            continue
+        short = int(((r.muas or {}).get("gate_stats") or {}).get("n_shortfall", 0) or 0)
+        denom = len(sel_ids) - short
+        if denom <= 0:
+            continue
+        s_cov_rates.append(len(set(r.executed_ids) & sel_ids) / denom)
+    s_coverage_rate = (sum(s_cov_rates) / len(s_cov_rates)) if s_cov_rates else 0.0
 
     # ── 长程吞吐协议指标（2026-10-14 用户定口径，2026-10-15 修订）──────
     # 完成率不是目标；真实目标 = 持续到达下「尽可能多且正确地完成任务」。
@@ -269,6 +332,16 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
             "coverage_gate": bool(
                 getattr(getattr(f.bundle, "stage_model", None), "coverage_gate", False)
             ),
+            # 论文主表必报列序（2026-10-22 指标体系 v2）：随数据自描述，
+            # 表格生成按此序取数，不靠文档记忆
+            "paper_main_table": [
+                "completion_rate_final",
+                "on_time_rate_final",
+                "path_per_completion_m",
+                "total_path_m",
+                "elimination_rate",
+                "unreachable_rate",
+            ],
             "dem_file": str(f.bundle.data.get("dem") or "未接入"),
             "dem_step_m": float(f.bundle.cost.get("dem_step_m", 0.0)),
         },
@@ -319,6 +392,23 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
             "n_voluntary_skip": n_voluntary_skip,
             "n_capacity_shortfall": n_capacity_shortfall,
             "n_gate_rescued": n_gate_rescued,
+            # ── 论文主表 v2（η_final 口径：分母排除不可达、保留淘汰）──
+            "completion_rate_final": round(completion_rate_final, 6),
+            "on_time_rate_final": round(on_time_rate_final, 6),
+            "path_per_completion_m": round(path_per_completion_m, 3),
+            "total_path_m": round(total_cost, 3),
+            "elimination_rate": round(elimination_rate, 6),
+            "unreachable_rate": round(unreachable_rate, 6),
+            # ── 过程指标 v2 ──
+            "quota_utilization": round(quota_utilization, 6),
+            "quota_full_cycle_ratio": round(quota_full_cycle_ratio, 6),
+            "avg_backlog": round(avg_backlog, 3),
+            "max_backlog": int(max_backlog),
+            "n_deferred_delivery": n_deferred_delivery,
+            "deferred_delivery_ratio": round(deferred_delivery_ratio, 6),
+            # ── 方法诊断 v2 ──
+            "n_hard_violations_total": n_hard_violations_total,
+            "s_coverage_rate": round(s_coverage_rate, 6),
             "n_remaining_pool": len(f.pool),
             "wall_seconds": round(f.wall_seconds, 3),
         },
@@ -380,6 +470,20 @@ _SEED_AGG_KEYS = (
     "n_voluntary_skip",
     "n_capacity_shortfall",
     "n_gate_rescued",
+    "completion_rate_final",
+    "on_time_rate_final",
+    "path_per_completion_m",
+    "total_path_m",
+    "elimination_rate",
+    "unreachable_rate",
+    "quota_utilization",
+    "quota_full_cycle_ratio",
+    "avg_backlog",
+    "max_backlog",
+    "n_deferred_delivery",
+    "deferred_delivery_ratio",
+    "n_hard_violations_total",
+    "s_coverage_rate",
     "n_remaining_pool",
     "wall_seconds",
     "n_arrived",
