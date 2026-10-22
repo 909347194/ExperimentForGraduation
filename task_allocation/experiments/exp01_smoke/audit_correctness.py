@@ -87,6 +87,11 @@ def main(results_name: str = "results") -> int:
     speed = float(m["problem"]["uav_speed"])
     max_range = float(m["problem"]["uav_max_range_km"]) * 1000.0
     w_decay = cfg["muas"].get("late_reward_decay_seconds")
+    # 覆盖门禁模式（lexicographic_coverage，2026-10-22）：F1 回归纯完成计数，
+    # 不做迟到折减（迟到单一定价走 w_late·L）——奖励守恒的交付端口径跟着切纯。
+    gate_fit = bool(cfg["muas"].get("lexicographic_coverage", False))
+    if gate_fit:
+        w_decay = None
     max_ratio = float(cfg["selection"]["marginal"]["max_ratio"])
     service = float(cfg["muas"].get("default_service_time", 0.0))
 
@@ -266,7 +271,9 @@ def main(results_name: str = "results") -> int:
             r *= max(0.0, 1.0 - late / float(w_decay))
         delivery_eff += r
     rel = abs(total_f1 - delivery_eff) / max(delivery_eff, 1e-9)
-    check("E 奖励守恒：Σf1 ≈ 交付端折减奖励（相对差 < 2%）",
+    check(("E 奖励守恒：Σf1 ≈ 交付端奖励（门禁口径不折减；相对差 < 2%）"
+           if gate_fit else
+           "E 奖励守恒：Σf1 ≈ 交付端折减奖励（相对差 < 2%）"),
           rel < 0.02, f"Σf1={total_f1:.3f} 交付端={delivery_eff:.3f} 相对差={rel:.4%}")
 
     # ── F 池守恒 ────────────────────────────────────────────────
@@ -333,8 +340,9 @@ def main(results_name: str = "results") -> int:
 
     # ── N 适应度可复算（治 auto big_m 漂移，2026-10-18 拆双口径）───────
     # 四层适应度（生产口径，w_time=0 时 F3 缺席）：
-    #   f = W_hard·n_hard + w_exc·excess_m − m·F1 + w_late·L_tot + λ·path
-    #       + w_time·F3
+    #   f = W_hard·n_hard + w_exc·excess_m + W_skip·n_voluntary_skip
+    #       − m·F1 + w_late·L_tot + λ·path + w_time·F3
+    # （W_skip 层仅覆盖门禁模式存在，快照 w_skip 缺省时计 0）
     # 权重取落盘快照 fitness_weights（本周期实际使用的 m/W_hard/w_exc/
     # w_late/λ/w_time/W_decay），成分从 solution.json 独立重取。
     #
@@ -372,6 +380,9 @@ def main(results_name: str = "results") -> int:
         fw_m = float(fw["m"])
         w_hard = float(fw.get("w_hard") or 0.0)
         w_excess = float(fw.get("w_excess") or 0.0)
+        # 覆盖门禁 T0.5 层（2026-10-22）：w_skip 缺省/None = 门禁关闭，计 0
+        w_skip = float(fw.get("w_skip") or 0.0)
+        n_skip = int((c.get("gate_stats") or {}).get("n_skip", 0) or 0)
         w_late = float(fw.get("w_late") or 0.0)
         lam = float(fw["lambda"])
         w_time = float(fw.get("w_time") or 0.0)
@@ -381,6 +392,7 @@ def main(results_name: str = "results") -> int:
         f_rec = (
             w_hard * float(c.get("final_n_hard") or 0)
             + w_excess * float(c.get("final_excess_m") or 0.0)
+            + w_skip * n_skip
             - fw_m * float(c.get("final_f1") or 0.0)
             + w_late * float(c.get("final_late_s") or 0.0)
             + lam * float(c.get("final_path_m") or 0.0)

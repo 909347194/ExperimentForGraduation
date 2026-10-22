@@ -188,6 +188,19 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
     # 活跃周期（有出动）计数：吞吐的另一个分母（I6：全周期分母含空转兜底周期，
     # 跨配置对比会被收敛节奏差异污染）
     n_active_cycles = sum(1 for r in records if len(r.executed_ids) > 0)
+    # ── 覆盖门禁分账（2026-10-22，合法解 = 物理硬约束 + 覆盖门禁）────
+    # voluntary_skip = S 内能装却没装（gate 修复下应恒 0）；
+    # capacity_shortfall = 一阶检验能力不足（允许不交付）；
+    # gate_rescued = 门禁修复救回数。逐周期 gate_stats 累加，
+    # 缺字段 = 未插桩/未开启（schema 容缺约定）按 0 计。
+    def _gate_sum(key: str) -> int:
+        return sum(
+            int(((r.muas or {}).get("gate_stats") or {}).get(key, 0) or 0)
+            for r in records
+        )
+    n_voluntary_skip = _gate_sum("n_skip")
+    n_capacity_shortfall = _gate_sum("n_shortfall")
+    n_gate_rescued = _gate_sum("n_rescued")
 
     # ── 长程吞吐协议指标（2026-10-14 用户定口径，2026-10-15 修订）──────
     # 完成率不是目标；真实目标 = 持续到达下「尽可能多且正确地完成任务」。
@@ -249,6 +262,13 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
                 if f.bundle.problem_model.lexicographic else "加权和 −F1+λ·F2"
             ),
             "time_window": bool(f.bundle.problem_model.constraints.time_window),
+            # 覆盖门禁口径自描述（2026-10-22）：审计/跨配置对比直读
+            "lexicographic_coverage": bool(
+                getattr(f.bundle.problem_model, "lexicographic_coverage", False)
+            ),
+            "coverage_gate": bool(
+                getattr(getattr(f.bundle, "stage_model", None), "coverage_gate", False)
+            ),
             "dem_file": str(f.bundle.data.get("dem") or "未接入"),
             "dem_step_m": float(f.bundle.cost.get("dem_step_m", 0.0)),
         },
@@ -295,6 +315,10 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
             "solve_time_ms": round(solve_ms, 2),
             "K_mean": (sum(avail_counts) / len(avail_counts)) if avail_counts else 0.0,
             "n_deferred_last": records[-1].muas.get("n_deferred", 0) if records else 0,
+            # 覆盖门禁三分账（2026-10-22）：skip 应恒 0（否则门禁未生效/有 bug）
+            "n_voluntary_skip": n_voluntary_skip,
+            "n_capacity_shortfall": n_capacity_shortfall,
+            "n_gate_rescued": n_gate_rescued,
             "n_remaining_pool": len(f.pool),
             "wall_seconds": round(f.wall_seconds, 3),
         },
@@ -353,6 +377,9 @@ _SEED_AGG_KEYS = (
     "solve_time_ms",
     "K_mean",
     "n_deferred_last",
+    "n_voluntary_skip",
+    "n_capacity_shortfall",
+    "n_gate_rescued",
     "n_remaining_pool",
     "wall_seconds",
     "n_arrived",
@@ -457,6 +484,9 @@ def build_solution(f: RunFacts) -> dict[str, Any]:
                 "fitness_weights": dict(
                     (r.muas or {}).get("fitness_weights") or {}
                 ),
+                # 覆盖门禁分账（2026-10-22）：W_skip 层的 n_skip 成分与
+                # 一阶检验归因，供审计 N2 重算与三分账表。
+                "gate_stats": dict((r.muas or {}).get("gate_stats") or {}),
                 # 交付解自身适应度与成分（与搜索期 best_fitness 口径分离：
                 # Lamarckian 只回写起始基因通道，回写后基因解码重建的解与
                 # 搜索期被评价解可不同）。缺省空值（旧数据/空转周期）。
