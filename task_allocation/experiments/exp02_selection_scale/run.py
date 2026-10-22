@@ -126,6 +126,42 @@ def selection_config_from(
     )
 
 
+def _coerce_set_value(v: str):
+    s = v.strip().lower()
+    if s in ("null", "none"):
+        return None
+    if s == "true":
+        return True
+    if s == "false":
+        return False
+    try:
+        return int(s)
+    except ValueError:
+        pass
+    try:
+        return float(s)
+    except ValueError:
+        pass
+    return v
+
+
+def _apply_dotted_set(cfg: dict, items) -> None:
+    """--set dotted.path=value 深合并进 raw_cfg（与 exp01/run_chunked 同语义）。"""
+    if not items:
+        return
+    for it in items:
+        if "=" not in it:
+            raise ValueError(f"--set 需要 dotted.path=value 形式：{it!r}")
+        path, _, val = it.partition("=")
+        parts = [p.strip() for p in path.strip().split(".")]
+        d = cfg
+        for p in parts[:-1]:
+            d = d.setdefault(p, {})
+            if not isinstance(d, dict):
+                raise ValueError(f"--set 路径冲突（非 dict 节点）：{path}")
+        d[parts[-1]] = _coerce_set_value(val)
+
+
 def main(argv: list[str] | None = None) -> int:
     import argparse
 
@@ -136,10 +172,15 @@ def main(argv: list[str] | None = None) -> int:
                     help="逗号分隔出图格式（缺省读 config.yaml 的 plot.formats）")
     ap.add_argument("--dpi", type=int, default=None,
                     help="出图 dpi（缺省读 config.yaml 的 plot.dpi）")
+    ap.add_argument(
+        "--set", action="append", default=[], metavar="dotted.path=value",
+        help="覆盖 config.yaml 任意键，便于 500 代等敏感性实验，"
+             "如 --set solver.max_generations=500；支持多次。")
     args = ap.parse_args(argv)
 
     cfg_path = EXP_DIR / "config.yaml"
     cfg = load_config(cfg_path)
+    _apply_dotted_set(cfg, args.set)
     out_dir = EXP_DIR / cfg["experiment"]["output_dir"]
     out_dir.mkdir(parents=True, exist_ok=True)
 

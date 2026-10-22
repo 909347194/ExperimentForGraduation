@@ -209,6 +209,42 @@ def _parse_seed_list(tokens: list[str]) -> list[int]:
     return out
 
 
+def _coerce_set_value(v: str):
+    s = v.strip().lower()
+    if s in ("null", "none"):
+        return None
+    if s == "true":
+        return True
+    if s == "false":
+        return False
+    try:
+        return int(s)
+    except ValueError:
+        pass
+    try:
+        return float(s)
+    except ValueError:
+        pass
+    return v
+
+
+def _apply_dotted_set(cfg: dict, items) -> None:
+    """--set dotted.path=value 深合并进 raw_cfg（与 exp02/exp05/run_chunked 同语义）。"""
+    if not items:
+        return
+    for it in items:
+        if "=" not in it:
+            raise ValueError(f"--set 需要 dotted.path=value 形式：{it!r}")
+        path, _, val = it.partition("=")
+        parts = [p.strip() for p in path.strip().split(".")]
+        d = cfg
+        for p in parts[:-1]:
+            d = d.setdefault(p, {})
+            if not isinstance(d, dict):
+                raise ValueError(f"--set 路径冲突（非 dict 节点）：{path}")
+        d[parts[-1]] = _coerce_set_value(val)
+
+
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     """解析实验入口参数；PDF 只在本次运行显式开启。"""
     parser = argparse.ArgumentParser(description="运行 exp01_smoke 端到端实验")
@@ -239,6 +275,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--figure", action="append", dest="figures", metavar="ID",
         help="只出指定图（图 id，如 geo_overview）；可重复指定",
     )
+    parser.add_argument(
+        "--set", action="append", default=[], metavar="dotted.path=value",
+        help="深合并覆盖 config.yaml 任意节点（与 exp02/exp05 同语义），"
+             "如 --set muas.lambda_cost=1e-1 --set experiment.output_dir=results_x；"
+             "支持多次；值支持 null/true/false/int/float/str",
+    )
     return parser.parse_args(argv)
 
 
@@ -246,6 +288,8 @@ def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     cfg_path = EXP_DIR / "config.yaml"
     raw_cfg = load_config(cfg_path)
+    # --set 深合并（在 --seeds 覆盖与 bundle 构建之前）
+    _apply_dotted_set(raw_cfg, args.set)
     # 命令行覆盖：--seeds 优先于 yaml 的 experiment.seeds（调试/长跑入口）
     if args.seeds:
         raw_cfg.setdefault("experiment", {})["seeds"] = _parse_seed_list(args.seeds)

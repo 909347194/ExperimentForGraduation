@@ -55,10 +55,11 @@ tasks:
   anchor_to_nests: true
 
 # 扫描的任务规模；每个规模独立测一轮（K_avail 恒为 8）
+# 2026-10-21 用户指定口径：10 / 50 / 100
 scales:
+  - 10
   - 50
   - 100
-  - 200
 
 selection:
   alpha: 2.5
@@ -134,4 +135,4 @@ run:
   # （旧版只跑 N=50，无法给出质量-规模的完整对照）；N=200 的 full
   # 单格求解 ~25 min、代价不成比例，不测——该规模的「无压缩上界」
   # 由 N=50/100 的损失比例外推说明（机制不随 N 变，见 notes）。
-  full_muas_baseline_scales: [50, 100]
+  full_muas_baseline_scales: [10, 50, 100]

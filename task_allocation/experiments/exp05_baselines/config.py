@@ -160,7 +160,7 @@ def build_config_bundle(cfg: Mapping[str, Any]) -> ConfigBundle:
     problem_model = MUASProblemConfig(
         allow_unassigned=bool(m.get("allow_unassigned", True)),
         allow_idle_uav=bool(m.get("allow_idle_uav", True)),
-        lambda_cost=float(m.get("lambda_cost", 1.0e-4)),
+        lambda_cost=float(m.get("lambda_cost", 1.0e-2)),
         w_penalty=float(m.get("w_penalty", 1.0)),
         w_violation=(None if m.get("w_violation") is None else float(m["w_violation"])),
         w_nest_capacity=float(m.get("w_nest_capacity", 1.0)),
