@@ -249,6 +249,44 @@ def _parse_seed_list(tokens: list[str]) -> list[int]:
     return out
 
 
+def _coerce_set_value(v: str):
+    s = v.strip().lower()
+    if s in ("null", "none"):
+        return None
+    if s == "true":
+        return True
+    if s == "false":
+        return False
+    try:
+        return int(s)
+    except ValueError:
+        pass
+    try:
+        return float(s)
+    except ValueError:
+        pass
+    return v
+
+
+def _apply_dotted_set(cfg: dict, items) -> None:
+    """--set dotted.path=value 深合并进 raw_cfg（与 exp01/run_chunked 同语义）。"""
+    if not items:
+        return
+    for it in items:
+        if "=" not in it:
+            raise argparse.ArgumentTypeError(
+                f"--set 需要 dotted.path=value 形式：{it!r}")
+        path, _, val = it.partition("=")
+        parts = [p.strip() for p in path.strip().split(".")]
+        d = cfg
+        for p in parts[:-1]:
+            d = d.setdefault(p, {})
+            if not isinstance(d, dict):
+                raise argparse.ArgumentTypeError(
+                    f"--set 路径冲突（非 dict 节点）：{path}")
+        d[parts[-1]] = _coerce_set_value(val)
+
+
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="运行 exp05_baselines 对照实验")
     parser.add_argument(
@@ -259,6 +297,10 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--seeds", nargs="+", metavar="SEED",
         help="覆盖 experiment.seeds：42 / 42,43,44 / 42-46（可混用）",
     )
+    parser.add_argument(
+        "--set", action="append", default=[], metavar="dotted.path=value",
+        help="覆盖 config.yaml 任意键，便于 500 代等敏感性实验，"
+             "如 --set solver.max_iter=500；支持多次。")
     return parser.parse_args(argv)
 
 
@@ -275,6 +317,7 @@ def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     cfg_path = EXP_DIR / "config.yaml"
     raw_cfg = load_config(cfg_path)
+    _apply_dotted_set(raw_cfg, args.set)
     bundle = build_config_bundle(raw_cfg)
 
     seeds = list(bundle.experiment.get("seeds") or [bundle.seed])

@@ -78,6 +78,33 @@
 
 **验证假设 H-B2**：三层架构下 K 可显著小于可用机数（尤其任务少时机多，K≥N 区也能正确工作：N 个任务各派一次、多余机闲置），而完成率不降（安全网兜底）；字典序边际比纯成本边际少派机而不掉完成率。
 
+#### B2 实验结果（2026-10-21，受控小 N 富机域 + exp01 生产域探针）
+
+**结论：B2 第2层（字典序边际）是「口径/参数敏感」的，绝非默认即优；当前代码把它设为 gated 消融臂（默认 `demand`）是正确的。**
+
+受控场景：合成小 N 富机静态实例（直线距离，N=8 任务、K_avail=10 可用机，
+任务抖动网格布点保证分散，单机剩余航程 45km 偏紧以制造冗余；`demand_coverage_radius=20km`；
+每实例调 `enumerate_reference_participating` 在约束 `len(avail)≤12 ∧ N≤10` 内做近精确枚举，
+20 个随机种子聚合）。扫描 `marginal_tour_cap ∈ {auto,2,3,4}` 与 `γ=participation_cost ∈ {0, 20000m}`：
+
+| cap | γ | n_demand | n_marginal | exec_demand | exec_ref(最优同规模) | exec_marginal |
+|-----|----|---------:|-----------:|------------:|--------------------:|--------------:|
+| auto | 0 | 6.30 | 6.30 | 7.25 | 7.25 | 7.25 |
+| auto | 20000 | 6.30 | 6.30 | 7.25 | 7.25 | 7.25 |
+| 2 | 0 | 6.30 | 6.30 | 7.25 | 7.25 | 7.25 |
+| 2 | 20000 | 6.30 | **4.70** | 7.25 | 7.25 | 7.20 |
+| 3 | 0 | 6.30 | 6.30 | 7.25 | 7.25 | 7.25 |
+| 3 | 20000 | 6.30 | **3.50** | 7.25 | 7.25 | 7.20 |
+| 4 | 0 | 6.30 | 6.30 | 7.25 | 7.25 | 7.25 |
+| 4 | 20000 | 6.30 | **3.10** | 7.25 | 7.25 | 7.20 |
+
+解读（三条硬规律）：
+1. **γ=0 恒等**：`select_participating_uavs` 仅在 `participation_cost>0` 时才进入边际层（代码 358-361 行），故 `demand_marginal` 在 γ=0 时与 `demand` **逐位相同**（n 与完成率全平）。这是设计行为，不是 bug。
+2. **auto cap 结构性空转（与 exp01 生产域探针一致）**：`marginal_tour_cap=None` 时自动推导 `cap=max(1,⌊min_range/mean_leg⌋−1)`；在 exp01 与多数实例中该值=1，于是每架机在容量估计里只服务 1 个任务、后续每架恒 `Δserved=+1`，γ 永不咬合 → 剪枝不发生。即 **B2 第2层在 auto-cap 域逐位等价于第1层预选**。
+3. **显式 cap>1 才真剪枝，但伴随轻微完成率代价**：给定 γ>0 且 cap=2/3/4，边际层把参与机从 ~6.3 剪到 4.7/3.5/3.1（少派机成立，H-B2 前半成立）；但 `exec_marginal` 由 7.25 降到 7.20/8（≈0.6% 完成率损失），且 `selection_gap`（见 B3）在剪枝实例中出现最坏 1.8×10⁷ 的极端值——说明容量估计偶发高估冗余、把「实则服务必需」的机误剪。
+
+**最终裁定**：H-B2「少派机而不掉完成率」在 cap>1 域**部分成立**（确实少派机），但当前边际层的容量估计不足以安全保证完成率，故它**不应取代解码端安全网、也不应作为生产默认**——这正与代码现状（默认 `demand`、`demand_marginal` 仅 gated 消融）一致。论文 §3.5.5 宜表述为「三层架构的能力由第1层（设施选址预选）+ 第3层（解码安全网）保证；第2层边际精修在显式 cap 下可进一步压缩出动架次，但是参数敏感的可选增强，需以安全网为硬约束」。
+
 ### B3 近精确枚举参照（小 N）：量化"启发式选机差多远"
 
 | 项 | 内容 |
@@ -89,6 +116,17 @@
 | 成功标准 | gap 在多数周期接近 0（启发式接近同预算最优）；若 gap 持续大 → 第1/2层选机有真实改进空间，作为下一步工作 |
 
 > 三臂关系：B1 换解码、B2 换选机、B3 给 B2 提供参照系；B2 的第3层安全网在两种 decode_mode 下都必须成立（`test_constructive_decode.py` 锁定）。
+
+#### B3 实验结果（2026-10-21，同上受控域，selection_gap 分布）
+
+`enumerate_reference_participating` 在 `len(avail)≤12 ∧ N≤10` 内枚举同规模子集、以固定解码器（贪心构造+终点 MCF+问题层评价）代理适应度取参照。同上 N=8/K=10/20 种子：
+
+- **demand 启发式已是近最优同规模子集**：`selection_gap(demand)` mean=3.15×10⁴、max=7.95×10⁴，且 `exec_demand=7.25` 与 `exec_ref=7.25` **逐位相等**——即 demand 预选在完成数上已达同规模最优，gap 仅来自航程代价微小差异（相对总适应度 ~−1.4×10⁸ 可忽略，约 0.02%）。
+- **marginal 启发式 gap 显著更大且长尾危险**：`selection_gap(marginal)` mean=3.71×10⁵、max=1.82×10⁷，最坏实例 `exec_marginal=7.20 < exec_ref=7.25`——即 B2 第2层剪枝偶尔把「实则必需」的机误删，导致完成数落后最优同规模子集。
+
+**结论（H-B3）**：选机质量的瓶颈**不在第1层预选**（demand 已近最优），而恰在 B2 第2层边际剪枝——它引入的 `selection_gap` 比 demand 大一个量级且带极端长尾。这与 B2 结论互相印证：**B3 量化证明 demand 预选已接近同预算最优，因此把边际层设为默认反而有回归风险；它是「可进一步压缩出动」的可选增强，须经安全网兜底**。`selection_gap` 指标本身可用作后续选机改进（如更紧的容量估计 / 纯成本边际对照）的量化标尺——边界声明（度量选机质量非全流程质量）随报告一并给出。
+
+> 注：B3 受 `len(avail)≤12 ∧ N≤10` 组合爆炸防护，故 **不适用 exp01 生产域（N=20）**；其结论在小 N 富机域成立，作为「选机层离最优多远」的机制性证据，与 exp01 主指标（完成率/航程/按时率）互补而非替代。
 
 ---
 
@@ -157,4 +195,9 @@ python task_allocation/experiments/exp04_ablation/run.py --only A0,A1,A2a,A5
 1. 把 `ABLATION_fitness_tiers_2026-10-18.md` 映射到 A0/A1/A2/A3 配置指纹。  
 2. 实现 A5 固定返巢对照（论文多巢贡献的最小证据）。  
 3. 多 seed 汇总后再锁论文表。
-4. **B1/B2/B3 已实现（2026-10-21，`muas_stage.py`）**：`decode_mode` 开关 + `_build_constructive` 构造式解码；`POLICY_DEMAND_MARGINAL` + `_select_by_lexicographic_marginal` 字典序边际选机；`enumerate_reference_participating` 小 N 枚举参照。测试见 `task_allocation/tests/test_constructive_decode.py`。待办：exp04 `run.py` 尚未建立（本目录 status=planned），B1/B2 主指标与 B3 `selection_gap` 的报告接线在 run.py 落地时一并做；在那之前以 `--set muas.decode_mode=constructive` / `muas.participating_policy=demand_marginal` 走 exp01 `run_chunked.py` 预验形态。
+4. **B1/B2/B3 已实现且已出实验证据（2026-10-21，`muas_stage.py`）**：
+   - **B1**：exp01 全协议 3 seed ×（repair_chain vs constructive）六格已完成，constructive 不劣于 repair_chain（更守时 93.9% vs 91.7%、更快 226s vs 589s、航程 +1.7% 为唯一代价），H-B1 支持；结果落 `exp01_smoke/results_b1_*`。
+   - **B2**：exp01 生产域探针（γ 任意不咬合，`tour_cap=1` 结构性空转）+ 受控小 N 富机域扫描（见上「B2 实验结果」）。结论：边际层口径/参数敏感，auto-cap 域逐位等价于预选，显式 cap>1 才剪枝但伴随 ~0.6% 完成率代价；故 `demand_marginal` 维持 gated 消融、默认 `demand` 正确。探针 `exp01_smoke/probe_participating.py`、扫描 `exp01_smoke/probe_b3.py`（输出 `results_b3_marginalsweep.txt`）。
+   - **B3**：`selection_gap` 在受控域量化——demand 预选已近最优同规模子集（gap≈3×10⁴、完成数=参照），marginal 剪枝引入大一个量级的 gap 与极端长尾（最坏 1.8×10⁷）。瓶颈在边际剪枝而非预选；指标可用作后续选机改进的标尺。
+   - 测试见 `task_allocation/tests/test_constructive_decode.py`（278 测试全过）。
+   - 待办：exp04 `run.py` 矩阵尚未建立（本目录 status 仍 planned），A0/A1/A2/A5 主指标待跑；B1/B2/B3 的正式报告接线在 run.py 落地时一并做。当前 B1/B2/B3 证据以 exp01 `run_chunked.py` + 探针脚本预验形态给出，数字以本 notes 为准。
