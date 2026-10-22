@@ -235,6 +235,12 @@ def main(argv: list[str] | None = None) -> int:
         w_penalty=float(m.get("w_penalty", 1.0)),
         w_nest_capacity=float(m.get("w_nest_capacity", 1.0)),
         w_time=float(m.get("w_time", 0.0)),
+        # 覆盖门禁两层适应度（2026-10-22）：默认关，行为逐位不变
+        lexicographic_coverage=bool(m.get("lexicographic_coverage", False)),
+        w_skip_violation=(
+            None if m.get("w_skip_violation") is None
+            else float(m["w_skip_violation"])
+        ),
     )
     s = cfg.get("stage", {}) or {}
     stage_cfg = MUASStageConfig(
@@ -253,6 +259,8 @@ def main(argv: list[str] | None = None) -> int:
         polish_max_rounds=int(s.get("polish_max_rounds", 30)),
         polish_max_evals=int(s.get("polish_max_evals", 2000)),
         polish_eps=float(s.get("polish_eps", 1.0e-6)),
+        # 覆盖门禁（2026-10-22）：终态修到不动点；默认关        coverage_gate=bool(s.get("coverage_gate", False)),
+        coverage_gate_max_rounds=int(s.get("coverage_gate_max_rounds", 8)),
     )
     variants = list(cfg.get("variants") or [{"name": "default", "alpha": None}])
     baseline_scales = set(cfg["run"].get("full_muas_baseline_scales") or [])

@@ -46,6 +46,9 @@ CSV_COLUMNS = (
     "cycle_feasible_rate",
     "n_eliminated",
     "n_unreachable",
+    "n_voluntary_skip",
+    "n_capacity_shortfall",
+    "n_gate_rescued",
     "throughput_per_cycle",
     "n_cycles",
     "n_active_cycles",
@@ -101,6 +104,16 @@ def build_summary(
     n_eliminated = sum(len(r.expired_ids) for r in records)
     n_unreachable = sum(len(r.unreachable_ids) for r in records)
     n_capacity_violations = sum(len(r.capacity_violations) for r in records)
+    # 覆盖门禁三分账（2026-10-22）：逐周期 gate_stats 累加；
+    # 缺字段 = 未插桩/未开启（schema 容缺）按 0 计。
+    def _gate_sum(key: str) -> int:
+        return sum(
+            int(((r.muas or {}).get("gate_stats") or {}).get(key, 0) or 0)
+            for r in records
+        )
+    n_voluntary_skip = _gate_sum("n_skip")
+    n_capacity_shortfall = _gate_sum("n_shortfall")
+    n_gate_rescued = _gate_sum("n_rescued")
 
     # 硬违约归因（弹回标签聚合，供 notes 归因分析）
     infeasible_tag_counts: dict[str, int] = {}
@@ -169,6 +182,9 @@ def build_summary(
         "cycle_feasible_rate": round(cycle_feasible_rate, 6),
         "n_eliminated": n_eliminated,
         "n_unreachable": n_unreachable,
+        "n_voluntary_skip": n_voluntary_skip,
+        "n_capacity_shortfall": n_capacity_shortfall,
+        "n_gate_rescued": n_gate_rescued,
         "throughput_per_cycle": round(len(completed) / n_cycles, 6),
         "n_cycles": n_cycles,
         "n_active_cycles": n_active_cycles,

@@ -451,6 +451,9 @@ class RollingHorizon:
         )
         record.selection = dict(sel.diagnostics)
         record.selection["replan"] = replan
+        # S 成员无条件落盘（2026-10-22 覆盖门禁）：一阶检验与三分账的 S 基准，
+        # 供「进过 S 没装」vs「从未进 S」归因；replan 时 forced_ids 仍只在重规划落。
+        record.selection["selected_ids"] = sorted(sel.selected_ids)
         if replan:
             record.selection["forced_task_ids"] = sorted(forced_ids)
 

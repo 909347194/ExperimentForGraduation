@@ -178,6 +178,12 @@ def build_config_bundle(cfg: Mapping[str, Any]) -> ConfigBundle:
             if m.get("late_reward_decay_seconds") is None
             else float(m["late_reward_decay_seconds"])
         ),
+        # 覆盖门禁两层适应度（2026-10-22）：默认关，行为逐位不变
+        lexicographic_coverage=bool(m.get("lexicographic_coverage", False)),
+        w_skip_violation=(
+            None if m.get("w_skip_violation") is None
+            else float(m["w_skip_violation"])
+        ),
         constraints=constraints,
     )
     stage_model = MUASStageConfig(
@@ -193,6 +199,8 @@ def build_config_bundle(cfg: Mapping[str, Any]) -> ConfigBundle:
         demand_provision_serving=bool(m.get("demand_provision_serving", True)),
         demand_serve_margin=float(m.get("demand_serve_margin", 0.95)),
         reflow_rescue_scope=str(m.get("reflow_rescue_scope", "fleet")),
+        # 覆盖门禁（2026-10-22）：终态修到不动点；默认关        coverage_gate=bool(m.get("coverage_gate", False)),
+        coverage_gate_max_rounds=int(m.get("coverage_gate_max_rounds", 8)),
         marginal_tour_cap=(
             None if m.get("marginal_tour_cap") is None else int(m["marginal_tour_cap"])
         ),
