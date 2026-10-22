@@ -300,7 +300,13 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--set", action="append", default=[], metavar="dotted.path=value",
         help="覆盖 config.yaml 任意键，便于 500 代等敏感性实验，"
-             "如 --set solver.max_iter=500；支持多次。")
+             "如 --set solver.max_iter=500；支持多次。",
+    )
+    parser.add_argument(
+        "--force", action="store_true",
+        help="已存在 results/<ARM>/seed_<s>/metrics.json 的组合也重跑"
+             "（默认断点续跑：直接读盘复用，只补缺失组合）",
+    )
     return parser.parse_args(argv)
 
 
@@ -354,6 +360,18 @@ def main(argv: list[str] | None = None) -> int:
             counts = ", ".join(f"周期{c}={n}" for c, n in batch.per_cycle_counts().items())
             print(f"[exp05] seed={seed} 任务：共 {len(batch.all_tasks())} 个（{counts}）")
         for arm in arms:
+            run_dir = out_root / arm.id / f"seed_{seed}"
+            # 断点续跑：已有 metrics.json 的组合直接读盘复用（网格中断后
+            # 只补缺失组合；--force 强制全量重跑）。
+            metrics_path = run_dir / "metrics.json"
+            if metrics_path.is_file() and not args.force:
+                import json as _json
+
+                summary = _json.loads(metrics_path.read_text(encoding="utf-8"))
+                per_arm[arm.id].append(summary)
+                if verbose:
+                    print(f"[exp05] {arm.id:<4} seed={seed}：已存在，复用结果（--force 重跑）")
+                continue
             t0 = time.time()
             summary, run_meta, solution = run_once(
                 bundle, arm, seed,
@@ -361,7 +379,6 @@ def main(argv: list[str] | None = None) -> int:
                 estimator=estimator, batch=batch, verbose=verbose,
             )
             per_arm[arm.id].append(summary)
-            run_dir = out_root / arm.id / f"seed_{seed}"
             write_json(run_dir / "metrics.json", summary)
             write_json(run_dir / "run_meta.json", run_meta)
             write_json(run_dir / "solution.json", solution)
