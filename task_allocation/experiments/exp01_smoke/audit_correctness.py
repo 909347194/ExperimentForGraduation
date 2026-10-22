@@ -57,6 +57,12 @@ import math
 import sys
 from pathlib import Path
 
+# 任意调用方式可跑（python -m / 任意 cwd）：脚本目录先入 sys.path，
+# 供 `from paths import` 在非脚本路径调用下也能解析（2026-10-22 修复）。
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent))
+
 import paths  # noqa: F401  # sys.path 引导：挂载仓库根
 
 from build import build_cost_estimator, build_scenario, build_terrain

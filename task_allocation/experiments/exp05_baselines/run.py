@@ -40,6 +40,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+# 任意调用方式可跑（python -m / 任意 cwd）：脚本目录先入 sys.path，
+# 供 `from paths import` 在非脚本路径调用下也能解析（2026-10-22 修复）。
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parent))
+
 from paths import DATA_DIR, EXP_DIR, ROOT
 
 from build import (
