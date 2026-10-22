@@ -64,6 +64,7 @@ from task_allocation.methods.muas.constraints.coop_constraints import (
     check_time_window_constraint,
 )
 from task_allocation.methods.muas.constraints.evaluator import ConstraintReport
+from task_allocation.methods.muas.coverage_gate import audit_coverage
 
 
 @dataclass
@@ -179,6 +180,15 @@ class MUASProblemConfig:
     # 与 w_violation 的秒级惩罚同向压实「按时服务」。
     # None / <=0 = 关闭折减（历史口径：F1 全额，迟到只经 w_violation 计价）。
     late_reward_decay_seconds: float | None = None
+    # ── 2026-10-22 覆盖门禁（coverage gate）两层适应度 ───────────────
+    # True：合法解 = 物理硬约束 + 覆盖门禁（S 内无 voluntary_skip）；
+    # f 在 T0 与 T1 之间加 W_skip·n_voluntary_skip 层；F1 砍迟到折减、
+    # 回归纯完成计数（迟到单一定价走 w_late·L，消双计）；
+    # _secondary_upper_bound 拆 1e6 虚构帽、换推导帽。
+    # False（默认）= 现行四层准字典序口径，逐位不变。
+    lexicographic_coverage: bool = False
+    # W_skip 显式权重；None = 自动同 W_hard（κ·m·R_pool）。
+    w_skip_violation: float | None = None
     # 本周期的规划时刻：时间窗游标从它起算，而不是从 0
     # （滚动时域下任务 latest 是绝对时刻，游标起点必须跟着周期走）
     current_time: float = 0.0
@@ -407,7 +417,11 @@ class SelectiveMUASProblem:
         # （late_reward_decay_seconds=W 时 max(0, 1 − L/W)）。迟到的量取自
         # check_feasible 透出的 lateness 表（时间窗游标的唯一模拟源）。
         total = 0.0
+        # 覆盖门禁模式（D5）：F1 回归纯完成计数——迟到折减砍掉，迟到只走
+        # w_late·L 单一定价（T2），消「迟到双计」。
         decay = self.config.late_reward_decay_seconds
+        if self.config.lexicographic_coverage:
+            decay = None
         feas = solution.meta.get("feasibility") or {}
         lateness = feas.get("lateness") or {}
         for tid in solution.executed_task_ids:
@@ -527,10 +541,21 @@ class SelectiveMUASProblem:
         # 同一组权重，消灭 auto big_m 逐周期漂移导致的「记录 best_fitness
         # 与重算目标差 6.5~13.6」。
         decay = self.config.late_reward_decay_seconds
+        if self.config.lexicographic_coverage:
+            decay = None  # 门禁模式 F1 不用迟到折减，快照口径与实际一致
+        # 覆盖门禁分账（W_skip 层消费）：解码期已算过（gate_stats 在
+        # build_solution 写入 meta）则复用；外源解（测试 /
+        # solution_from_sequences）在这里惰性补算。
+        if self.config.lexicographic_coverage and "gate_stats" not in solution.meta:
+            routes = {t.uav_id: list(t.task_ids) for t in solution.tours}
+            ends = {t.uav_id: t.end_nest_id for t in solution.tours}
+            solution.meta["gate_stats"] = audit_coverage(self, routes, ends).to_dict()
         solution.meta["fitness_weights"] = {
             "m": float(self.f1_weight()),
             "w_hard": float(self.hard_weight()),
             "w_excess": float(self.range_excess_weight()),
+            "w_skip": (float(self.skip_weight())
+                       if self.config.lexicographic_coverage else None),
             "w_late": (None if self.config.w_violation is None
                        else float(self.config.w_violation)),
             "lambda": float(self.config.lambda_cost),
@@ -591,11 +616,19 @@ class SelectiveMUASProblem:
                 + float(wv) * self.violation_penalty(solution)
                 + self.config.w_time * bt
             )
-        # 四层准字典序（生产口径）
+        # 四层准字典序（生产口径）；覆盖门禁模式（lexicographic_coverage，
+        # 2026-10-22）在 T0 与 T1 之间加 T0.5 层 W_skip·n_voluntary_skip——
+        # voluntary_skip 与物理硬约束等价的非法解，由解码器 repair 至不动点
+        # 构造性归零（gate 模式），W_skip 仅在 audit 模式/防御路径咬合。
         n_hard, excess_m = self.hard_stats(solution)
+        skip_pen = 0.0
+        if self.config.lexicographic_coverage:
+            n_skip = int((solution.meta.get("gate_stats") or {}).get("n_skip", 0))
+            skip_pen = self.skip_weight() * n_skip
         return float(
             self.hard_weight() * n_hard
             + self.range_excess_weight() * excess_m
+            + skip_pen
             - m * f1
             + float(wv) * self.soft_violation(solution)
             + self.config.lambda_cost * self.path_cost(solution)
@@ -622,6 +655,17 @@ class SelectiveMUASProblem:
             cached = float(self.config.hard_violation_kappa) * m * r_pool
             self._hard_weight_cache = cached
         return float(cached)
+
+    def skip_weight(self) -> float:
+        """T0.5 覆盖门禁违约的支配权重 W_skip（默认同 W_hard 推导 κ·m·R_pool）。
+
+        voluntary_skip（能装却没装）是与物理硬约束等价的非法解；W_skip
+        保证一次 skip 压倒任意交付收益。gate 修复模式下 n_skip 恒 0
+        （构造性归零），本层不咬合，仅 audit 模式/防御路径生效。
+        """
+        if self.config.w_skip_violation is not None:
+            return max(0.0, float(self.config.w_skip_violation))
+        return self.hard_weight()
 
     def range_excess_weight(self) -> float:
         """T0 层内 tie-break 权重（米 → 奖励当量）；None = 自动 ``1/m``。"""
@@ -684,9 +728,16 @@ class SelectiveMUASProblem:
             (max(float(getattr(u, "speed", 0.0) or 0.0), 1e-6) for u in self.uavs),
             default=1.0,
         )
-        # 软违约（迟到秒数）保守上界：每任务 1e6 s（≈11.6 天，无实际意义，
-        # 只为「一个任务的收益优势压倒任意次级差异」提供不破的保证）。
-        v_bound = 1.0e6 * (n_t + 8)
+        # 软违约（迟到秒数）上界：
+        # - 覆盖门禁模式（lexicographic_coverage）：拆「1e6 s/任务」虚构帽
+        #   （消 m 病的真正落地）——迟到是 T2 单一定价的成本，不再需要
+        #   「一个任务收益压倒任意迟到」的假保证；换**推导**帽
+        #   n_t × 单机航迹时间上界（迟到不可能超过航迹时间本身）。
+        # - 历史口径：保持 1e6·(n_t + 8) 不变（既有测试与历史格逐位可比）。
+        if getattr(cfg, "lexicographic_coverage", False):
+            v_bound = n_t * (c_bound / speed_min)
+        else:
+            v_bound = 1.0e6 * (n_t + 8)
         lam = float(cfg.lambda_cost)
         total = lam * c_bound
         if cfg.w_violation is None:
