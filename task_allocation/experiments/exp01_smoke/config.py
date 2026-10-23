@@ -218,6 +218,13 @@ def build_config_bundle(cfg: Mapping[str, Any]) -> ConfigBundle:
         # False = 不修复（lexicographic_coverage 时只做纯审计分账）。
         coverage_gate=bool(m.get("coverage_gate", False)),
         coverage_gate_max_rounds=int(m.get("coverage_gate_max_rounds", 8)),
+        # 覆盖优先两段式解码（2026-10-23 用户裁定）：True = 先装到约定
+        # 口径下的最大可行集（EDD 不动点），再在不减少已装集合的约束下
+        # 做成本 polish（跨机 relocate / 调序）。False = 现行修复链口径。
+        coverage_first=bool(m.get("coverage_first", False)),
+        coverage_first_max_rounds=int(m.get("coverage_first_max_rounds", 4)),
+        monotone_polish_max_rounds=int(m.get("monotone_polish_max_rounds", 30)),
+        monotone_polish_eps=float(m.get("monotone_polish_eps", 1.0e-6)),
         marginal_tour_cap=(
             None if m.get("marginal_tour_cap") is None
             else int(m["marginal_tour_cap"])

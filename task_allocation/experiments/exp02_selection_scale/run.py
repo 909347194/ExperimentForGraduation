@@ -6,7 +6,7 @@
     搜索空间。第一阶段用候选预筛把 T_t 压到 T_t^sel，据称能提高实时性。
 
 exp01_smoke 跑在「机多任务少」一侧（10 任务 / 24 机，αK=60），n_cand 预筛从不
-触发，无法验证该机制。本实验固定 K=8（可用无人机数），把任务规模拉到 50/100/200，
+触发，无法验证该机制。本实验固定 K=8（可用无人机数），把任务规模扫到 10/50/100，
 分别测量：
 
     T_hint    cost_hint（最近可用机，惰性表 O(n·K) 条边）
@@ -18,13 +18,12 @@ exp01_smoke 跑在「机多任务少」一侧（10 任务 / 24 机，αK=60）�
 由此回答三个问题：
     1. 压缩是否真的发生了？压到多少？（候选规模跟 N 还是跟 K/能力走）
     2. 分层省下的搜索时间，是否被 O(n²) 代价构建吃掉？
-       （2026-10-20 延迟构建后：全量建矩阵不再发生在一阶段之前）
     3. 候选规模按「机数名额」还是「机队能力」标定，吞吐-耗时-质量
        平衡点各在哪里？（variants 扫描：quota_* vs cap_x*）
 
-2026-10-20 起接入延迟构建（horizon 同款）：一阶段前只建惰性代价表
-（按需算 + 缓存，值与全量 eager 建表逐位一致），一阶段后只对候选子集
-建矩阵——N=200 时端到端不再被 O(n²) 全量建矩阵 dominate（旧版占 85.6%）。
+代价矩阵延迟构建（惰性表）：一阶段前只建惰性代价表（按需算 + 缓存，
+值与全量 eager 建表逐位一致），一阶段后只对候选子集建矩阵——
+N 再大，端到端也不会被 O(n²) 全量建矩阵 dominate。
 """
 
 from __future__ import annotations
@@ -60,7 +59,10 @@ from task_allocation.methods.muas.cost.vertical_section import (  # noqa: E402
     VerticalSectionCostEstimator,
     make_distance_fn,
 )
-from task_allocation.methods.muas.problem import MUASProblemConfig  # noqa: E402
+from task_allocation.methods.muas.problem import (  # noqa: E402
+    ConstraintConfig,
+    MUASProblemConfig,
+)
 from task_allocation.methods.muas.solvers.dmde_solver import DMDEConfig  # noqa: E402
 from task_allocation.methods.muas.solvers.muas_stage import (  # noqa: E402
     MUASStageConfig,
@@ -201,12 +203,9 @@ def main(argv: list[str] | None = None) -> int:
 
     n_uavs = int(problem_cfg["n_uavs"])
     max_range = float(problem_cfg.get("uav_max_range", 80000.0))
-    # 2026-10-20 修复：UAV 必须**驻留其机巢**（exp01 build_uavs 同口径）。
-    # 旧版把全部 UAV 放在局部平面原点 (0,0)，而任务锚定在散布的机巢周围
-    # （nest span 约 70km×87km）——最近可用机距离中位数被推到 39km、
-    # cap(t)=B/c̃ 缩到 16、半数任务被往返预筛误杀（24/50），整个规模实验
-    # 测的是「原点邻域」这个退化构型。驻巢后中位 15.2km、cap(t)≈42、
-    # 与 full baseline 的 34/50 执行一致，能力驱动标定才真正可测。
+    # UAV 驻留其机巢（exp01 build_uavs 同口径）：任务锚定在散布的机巢周围
+    # （nest span 约 70km×87km），驻巢后最近可用机距离中位数 ~15km、
+    # cap(t)≈42，与 full baseline 的执行数同量级，能力驱动标定才真正可测。
     nest_list = list(scenario.nests)
     uavs = [
         UAV(
@@ -228,19 +227,36 @@ def main(argv: list[str] | None = None) -> int:
         seed=int(cfg["experiment"].get("seed", 42)),
     )
     m = cfg.get("problem", {})
+    # 与 exp01 / exp05 生产口径一致的四层准字典序评价（字典序 + 惩罚量纲
+    # 解耦 + 迟到折减 + T0 物理违约支配层）；覆盖门禁默认关。
     problem_model = MUASProblemConfig(
         allow_unassigned=bool(m.get("allow_unassigned", True)),
         allow_idle_uav=bool(m.get("allow_idle_uav", True)),
-        lambda_cost=float(m.get("lambda_cost", 1.0e-4)),
+        lambda_cost=float(m.get("lambda_cost", 1.0e-2)),
         w_penalty=float(m.get("w_penalty", 1.0)),
+        w_violation=(
+            None if m.get("w_violation") is None else float(m["w_violation"])
+        ),
         w_nest_capacity=float(m.get("w_nest_capacity", 1.0)),
         w_time=float(m.get("w_time", 0.0)),
-        # 覆盖门禁两层适应度（2026-10-22）：默认关，行为逐位不变
+        lexicographic=bool(m.get("lexicographic", True)),
+        big_m=(None if m.get("big_m") is None else float(m["big_m"])),
+        late_reward_decay_seconds=(
+            None if m.get("late_reward_decay_seconds") is None
+            else float(m["late_reward_decay_seconds"])
+        ),
+        w_hard_violation=(
+            None if m.get("w_hard_violation") is None
+            else float(m["w_hard_violation"])
+        ),
+        hard_violation_kappa=float(m.get("hard_violation_kappa", 10.0)),
+        # 覆盖门禁两层适应度：默认关，行为逐位不变
         lexicographic_coverage=bool(m.get("lexicographic_coverage", False)),
         w_skip_violation=(
             None if m.get("w_skip_violation") is None
             else float(m["w_skip_violation"])
         ),
+        constraints=ConstraintConfig.from_dict(cfg.get("constraints")),
     )
     s = cfg.get("stage", {}) or {}
     stage_cfg = MUASStageConfig(
@@ -249,18 +265,30 @@ def main(argv: list[str] | None = None) -> int:
         prune_margin=float(s.get("prune_margin", 0.0)),
         prune_wait_bonus=float(s.get("prune_wait_bonus", 1.0)),
         wait_scale=float(s.get("wait_scale", 3600.0)),
-        participating_policy=str(s.get("participating_policy", "cheapest")),
+        # 需求感知参与（生产口径）：贪心最大覆盖 + 容量感知补机
+        participating_policy=str(s.get("participating_policy", "demand")),
         participation_cost=float(s.get("participation_cost", 0.0)),
         marginal_tour_cap=(
             None if s.get("marginal_tour_cap") is None
             else int(s["marginal_tour_cap"])
         ),
+        demand_coverage_radius=(
+            None if s.get("demand_coverage_radius") is None
+            else float(s["demand_coverage_radius"])
+        ),
+        demand_range_factor=float(s.get("demand_range_factor", 0.5)),
+        demand_provision_serving=bool(s.get("demand_provision_serving", True)),
+        demand_serve_margin=float(s.get("demand_serve_margin", 0.95)),
+        # 「可达即执行」救援池口径：扩到全可用机队
+        reflow_rescue_scope=str(s.get("reflow_rescue_scope", "fleet")),
         polish_enabled=bool(s.get("polish_enabled", True)),
         polish_max_rounds=int(s.get("polish_max_rounds", 30)),
         polish_max_evals=int(s.get("polish_max_evals", 2000)),
         polish_eps=float(s.get("polish_eps", 1.0e-6)),
-        # 覆盖门禁（2026-10-22）：终态修到不动点；默认关        coverage_gate=bool(s.get("coverage_gate", False)),
+        # 覆盖门禁（默认关；完整口径 = coverage_gate + problem.lexicographic_coverage 同开）
+        coverage_gate=bool(s.get("coverage_gate", False)),
         coverage_gate_max_rounds=int(s.get("coverage_gate_max_rounds", 8)),
+        coverage_first=bool(s.get("coverage_first", False)),
     )
     variants = list(cfg.get("variants") or [{"name": "default", "alpha": None}])
     baseline_scales = set(cfg["run"].get("full_muas_baseline_scales") or [])
@@ -345,8 +373,7 @@ def main(argv: list[str] | None = None) -> int:
                 "n_deferred": len(sel.selected) - len(res.solution.executed_task_ids),
                 "f1_reward": round(res.solution.f1_reward, 3),
                 "f2_cost": round(res.solution.f2_cost, 1),
-                # n_evals 在 MUASStageResult 属性上（diagnostics 字典无此键，
-                # 误取会恒为 0——2026-10-20 首版即此错，已修）
+                # n_evals 在 MUASStageResult 属性上（diagnostics 字典无此键）
                 "n_evals": int(getattr(res, "n_evals", 0) or 0),
                 "polish_evals": int(diag.get("polish_evals", 0)),
                 "polish_accepted": int(sum((diag.get("polish_accepted") or {}).values())),

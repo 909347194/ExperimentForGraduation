@@ -93,9 +93,20 @@ def main(results_name: str = "results") -> int:
     speed = float(m["problem"]["uav_speed"])
     max_range = float(m["problem"]["uav_max_range_km"]) * 1000.0
     w_decay = cfg["muas"].get("late_reward_decay_seconds")
-    # 覆盖门禁模式（lexicographic_coverage，2026-10-22）：F1 回归纯完成计数，
-    # 不做迟到折减（迟到单一定价走 w_late·L）——奖励守恒的交付端口径跟着切纯。
-    gate_fit = bool(cfg["muas"].get("lexicographic_coverage", False))
+    # 覆盖门禁模式（2026-10-22）：F1 回归纯完成计数，不做迟到折减
+    # （迟到单一定价走 w_late·L）——奖励守恒的交付端口径跟着切纯。
+    #
+    # 判据**优先取 metrics 的自描述字段**（problem.lexicographic_coverage /
+    # problem.coverage_gate，吃 --set 覆盖）；仅当旧数据没有这两个键时回退
+    # config.yaml。原因：本脚本读的是 yaml 原文，命令行 --set 注入的门禁
+    # 开关它看不到，会导致门禁跑出来的结果被按旧口径审计（E/N2 误报 FAIL）。
+    prob_desc = m.get("problem") or {}
+    if "lexicographic_coverage" in prob_desc or "coverage_gate" in prob_desc:
+        gate_fit = (bool(prob_desc.get("lexicographic_coverage", False))
+                    or bool(prob_desc.get("coverage_gate", False)))
+    else:
+        gate_fit = (bool(cfg["muas"].get("lexicographic_coverage", False))
+                    or bool(cfg["muas"].get("coverage_gate", False)))
     if gate_fit:
         w_decay = None
     max_ratio = float(cfg["selection"]["marginal"]["max_ratio"])
@@ -295,12 +306,23 @@ def main(results_name: str = "results") -> int:
     for i in range(len(cycles) - 1):
         c, nxt = cycles[i], cycles[i + 1]
         pc, pn = c["pool_counts"], nxt["pool_counts"]
+        # 记账周期口径（2026-10-23 修正；原公式把四种事件混为同一周期，
+        # 在「任务滞留多周期后才超期淘汰」的场景下必然错位 FAIL）：
+        #   completed / unreachable：周期 t 解算期出池 ⇒ 影响 t→t+1 水位；
+        #   infeasible（废飞回池）：``pool.release`` 进 ``_release_pending``，
+        #     下周期 begin_cycle 归类为 RELEASE 来源 ⇒ **已含在
+        #     pn.n_release**，原公式再 +len(infeasible) 属双计（本场景为 0
+        #     未暴露，但公式是错的）；
+        #   expired：在**下周期** begin_cycle 入口出池（task_pool.expire），
+        #     且快照 pool_counts 与 expired_ids 同在周期 t+1 ⇒ 水位效应落在
+        #     P_{t+1}，必须取 nxt.expired_ids（原公式取 c.expired_ids，错位
+        #     一个周期——这正是 coverage_first 冒烟 (7,1,2) 失败的成因）。
+        # 迟交交付自然对冲：completed −1 且回池进 pn.n_release +1。
         expect = (pc["n_total"]
                   + pn.get("n_new", 0) + pn.get("n_release", 0)
                   - len(c.get("completed_ids", []))
-                  - len(c.get("expired_ids", []))
-                  - len(c.get("unreachable_ids", []))
-                  + len(c.get("infeasible_ids", [])))
+                  - len(nxt.get("expired_ids", []))
+                  - len(c.get("unreachable_ids", [])))
         if pn["n_total"] != expect:
             level_bad.append((c["cycle"], pn["n_total"], expect))
     check("F 池水位递推闭合（含废飞回池）", not level_bad, str(level_bad[:3]))
@@ -395,11 +417,17 @@ def main(results_name: str = "results") -> int:
         if w_time != 0.0 and c.get("final_bottleneck_s") is None:
             n2_skipped += 1
             continue
+        # 门禁口径下 **f 不含 −m·F1**（固定表述：搜索用 f 不含 −m·F1，
+        # F1 只作指标）⇒ 重算时该项置零。判据与 problem.gate_mode 同构：
+        # 快照带 w_skip（problem 开关开）或本周期落了 gate_stats
+        # （stage 层 coverage_gate 产物）。
+        gate_cycle = (fw.get("w_skip") is not None) or bool(c.get("gate_stats"))
+        f1_term = 0.0 if gate_cycle else -fw_m * float(c.get("final_f1") or 0.0)
         f_rec = (
             w_hard * float(c.get("final_n_hard") or 0)
             + w_excess * float(c.get("final_excess_m") or 0.0)
             + w_skip * n_skip
-            - fw_m * float(c.get("final_f1") or 0.0)
+            + f1_term
             + w_late * float(c.get("final_late_s") or 0.0)
             + lam * float(c.get("final_path_m") or 0.0)
             + w_time * float(c.get("final_bottleneck_s") or 0.0)

@@ -33,12 +33,14 @@ from __future__ import annotations
 import argparse
 import copy
 import csv
+import hashlib
 import itertools
+import json
 import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Mapping
 
 # 任意调用方式可跑（python -m / 任意 cwd）：脚本目录先入 sys.path，
 # 供 `from paths import` 在非脚本路径调用下也能解析（2026-10-22 修复）。
@@ -182,6 +184,9 @@ def run_once(
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "config_path": str((EXP_DIR / "config.yaml").relative_to(ROOT)),
         "repo_root": str(ROOT),
+        # 生效配置指纹（含 --set）：断点续跑复用的判据。换 λ / 代数 / 门禁
+        # 开关必须导致不复用，否则旧口径静默混入论文主表（2026-10-22）。
+        "config_fingerprint": _config_fingerprint(bundle.raw, arm),
     }
 
     solution = {
@@ -293,6 +298,27 @@ def _apply_dotted_set(cfg: dict, items) -> None:
         d[parts[-1]] = _coerce_set_value(val)
 
 
+def _config_fingerprint(raw_cfg: Mapping[str, Any], arm: Any) -> str:
+    """当前**生效**配置（含 --set 覆盖）的稳定指纹。
+
+    断点续跑的复用判据不能只看 metrics.json 是否存在：换 λ / 代数 / 门禁
+    开关后跑进同一 results 目录，会静默混入旧口径结果并直接进论文主表
+    （2026-10-22 修复）。故把生效配置连同对照臂关键参数一起哈希，落盘
+    run_meta 并在复用时比对；不匹配即不复用。
+    """
+    payload = {
+        "config": raw_cfg,
+        "arm": {
+            "id": getattr(arm, "id", None),
+            "solver": getattr(arm, "solver", None),
+            "cost_model": getattr(arm, "cost_model", None),
+            "overrides": getattr(arm, "overrides", None),
+        },
+    }
+    blob = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
+
+
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="运行 exp05_baselines 对照实验")
     parser.add_argument(
@@ -369,15 +395,31 @@ def main(argv: list[str] | None = None) -> int:
             run_dir = out_root / arm.id / f"seed_{seed}"
             # 断点续跑：已有 metrics.json 的组合直接读盘复用（网格中断后
             # 只补缺失组合；--force 强制全量重跑）。
+            # 复用前必须比对配置指纹（2026-10-22）：只判"文件存在"会让换
+            # λ / 代数 / 门禁开关后的旧口径结果被静默沿用，污染论文主表。
             metrics_path = run_dir / "metrics.json"
+            meta_path = run_dir / "run_meta.json"
             if metrics_path.is_file() and not args.force:
-                import json as _json
-
-                summary = _json.loads(metrics_path.read_text(encoding="utf-8"))
-                per_arm[arm.id].append(summary)
-                if verbose:
-                    print(f"[exp05] {arm.id:<4} seed={seed}：已存在，复用结果（--force 重跑）")
-                continue
+                fp = _config_fingerprint(raw_cfg, arm)
+                stored_fp = None
+                if meta_path.is_file():
+                    try:
+                        stored_fp = json.loads(
+                            meta_path.read_text(encoding="utf-8")
+                        ).get("config_fingerprint")
+                    except (OSError, ValueError):
+                        stored_fp = None
+                if stored_fp is not None and stored_fp == fp:
+                    summary = json.loads(metrics_path.read_text(encoding="utf-8"))
+                    per_arm[arm.id].append(summary)
+                    if verbose:
+                        print(f"[exp05] {arm.id:<4} seed={seed}：已存在且配置指纹一致，复用结果（--force 重跑）")
+                    continue
+                print(
+                    f"[exp05] {arm.id:<4} seed={seed}：配置指纹不一致"
+                    f"（存量={stored_fp or '缺失'} / 当前={fp}）⇒ 不复用，重跑"
+                    "（旧结果口径与当前不符，沿用会污染主表）"
+                )
             t0 = time.time()
             summary, run_meta, solution = run_once(
                 bundle, arm, seed,
