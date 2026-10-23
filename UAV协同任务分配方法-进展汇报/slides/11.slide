@@ -24,7 +24,7 @@
       </Box>
     </Box>
     <Text style={{ fontSize: 16, color: '#4A5568', lineHeight: 1.8, marginTop: 30 }}>
-      评估口径：长程滚动 24 周期、Poisson λ=5 到达；「任务不被完成只有物理约束被违反」——完成只认物理约束，迟到计奖励折减而非废飞。所有数字来自实验 metrics 原始记录，可复现。
+      评估口径：长程滚动 24 周期、Poisson λ=5 到达；「任务不被完成只有物理约束被违反」——完成只认物理约束，迟到折价而非废飞。所有数字来自实验 metrics 原始记录。
     </Text>
     <Box style={{ marginTop: 24, flexDirection: 'row', gap: 12, alignItems: 'center' }}>
       <Box style={{ padding: '7px 16px', background: '#1E4FA8', borderRadius: 6 }}>
