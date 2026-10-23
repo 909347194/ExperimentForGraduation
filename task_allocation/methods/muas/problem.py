@@ -292,7 +292,7 @@ class SelectiveMUASProblem(FitnessWeightsMixin):
 
         段长口径：**统一走 DEM 三维航程**（``costs.travel``），不用欧氏直线——
         此前 F3 用直线而代价矩阵用地形代价，同一航次两套长度，F3 与 ETA 系统性
-        低估（P1-1）。
+        低估。
 
         对应 Ming et al. 2017 Eq.1 的 Σ_i Σ_j t(i,j)·x(i,j) 单 UAV 飞行时间；
         F3 = max_k T_k 即其中的 a·max(·) 最坏机项。

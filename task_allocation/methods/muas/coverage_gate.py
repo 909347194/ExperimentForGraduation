@@ -62,7 +62,7 @@ __all__ = [
 
 @dataclass
 class GateStats:
-    """覆盖门禁分账（gate_stats 落盘口径，keys 与规划第 7 条一致）。"""
+    """覆盖门禁分账（gate_stats 落盘口径，随解一并写入 solution.meta）。"""
 
     n_skip: int = 0
     n_shortfall: int = 0
