@@ -135,6 +135,27 @@ class MUASStageConfig:
     coverage_gate: bool = False
     # 修复不动点的防御性轮数上限（不挤出 ⇒ 通常一轮收敛）。
     coverage_gate_max_rounds: int = 8
+    # ── 覆盖优先解码 + 单调成本 polish（2026-10-23 用户裁定）──────────
+    # 解码/repair 两段式：**先**按覆盖目标装到约定口径下的最大可行集
+    # （_load_coverage_fixed_point：一阶判据 = 航程 + 自身时间窗 + 开班
+    # 巢容量；救援含插入现有航次 / 闲置机开班（参与集→全机队）/ 换机
+    # 腾位；EDD 升序修到不动点），**再**在不减少已装集合的约束下做
+    # 成本 polish（_polish_routes_monotone：跨机 relocate / 调序，四道
+    # 门 = 航程 / 自身窗 / 迟到数不增 / 成本严格降）。
+    # 动机：E1E2（2026-10-23）证实门禁单独上场时覆盖指标恒真而完成率
+    # −5pp——「可装载」内生于当前解，成本-only 适应度把航程/窗口占满
+    # ⇒ 剩余任务一阶判 shortfall ⇒ 超期淘汰。覆盖优先构造把「留装载
+    # 余量」的激励放回解码本身；单调 polish 保证成本优化不侵蚀覆盖。
+    # 门禁证明「能装却不装」可被抹成 0，但**不能单独承担完成语义**——
+    # 完成语义由「覆盖优先装载 + 单调 polish」两段式承担，门禁退居
+    # 事后校验。False（默认）= 现行修复链口径，逐位不变。
+    coverage_first: bool = False
+    # 覆盖装载不动点轮数上限（装载 → 重排 → 换巢 → 航程修复 = 一轮）。
+    coverage_first_max_rounds: int = 4
+    # 单调成本 polish 轮数上限（无改进即停）。
+    monotone_polish_max_rounds: int = 30
+    # 单调 polish 严格改进阈值（绝对；吸收浮点求和噪声）。
+    monotone_polish_eps: float = 1e-6
     # 剔除判据的裕度：仅当 λ·节省 > 收益 × (1 + margin) 时才剔除
     prune_margin: float = 0.0
     # 等待补偿（论文 §3.2 的 W_i(t)）：任务滞留越久越不容易被剔除，
@@ -253,6 +274,10 @@ class MUASStageConfig:
                 'reflow_rescue_scope 必须是 "fleet" 或 "participating"，'
                 f"当前为 {self.reflow_rescue_scope!r}"
             )
+        if self.coverage_first_max_rounds < 1:
+            raise ValueError("coverage_first_max_rounds 必须 >= 1")
+        if self.monotone_polish_max_rounds < 1:
+            raise ValueError("monotone_polish_max_rounds 必须 >= 1")
         bad = [m for m in self.polish_moves
                if m not in (MOVE_RELOCATE, MOVE_SWAP, MOVE_POSITION)]
         if bad:
@@ -850,9 +875,13 @@ class MUASAssignmentEvaluator:
         prev_state = None
         # 字典序（收益优先）下经济性剔除与目标冲突（丢正收益任务必降 F1），
         # 自动关闭；任务暂缓仅由可行性修复产生。legacy 加权和保留选择性剔除
-        # （论文 §5(3) y_j=0 的消融对比口径）。
-        economic_prune = self.config.prune_unprofitable and not getattr(
-            self.problem.config, "lexicographic", True
+        # （论文 §5(3) y_j=0 的消融对比口径）。coverage_first（覆盖优先解码，
+        # 2026-10-23）下同样强制关闭——「完成是约束」，经济剔除与覆盖目标
+        # 直接冲突。
+        economic_prune = (
+            self.config.prune_unprofitable
+            and not self.config.coverage_first
+            and not getattr(self.problem.config, "lexicographic", True)
         )
         for _ in range(6):
             # 合并修复：任务少时向更少机合并（闲置合法，U_exec ⊆ U_avail）
@@ -873,12 +902,28 @@ class MUASAssignmentEvaluator:
         # 注意 _reflow_task 是**被动**救援（仅在航程修复移除任务时触发），
         # 救不了压根没被 DMDE 编入航次的任务——DMDE 的搜索空间锁死在参与集
         # 内，无法自己引入参与集外的可用机（exp01 的 T10 正是此情形）。
-        routes, end_nests = self._complete_coverage(routes, end_nests)
+        #
+        # coverage_first（2026-10-23 用户裁定，解码/repair 第一段）：改走
+        # **覆盖优先装载**——EDD 升序、修到不动点（装载 → 重排 → 换巢 →
+        # 航程修复多轮），把 S 内未交付任务装到约定口径（一阶判据）下的
+        # 最大可行集；比 _complete_coverage 单趟多两层：不动点 + EDD。
+        # 完成语义由这一段承担，门禁退居事后校验（不能单独承担完成语义——
+        # E1E2 实证：门禁指标恒真而完成率 −5pp）。
+        if self.config.coverage_first:
+            routes, end_nests, _n_loaded = self._load_coverage_fixed_point(
+                routes, end_nests
+            )
+        else:
+            routes, end_nests = self._complete_coverage(routes, end_nests)
         # 航次内访问顺序的时间窗修复（不改任务集，只调先后）
         routes = self._reorder_for_deadlines(routes)
         # 零奖励剔除：ETA ≥ latest+W 的任务 eff≈0——带着飞只赔迟到惩罚
         # （T2），暂缓把机会留给下周期（2026-10-18 四层适应度配套）。
-        routes, end_nests = self._prune_zero_reward(routes, end_nests)
+        # coverage_first 下强制跳过：零奖励是**经济**判据，卸任务与
+        # 「完成是约束」冲突；迟交按完成计（w_violation 单一定价），
+        # 是否值得飞由成本目标层裁决，不由解码端预先剔除。
+        if not self.config.coverage_first:
+            routes, end_nests = self._prune_zero_reward(routes, end_nests)
         # 重排按「迟到数, 迟到量, 航程」字典序挑顺序，末任务换人会拉长返航腿，
         # 可能把航次推过剩余航程（uav_9 周期 3–6 的 [47,59,40,55] 即由可行序
         # [59,40,55,47] 重排而来，全航程 77 686.91 → 80 027.58 m）。先按当前
@@ -894,10 +939,21 @@ class MUASAssignmentEvaluator:
         # 的 16 次弹回全部源于此（超限仅 27.58 m = 0.034%）。
         routes, end_nests = self._repair_range(routes, end_nests)
 
+        # coverage_first（2026-10-23）：终态**再装载一轮**。前面的换巢 /
+        # 重排 / 航程闸可能释放新的装载空间（终点巢改近、顺序调整腾出
+        # 时间），覆盖优先口径要求把「约定口径下的最大可行集」做终——
+        # 无新可装任务时一轮集合运算即返回（不动点）。
+        if self.config.coverage_first:
+            routes, end_nests, _n_loaded2 = self._load_coverage_fixed_point(
+                routes, end_nests
+            )
+
         # ── 覆盖门禁（2026-10-22）终态挂点：最后一次 _repair_range 之后、
         # _assemble 之前（其后仅 problem.evaluate 不改 routes，终态安全）。
         #   coverage_gate=True  → 能救必救修到不动点（skip 构造归零）；
         #   否则 lexicographic_coverage=True → 纯审计分账（W_skip 层消费）。
+        # coverage_first 下门禁退居**事后校验**：完成语义由覆盖优先装载
+        # 承担（E1E2 实证门禁单独上场覆盖指标恒真而完成率 −5pp）。
         gate_stats: dict[str, Any] | None = None
         if bool(getattr(self.config, "coverage_gate", False)):
             routes, end_nests, gs = repair_coverage(
@@ -1745,6 +1801,275 @@ class MUASAssignmentEvaluator:
 
         return work, ends
 
+    # -- 覆盖优先装载（2026-10-23 用户裁定：解码/repair 第一段）---------
+
+    def _load_coverage_fixed_point(
+        self,
+        routes: Mapping[int, Sequence[int]],
+        end_nests: Mapping[int, int | None],
+    ) -> tuple[dict[int, list[int]], dict[int, int | None], int]:
+        """覆盖优先装载：把 S 内未交付任务装到**约定口径下的最大可行集**。
+
+        用户 2026-10-23 裁定（解码/repair 第一段）：先按覆盖目标装，再
+        在不减少已装集合的约束下做成本 polish。本函数即第一段。
+
+        约定口径（与覆盖门禁同源，D1 自身窗）：**一阶判据** =
+        航程（全航程 ≤ 剩余航程）+ 自身时间窗（插入位任务到达 ≤
+        deadline）+ 开班机巢容量；救援通道含插入现有航次、闲置机开班
+        （参与集 → 全机队 fleet 口径）、换机腾位（Fix⑦，depth<2，
+        迁移任务受全航次窗约束）。不含「两个未覆盖任务拼班才装得下」
+        的组合可行——与 ``gate_stats`` 的 shortfall 声明同边界。
+
+        顺序 EDD（deadline 升序，最紧急先装）——与
+        :func:`coverage_gate.repair_coverage` 一致；每轮装载后重排 +
+        重选终点巢 + 航程修复（装载改变航次结构，可能释放或占用后续
+        任务的装载空间），修到不动点或轮数上限。只增不减：任务移除
+        仅由 :meth:`_repair_range` 的硬约束触发，且被移除任务当场改派
+        （reflow），全部不可行才是证明性暂缓（与门禁 shortfall 同义）。
+
+        与 ``_complete_coverage`` 的区别：① EDD 序（最紧急先装，装载
+        优先级确定）；② 不动点多轮（装载 → 重排 → 换巢 → 修复），
+        把后续 pass 释放的空间用尽；③ 与 ``_polish_routes_monotone``
+        组成两段式，服务于 coverage_first 口径。
+        """
+        work: dict[int, list[int]] = {k: list(v) for k, v in routes.items()}
+        ends: dict[int, int | None] = dict(end_nests)
+        loaded = 0
+        for _ in range(max(1, int(self.config.coverage_first_max_rounds))):
+            assigned = {tid for tids in work.values() for tid in tids}
+            deferred = [tid for tid in self._task_ids if tid not in assigned]
+            if not deferred:
+                break
+            # EDD：deadline 升序（无 deadline 排最后），同刻按 id 保确定
+            deferred.sort(
+                key=lambda t: (self._task_latest(t) if self._task_latest(t) is not None else float("inf"), t)
+            )
+            round_loaded = 0
+            for tid in deferred:
+                # require_window=True：可达 = 航程可行且自身时间窗可行；
+                # allow_evict 默认开（换机腾位 Fix⑦，救援强度高于门禁的
+                # 插入/开班两级）。
+                if self._reflow_task(tid, work, ends, require_window=True):
+                    round_loaded += 1
+            loaded += round_loaded
+            if round_loaded == 0:
+                break  # 不动点：一阶口径下无更多可装任务
+            # 装载改变了航次结构 → 重排 + 重选终点巢 + 航程闸，可能释放
+            # 新的装载空间（也可能把某航次推超航程 → 修复时改派）。
+            work = self._reorder_for_deadlines(work)
+            ends = self._choose_end_nests(work) if work else {}
+            work, ends = self._repair_range(work, ends)
+        return work, ends, loaded
+
+    # -- 单调成本 polish（2026-10-23 用户裁定：解码/repair 第二段）-----
+
+    def _polish_routes_monotone(
+        self,
+        routes: Mapping[int, Sequence[int]],
+        end_nests: Mapping[int, int | None],
+    ) -> tuple[dict[int, list[int]], dict[int, int | None], dict[str, int]]:
+        """单调成本 polish：跨机 relocate / 调序，**覆盖只增不减**。
+
+        用户 2026-10-23 裁定（解码/repair 第二段）：覆盖优先装载之后，
+        成本 polish 必须在不减少已装集合（不增加 shortfall）的约束下
+        进行。relocate / 调序移动本身不卸任务（任务集由移动结构保持），
+        候选仍须过四道门：
+
+        1. **航程门**：涉及航次（改派双方）全航程 ≤ 各自剩余航程；
+        2. **自身时间窗门**：插入位任务自身到达 ≤ deadline；
+        3. **迟到数门**：插入航次的迟到任务数不得增加（不制造新违约；
+           移除侧任务只可能更早，无需校验）；
+        4. **成本门**：涉及航次代价合计严格下降（first-improvement，
+           接受即重启邻域扫描；无随机，逐位可复现）。
+
+        relocate 目标含**空闲机**（routes 键即真实 uav id，
+        ``_tour_cost`` / ``_window_ok`` 等 helper 均按真实 id 口径，
+        参与集外的可用机可直接作为目标——与覆盖装载的 fleet 口径一致）。
+        位置移动只改访问顺序（同 :meth:`_reorder_for_deadlines` 的候选
+        性质，但这里以成本为唯一目标、迟到数门兜底）。
+        """
+        work: dict[int, list[int]] = {k: list(v) for k, v in routes.items()}
+        ends: dict[int, int | None] = dict(end_nests)
+        eps = float(self.config.monotone_polish_eps)
+        max_rounds = max(1, int(self.config.monotone_polish_max_rounds))
+        stats = {"n_relocate": 0, "n_position": 0, "n_rounds": 0, "converged": 0}
+        # relocate 目标 = 全部 UAV（含当前空闲机；work 缺键时按需补）
+        all_uav_ids = [u.id for u in self.problem.uavs]
+
+        def cost_of(uid: int, tids: Sequence[int]) -> float:
+            return self._tour_cost(uid, tids, ends.get(uid))
+
+        def arrivals_of(uid: int, tids: Sequence[int]) -> list[float]:
+            uav = self._uav_by_id.get(uid)
+            speed = max(float(getattr(uav, "speed", 10.0) or 10.0), 1e-6)
+            service = float(getattr(self.problem.config, "default_service_time", 0.0) or 0.0)
+            t = float(self.config.current_time)
+            prev = (
+                (float(uav.x), float(uav.y), float(uav.z))
+                if uav is not None else (0.0, 0.0, 0.0)
+            )
+            out: list[float] = []
+            for tid in tids:
+                task = self._task_by_id.get(tid)
+                if task is None:
+                    out.append(t)
+                    continue
+                t += self.problem.costs.travel(
+                    prev, (float(task.x), float(task.y), float(task.z))
+                ) / speed
+                est = getattr(task, "earliest", None)
+                if est is not None and t < est:
+                    t = est
+                out.append(t)
+                t += service
+                prev = (float(task.x), float(task.y), float(task.z))
+            return out
+
+        def late_count(uid: int, tids: Sequence[int]) -> int:
+            n = 0
+            for tid, t_arr in zip(tids, arrivals_of(uid, tids)):
+                latest = self._task_latest(tid)
+                if latest is not None and t_arr > float(latest) + 1e-6:
+                    n += 1
+            return n
+
+        for round_idx in range(max_rounds):
+            stats["n_rounds"] = round_idx + 1
+            improved = False
+            # ── 位置移动（机内调序）：单航次、代价严格降、迟到数不增
+            for uid in sorted(work):
+                if improved:
+                    break  # first-improvement：接受即重启（下一轮从头扫）
+                tids = work[uid]
+                if len(tids) <= 1:
+                    continue
+                limit = self._range_limit(uid)
+                base_cost = cost_of(uid, tids)
+                base_late = late_count(uid, tids)
+                for i in range(len(tids)):
+                    if improved:
+                        break
+                    rest = tids[:i] + tids[i + 1:]
+                    for p in range(len(rest) + 1):
+                        if p == i:
+                            continue
+                        cand = rest[:p] + [tids[i]] + rest[p:]
+                        if not self._window_ok(uid, cand, p):
+                            continue
+                        c = cost_of(uid, cand)
+                        if c > limit + 1e-6:
+                            continue
+                        if late_count(uid, cand) > base_late:
+                            continue
+                        if c < base_cost - eps:
+                            work[uid] = cand
+                            stats["n_position"] += 1
+                            improved = True
+                            break
+            # ── 跨机 relocate：任务 × 目标机（含空闲）× 插入位
+            if not improved:
+                for uid in sorted(work):
+                    if improved:
+                        break  # first-improvement：接受即重启
+                    tids = work[uid]
+                    if not tids:
+                        continue
+                    limit_src = self._range_limit(uid)
+                    for i, tid in enumerate(tids):
+                        if improved:
+                            break
+                        rest = tids[:i] + tids[i + 1:]
+                        src_after_cost = cost_of(uid, rest)
+                        for u2 in all_uav_ids:
+                            if improved:
+                                break
+                            if u2 == uid:
+                                continue
+                            target = work.get(u2, [])
+                            limit_dst = self._range_limit(u2)
+                            base_dst_cost = cost_of(u2, target)
+                            base_dst_late = late_count(u2, target)
+                            for p in range(len(target) + 1):
+                                cand = target[:p] + [tid] + target[p:]
+                                if not self._window_ok(u2, cand, p):
+                                    continue
+                                c2 = cost_of(u2, cand)
+                                if c2 > limit_dst + 1e-6:
+                                    continue
+                                if late_count(u2, cand) > base_dst_late:
+                                    continue
+                                # 成本门：双方航次合计严格下降（源侧移除
+                                # 任务只降不升，仍精确计算保稳健）
+                                if (
+                                    src_after_cost + c2
+                                    < cost_of(uid, tids) + base_dst_cost - eps
+                                ):
+                                    work[uid] = list(rest)
+                                    work[u2] = cand
+                                    stats["n_relocate"] += 1
+                                    improved = True
+                                    break
+                # first-improvement：接受即结束本轮（下一轮从头重启邻域
+                # 扫描——确定性、无随机；n_rounds ≈ 接受移动数 + 1）。
+                if improved:
+                    continue
+            if not improved:
+                stats["converged"] = 1
+                break
+        return work, ends, stats
+
+    def post_polish(
+        self, solution: AllocationSolution
+    ) -> tuple[AllocationSolution, dict[str, int]]:
+        """交付解的「单调成本 polish → 覆盖优先装载 → 门禁」后处理。
+
+        对已构建的解（DMDE 原始交付解 / assignment polish 后 / memetic
+        档案）取 routes 做：
+
+        1. :meth:`_polish_routes_monotone`——跨机 relocate / 调序压成本
+           （四道门，覆盖不侵蚀）；
+        2. :meth:`_load_coverage_fixed_point`——补回 polish 期间新变为
+           可行集的任务（覆盖只增）；
+        3. 重排 → 航程闸 → 终点巢精确重解 → 航程闸（与
+           :meth:`build_solution` 终态同序）；
+        4. 覆盖门禁（coverage_gate 修复 / lexicographic_coverage 审计，
+           与 :meth:`build_solution` 末段同判据）；
+        5. 重新装配，``gate_stats`` 落 ``solution.meta``。
+
+        覆盖只增不减：polish 移动不卸任务、装载只加任务、门禁修复只加
+        任务。调用方按「覆盖 ⊇ 旧解 且 硬违约不增 且 适应度更优」择优
+        采纳（见 ``run_selective_muas``）。
+        """
+        routes = {
+            t.uav_id: list(t.task_ids) for t in solution.tours if t.task_ids
+        }
+        ends = {t.uav_id: t.end_nest_id for t in solution.tours}
+        if not routes:
+            return solution, {}
+        polish_stats: dict[str, int] = {}
+        if self.config.coverage_first:
+            routes, ends, polish_stats = self._polish_routes_monotone(routes, ends)
+        routes, ends, loaded = self._load_coverage_fixed_point(routes, ends)
+        polish_stats["n_reloaded"] = int(loaded)
+        routes = self._reorder_for_deadlines(routes)
+        routes, ends = self._repair_range(routes, ends)
+        if routes:
+            ends = self._choose_end_nests(routes)
+        routes, ends = self._repair_range(routes, ends)
+        gate_stats: dict[str, Any] | None = None
+        if bool(getattr(self.config, "coverage_gate", False)):
+            routes, ends, gs = repair_coverage(
+                self.problem, routes, ends,
+                max_rounds=int(getattr(self.config, "coverage_gate_max_rounds", 8)),
+            )
+            gate_stats = gs.to_dict()
+        elif bool(getattr(self.problem.config, "lexicographic_coverage", False)):
+            gate_stats = audit_coverage(self.problem, routes, ends).to_dict()
+        sol = self._assemble(routes, ends)
+        if gate_stats is not None:
+            sol.meta["gate_stats"] = gate_stats
+        return sol, polish_stats
+
     def _range_limit(self, uav_id: int) -> float:
         """UAV 航程预算；未知 UAV 返回 +inf（不设限）。"""
         uav = self._uav_by_id.get(uav_id)
@@ -2311,6 +2636,9 @@ def run_selective_muas(
     # （``cost_history[-1] == best_fitness``）；交付解自身的适应度另记
     # ``final_fitness`` 及成分，供审计用快照权重独立重算对账。
     prebuilt = (result.extra or {}).get("solution")
+    # 覆盖优先两段式的终态后处理诊断（2026-10-23）；预构建解通道不走
+    # 后处理（基线的构造策略即其方法本身），保持空字典。
+    mono_stats: dict[str, int] = {}
     if isinstance(prebuilt, AllocationSolution):
         # 预构建解通道（构造式基线，exp05_baselines）：extra["solution"] 即
         # 交付解——不走 assignment 解码修复链 / polish / memetic 档案，
@@ -2361,6 +2689,33 @@ def run_selective_muas(
             problem.evaluate(final)
             final_fitness = float(problem.scalar_fitness(final))
             final_n_hard, final_excess_m = problem.hard_stats(final)
+
+        # ── 覆盖优先两段式的终态后处理（2026-10-23 用户裁定）────────
+        # 对交付解（DMDE 原始 / assignment polish / memetic 档案， whichever
+        # 胜出）做：单调成本 polish（relocate/调序，四道门）→ 覆盖优先
+        # 装载（补回新可行任务）→ 重排/航程闸/换巢 → 覆盖门禁 → 重装配。
+        # 采纳判据（覆盖优先字典序）：覆盖不减少（executed ⊇ 旧解）且
+        # 硬违约不增；同覆盖时要求适应度严格更优（覆盖增长则优先采纳，
+        # 成本让位——「完成是约束、成本是目标」）。仅在 coverage_first
+        # 开启时生效（默认路径逐位不变）；预构建解通道不适用（基线的
+        # 构造策略即其方法本身）。
+        if stage_cfg.coverage_first:
+            cand, mono_stats = evaluator.post_polish(final)
+            problem.evaluate(cand)
+            cand_fitness = float(problem.scalar_fitness(cand))
+            cand_n_hard, cand_excess = problem.hard_stats(cand)
+            old_exec = set(final.executed_task_ids)
+            new_exec = set(cand.executed_task_ids)
+            if new_exec >= old_exec and cand_n_hard <= final_n_hard and (
+                len(new_exec) > len(old_exec)
+                or cand_fitness < final_fitness - stage_cfg.monotone_polish_eps
+            ):
+                final = cand
+                final_fitness = cand_fitness
+                final_n_hard, final_excess_m = cand_n_hard, cand_excess
+            else:
+                mono_stats = dict(mono_stats)
+                mono_stats["rejected"] = 1
 
     model_type = (
         "balanced" if len(participating) == len(task_list)
@@ -2434,6 +2789,17 @@ def run_selective_muas(
             "polish_gain": float(polish.fitness_gain),
             "polish_converged": bool(polish.converged),
             "polish_budget_hit": bool(polish.budget_hit),
+            # 覆盖优先两段式诊断（2026-10-23）：coverage_first 开启时
+            # 记录单调成本 polish 的移动数与覆盖补装数；rejected=1 表示
+            # 后处理候选未达采纳判据（覆盖减少/硬违约增/适应度未改进），
+            # 交付解保持原样。关闭时全 0（逐位等于旧口径）。
+            "coverage_first": bool(stage_cfg.coverage_first),
+            "monotone_polish_relocate": int(mono_stats.get("n_relocate", 0)),
+            "monotone_polish_position": int(mono_stats.get("n_position", 0)),
+            "monotone_polish_rounds": int(mono_stats.get("n_rounds", 0)),
+            "monotone_polish_converged": bool(mono_stats.get("converged", 0)),
+            "monotone_polish_reloaded": int(mono_stats.get("n_reloaded", 0)),
+            "monotone_polish_rejected": int(mono_stats.get("rejected", 0)),
             # memetic M1 精英档案诊断（2026-10-19）。enabled=False 时
             # n_polish/n_accepted=0、final_fitness=None、trajectory=[]，
             # 行为逐位等于非 memetic 基线。trajectory 长度 == len(cost_history)，

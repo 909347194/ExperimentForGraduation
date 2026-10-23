@@ -27,6 +27,13 @@ complete_coverage / reorder_for_deadlines / prune_zero_reward / 交付前
 策略：first-improvement + 邻域重启；整轮无改进即收敛。全程无随机数，
 同输入逐位可复现。预算由 ``polish_max_rounds`` / ``polish_max_evals``
 双重封顶（后者按**真实评估数**计，缓存命中不计）。
+
+覆盖守护（2026-10-23 用户裁定「不减少已装集合」）：覆盖盲判据下
+（coverage_first / coverage_gate / lexicographic_coverage 任一开启，
+此时 ``f`` 不含 ``−m·F1``），候选若经修复链卸掉任务、只降成本，
+会被无守护的 polish 接受 ⇒ 覆盖被 polish 侵蚀（E1E2 实证的缺口之一）。
+守护判据：候选的 executed 任务集必须**包含**当前最优的解集
+（``cand_exec >= best_exec``），否则拒绝。非门禁口径逐位不变。
 """
 
 from __future__ import annotations
@@ -199,6 +206,15 @@ def polish_assignment(
     max_rounds = max(1, int(getattr(config, "polish_max_rounds", 30)))
     max_evals = max(1, int(getattr(config, "polish_max_evals", 2000)))
 
+    # 覆盖盲判据检测（2026-10-23）：门禁口径下 f 不含 −m·F1，成本-only
+    # 适应度会欣然接受「卸任务换成本」的候选。守护 = executed 解集单调。
+    problem_cfg = getattr(getattr(evaluator, "problem", None), "config", None)
+    coverage_blind = (
+        bool(getattr(config, "coverage_first", False))
+        or bool(getattr(config, "coverage_gate", False))
+        or bool(getattr(problem_cfg, "lexicographic_coverage", False))
+    )
+
     base = normalize_assignment(assignment, n_uavs, n_tasks)
     r0 = evaluator.evaluate(base)
     result = PolishResult(
@@ -213,6 +229,7 @@ def polish_assignment(
         return result
 
     routes = canonical_routes(base, n_uavs, n_tasks)
+    best_exec = set(getattr(result.best_solution, "executed_task_ids", []) or [])
     real0 = int(evaluator.n_evals)
 
     while result.n_rounds < max_rounds:
@@ -236,6 +253,15 @@ def polish_assignment(
                 res = evaluator.evaluate(cand)
                 result.n_evals = int(evaluator.n_evals) - real0
                 if float(res.fitness) < result.best_fitness - eps:
+                    # 覆盖守护（2026-10-23）：门禁/覆盖优先口径下，候选若
+                    # 卸掉了已装任务（修复链删任务 → F1 不在适应度里看不
+                    # 见），只降成本也拒绝——「不减少已装集合」。
+                    if coverage_blind:
+                        cand_exec = set(
+                            getattr(res.solution, "executed_task_ids", []) or []
+                        )
+                        if not (cand_exec >= best_exec):
+                            continue
                     # first-improvement：接受即重启邻域扫描（确定性，无随机）
                     routes = new_routes
                     result.best_assignment = cand

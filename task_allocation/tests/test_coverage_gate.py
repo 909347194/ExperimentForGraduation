@@ -12,12 +12,16 @@
 5. **默认关逐位不变**：开关关闭时不写 gate_stats、W_skip 不入权重、
    F1 迟到折减行为与历史口径一致；
 6. **F1 纯完成计数 + 拆虚构帽**：门禁模式下迟到不折减 F1，
-   _secondary_upper_bound 换推导帽。
+   _secondary_upper_bound 换推导帽；
+7. **搜索用 f 不含 −m·F1（F1 只作指标）**：门禁口径（含 stage 层
+   coverage_gate 产物落 meta 的路径）下 f 与 F1 无关。
 """
 
 from __future__ import annotations
 
 import math
+
+import pytest
 
 from task_allocation.common.types import AllocationSolution, Nest, Task, UAV, UAVTour
 from task_allocation.methods.muas.coverage_gate import (
@@ -268,3 +272,38 @@ def test_stage_hook_gate_stats_and_default_off():
     ev_off = _ev(MUASStageConfig(), gate_fit=False)
     sol_off = ev_off.build_solution([(0, 0)])
     assert "gate_stats" not in sol_off.meta, "默认关不得改写解的 meta 结构"
+
+
+# ── 7. 搜索用 f 不含 −m·F1（F1 只作指标）─────────────────────────
+
+
+def test_search_fitness_excludes_f1_under_gate():
+    """门禁口径固定表述：**搜索用 f 不含 −m·F1；F1 只作事后指标**。
+
+    两条进入路径都必须生效：① problem.lexicographic_coverage=True；
+    ② stage 层 coverage_gate=True（gate_stats 落 solution.meta）。
+    判据：同一解在「带 gate_stats」与「不带」两态下的 f 差值恰为 m·F1。
+    """
+    tasks = [_task(0, 10_000.0, 0.0)]
+    nests = [Nest(id=0, x=0.0, y=0.0, z=0.0, capacity=4)]
+    uavs = [_uav(0, 80_000.0)]
+    p = _problem(tasks, uavs, nests)  # lexicographic_coverage 默认 False
+
+    sol_legacy = _sol([UAVTour(uav_id=0, task_ids=[0], end_nest_id=0)], cand=[0])
+    f_legacy = p.scalar_fitness(sol_legacy)
+    m, f1 = p.f1_weight(), float(sol_legacy.f1_reward)
+    assert f1 > 0.0 and m > 0.0, "前提：正收益任务已完成交付"
+    assert p.gate_mode(sol_legacy) is False, "无 gate_stats 且开关关 ⇒ 非门禁口径"
+
+    sol_gate = _sol([UAVTour(uav_id=0, task_ids=[0], end_nest_id=0)], cand=[0])
+    sol_gate.meta["gate_stats"] = {
+        "n_skip": 0, "skip_ids": [], "n_shortfall": 0,
+        "shortfall_ids": [], "n_gate_rescued": 0,
+    }
+    assert p.gate_mode(sol_gate) is True, "meta 带 gate_stats ⇒ 门禁口径"
+    f_gate = p.scalar_fitness(sol_gate)
+
+    assert f_gate == pytest.approx(f_legacy + m * f1, rel=1e-9), (
+        "门禁口径的 f 应不含 −m·F1：与历史口径之差恰为 m·F1（"
+        f"f_gate={f_gate}, f_legacy={f_legacy}, m·F1={m * f1}）"
+    )

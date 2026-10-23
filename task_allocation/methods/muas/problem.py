@@ -182,10 +182,13 @@ class MUASProblemConfig:
     late_reward_decay_seconds: float | None = None
     # ── 2026-10-22 覆盖门禁（coverage gate）两层适应度 ───────────────
     # True：合法解 = 物理硬约束 + 覆盖门禁（S 内无 voluntary_skip）；
-    # f 在 T0 与 T1 之间加 W_skip·n_voluntary_skip 层；F1 砍迟到折减、
-    # 回归纯完成计数（迟到单一定价走 w_late·L，消双计）；
+    # f 在 T0 与 T1 之间加 W_skip·n_voluntary_skip 层；
+    # **搜索用 f 不含 −m·F1，F1 只作事后指标**（纯完成计数：砍迟到折减，
+    # 迟到单一定价走 w_late·L，消双计）；
     # _secondary_upper_bound 拆 1e6 虚构帽、换推导帽。
-    # False（默认）= 现行四层准字典序口径，逐位不变。
+    # 注：stage 层 coverage_gate=True（终态构造性修复）也会进入同一口径
+    # ——判据见 SelectiveMUASProblem.gate_mode（meta 带 gate_stats）。
+    # False（默认且两开关皆关）= 现行四层准字典序口径，逐位不变。
     lexicographic_coverage: bool = False
     # W_skip 显式权重；None = 自动同 W_hard（κ·m·R_pool）。
     w_skip_violation: float | None = None
@@ -418,9 +421,10 @@ class SelectiveMUASProblem:
         # check_feasible 透出的 lateness 表（时间窗游标的唯一模拟源）。
         total = 0.0
         # 覆盖门禁模式（D5）：F1 回归纯完成计数——迟到折减砍掉，迟到只走
-        # w_late·L 单一定价（T2），消「迟到双计」。
+        # w_late·L 单一定价（T2），消「迟到双计」。门禁模式下 F1 只作指标，
+        # 故该口径同时是「指标 F1 = 完成计数、不掺迟到折减」的固定定义。
         decay = self.config.late_reward_decay_seconds
-        if self.config.lexicographic_coverage:
+        if self.gate_mode(solution):
             decay = None
         feas = solution.meta.get("feasibility") or {}
         lateness = feas.get("lateness") or {}
@@ -540,13 +544,14 @@ class SelectiveMUASProblem:
         # 2026-10-18：本次评价实际使用的四层权重快照。记录/重算/绘图共用
         # 同一组权重，消灭 auto big_m 逐周期漂移导致的「记录 best_fitness
         # 与重算目标差 6.5~13.6」。
+        gate = self.gate_mode(solution)
         decay = self.config.late_reward_decay_seconds
-        if self.config.lexicographic_coverage:
+        if gate:
             decay = None  # 门禁模式 F1 不用迟到折减，快照口径与实际一致
         # 覆盖门禁分账（W_skip 层消费）：解码期已算过（gate_stats 在
         # build_solution 写入 meta）则复用；外源解（测试 /
         # solution_from_sequences）在这里惰性补算。
-        if self.config.lexicographic_coverage and "gate_stats" not in solution.meta:
+        if gate and "gate_stats" not in solution.meta:
             routes = {t.uav_id: list(t.task_ids) for t in solution.tours}
             ends = {t.uav_id: t.end_nest_id for t in solution.tours}
             solution.meta["gate_stats"] = audit_coverage(self, routes, ends).to_dict()
@@ -554,8 +559,7 @@ class SelectiveMUASProblem:
             "m": float(self.f1_weight()),
             "w_hard": float(self.hard_weight()),
             "w_excess": float(self.range_excess_weight()),
-            "w_skip": (float(self.skip_weight())
-                       if self.config.lexicographic_coverage else None),
+            "w_skip": (float(self.skip_weight()) if gate else None),
             "w_late": (None if self.config.w_violation is None
                        else float(self.config.w_violation)),
             "lambda": float(self.config.lambda_cost),
@@ -594,6 +598,20 @@ class SelectiveMUASProblem:
         legacy 加权和（``lexicographic=False``）：``f = -F1 + λ·path +
         w_violation·penalty + w_time·F3``（惩罚不再乘 λ 的解耦口径）。
         最老口径（``w_violation=None``）：惩罚随 F2 一起乘 λ。
+
+        **覆盖门禁口径（2026-10-22 起的主口径，见 :meth:`gate_mode`）**::
+
+            f = W_hard·n_hard + w_exc·excess_m       # T0  物理硬约束
+              + W_skip·n_voluntary_skip              # T0.5 覆盖门禁
+              + w_late·L_tot                         # T2  迟到（秒级软计价）
+              + λ·path + w_time·F3                   # T3  航程/负载均衡
+
+        即 **搜索用 f 不含 −m·F1；F1 只作指标**：合法解中 S 内可装载任务
+        已全部交付 ⇒ F1 恒为常数、对解无区分度；保留 −m·F1 只会让 m 机制
+        继续主导阶梯并把成本项挤成 tie-break（历史上 λ·path 仅占 m·F1 的
+        1/5.7e5）。覆盖由门禁承担（构造修复 + W_skip 层），目标层只剩
+        成本 + 迟到。``m`` 仍落 fitness_weights 快照，仅供 w_hard/w_skip
+        推导与事后分析，不直接进 f。
         """
         if not solution.meta.get("feasibility"):
             self.evaluate(solution)
@@ -616,24 +634,45 @@ class SelectiveMUASProblem:
                 + float(wv) * self.violation_penalty(solution)
                 + self.config.w_time * bt
             )
-        # 四层准字典序（生产口径）；覆盖门禁模式（lexicographic_coverage，
-        # 2026-10-22）在 T0 与 T1 之间加 T0.5 层 W_skip·n_voluntary_skip——
+        # 四层准字典序（生产口径）；覆盖门禁口径（见 gate_mode，2026-10-22
+        # 起的主口径）在 T0 与 T1 之间加 T0.5 层 W_skip·n_voluntary_skip——
         # voluntary_skip 与物理硬约束等价的非法解，由解码器 repair 至不动点
         # 构造性归零（gate 模式），W_skip 仅在 audit 模式/防御路径咬合。
         n_hard, excess_m = self.hard_stats(solution)
+        gate = self.gate_mode(solution)
         skip_pen = 0.0
-        if self.config.lexicographic_coverage:
+        if gate:
             n_skip = int((solution.meta.get("gate_stats") or {}).get("n_skip", 0))
             skip_pen = self.skip_weight() * n_skip
+        # F1 项：门禁口径置零——**搜索用 f 不含 −m·F1，F1 只作事后指标**；
+        # 历史/消融口径（非门禁）保持 −m·F1 逐位不变。
+        f1_term = 0.0 if gate else -m * f1
         return float(
             self.hard_weight() * n_hard
             + self.range_excess_weight() * excess_m
             + skip_pen
-            - m * f1
+            + f1_term
             + float(wv) * self.soft_violation(solution)
             + self.config.lambda_cost * self.path_cost(solution)
             + self.config.w_time * bt
         )
+
+    def gate_mode(self, solution: "AllocationSolution | None" = None) -> bool:
+        """是否处于覆盖门禁口径（「完成是约束」而非「完成是目标」）。
+
+        两条进入路径，任一成立即按同一口径评价：
+
+        - ``problem.lexicographic_coverage=True``：显式开启门禁适应度；
+        - 解已过门禁（``solution.meta`` 带 ``gate_stats``，即 stage 层
+          ``coverage_gate=True`` 的终态修复/审计产物）。
+
+        门禁口径下的**固定表述**（2026-10-22，与论文 §4.3 一致）：
+        **搜索用 ``f`` 不含 ``−m·F1``；``F1`` 只作事后指标。** 覆盖由门禁
+        （构造修复 + W_skip 层）承担，目标层只剩成本 + 迟到。
+        """
+        if bool(self.config.lexicographic_coverage):
+            return True
+        return bool(solution is not None and "gate_stats" in solution.meta)
 
     # ---- T0 硬违约权重与分解（2026-10-18 四层适应度）-------------------
 
