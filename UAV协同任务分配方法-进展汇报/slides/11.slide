@@ -1,66 +1,85 @@
 <Slide style={{ width: 1280, height: 720, background: '#FFFFFF', position: 'relative', fontFamily: 'Source Han Sans CN, Microsoft YaHei, sans-serif' }}>
   <Box style={{ position: 'absolute', top: 0, left: 0, width: 1280, height: 12, background: '#1E4FA8' }} />
+  <Box style={{ position: 'absolute', top: 30, left: 40, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+    <Box style={{ width: 6, height: 34, background: '#1E4FA8' }} />
+    <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#0E3F8C' }}>改进离散映射差分进化（DMDE）</Text>
+  </Box>
+  <Text style={{ position: 'absolute', top: 78, left: 60, fontSize: 15, color: '#8B97A8' }}>连续编码承载「UAV 归属 + 访问顺序」，差分算子的搜索方向由地理代价引导</Text>
 
-  <Text style={{ position: 'absolute', top: 130, right: 60, fontSize: 330, fontWeight: 'bold', color: '#E8EFF8', lineHeight: 1 }}>04</Text>
-
-  <Box style={{ position: 'absolute', top: 200, left: 80, width: 760, flexDirection: 'column' }}>
-    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-      <Box style={{ width: 40, height: 4, background: '#FFC107' }} />
-      <Text style={{ fontSize: 17, color: '#3D7BD9', letterSpacing: 5 }}>CHAPTER 04</Text>
-    </Box>
-    <Text style={{ fontSize: 44, fontWeight: 'bold', color: '#0E3F8C', marginTop: 18 }}>实验验证与下一步</Text>
-    <Box style={{ marginTop: 34, flexDirection: 'column', gap: 18 }}>
-      <Box style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
-        <Box style={{ width: 8, height: 8, borderRadius: 4, background: '#1E4FA8', marginTop: 11 }} />
-        <Text style={{ fontSize: 19, color: '#1A2230', lineHeight: 1.7, flex: 1 }}>
-          exp01 多 seed 阶梯：改进方向 <span style={{ fontWeight: 'bold' }}>3/3 seed 一致</span>、可逐位复现，幅度 seed-dependent
-        </Text>
-      </Box>
-      <Box style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
-        <Box style={{ width: 8, height: 8, borderRadius: 4, background: '#1E4FA8', marginTop: 11 }} />
-        <Text style={{ fontSize: 19, color: '#1A2230', lineHeight: 1.7, flex: 1 }}>
-          exp02 规模标定：<span style={{ fontWeight: 'bold' }}>求解规模与任务规模 N 解耦</span>，瓶颈定位到选择名额而非候选比例
-        </Text>
-      </Box>
-    </Box>
-    <Text style={{ fontSize: 16, color: '#4A5568', lineHeight: 1.8, marginTop: 30 }}>
-      评估口径：长程滚动 24 周期、Poisson λ=5 到达；「任务不被完成只有物理约束被违反」——完成只认物理约束，迟到折价而非废飞。所有数字来自实验 metrics 原始记录。
-    </Text>
-    <Box style={{ marginTop: 24, flexDirection: 'row', gap: 12, alignItems: 'center' }}>
-      <Box style={{ padding: '7px 16px', background: '#1E4FA8', borderRadius: 6 }}>
-        <Text style={{ fontSize: 14, color: '#FFFFFF', fontWeight: 'bold' }}>P12 · exp01</Text>
-      </Box>
-      <Box style={{ padding: '7px 16px', background: '#1E4FA8', borderRadius: 6 }}>
-        <Text style={{ fontSize: 14, color: '#FFFFFF', fontWeight: 'bold' }}>P13 · exp02</Text>
-      </Box>
-      <Box style={{ padding: '7px 16px', background: '#1E4FA8', borderRadius: 6 }}>
-        <Text style={{ fontSize: 14, color: '#FFFFFF', fontWeight: 'bold' }}>P14 · 性能瓶颈</Text>
-      </Box>
-      <Box style={{ padding: '7px 16px', background: '#1E4FA8', borderRadius: 6 }}>
-        <Text style={{ fontSize: 14, color: '#FFFFFF', fontWeight: 'bold' }}>P15 · 边界与计划</Text>
-      </Box>
-    </Box>
+  <Box style={{ position: 'absolute', top: 98, left: 60 }}>
+    <svg width={1160} height={252} viewBox='0 0 1160 252'>
+      <text x='20' y='26' font-size='16' font-weight='bold' fill='#0E3F8C'>离散层：三元组基因 (U_i, T_j, C(i,j)) —— 按 UAV 分段，每任务恰出现一次，基因总数恒 N</text>
+      <rect x='60' y='42' width='96' height='42' rx='6' fill='#1E4FA8' />
+      <text x='108' y='68' font-size='14' fill='#FFFFFF' text-anchor='middle'>U0→T3</text>
+      <rect x='160' y='42' width='112' height='42' rx='6' fill='#B5D4F4' />
+      <text x='216' y='68' font-size='14' fill='#0E3F8C' text-anchor='middle'>T3→T7</text>
+      <rect x='276' y='42' width='106' height='42' rx='6' fill='#B5D4F4' />
+      <text x='329' y='68' font-size='14' fill='#0E3F8C' text-anchor='middle'>T7→T1</text>
+      <text x='108' y='102' font-size='12' fill='#4A5568' text-anchor='middle'>起始基因 (id≥0)</text>
+      <text x='266' y='102' font-size='12' fill='#4A5568' text-anchor='middle'>巡游基因 (id=−1)</text>
+      <rect x='430' y='42' width='96' height='42' rx='6' fill='#1E4FA8' />
+      <text x='478' y='68' font-size='14' fill='#FFFFFF' text-anchor='middle'>U1→T2</text>
+      <rect x='530' y='42' width='112' height='42' rx='6' fill='#B5D4F4' />
+      <text x='586' y='68' font-size='14' fill='#0E3F8C' text-anchor='middle'>T2→T5</text>
+      <rect x='646' y='42' width='96' height='42' rx='6' fill='#B5D4F4' />
+      <text x='694' y='68' font-size='14' fill='#0E3F8C' text-anchor='middle'>T5→T8</text>
+      <rect x='790' y='42' width='96' height='42' rx='6' fill='#1E4FA8' />
+      <text x='838' y='68' font-size='14' fill='#FFFFFF' text-anchor='middle'>U2→T6</text>
+      <rect x='890' y='42' width='112' height='42' rx='6' fill='#B5D4F4' />
+      <text x='946' y='68' font-size='14' fill='#0E3F8C' text-anchor='middle'>T6→T4</text>
+      <rect x='1006' y='42' width='98' height='42' rx='6' fill='#D6DCE5' stroke='#8B97A8' strokeWidth='1' strokeDasharray='4 3' />
+      <text x='1055' y='68' font-size='13' fill='#4A5568' text-anchor='middle'>T4→巢?</text>
+      <text x='1055' y='102' font-size='12' fill='#8B97A8' text-anchor='middle'>终点不占编码维</text>
+      <line x1='406' y1='40' x2='406' y2='106' stroke='#D6DCE5' strokeWidth='1.2' strokeDasharray='5 4' />
+      <line x1='772' y1='40' x2='772' y2='106' stroke='#D6DCE5' strokeWidth='1.2' strokeDasharray='5 4' />
+      <text x='30' y='152' font-size='15' font-weight='bold' fill='#0E3F8C'>连续层：固定布局代价值向量（DE 在此空间变异/交叉）</text>
+      <text x='968' y='139' font-size='14' font-weight='bold' fill='#3D7BD9'>▼ 逆映射（4 步，见下）</text>
+      <rect x='60' y='166' width='250' height='38' rx='6' fill='#1E4FA8' />
+      <text x='185' y='190' font-size='14' fill='#FFFFFF' text-anchor='middle'>起始基因代价 [0, K)</text>
+      <rect x='314' y='166' width='480' height='38' rx='6' fill='#3D7BD9' />
+      <text x='554' y='190' font-size='14' fill='#FFFFFF' text-anchor='middle'>巡游基因代价（任务→任务） [K, N)</text>
+      <rect x='798' y='166' width='304' height='38' rx='6' fill='#D6DCE5' strokeDasharray='5 4' />
+      <text x='950' y='190' font-size='14' fill='#4A5568' text-anchor='middle'>终止段（主方案为空） [N, N+K)</text>
+      <text x='30' y='234' font-size='14' fill='#4A5568'>差分算子作用于连续代价——其差分具有「三维航程差」的物理意义，搜索方向由地形代价引导；临时结果经逆映射还原为可行离散个体。</text>
+    </svg>
   </Box>
 
-  <Box style={{ position: 'absolute', top: 480, right: 80, width: 360, flexDirection: 'column', alignItems: 'flex-end', gap: 12 }}>
-    {['按时率 93.3% ± 3.6', '完成 60/60 · 废飞 0', '求解规模与 N 解耦'].map((k) => (
-      <Box key={k} style={{ padding: '8px 18px', background: '#F0F5FC', borderRadius: 18, border: '1px solid #D6DCE5' }}>
-        <Text style={{ fontSize: 15, color: '#1E4FA8', fontWeight: 'bold' }}>{k}</Text>
+  <Box style={{ position: 'absolute', top: 372, left: 60, width: 1160, flexDirection: 'row', alignItems: 'flex-start', gap: 0 }}>
+    {[
+      { n: '1', t: '首任务匹配', d: '温度自适应 softmax：早期较大候选集软采样保多样性，随温度衰减收敛为贪心匹配' },
+      { n: '2', t: '巡游边匹配', d: '按迭代行替换：以已访问任务为新起点行继续匹配——访问顺序真正进入进化搜索空间' },
+      { n: '3', t: '扰动增强', d: '匹配后辅以 swap / insert / reverse 扰动，跳出局部结构' },
+      { n: '4', t: '段结构规范化', d: '重建航次分段：起始基因按 UAV 升序、巡游基因紧跟其段——SRP 不变式（每任务恰一次、无终止基因）' },
+    ].map((s, i) => (
+      <Box key={s.n} style={{ width: 280, flexDirection: 'column', paddingLeft: i === 0 ? 0 : 13 }}>
+        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <Box style={{ width: 34, height: 34, borderRadius: 17, background: '#1E4FA8', alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#FFFFFF' }}>{s.n}</Text>
+          </Box>
+          <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#0E3F8C' }}>{s.t}</Text>
+        </Box>
+        <Text style={{ fontSize: 13.5, color: '#4A5568', lineHeight: 1.6, marginTop: 8, paddingRight: 16 }}>{s.d}</Text>
       </Box>
     ))}
   </Box>
 
-  <Box style={{ position: 'absolute', bottom: 76, left: 80, flexDirection: 'row', gap: 12, alignItems: 'center' }}>
-    {['01', '02', '03', '04'].map((n, i) => (
-      <Box key={n} style={{ padding: '6px 16px', borderRadius: 14, background: i === 3 ? '#1E4FA8' : '#F0F5FC' }}>
-        <Text style={{ fontSize: 14, fontWeight: 'bold', color: i === 3 ? '#FFFFFF' : '#8B97A8' }}>{n}</Text>
-      </Box>
-    ))}
-    <Text style={{ fontSize: 14, color: '#8B97A8', marginLeft: 8 }}>研究问题 · 方法两阶段 · 实验验证</Text>
+  <Box style={{ position: 'absolute', top: 500, left: 60, width: 1160, flexDirection: 'row', gap: 20 }}>
+    <Box style={{ flex: 1, background: '#F0F5FC', border: '1px solid #D6DCE5', borderLeft: '4px solid #1E4FA8', borderRadius: 10, padding: '13px 18px' }}>
+      <Text style={{ fontSize: 15.5, fontWeight: 'bold', color: '#0E3F8C' }}>选择性 y=0 的决策位置：不占编码维度</Text>
+      <Text style={{ fontSize: 13.5, color: '#4A5568', lineHeight: 1.65, marginTop: 5 }}>
+        DE 空间中每个任务都被分配，「暂不执行」不占基因维度——由解码端修复链裁量（物理不可行才移除/改派，能装必装由覆盖门禁保证），并支持「任务少时并入更少机」的合并修复 _consolidate：空闲是解码侧概念，不进基因。
+      </Text>
+    </Box>
+    <Box style={{ flex: 1, background: '#F0F5FC', border: '1px solid #D6DCE5', borderLeft: '4px solid #0E3F8C', borderRadius: 10, padding: '13px 18px' }}>
+      <Text style={{ fontSize: 15.5, fontWeight: 'bold', color: '#0E3F8C' }}>Lamarckian 回写：只回写起始基因</Text>
+      <Text style={{ fontSize: 13.5, color: '#4A5568', lineHeight: 1.65, marginTop: 5 }}>
+        修复解只把首任务写回获胜个体的起始基因，巡游基因原样保留、绝不增删——基因长度恒定，这是「每任务恰出现一次」不变式下可安全落地的关键。
+      </Text>
+    </Box>
   </Box>
 
   <Box style={{ position: 'absolute', bottom: 0, left: 0, width: 1280, height: 44, background: '#F7F9FC', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: '0 40px', borderTop: '1px solid #E5E7EB' }}>
     <Text style={{ fontSize: 13, color: '#8B97A8' }}>动态滚动的多机巢多无人机协同任务分配 · 进展汇报</Text>
-    <Text style={{ fontSize: 15, color: '#1E4FA8', fontWeight: 'bold' }}>11 / 16</Text>
+    <Text style={{ fontSize: 15, color: '#1E4FA8', fontWeight: 'bold' }}>11 / 12</Text>
   </Box>
 </Slide>

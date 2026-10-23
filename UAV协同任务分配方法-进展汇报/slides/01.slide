@@ -12,10 +12,10 @@
     </Text>
     <Box style={{ marginTop: 24, flexDirection: 'row', gap: 14 }}>
       <Box style={{ padding: '7px 22px', background: '#E8EFF8', borderRadius: 18 }}>
-        <Text style={{ fontSize: 17, color: '#1E4FA8', fontWeight: 'bold' }}>分层求解框架的构建与实验验证</Text>
+        <Text style={{ fontSize: 17, color: '#1E4FA8', fontWeight: 'bold' }}>分层求解框架的构建与求解方法</Text>
       </Box>
       <Box style={{ padding: '7px 22px', background: '#F0F5FC', borderRadius: 18 }}>
-        <Text style={{ fontSize: 17, color: '#4A5568' }}>进展 · 结果 · 下一步</Text>
+        <Text style={{ fontSize: 17, color: '#4A5568' }}>问题 · 方法 · 机制</Text>
       </Box>
     </Box>
   </Box>

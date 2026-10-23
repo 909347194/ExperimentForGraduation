@@ -1,57 +1,74 @@
 <Slide style={{ width: 1280, height: 720, background: '#FFFFFF', position: 'relative', fontFamily: 'Source Han Sans CN, Microsoft YaHei, sans-serif' }}>
   <Box style={{ position: 'absolute', top: 0, left: 0, width: 1280, height: 12, background: '#1E4FA8' }} />
+  <Box style={{ position: 'absolute', top: 30, left: 40, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+    <Box style={{ width: 6, height: 34, background: '#1E4FA8' }} />
+    <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#0E3F8C' }}>动态滚动与闭环运行：周期时序与状态更新</Text>
+  </Box>
+  <Text style={{ position: 'absolute', top: 78, left: 60, fontSize: 15, color: '#8B97A8' }}>每周期独立重算选择与分配，状态只经执行反馈演化——长程运行不丢任务</Text>
 
-  <Text style={{ position: 'absolute', top: 130, right: 60, fontSize: 330, fontWeight: 'bold', color: '#E8EFF8', lineHeight: 1 }}>02</Text>
+  <Box style={{ position: 'absolute', top: 116, left: 40, width: 700, flexDirection: 'column', gap: 16 }}>
+    <Box style={{ background: '#F7F9FC', border: '1px solid #D6DCE5', borderRadius: 10, padding: '16px 20px', flexDirection: 'column' }}>
+      <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#0E3F8C' }}>① 任务池演化（完成出池 · 未选留池 · 新到入池）</Text>
+      <Box style={{ marginTop: 12, background: '#E8EFF8', borderRadius: 8, padding: '14px 16px', alignItems: 'center' }}>
+        <Text style={{ fontSize: 23, fontWeight: 'bold', color: '#0E3F8C' }}>T(t+1) = remain ∪ new ∪ release</Text>
+      </Box>
+      <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.7, marginTop: 10 }}>
+        完成出池、未选留池、故障释放、新任务到达；滞留任务带等待补偿 W = 1−e<sup>−t/τ</sup> 参与下周期排序，不会被静默丢失——池水位守恒，arrived = done + unreach + elim + remain 每周期成立。
+      </Text>
+    </Box>
 
-  <Box style={{ position: 'absolute', top: 200, left: 80, width: 760, flexDirection: 'column' }}>
-    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-      <Box style={{ width: 40, height: 4, background: '#FFC107' }} />
-      <Text style={{ fontSize: 17, color: '#3D7BD9', letterSpacing: 5 }}>CHAPTER 02</Text>
+    <Box style={{ background: '#F7F9FC', border: '1px solid #D6DCE5', borderRadius: 10, padding: '16px 20px', flexDirection: 'column' }}>
+      <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#0E3F8C' }}>② 机队状态更新（规划只用当前真实状态）</Text>
+      <Box style={{ marginTop: 12, background: '#E8EFF8', borderRadius: 8, padding: '12px 16px', flexDirection: 'column', gap: 5, alignItems: 'center' }}>
+        <Text style={{ fontSize: 16.5, fontWeight: 'bold', color: '#0E3F8C' }}>状态(u) = 停靠机巢 + 剩余航程 + 可用性　　每周期重算 K(t) 与 cap(t)</Text>
+        <Text style={{ fontSize: 13, color: '#4A5568' }}>B(t) = 可起飞子集剩余航程和；cap(t) = max(min_cap, ⌊B(t)/c_med⌋)</Text>
+      </Box>
+      <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.7, marginTop: 10 }}>
+        起降、充电、故障与返航迁移每周期改变可用集与停靠巢；充电中的机是幻影容量、不计入 B(t)——规划基于当前状态而非初始快照。
+      </Text>
     </Box>
-    <Text style={{ fontSize: 44, fontWeight: 'bold', color: '#0E3F8C', marginTop: 18 }}>第一阶段：动态任务选择</Text>
-    <Box style={{ marginTop: 34, flexDirection: 'column', gap: 18 }}>
-      <Box style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
-        <Box style={{ width: 8, height: 8, borderRadius: 4, background: '#1E4FA8', marginTop: 11 }} />
-        <Text style={{ fontSize: 19, color: '#1A2230', lineHeight: 1.7, flex: 1 }}>
-          <span style={{ fontWeight: 'bold' }}>不构造成全局组合优化问题</span>——采用轻量化的「预筛选 + 增量选择 + 可行性检查」三步机制
-        </Text>
-      </Box>
-      <Box style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
-        <Box style={{ width: 8, height: 8, borderRadius: 4, background: '#1E4FA8', marginTop: 11 }} />
-        <Text style={{ fontSize: 19, color: '#1A2230', lineHeight: 1.7, flex: 1 }}>
-          候选池与能力<span style={{ fontWeight: 'bold' }}>解耦</span>（n_cand=⌈αK⌉，富）；选择数由 <span style={{ fontWeight: 'bold' }}>cap(t)</span> 卡紧（n_sel），与后续执行代价保持联系
-        </Text>
-      </Box>
-    </Box>
-    <Text style={{ fontSize: 16, color: '#4A5568', lineHeight: 1.8, marginTop: 30 }}>
-      该阶段的目的不是直接确定最终执行任务，而是将原始动态任务池缩减为规模可控的候选集合，使后续边际选择与 MUAS 精细优化无需面对全部任务；落选任务留池、下周期再评。
-    </Text>
-    <Box style={{ marginTop: 24, flexDirection: 'row', gap: 12, alignItems: 'center' }}>
-      <Box style={{ padding: '7px 16px', background: '#1E4FA8', borderRadius: 6 }}>
-        <Text style={{ fontSize: 14, color: '#FFFFFF', fontWeight: 'bold' }}>P7 · 优先级预筛选与边际收益选择</Text>
-      </Box>
+
+    <Box style={{ background: '#F0F5FC', border: '1px solid #D6DCE5', borderRadius: 10, padding: '12px 20px', flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+      <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#0E3F8C' }}>周期时序：</Text>
+      {['到达入池', '① 任务选择', '② MUAS 求解', '③ 执行出动', '④ 反馈更新'].map((s, i) => (
+        <Box key={s} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          {i > 0 && <Text style={{ fontSize: 16, color: '#3D7BD9', fontWeight: 'bold' }}>→</Text>}
+          <Box style={{ padding: '6px 12px', background: '#FFFFFF', borderRadius: 14, border: '1px solid #3D7BD9' }}>
+            <Text style={{ fontSize: 13, color: '#1E4FA8' }}>{s}</Text>
+          </Box>
+        </Box>
+      ))}
     </Box>
   </Box>
 
-  <Box style={{ position: 'absolute', top: 480, right: 80, width: 360, flexDirection: 'column', alignItems: 'flex-end', gap: 12 }}>
-    {['基础优先级排序', '能力定规模(cap)', '边际增量选择'].map((k) => (
-      <Box key={k} style={{ padding: '8px 18px', background: '#F0F5FC', borderRadius: 18, border: '1px solid #D6DCE5' }}>
-        <Text style={{ fontSize: 15, color: '#1E4FA8', fontWeight: 'bold' }}>{k}</Text>
+  <Box style={{ position: 'absolute', top: 116, left: 764, width: 476, flexDirection: 'column', gap: 14 }}>
+    <Box style={{ background: '#F0F5FC', border: '1px solid #D6DCE5', borderTop: '4px solid #1E4FA8', borderRadius: 10, padding: '14px 20px', flexDirection: 'column' }}>
+      <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#0E3F8C' }}>③ 完成反馈闸门（完成只认物理约束）</Text>
+      <Box style={{ marginTop: 10, background: '#FFFFFF', borderRadius: 8, padding: '12px 14px', alignItems: 'center' }}>
+        <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#0E3F8C' }}>迟到照常完成 · 物理不可行回池</Text>
+        <Text style={{ fontSize: 16, color: '#1E4FA8', marginTop: 6 }}>迟到交付按 L 折价计收益、不计废飞；物理不可行才回池重选，是唯一合法的未完成原因</Text>
       </Box>
-    ))}
-  </Box>
+      <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.7, marginTop: 8 }}>
+        执行反馈只按物理可行性裁决——「任务不被完成只有物理约束被违反」；迟到由适应度按 w_late 计价，与航程代价同台竞争。
+      </Text>
+    </Box>
 
-  <Box style={{ position: 'absolute', bottom: 76, left: 80, flexDirection: 'row', gap: 12, alignItems: 'center' }}>
-    {['01', '02', '03', '04'].map((n, i) => (
-      <Box key={n} style={{ padding: '6px 16px', borderRadius: 14, background: i === 1 ? '#1E4FA8' : '#F0F5FC' }}>
-        <Text style={{ fontSize: 14, fontWeight: 'bold', color: i === 1 ? '#FFFFFF' : '#8B97A8' }}>{n}</Text>
-      </Box>
-    ))}
-    <Text style={{ fontSize: 14, color: '#8B97A8', marginLeft: 8 }}>研究问题 · 方法两阶段 · 实验验证</Text>
+    <Box style={{ background: '#F7F9FC', border: '1px solid #D6DCE5', borderRadius: 10, padding: '13px 20px', flexDirection: 'column' }}>
+      <Text style={{ fontSize: 17, fontWeight: 'bold', color: '#0E3F8C' }}>④ 滞留与防饥饿（不停饿兜底）</Text>
+      <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.7, marginTop: 6 }}>
+        等待超阈值或逼近 latest 的任务强制纳入候选集并在终刀获强优先；边际接受判据带等待软加权 eff = ratio·(1+γ·age)——长程运行下没有任务被无限期挤出。
+      </Text>
+    </Box>
+
+    <Box style={{ background: '#0E3F8C', borderRadius: 10, padding: '14px 20px', flexDirection: 'column' }}>
+      <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#FFFFFF', lineHeight: 1.6 }}>
+        判断：滚动闭环把「求解一次」变成「持续服务」——每周期规模由 cap(t) 卡住、状态由执行反馈驱动，任务去留全程可审计，长程运行不丢任务。
+      </Text>
+    </Box>
   </Box>
 
   <Box style={{ position: 'absolute', bottom: 0, left: 0, width: 1280, height: 44, background: '#F7F9FC', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: '0 40px', borderTop: '1px solid #E5E7EB' }}>
     <Text style={{ fontSize: 13, color: '#8B97A8' }}>动态滚动的多机巢多无人机协同任务分配 · 进展汇报</Text>
-    <Text style={{ fontSize: 15, color: '#1E4FA8', fontWeight: 'bold' }}>06 / 16</Text>
+    <Text style={{ fontSize: 15, color: '#1E4FA8', fontWeight: 'bold' }}>06 / 12</Text>
   </Box>
 </Slide>
