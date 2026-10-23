@@ -16,9 +16,11 @@
     允许 y_j=0（选择性）、n_u=0（空闲 UAV）
 
 目标：
-    max F1 = sum_j R_j y_j
+    max F1 = Σ_j R_j·y_j      （执行任务奖励和；实现为 f1_reward——非门禁
+                               口径按迟到秒数线性折减（F1_eff），门禁口径为
+                               纯完成计数，见适应度 T1 与 gate_mode）
     min F2 = C(x, π, z, y)   （路径代价 + 惩罚）
-    min F3 = max_k T_k        （最坏机航迹时间，论文 §5(3) 负载均衡/公平性项）
+    min F3 = max_k T_k        （最坏机航迹时间，论文 §4.3 时效与负载均衡项）
 
 适应度（DMDE 最小化标量）：
     四层准字典序（方案 A/B 主线；非门禁口径）：
@@ -31,11 +33,13 @@
       T1：big_m 主导 —— 任一 ≥ 最小正收益的收益优势支配任意次级差异
           （先最大化任务收益，再在收益等价的解中最小化成本）；
       T2：迟到秒数软计价 —— 迟到可接受，只与路径同台竞争；
-    legacy（lexicographic=False，消融对比）：f(s) = -F1 + λ·path + w_v·penalty
+    legacy（lexicographic=False，消融对比）：
+        f(s) = -F1 + λ·path + w_v·penalty + w_time·F3
     ；最老口径（w_violation=None）：惩罚随 F2 一起乘 λ。
 其中 F3 = max_k T_k 为各 UAV 航迹时间的最大值（瓶颈机），对应 Ming et al. 2017
-Eq.1 中的 a·max(Σ_i Σ_j t(i,j)·x(i,j)) 最坏机飞行时间项。w_time=0 时退化为
-原双目标形式，行为与重构前完全一致。
+Eq.1 中的 a·max(Σ_i Σ_j t(i,j)·x(i,j)) 最坏机飞行时间项（该文式号已经原文
+核对；本模型将其扩展为含等待、服务与返航的整航迹时间）。w_time=0 时不激活
+负载均衡项，退化为双目标（F1/F2）形式。
 
 覆盖门禁口径（2026-10-22 起的主口径）：T0 与 T1 之间加
 W_skip·n_voluntary_skip 层，且 **搜索用 f 不含 −m·F1，F1 只作事后指标**
@@ -323,7 +327,7 @@ class SelectiveMUASProblem(FitnessWeightsMixin):
         return float(t_cursor - self.config.current_time)
 
     def bottleneck_time(self, solution: AllocationSolution) -> float:
-        """最坏机航迹时间 F3 = max_k T_k（论文 §5(3) 负载均衡项）。
+        """最坏机航迹时间 F3 = max_k T_k（论文 §4.3 时效与负载均衡项）。
 
         空解（无航次）返回 0；若存在非空航次则取各航次 ``tour_time`` 的最大值。
         最小化该项使任务在 UAV 间更均衡，避免单架机成为执行瓶颈。
