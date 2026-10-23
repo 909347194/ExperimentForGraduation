@@ -10,6 +10,7 @@ from task_allocation.methods.muas.cost.cost_matrix import (
     build_pairwise_costs,
 )
 from task_allocation.methods.muas.cost.dem_terrain import DEMMeta, DEMProfile, DEMTerrain
+from task_allocation.methods.muas.cost.provider import CostProvider, build_cost_provider
 from task_allocation.methods.muas.cost.vertical_section import (
     CostEstimationResult,
     VerticalSectionCostEstimator,
@@ -23,4 +24,6 @@ __all__ = [
     "CostEstimationResult",
     "build_pairwise_costs",
     "CostMatrixBuildResult",
+    "CostProvider",
+    "build_cost_provider",
 ]

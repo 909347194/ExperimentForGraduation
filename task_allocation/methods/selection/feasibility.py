@@ -12,7 +12,7 @@
 
 拒绝理由只有物理原因（2026-10-15 用户原则「任务不被完成只有物理约束被
 违反」）：无机可用、往返超航程。时间窗不是拒绝理由——迟到由适应度按
-``eff = R×max(0, 1−L/W)`` 折减定价（见 muas/problem.py）；时间窗预筛
+``eff = R×max(0, 1−L/W)`` 折减定价（见 muas/config.py 的 late_reward_decay_seconds）；时间窗预筛
 仅在 ``check_time_window=True`` 的消融口径保留。
 """
 

@@ -21,7 +21,7 @@
     min F3 = max_k T_k        （最坏机航迹时间，论文 §5(3) 负载均衡/公平性项）
 
 适应度（DMDE 最小化标量）：
-    四层准字典序（2026-10-18 起默认，方案 A/B 主线）：
+    四层准字典序（方案 A/B 主线；非门禁口径）：
         f(s) = W_hard·n_hard + w_exc·excess_m        # T0 物理违约（硬，真 big-M）
               − big_m·F1_eff                          # T1 交付收益（含迟到折减）
               + w_late·L_tot                          # T2 迟到（软，秒级）
@@ -37,12 +37,25 @@
 Eq.1 中的 a·max(Σ_i Σ_j t(i,j)·x(i,j)) 最坏机飞行时间项。w_time=0 时退化为
 原双目标形式，行为与重构前完全一致。
 
+覆盖门禁口径（2026-10-22 起的主口径）：T0 与 T1 之间加
+W_skip·n_voluntary_skip 层，且 **搜索用 f 不含 −m·F1，F1 只作事后指标**
+——完整公式与固定表述见 :meth:`SelectiveMUASProblem.scalar_fitness`
+与 :meth:`SelectiveMUASProblem.gate_mode`。
+
+模块地图（包内分工；各模块符号仍可从本模块导入，既有路径不变）：
+    config.py            约束开关与评价权重（ConstraintConfig / MUASProblemConfig）
+    cost/provider.py     节点间代价访问（CostProvider / build_cost_provider）
+    feasibility.py       可行性校验与惩罚聚合编排（check_solution_feasibility）
+    fitness_weights.py   层权重推导与分层统计（FitnessWeightsMixin）
+    problem.py（本模块）  问题实例：实体 / 解构造 / 目标分量 / 评价与标量适应度
+    constraints/         单条约束判据与违约聚合（ConstraintReport）
+    coverage_gate.py     覆盖门禁审计与构造性修复
+
 本模块不实现 DMDE 搜索；求解器只负责搜索，本模块负责问题定义与解评价。
 """
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping, Sequence
 
@@ -53,243 +66,36 @@ from task_allocation.common.types import (
     UAV,
     UAVTour,
 )
-from task_allocation.methods.muas.constraints.nest_capacity import check_nest_capacity
-from task_allocation.methods.muas.constraints.single_constraints import (
-    check_range_constraint,
-    check_time_constraint,
-)
-from task_allocation.methods.muas.constraints.coop_constraints import (
-    check_sequence_constraint,
-    check_sync_constraint,
-    check_time_window_constraint,
-)
-from task_allocation.methods.muas.constraints.evaluator import ConstraintReport
+from task_allocation.methods.muas.config import ConstraintConfig, MUASProblemConfig
+from task_allocation.methods.muas.cost.provider import CostProvider, build_cost_provider
 from task_allocation.methods.muas.coverage_gate import audit_coverage
+from task_allocation.methods.muas.feasibility import check_solution_feasibility
+from task_allocation.methods.muas.fitness_weights import FitnessWeightsMixin
+
+# 拆分后保持既有导入路径不变：config / cost.provider / feasibility /
+# fitness_weights 各符号仍可经本模块导入（新家见各模块 docstring）。
+__all__ = [
+    "ConstraintConfig",
+    "MUASProblemConfig",
+    "CostProvider",
+    "build_cost_provider",
+    "SelectiveMUASProblem",
+    "FitnessWeightsMixin",
+    "check_solution_feasibility",
+    "FitnessEvaluator",
+    "make_fitness_evaluator",
+]
 
 
 @dataclass
-class ConstraintConfig:
-    """约束开关与惩罚权重（实验可配置层，对齐论文 §5(4) 约束处理）。
+class SelectiveMUASProblem(FitnessWeightsMixin):
+    """选择性多机巢 MUAS 问题实例（单滚动周期）。
 
-    设计要点：每类约束**独立开关**。置 ``False`` 时该约束既不参与可行性
-    判定、也不计入惩罚，用于消融对比与论文口径取舍（例如「本模型聚焦
-    容量—航程—机巢选择，交付时间窗暂不纳入」这类声明，只需改 yaml 一个
-    布尔值，不必动代码）。
-
-    分组：
-
-        结构类      duplicate_task / require_all_tasks / require_no_idle
-        单机安全    range（航程）/ endurance（飞行时间，续航）
-        协同        time_window（交付时间窗）/ sequence（时序）/ sync（同时到达）
-        机巢        nest_capacity（容量）/ nest_availability（可用性）
-                    end_nest_reachability（末任务 → 机巢可达性）
-
-    权重与开关一一对应（``w_*``），仅对**已启用**的约束生效。
+    层权重推导与门禁判据（``hard_weight`` / ``gate_mode`` / …）由
+    :class:`~task_allocation.methods.muas.fitness_weights.FitnessWeightsMixin`
+    混入提供；可行性校验委托
+    :func:`~task_allocation.methods.muas.feasibility.check_solution_feasibility`。
     """
-
-    # ── 结构类 ──────────────────────────────────────────────────
-    duplicate_task: bool = True  # 任务重复分配 / 未知任务 / sum_u x_uj = y_j
-    require_all_tasks: bool = True  # allow_unassigned=False 时禁止 y_j=0
-    require_no_idle: bool = True  # allow_idle_uav=False 时禁止空闲机
-
-    # ── 单机（飞行安全类）────────────────────────────────────────
-    range: bool = True  # 航程
-    endurance: bool = True  # 飞行时间 / 续航
-
-    # ── 协同 ────────────────────────────────────────────────────
-    time_window: bool = True  # 交付时间窗
-    sequence: bool = True  # 时序 / 前置依赖
-    sync: bool = True  # 同时到达
-
-    # ── 机巢 ────────────────────────────────────────────────────
-    nest_capacity: bool = True  # 容量
-    nest_availability: bool = True  # 可用性 / 存在性
-    end_nest_reachability: bool = True  # 末任务 → 终点机巢可达性
-
-    # ── 惩罚权重（仅对启用的约束生效）────────────────────────────
-    w_misc: float = 1.0
-    w_range: float = 1.0
-    w_endurance: float = 1.0
-    w_window: float = 1.0
-    w_seq: float = 1.0
-    w_sync: float = 1.0
-    w_nest_capacity: float = 1.0
-    w_nest_availability: float = 1.0
-    w_end_nest_reachability: float = 1.0
-
-    @classmethod
-    def from_dict(cls, d: Mapping[str, Any] | None) -> "ConstraintConfig":
-        """从 yaml 映射装配；未给出的项保持默认（缺省 = 全部启用、权重 1）。"""
-        known = set(cls.__dataclass_fields__)
-        return cls(**{k: v for k, v in dict(d or {}).items() if k in known})
-
-
-@dataclass
-class MUASProblemConfig:
-    """模型开关与评价权重。"""
-
-    allow_unassigned: bool = True
-    allow_idle_uav: bool = True
-    # 最坏机航迹时间项权重（论文 §5(3) a·max(Σt)）：最小化瓶颈机任务时间，
-    # 实现负载均衡/公平性。默认 0（仅双目标）；>0 时接入 F3=max_k T_k。
-    w_time: float = 0.0
-    w_penalty: float = 1.0
-    # 约束惩罚直接进入适应度的权重（单位：奖励当量 / 惩罚单位）。
-    # 历史口径下惩罚与路径代价混进同一个 F2 再乘 λ（λ≈1e-4 是为把「米」级
-    # 路径代价折成奖励当量而设），同处 F2 的「秒」级惩罚因此被一并压没，
-    # 软约束形同虚设。给定本值时惩罚**不再乘 λ**，量纲得以解耦：
-    # 取 0.01~0.02 意味着「迟到 300 s ≈ 3~6 点奖励」，足以抵消单任务收益。
-    # None = 沿用历史口径 λ·w_penalty（保持旧行为与既有测试不变）。
-    w_violation: float | None = None
-    # ── 2026-10-18 四层准字典序：硬违约（物理）的支配权重 ──────────────
-    # T0 层 ``W_hard·n_hard + w_exc·excess_m``：任何一次物理违约（航程超限/
-    # 续航/时序/同步/机巢容量/终点不可达/结构）压倒任意交付收益，杜绝「纸面
-    # 可行、执行弹回」的幽灵 F1——旧口径 misc×1e3×wv 只折 10 单位，而单任务
-    # 收益 m·R≈2.7e5，修 uav_9 前的 16 次弹回正是这类幽灵被计功。
-    #   None = 自动：κ·m·R_pool（κ=hard_violation_kappa，R_pool=本周期候选
-    #          任务奖励和）⇒ 可行解永远压到不可行解之前；
-    #   显式值 = 固定权重（测试/消融用；0 = 关闭 T0 层）。
-    w_hard_violation: float | None = None
-    # T0 层内 tie-break：航程超限米数权重（米 → 奖励当量）。None = 自动 1/m：
-    # 1km 超程≈1000 单位，在不可行解间制造「少超更好」的梯度，又永远翻不了
-    # 记账（要抵一次违约计数需 ~4.5e5 km）。
-    w_range_excess: float | None = None
-    # W_hard 自动推导的安全系数：W_hard = hard_violation_kappa · m · R_pool。
-    hard_violation_kappa: float = 10.0
-    # 约束开关与各类惩罚权重（实验可配置）；判定见 constraints.*
-    constraints: ConstraintConfig = field(default_factory=ConstraintConfig)
-    # 机巢容量惩罚权重（论文 §4.3）。历史字段，保留作缺省来源：
-    # 若未显式给出 constraints.w_nest_capacity，则取其值。
-    w_nest_capacity: float = 1.0
-    lambda_cost: float = 1.0
-    # ----双目标的单标量化口径（评价规则，方案 B 主线）------------------
-    # lexicographic=True（默认）：**字典序**——先最大化任务收益 F1，再在收益
-    # 等价的解中最小化次目标（路径代价/约束惩罚/最坏机时间）。实现保持 DMDE
-    # 单适应度框架（不碰选择机制）：f = -big_m·F1 + 次目标，big_m 使任一
-    # ≥ 最小正收益的收益优势支配任意次目标差异；更细粒度的收益差视为同收益、
-    # 由成本裁决（与 Ming 2017 单标量框架的唯一区别是 F1 项的支配性权重）。
-    #   big_m=None → 按问题数据自动推导（1 + 次目标上界 / 最小正收益）；
-    #   big_m>0 → 显式给定（测试/消融用）。
-    # lexicographic=False → 历史加权和 f = -F1 + λ·F2（消融对比口径）。
-    lexicographic: bool = True
-    big_m: float | None = None
-    default_service_time: float = 0.0
-    # 迟到奖励折减容忍 W（秒）：晚到任务的有效奖励
-    # ``eff = R × max(0, 1 − L/W)``（L = 迟到秒数）。迟到不是废飞
-    # （2026-10-15 协议）：晚到仍算完成并计奖励，但按迟到时长线性折减，
-    # 与 w_violation 的秒级惩罚同向压实「按时服务」。
-    # None / <=0 = 关闭折减（历史口径：F1 全额，迟到只经 w_violation 计价）。
-    late_reward_decay_seconds: float | None = None
-    # ── 2026-10-22 覆盖门禁（coverage gate）两层适应度 ───────────────
-    # True：合法解 = 物理硬约束 + 覆盖门禁（S 内无 voluntary_skip）；
-    # f 在 T0 与 T1 之间加 W_skip·n_voluntary_skip 层；
-    # **搜索用 f 不含 −m·F1，F1 只作事后指标**（纯完成计数：砍迟到折减，
-    # 迟到单一定价走 w_late·L，消双计）；
-    # _secondary_upper_bound 拆 1e6 虚构帽、换推导帽。
-    # 注：stage 层 coverage_gate=True（终态构造性修复）也会进入同一口径
-    # ——判据见 SelectiveMUASProblem.gate_mode（meta 带 gate_stats）。
-    # False（默认且两开关皆关）= 现行四层准字典序口径，逐位不变。
-    lexicographic_coverage: bool = False
-    # W_skip 显式权重；None = 自动同 W_hard（κ·m·R_pool）。
-    w_skip_violation: float | None = None
-    # 本周期的规划时刻：时间窗游标从它起算，而不是从 0
-    # （滚动时域下任务 latest 是绝对时刻，游标起点必须跟着周期走）
-    current_time: float = 0.0
-
-
-def _euclid(
-    a: tuple[float, float, float],
-    b: tuple[float, float, float],
-) -> float:
-    return float(
-        ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2) ** 0.5
-    )
-
-
-@dataclass
-class CostProvider:
-    """节点间代价：pairwise 优先，否则欧氏；机巢键 = nest_offset + nest_id。
-
-    另承载 **统一距离口径** ``distance_fn``（:func:`make_distance_fn` 生成的
-    DEM 三维航程）。凡要算「飞这一段的物理长度/时间」的地方（航迹时间 F3、
-    时间窗 ETA）一律走 :meth:`travel`，不得再直接 ``_euclid`` —— 后者是直线，
-    会系统性低估飞行时间（docs/full_review_20261012.md P1-1）。
-    """
-
-    pairwise: dict[tuple[int, int], float] = field(default_factory=dict)
-    positions: dict[int, tuple[float, float, float]] = field(default_factory=dict)
-    nest_offset: int = 1_000_000
-    # 统一距离口径：``f(xyz_a, xyz_b) -> 米``；None → 回退欧氏（无 DEM 场景）
-    distance_fn: Callable[[Sequence[float], Sequence[float]], float] | None = None
-
-    def nest_key(self, nest_id: int) -> int:
-        return self.nest_offset + nest_id
-
-    def cost(self, id_a: int, id_b: int) -> float:
-        if (id_a, id_b) in self.pairwise:
-            return float(self.pairwise[(id_a, id_b)])
-        if (id_b, id_a) in self.pairwise:
-            return float(self.pairwise[(id_b, id_a)])
-        pa = self.positions.get(id_a)
-        pb = self.positions.get(id_b)
-        if pa is not None and pb is not None:
-            return _euclid(pa, pb)
-        return 1e6
-
-    def travel(self, a: Sequence[float], b: Sequence[float]) -> float:
-        """两点间的**物理航程**（米），统一口径：DEM 三维航程优先。
-
-        与 :meth:`cost` 的区别：``cost`` 查的是节点 id → id 的**代价**（可含
-        收益加权等模型化口径），``travel`` 是纯粹的空间长度，用于把距离换算成
-        飞行时间（ETA / F3）。两者同源（都由同一个 DEM 估算器派生）。
-        """
-        if self.distance_fn is not None:
-            try:
-                return float(self.distance_fn(a, b))
-            except Exception:  # 防御：估算器异常不得让求解崩，退回直线
-                pass
-        return _euclid(tuple(a[:3]), tuple(b[:3]))
-
-
-def build_cost_provider(
-    tasks: Sequence[Task],
-    nests: Sequence[Nest],
-    uavs: Sequence[UAV],
-    pairwise: Mapping[tuple[int, int], float] | None = None,
-    nest_offset: int = 1_000_000,
-    distance_fn: Callable[[Sequence[float], Sequence[float]], float] | None = None,
-) -> CostProvider:
-    positions: dict[int, tuple[float, float, float]] = {}
-    for t in tasks:
-        positions[t.id] = t.position
-    for n in nests:
-        positions[nest_offset + n.id] = n.position
-    for u in uavs:
-        positions[-(1 + u.id)] = u.position
-    if pairwise is None:
-        pw: Mapping[tuple[int, int], float] = {}
-    elif isinstance(pairwise, dict):
-        # 快照：调用方后续改动不影响 provider（历史行为）
-        pw = dict(pairwise)
-    else:
-        # 非 dict 的 Mapping 直通共享。本项目唯一的此类输入是惰性活视图
-        # :class:`~task_allocation.methods.muas.cost.lazy_pairwise.LazyPairwiseCost`：
-        # ① 其语义是「只增缓存的值视图」，快照无意义；
-        # ② dict() 物化会把没问过的边全部算出来（O(n²) 回潮），必须禁止；
-        # ③ 缺项查询按其 KeyError/False 语义回落，与普通字典缺项一致。
-        # （不 import 具体类：cost 包的 __init__ 会拉 cost_matrix → 回环。）
-        pw = pairwise
-    return CostProvider(
-        pairwise=pw,
-        positions=positions,
-        nest_offset=nest_offset,
-        distance_fn=distance_fn,
-    )
-
-
-@dataclass
-class SelectiveMUASProblem:
-    """选择性多机巢 MUAS 问题实例（单滚动周期）。"""
 
     tasks: list[Task]
     uavs: list[UAV]
@@ -657,309 +463,23 @@ class SelectiveMUASProblem:
             + self.config.w_time * bt
         )
 
-    def gate_mode(self, solution: "AllocationSolution | None" = None) -> bool:
-        """是否处于覆盖门禁口径（「完成是约束」而非「完成是目标」）。
-
-        两条进入路径，任一成立即按同一口径评价：
-
-        - ``problem.lexicographic_coverage=True``：显式开启门禁适应度；
-        - 解已过门禁（``solution.meta`` 带 ``gate_stats``，即 stage 层
-          ``coverage_gate=True`` 的终态修复/审计产物）。
-
-        门禁口径下的**固定表述**（2026-10-22，与论文 §4.3 一致）：
-        **搜索用 ``f`` 不含 ``−m·F1``；``F1`` 只作事后指标。** 覆盖由门禁
-        （构造修复 + W_skip 层）承担，目标层只剩成本 + 迟到。
-        """
-        if bool(self.config.lexicographic_coverage):
-            return True
-        return bool(solution is not None and "gate_stats" in solution.meta)
-
-    # ---- T0 硬违约权重与分解（2026-10-18 四层适应度）-------------------
-
-    def hard_weight(self) -> float:
-        """T0 硬违约的支配权重 ``W_hard = κ·m·R_pool``。
-
-        保证任一物理违约的代价超过本周期全部候选任务的收益和——可行解
-        永远压到不可行解之前，与交付了多少任务无关。legacy 加权和
-        （``lexicographic=False``）不设支配层，返回 1.0。
-        """
-        if not self.config.lexicographic:
-            return 1.0
-        if self.config.w_hard_violation is not None:
-            return max(0.0, float(self.config.w_hard_violation))
-        cached = getattr(self, "_hard_weight_cache", None)
-        if cached is None:
-            m = self.f1_weight()
-            r_pool = sum(max(float(t.reward), 0.0) for t in self.tasks)
-            cached = float(self.config.hard_violation_kappa) * m * r_pool
-            self._hard_weight_cache = cached
-        return float(cached)
-
-    def skip_weight(self) -> float:
-        """T0.5 覆盖门禁违约的支配权重 W_skip（默认同 W_hard 推导 κ·m·R_pool）。
-
-        voluntary_skip（能装却没装）是与物理硬约束等价的非法解；W_skip
-        保证一次 skip 压倒任意交付收益。gate 修复模式下 n_skip 恒 0
-        （构造性归零），本层不咬合，仅 audit 模式/防御路径生效。
-        """
-        if self.config.w_skip_violation is not None:
-            return max(0.0, float(self.config.w_skip_violation))
-        return self.hard_weight()
-
-    def range_excess_weight(self) -> float:
-        """T0 层内 tie-break 权重（米 → 奖励当量）；None = 自动 ``1/m``。"""
-        if self.config.w_range_excess is not None:
-            return max(0.0, float(self.config.w_range_excess))
-        return 1.0 / max(self.f1_weight(), 1.0)
-
-    def hard_stats(self, solution: AllocationSolution) -> tuple[int, float]:
-        """``(硬违约条数, 航程超限米数)``（T0 层两个计数基）。"""
-        det = solution.meta.get("feasibility") or {}
-        if "n_hard" not in det:
-            _, det = self.check_feasible(solution)
-        return int(det.get("n_hard", 0)), float(det.get("range_excess", 0.0))
-
-    def soft_violation(self, solution: AllocationSolution) -> float:
-        """软违约量 = 时间窗迟到秒数合计（T2 层；迟到不是不可行）。"""
-        det = solution.meta.get("feasibility") or {}
-        if "soft_violation" not in det:
-            _, det = self.check_feasible(solution)
-        return float(det.get("soft_violation", 0.0))
-
-    # ---- 字典序权重（big-M）------------------------------------------
-
-    def f1_weight(self) -> float:
-        """F1 的支配性权重 big_m（lexicographic=False 时为 1.0 = 历史加权和）。"""
-        if not self.config.lexicographic:
-            return 1.0
-        if self.config.big_m is not None:
-            return max(1.0, float(self.config.big_m))
-        cached = getattr(self, "_f1_weight_cache", None)
-        if cached is None:
-            cached = self._auto_big_m()
-            self._f1_weight_cache = cached
-        return float(cached)
-
-    def _auto_big_m(self) -> float:
-        """按问题数据推导字典序权重：``1 + 次目标上界 / 最小正收益``。
-
-        保证：任一 ≥ 最小正收益 r_min 的收益优势（即多完成 ≥1 个正收益任务）
-        支配任意次目标差异；更细粒度的收益差视为同收益、由成本裁决。
-        """
-        pos = [float(t.reward) for t in self.tasks if float(t.reward) > 0]
-        r_min = min(pos) if pos else 1.0
-        return 1.0 + self._secondary_upper_bound() / r_min
-
-    def _secondary_upper_bound(self) -> float:
-        """任一解次目标值的保守上界（λ·路径 + 软惩罚 + w_time·最坏机时间）。
-
-        2026-10-18 四层适应度：硬违约已升入 T0 支配层（``W_hard = κ·m·R_pool``，
-        与 m 的推导解耦），不再进次目标上界；此处只包软违约（时间窗迟到
-        秒数）——按每任务 1e6 s 的保守帽估计，保证 m·r_min 覆盖任何可实现的
-        迟到总量差异。
-        """
-        cfg = self.config
-        n_t, n_u, n_b = len(self.tasks), len(self.uavs), len(self.nests)
-        # 航次腿数上界：每任务一条链边 + 每航次进/出边
-        legs = n_t + 2 * n_u + 2
-        c_bound = self._max_edge_cost() * legs
-        speed_min = min(
-            (max(float(getattr(u, "speed", 0.0) or 0.0), 1e-6) for u in self.uavs),
-            default=1.0,
-        )
-        # 软违约（迟到秒数）上界：
-        # - 覆盖门禁模式（lexicographic_coverage）：拆「1e6 s/任务」虚构帽
-        #   （消 m 病的真正落地）——迟到是 T2 单一定价的成本，不再需要
-        #   「一个任务收益压倒任意迟到」的假保证；换**推导**帽
-        #   n_t × 单机航迹时间上界（迟到不可能超过航迹时间本身）。
-        # - 历史口径：保持 1e6·(n_t + 8) 不变（既有测试与历史格逐位可比）。
-        if getattr(cfg, "lexicographic_coverage", False):
-            v_bound = n_t * (c_bound / speed_min)
-        else:
-            v_bound = 1.0e6 * (n_t + 8)
-        lam = float(cfg.lambda_cost)
-        total = lam * c_bound
-        if cfg.w_violation is None:
-            total += lam * float(cfg.w_penalty) * v_bound
-        else:
-            total += float(cfg.w_violation) * v_bound
-        total += float(cfg.w_time) * (c_bound / speed_min)
-        return float(total)
-
-    def _max_edge_cost(self) -> float:
-        """有限边代价上界：pairwise 与实体包围盒对角线（欧氏兜底边）取大。"""
-        vals = [
-            abs(float(c))
-            for c in getattr(self.costs, "pairwise", {}).values()
-            if abs(float(c)) < 1e18
-        ]
-        c_max = max(vals, default=0.0)
-        pts = [p.position for p in self.tasks] + [p.position for p in self.uavs]
-        pts += [p.position for p in self.nests]
-        if pts:
-            xs = [p[0] for p in pts]
-            ys = [p[1] for p in pts]
-            zs = [p[2] for p in pts]
-            diag = (
-                (max(xs) - min(xs)) ** 2
-                + (max(ys) - min(ys)) ** 2
-                + (max(zs) - min(zs)) ** 2
-            ) ** 0.5
-            c_max = max(c_max, diag)
-        return max(c_max, 1.0)
+    # ── 层权重推导与分层统计（big-M / T0 / W_skip）────────
+    # 实现见 fitness_weights.FitnessWeightsMixin（本类混入之）：
+    #   gate_mode / hard_weight / skip_weight / range_excess_weight /
+    #   hard_stats / soft_violation / f1_weight / _auto_big_m /
+    #   _secondary_upper_bound / _max_edge_cost
 
     def check_feasible(
         self, solution: AllocationSolution
     ) -> tuple[bool, dict[str, Any]]:
         """校验解的可行性并累加约束惩罚（论文 §5(4) 约束处理）。
 
-        实现已迁至 ``constraints`` 包：单机约束 → ``single_constraints``、
-        协同约束 → ``coop_constraints``、机巢容量 → ``nest_capacity``，最终统一
-        汇入 ``evaluator.ConstraintReport``。:meth:`ConstraintReport.as_details`
-        透出的 ``violations`` / ``penalty`` / ``nest_capacity`` 与历史口径完全一致
+        编排实现在 :mod:`task_allocation.methods.muas.feasibility`（单条约束判据在
+        ``constraints`` 包，目标函数在 ``problem.py``）。透出的
+        ``violations`` / ``penalty`` / ``nest_capacity`` 与历史口径完全一致
         （供滚动层 horizon 与指标 metrics 消费）。
         """
-        cons = self.config.constraints
-        report = ConstraintReport()
-
-        # ---- 结构类（misc）----
-        if cons.duplicate_task:
-            if not solution.validate_unique_tasks():
-                report.add_misc("duplicate_task_assignment", cons.w_misc * 1e3)
-
-            rel = self.relations_from_solution(solution)
-            if not rel["sum_x_eq_y"]:
-                report.add_misc("sum_x_neq_y", cons.w_misc * 1e3)
-
-            cand = set(solution.candidate_task_ids) or set(self.task_by_id)
-            for tid in solution.executed_task_ids:
-                if tid not in cand and tid not in self.task_by_id:
-                    report.add_misc(f"unknown_task_{tid}", cons.w_misc * 1e3)
-
-        if cons.require_all_tasks and not self.config.allow_unassigned:
-            missing = [
-                t.id for t in self.tasks if t.id not in set(solution.executed_task_ids)
-            ]
-            if missing:
-                report.add_misc("unassigned_not_allowed", 100.0 * len(missing))
-
-        if cons.require_no_idle and not self.config.allow_idle_uav:
-            for tour in solution.tours:
-                if tour.is_idle:
-                    report.add_misc(f"idle_uav_{tour.uav_id}", 100.0)
-
-        # ---- 单机约束（single_constraints）----
-        for tour in solution.tours:
-            u = self.uav_by_id.get(tour.uav_id)
-            if u is None:
-                report.add_misc(f"unknown_uav_{tour.uav_id}", cons.w_misc * 1e3)
-                continue
-            pc = self.tour_path_cost(tour)
-            tour_ok = True
-            if cons.range:
-                rv = check_range_constraint(u, pc, margin=1.0)
-                if rv > 0:
-                    # excess=rv：超限米数单独进 T0 层内 tie-break（不受
-                    # w_range 缩放影响），使不可行解之间也有「少超一点
-                    # 更好」的梯度。
-                    report.add_range(
-                        f"range_uav_{tour.uav_id}", cons.w_range * rv, excess=rv
-                    )
-                    tour_ok = False
-            if cons.endurance:
-                tv = check_time_constraint(u, pc)
-                if tv > 0:
-                    report.add_time(
-                        f"time_uav_{tour.uav_id}", cons.w_endurance * tv
-                    )
-            tour.feasible = tour_ok
-
-        # ---- 终点机巢：合法性 + 可用性 + 可达性 ----
-        for tour in solution.tours:
-            if tour.end_nest_id is None:
-                if tour.task_ids:
-                    # 有航次却无终点机巢：返航义务未落账（否则返航零成本、
-                    # 容量不计账，适应度被系统性低估，恰是方案 A 要避免的
-                    # 「进化不考虑返航」陷阱的残余缺口）→ 计违约使缺口在
-                    # 评价中可见。空航次（不飞）无返航义务，不计。
-                    report.add_misc(
-                        f"end_nest_missing_{tour.uav_id}",
-                        cons.w_end_nest_reachability * 1e3,
-                    )
-                    tour.feasible = False
-                continue
-            nest = self.nest_by_id.get(tour.end_nest_id)
-            if nest is None:
-                if cons.nest_availability:
-                    report.add_misc(
-                        f"bad_nest_{tour.end_nest_id}",
-                        cons.w_nest_availability * 1e3,
-                    )
-                continue
-            if cons.nest_availability and not nest.available:
-                report.add_misc(
-                    f"nest_unavailable_{tour.end_nest_id}",
-                    cons.w_nest_availability * 100.0,
-                )
-            # 末任务 → 终点机巢不可达（地形遮挡 / 禁飞区，代价 inf）→ 判违约。
-            # 与 muas_stage._choose_end_nests 的改派过滤共用同一判据。
-            if cons.end_nest_reachability and tour.task_ids:
-                c = self.costs.cost(
-                    tour.task_ids[-1], self.costs.nest_key(nest.id)
-                )
-                if not math.isfinite(float(c)):
-                    report.add_misc(
-                        f"end_nest_unreachable_{tour.end_nest_id}",
-                        cons.w_end_nest_reachability * 1e3,
-                    )
-                    tour.feasible = False
-
-        # ---- 机巢容量约束（nest_capacity）----
-        if cons.nest_capacity and self.nests:
-            assignments = {t.uav_id: t.end_nest_id for t in solution.tours}
-            fleet = self.fleet_uavs if self.fleet_uavs is not None else self.uavs
-            cap_report = check_nest_capacity(fleet, self.nests, assignments)
-            nest_tags = [
-                f"nest_capacity_{nid}"
-                for nid in cap_report.violations
-                if cap_report.per_nest[nid]["overflow"] > 0
-            ]
-            report.add_nest(
-                nest_tags,
-                cons.w_nest_capacity * cap_report.penalty,
-                capacity=cap_report.as_dict(),
-            )
-
-        # ---- 协同约束（coop_constraints）----
-        if cons.time_window:
-            w_pen, w_tags, w_late = check_time_window_constraint(
-                solution.tours,
-                self.task_by_id,
-                self.uav_by_id,
-                current_time=float(self.config.current_time),
-                service_time=float(self.config.default_service_time),
-                distance_fn=self.costs.travel,
-            )
-            if w_pen > 0:
-                report.add_window(
-                    w_tags, cons.w_window * w_pen, lateness=w_late
-                )
-                # 【任务级时间窗不可行 · 2026-10-12 改造】
-                # 不再把「含迟到任务的整条 tour」置 feasible=False。
-                # tw_task_* 标签已写入 violations（add_window），horizon._violated_task_ids
-                # 对其走任务级归因（仅迟到任务自身被拦），同 tour 的准时任务照常完成。
-                # 整 tour 兜底（horizon 中 tour.feasible==False 分支）仅对 range/endurance/
-                # 终点机巢等真正「飞行不可行」的情形触发，时间窗违约只影响迟到任务本身。
-        if cons.sequence:
-            s_pen, s_tags = check_sequence_constraint(solution.tours, self.task_by_id)
-            if s_pen > 0:
-                report.add_seq(s_tags, cons.w_seq * s_pen)
-        if cons.sync:
-            sy_pen, sy_tags = check_sync_constraint(solution.tours, self.task_by_id)
-            if sy_pen > 0:
-                report.add_sync(sy_tags, cons.w_sync * sy_pen)
-
-        return report.is_feasible, report.as_details()
+        return check_solution_feasibility(self, solution)
 
     @classmethod
     def from_entities(

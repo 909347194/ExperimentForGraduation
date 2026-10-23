@@ -32,7 +32,7 @@ from task_allocation.methods.muas.cost.vertical_section import (
     VerticalSectionCostEstimator,
     make_distance_fn,
 )
-from task_allocation.methods.muas.problem import CostProvider, build_cost_provider
+from task_allocation.methods.muas.cost.provider import CostProvider, build_cost_provider
 
 
 @dataclass
