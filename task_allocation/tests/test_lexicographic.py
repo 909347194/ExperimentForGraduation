@@ -304,10 +304,12 @@ def test_delivered_fitness_recompute_from_components():
                 "final_n_hard", "final_excess_m", "fitness_weights"):
         assert key in d, f"diagnostics 缺字段 {key}"
     w = d["fitness_weights"]
+    # 2026-10-23 覆盖个数第一键：T1 = W_cov·覆盖缺口（n_tasks − n_executed）
+    gap = d["n_tasks"] - d["n_executed"]
     rec = (
         w["w_hard"] * d["final_n_hard"]
         + w["w_excess"] * d["final_excess_m"]
-        - w["m"] * d["final_f1"]
+        + w["w_cov"] * gap
         + (w["w_late"] or 0.0) * d["final_late_s"]
         + w["lambda"] * d["final_path_m"]
         + w["w_time"] * 0.0

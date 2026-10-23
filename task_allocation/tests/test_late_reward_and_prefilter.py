@@ -45,7 +45,7 @@ from task_allocation.methods.selection.feasibility import (  # noqa: E402
 # ---------------------------------------------------------------------------
 
 
-def _problem(late_decay, latest):
+def _problem(late_decay, latest, **extra):
     """1 机 / 1 任务：直线 100m、速度 10 → 到达 10s。
 
     latest=5 → 迟到 5s（tw_task_0，lateness={0: 5.0}）。
@@ -70,6 +70,7 @@ def _problem(late_decay, latest):
             w_violation=0.01,
             big_m=1.0,  # 锁字典序权重，公式数值口径确定
             late_reward_decay_seconds=late_decay,
+            **extra,
         ),
     )
 
@@ -104,9 +105,22 @@ def test_on_time_reward_undiscounted():
 
 
 def test_fitness_uses_discounted_reward():
-    """适应度必须吃折减后的 F1：同解仅 W 不同 → 差 = -(2−4) = +2。"""
-    _, f_dec, _ = _fitness(_problem(10.0, latest=5.0))
-    _, f_full, _ = _fitness(_problem(None, latest=5.0))
+    """覆盖个数第一键（默认）：F1 不进搜索主阶梯，适应度不随折减变化。
+
+    消融口径（coverage_count_first=False）：适应度必须吃折减后的 F1：
+    同解仅 W 不同 → 差 = -(2−4) = +2。
+    """
+    # 默认（覆盖个数第一键）：折减只动 F1 指标，不动适应度
+    _, f_dec_new, _ = _fitness(_problem(10.0, latest=5.0))
+    _, f_full_new, _ = _fitness(_problem(None, latest=5.0))
+    assert abs(f_dec_new - f_full_new) < 1e-9, (f_dec_new, f_full_new)
+    # 消融（−m·F1_eff 旧口径）：适应度吃折减 F1
+    _, f_dec, _ = _fitness(
+        _problem(10.0, latest=5.0, coverage_count_first=False)
+    )
+    _, f_full, _ = _fitness(
+        _problem(None, latest=5.0, coverage_count_first=False)
+    )
     assert abs((f_dec - f_full) - 2.0) < 1e-9, (f_dec, f_full)
 
 

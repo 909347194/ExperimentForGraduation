@@ -142,7 +142,7 @@ def test_t0_excess_tiebreak():
 # ── 3. T1 支配 T2/T3：多一个任务的收益压倒一切次级差异 ────────────
 
 def test_t1_dominates_secondary():
-    """都可行时，多交付一个任务永远更优，且优势 ≈ m·R（次级项可忽略）。"""
+    """都可行时，多交付一个任务永远更优（覆盖个数第一键），优势 = W_cov·1。"""
     tasks = [_task(0, 30_000.0, 0.0), _task(1, -30_000.0, 0.0)]
     nests = [Nest(id=0, x=0.0, y=0.0, z=0.0, capacity=4)]
     uavs = [_uav(0, 1e9)]  # 航程不设限：两个解都物理可行
@@ -157,11 +157,16 @@ def test_t1_dominates_secondary():
 
     f_1, f_2 = p.scalar_fitness(sol_1), p.scalar_fitness(sol_2)
     assert f_2 < f_1, "多交一个任务必须更优（最小化器下 f 更小）"
-    # 优势 = m·10（F1 差）− λ·Δpath（航程差 60 km）；前者应压倒后者
-    m = p.f1_weight()
+    # 2026-10-23 覆盖个数第一键：优势 = W_cov·Δ缺口 − λ·Δpath（航程差 60 km）
+    w_cov = p.coverage_weight()
+    gap_diff = p.coverage_gap(sol_1) - p.coverage_gap(sol_2)  # 1 − 0
     d_path = p.path_cost(sol_2) - p.path_cost(sol_1)
-    assert f_1 - f_2 == pytest.approx(m * 10.0 - p.config.lambda_cost * d_path, rel=1e-9)
-    assert m * 10.0 > 100.0 * p.config.lambda_cost * d_path, "T1 应压倒 T3"
+    assert f_1 - f_2 == pytest.approx(
+        w_cov * gap_diff - p.config.lambda_cost * d_path, rel=1e-9
+    )
+    assert w_cov * gap_diff > 100.0 * p.config.lambda_cost * d_path, (
+        "T1 应压倒 T3"
+    )
 
 
 # ── 4. T2 软计价：迟到按秒线性计入，不判不可行 ────────────────────
@@ -226,11 +231,13 @@ def test_fitness_weights_meta_snapshot():
     assert w["m"] == pytest.approx(p.f1_weight())
     assert w["w_hard"] == pytest.approx(p.hard_weight())
     assert w["w_late"] == 0.01
+    assert w["w_cov"] == pytest.approx(p.coverage_weight())
     det = sol.meta["feasibility"]
+    # 2026-10-23 覆盖个数第一键：T1 = W_cov·覆盖缺口（不再用 −m·F1）
     manual = (
         w["w_hard"] * det["n_hard"]
         + w["w_excess"] * det["range_excess"]
-        - w["m"] * sol.f1_reward
+        + w["w_cov"] * p.coverage_gap(sol)
         + w["w_late"] * det["soft_violation"]
         + w["lambda"] * p.path_cost(sol)
         + w["w_time"] * sol.meta["bottleneck_time"]
