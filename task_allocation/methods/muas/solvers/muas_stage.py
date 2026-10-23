@@ -112,18 +112,17 @@ class MUASStageConfig:
     # 本开关仅在 legacy 加权和（lexicographic=False）下生效（消融对比口径）。
     prune_unprofitable: bool = True
     prune_max_rounds: int = 8
-    # 零奖励剔除（2026-10-18 四层适应度配套）：对「ETA ≥ latest + W」的任务
+    # 零奖励剔除（四层适应度配套）：对「ETA ≥ latest + W」的任务
     # （迟到折减 eff=R·max(0,1−L/W) 下 F1 贡献≈0）在 repair 链末轮暂缓
     # （y_j=0）。字典序下经济性剔除（prune_unprofitable）整体关闭——丢正收益
     # 任务必降 F1；而零奖励任务不降 F1，剔除它是严格的适应度改进（省 T2
     # 迟到惩罚），还把机会留给下一周期（可能按时交付）。仅当
     # problem.late_reward_decay_seconds>0 且时间窗约束启用时生效。
     #
-    # **默认 false（2026-10-18 消融定稿）**：exp01 s42 实测剔除开启后奖励
-    # 产出率 94.4%→91.1%（净亏）——剔除在搜索期对每个候选生效，把「硬塞
+    # **默认 false（消融定稿）**：剔除在搜索期对每个候选生效，会把「硬塞
     # 必然迟发任务」的候选救回可交付形态，搜索偏向「周期 1 多塞一个但迟到
-    # 更深」的盆地；而 W=1800 已单独消灭零奖励交付（7→0），靶病不存在。
-    # 开关保留供 exp02（|T|≫K）压力场评估。
+    # 更深」的盆地；而迟到归零项已单独消灭零奖励交付，靶病不存在。
+    # 开关保留供大规模压力场评估。
     prune_zero_reward: bool = False
     # ── 覆盖门禁（2026-10-22，合法解 = 物理硬约束 + 覆盖门禁）────────
     # True：build_solution 末态（最后一次 _repair_range 之后、_assemble
@@ -212,7 +211,7 @@ class MUASStageConfig:
     #   完整成本评价间接影响进化搜索。
     #   「终点机巢进编码」的联合变体（方案 B，编码优先、精确分配兜底）已从
     #   master 移除，在 pro 分支实现。
-    # Lamarckian 回写（TODO §2.7）：把修复后的解（经 _prune / _repair_range /
+    # Lamarckian 回写：把修复后的解（经 _prune / _repair_range /
     # _choose_end_nests）的「起始任务归属」编码回获胜个体的基因，使后继代际的
     # 差分变异围绕**修复后的可行子空间**展开（默认开启）。
     # 关闭后退化为当前行为：进化搜索的是未修复空间。
@@ -225,12 +224,12 @@ class MUASStageConfig:
     current_time: float = 0.0
     # 适应度缓存（DMDE 会重复评估同一个体）
     use_cache: bool = True
-    # 解码后局部搜索 polish（2026-10-19）：DMDE 收敛后对 best_assignment
+    # 解码后局部搜索 polish：DMDE 收敛后对 best_assignment
     # 做 relocate / swap / 插入位局部搜索，候选一律过 evaluator.evaluate
     # （与 DMDE 个体同一 build_solution 修复链），仅严格改进才接受。
-    # 治「曲线第 3 代躺平」的两个根因：① big-M 阶梯适应度下差分算子对
-    # 换机/换序级改善不可见（T9 换机省 27.9km 仅折 2.8 单位 vs 单任务
-    # 2.8e5）；② Lamarckian 回写只写起始基因通道致归属冻结。局部搜索
+    # 治「收敛曲线早期躺平」的两个根因：① big-M 阶梯适应度下差分算子对
+    # 换机/换序级改善不可见（路径级优化空间远小于单任务收益量级）；
+    # ② Lamarckian 回写只写起始基因通道致归属冻结。局部搜索
     # 直接在解空间操作，绕过编码—回写冻结构悟。
     # 默认开启（生产口径）；消融对照显式传 False。
     polish_enabled: bool = True
@@ -671,9 +670,8 @@ def _select_by_marginal_takeoff(
 
     **停机规则**：``gain_j ≤ γ`` 时**跳过该机、继续试下一架**（不是 break）。
     依据：``est(j)`` 单调非增只保证 ``gain_j ≥ 0``，并**不**保证 gain 单调——
-    一架零增益机（对任何任务都不比已选机近）之后仍可能有正增益机。旧实现用
-    break 并在 docstring 里断言 gain「单调非增」，该断言不成立，导致在第一个
-    零增益机处过早停机（实测 K 塌到 1~3、完成率 100%→48.7%）。
+    一架零增益机（对任何任务都不比已选机近）之后仍可能有正增益机。旧实现
+    在第一个零增益机处过早停机，导致 K 远小于可用机数、完成率受损。
 
     **容量**：``tour_cap`` 为单机服务容量（None=按航程自动推导，见
     ``_resolve_tour_cap``）。无容量的旧口径把每架机当成能同时覆盖全部任务，
@@ -925,18 +923,15 @@ class MUASAssignmentEvaluator:
         if not self.config.coverage_first:
             routes, end_nests = self._prune_zero_reward(routes, end_nests)
         # 重排按「迟到数, 迟到量, 航程」字典序挑顺序，末任务换人会拉长返航腿，
-        # 可能把航次推过剩余航程（uav_9 周期 3–6 的 [47,59,40,55] 即由可行序
-        # [59,40,55,47] 重排而来，全航程 77 686.91 → 80 027.58 m）。先按当前
-        # 终点闸一次；被移除任务由 _reflow_task 改派（全航程口径校验），全部
-        # 不可行才证明性暂缓。
+        # 可能把航次推过剩余航程。先按当前终点闸一次；被移除任务由
+        # _reflow_task 改派（全航程口径校验），全部不可行才证明性暂缓。
         routes, end_nests = self._repair_range(routes, end_nests)
         if routes:
             # 新增航次后终点机巢需重新联合分配（容量约束下精确求解）
             end_nests = self._choose_end_nests(routes)
         # 终点机巢在容量竞争下未必是最近巢，改派会再次拉长航程。交付前最后
         # 闸一次：否则完成闸门按「起点→任务→终点巢」全航程判 range_uav_*
-        # 弹回——航程/位置已更新却解绑回池不计完成（废飞），uav_9 周期 3–6
-        # 的 16 次弹回全部源于此（超限仅 27.58 m = 0.034%）。
+        # 弹回——航程/位置已更新却解绑回池不计完成（废飞）。
         routes, end_nests = self._repair_range(routes, end_nests)
 
         # coverage_first（2026-10-23）：终态**再装载一轮**。前面的换巢 /
@@ -1069,9 +1064,7 @@ class MUASAssignmentEvaluator:
             # 返航腿必须计入航程预算。完成闸门（check_range_constraint →
             # problem.tour_path_cost）与 _repair_range/_tour_cost/_reflow_task
             # 用的都是「起点 → 各任务 → 终点巢」全航程；只查外出链会把
-            # 「外出 48.7 km + 返航 31.3 km」的越限航次放行——uav_9 周期 3–6
-            # 的 [47,59,40,55]（全航程 80 027.58 m，超满电 27.58 m）正是被
-            # 这里放行后漏到交付，16 次弹回全部源于此。
+            # 返航后超限的航次放行，漏到交付即被完成闸门弹回。
             # 终点机巢此刻尚未定稿（_choose_end_nests 在重排之后才跑），取
             # 最近可用巢作为返航下界——实际终点只会更远或相等，保守。
             length += self._return_leg_cost(seq[-1], None)
@@ -2284,7 +2277,7 @@ class MUASAssignmentEvaluator:
             self._cache[assign_key] = result
         return result
 
-    # ---- Lamarckian 回写（TODO §2.7）----------------------------------
+    # ---- Lamarckian 回写 ------------------------------------------------
 
     def lamarckian_reencode(
         self,
@@ -2553,7 +2546,7 @@ def run_selective_muas(
         available_uavs=avail,
     )
 
-    # 把编排层的 lamarckian 开关并入求解器配置（TODO §2.7）
+    # 把编排层的 lamarckian 开关并入求解器配置
     if solver_config is not None:
         solver_cfg = replace(solver_config, lamarckian=stage_cfg.lamarckian)
     else:
@@ -2627,8 +2620,7 @@ def run_selective_muas(
     # 用最优 assignment 重建最终解（终点机巢与选择性剔除在此落地）：
     # 终点由内层最小费用流在容量约束下精确求解（方案 A）
     #
-    # 口径说明（2026-10-18，治「记录 best_fitness 与重算目标差 6.5~13.6」的
-    # 最后一环）：``result.best_fitness`` 是**搜索期**适应度——Lamarckian
+    # 口径说明：``result.best_fitness`` 是**搜索期**适应度——Lamarckian
     # 回写只改写起始基因通道、巡游基因保留未修复原值（有意的保守设计，
     # 见 :meth:`lamarckian_reencode`），故回写后基因解码重建的交付解与
     # 当时被评价的解任务集/顺序/ETA 均可不同，两者适应度本不可比。收敛

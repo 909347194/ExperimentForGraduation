@@ -12,7 +12,7 @@ UAV 起点虚拟键：-(1+uav_id)；机巢键：nest_offset + nest_id
   :class:`~task_allocation.methods.muas.cost.lazy_pairwise.LazyPairwiseCost`
   按需读/算并共享缓存，只对**传入的 tasks**（候选子集）建 4 个矩阵。
   滚动层据此把全量 O(n²) 建矩阵从第一阶段之前挪到第一阶段之后、
-  且只覆盖候选集——exp02 实测 N=200 端到端因此 11391→~1700 ms。
+  且只覆盖候选集，端到端耗时随任务规模的增长由 O(n²) 降为 O(n)。
   值与 eager 全量建表逐位一致（同估算器/同坐标/同方向）。
 """
 
@@ -40,14 +40,15 @@ class CostMatrixBuildResult:
     provider: CostProvider
     uav_target: np.ndarray  # (n_uavs, n_tasks)
     task_task: np.ndarray  # (n_tasks, n_tasks)
-    # 终点机巢代价（论文 §5(2)：终点作为航次终止节点进编码）
+    # 终点机巢代价矩阵（论文 §5(2)：终点机巢由内层分配子问题在解码后
+    # 精确求解，不进进化编码；此处为任务→机巢的三维近似代价）
     task_nest: np.ndarray = field(default_factory=lambda: np.zeros((0, 0)))  # (n_tasks, n_nests)
     uav_nest: np.ndarray = field(default_factory=lambda: np.zeros((0, 0)))  # (n_uavs, n_nests)
     n_nests: int = 0
     details: dict[tuple[int, int], CostEstimationResult] = field(default_factory=dict)
     # 统一距离口径：由同一个估算器派生的 DEM 三维航程（带记忆化）。
     # 评价端航迹时间 F3、时间窗 ETA、第一阶段 travel/插入代价都从它取长度，
-    # 杜绝「代价矩阵走地形、ETA 走直线」的口径分裂（P1-1）。
+    # 杜绝「代价矩阵走地形、ETA 走直线」的口径分裂。
     distance_fn: Callable[[Sequence[float], Sequence[float]], float] | None = None
 
 

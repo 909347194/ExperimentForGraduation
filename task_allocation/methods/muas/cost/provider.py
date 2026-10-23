@@ -30,7 +30,7 @@ class CostProvider:
     另承载 **统一距离口径** ``distance_fn``（:func:`make_distance_fn` 生成的
     DEM 三维航程）。凡要算「飞这一段的物理长度/时间」的地方（航迹时间 F3、
     时间窗 ETA）一律走 :meth:`travel`，不得再直接 ``_euclid`` —— 后者是直线，
-    会系统性低估飞行时间（docs/full_review_20261012.md P1-1）。
+    会系统性低估飞行时间。
     """
 
     pairwise: dict[tuple[int, int], float] = field(default_factory=dict)

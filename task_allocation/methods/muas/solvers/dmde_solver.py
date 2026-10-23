@@ -82,7 +82,7 @@ class DMDEConfig:
     seed: int | None = None
     verbose: bool = False
     log_interval: int = 100
-    # Lamarckian 回写（TODO §2.7）：获胜个体在评价中被修复（_prune /
+    # Lamarckian 回写：获胜个体在评价中被修复（_prune /
     # _repair_range）后，把修复结果写回其基因，使后继代际的差分变异
     # 围绕修复后的可行子空间展开，而非未修复空间。依赖评估器提供的
     # ``lamarckian_reencode`` 方法；缺失或失败时静默回退到原行为。
@@ -213,7 +213,7 @@ class DMDESolver(BaseOptimizer):
 
                 # 贪婪选择 (算法 3.1 行 28-30)
                 if child.fitness < population[i].fitness:
-                    # Lamarckian 回写（TODO §2.7）：把修复后的解写回获胜个体基因，
+                    # Lamarckian 回写：把修复后的解写回获胜个体基因，
                     # 使下一代差分变异围绕修复后的可行子空间展开。
                     if (
                         cfg.lamarckian
