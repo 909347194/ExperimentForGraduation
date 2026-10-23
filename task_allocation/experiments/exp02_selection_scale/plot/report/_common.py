@@ -40,7 +40,7 @@ VARIANT_COLOR: dict[str, str] = {
 }
 
 #: 任务规模 N → 散点标记（同图内用颜色分变体、形状分规模）
-N_MARKER: dict[int, str] = {50: "o", 100: "s", 200: "^"}
+N_MARKER: dict[int, str] = {10: "o", 50: "s", 100: "^"}
 
 #: 变体族（用于「族内平均线」等族级样式）
 VARIANT_FAMILY: dict[str, str] = {
@@ -106,8 +106,7 @@ def t_build_s(row: dict[str, Any]) -> float:
 def n_candidate(row: dict[str, Any]) -> int | None:
     """候选任务数 n_cand（优先级预筛后规模；full_baseline 为 None）。
 
-    2026-10-21 符号统一：诊断键 capability_preselect_k → capability_n_cand；
-    旧存档 json 回退读旧键，保证可重渲染。
+    兼容旧存档 json 的 ``capability_preselect_k`` 键名回退读取。
     """
     sel = sel_of(row)
     v = sel.get("capability_n_cand", sel.get("capability_preselect_k"))
@@ -137,8 +136,7 @@ def cap_t(row: dict[str, Any]) -> int | None:
 def n_sel_cap(row: dict[str, Any]) -> int | None:
     """选择数封顶值 n_sel = ⌈max_ratio·K⌉（intersect 口径下真正的瓶颈）。
 
-    2026-10-21 符号统一：诊断键 capability_marginal_limit → capability_n_sel；
-    旧存档 json 回退读旧键，保证可重渲染。
+    兼容旧存档 json 的 ``capability_marginal_limit`` 键名回退读取。
     """
     sel = sel_of(row)
     v = sel.get("capability_n_sel", sel.get("capability_marginal_limit"))

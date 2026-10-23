@@ -4,20 +4,17 @@
 【report 层 · 结论与论文插图】
 
 回答「分层省下的搜索时间，是否被 O(n²) 代价构建吃掉？」——
-2026-10-20 延迟构建（惰性代价表）落地后的答案：没有，且二阶段耗时与 N 无关。
+代价矩阵延迟构建（惰性代价表）下的答案：没有，且二阶段耗时与 N 无关。
 
 三联面板：
 
     (a) 二阶段耗时 t_muas vs N（对数轴）   固定 k 时三条平线
-                      （k=16：25.3 / 25.2 / 25.0 s，极差 < 2%）——
-                      耗时只随 k 涨，不随 N 涨。
+                      （极差 < 2%）——耗时只随 k 涨，不随 N 涨。
     (b) 一阶段三项耗时 vs N（对数轴）   hint（最近机 O(n·K)）/
                       selection / build（候选子集矩阵）全程在百毫秒~秒级，
-                      N=200 合计 0.96 s = 端到端 3.7%（旧版全量建矩阵一项 9.8 s
-                      占 85.6%，见 notes「管线修正」第 2 项）。
+                      占端到端比例随 N 下降（二阶段求解主导端到端）。
     (c) 惰性表现算边数 vs N（双对数）   实测惰性边沿 O(N) 增长（k 固定），
-                      全量矩阵沿 O(N²)（斜率 2 参考线）；N=200 时惰性
-                      2,164 条 = 全量的 5.0%。
+                      全量矩阵沿 O(N²)（斜率 2 参考线）。
 
 数据来源：``metrics.json`` 的 ``scales[].t_{hint,selection,build,muas}_ms``
 与 ``lazy_edges``。
@@ -60,9 +57,6 @@ from ._common import (
 __all__ = ["plot_r03_time_breakdown"]
 
 _FULL = "full_baseline"
-#: N=200 全量矩阵边数（修正前旧管线实测，留档 notes「管线修正」第 2 项；
-#: 本轮 full_baseline 只跑 N=50/100，故 200 处为空心参考点）
-_FULL_EDGES_N200 = 43264
 
 
 def plot_r03_time_breakdown(
@@ -91,7 +85,7 @@ def plot_r03_time_breakdown(
             ax_a.annotate(f"{y:.0f}", xy=(x, y), xytext=(0, 6),
                           textcoords="offset points", ha="center",
                           fontsize=FS["annotation"] - 1.0, color=color(v))
-    # 全量对照（只测了 50/100）
+    # 全量对照（三个规模全测）
     fx = [i for i, n in enumerate(ns) if _FULL in g[n]]
     fy = [t_muas_s(g[n][_FULL]) for n in ns if _FULL in g[n]]
     ax_a.plot(fx, fy, marker="D", markersize=4.5, linewidth=1.5,
@@ -127,15 +121,14 @@ def plot_r03_time_breakdown(
             ax_c.annotate(f"{y}", xy=(x, y), xytext=(0, 6),
                           textcoords="offset points", ha="center",
                           fontsize=FS["annotation"] - 1.0, color=color(v))
-    # 全量矩阵：实测 50/100 + N=200 旧管线实测参考点 + O(N²) 参考线
+    # 全量矩阵：三个规模全测（实测点）+ O(N²) 参考线
     ax_c.plot(fx, [edges(g[n][_FULL]) for n in ns if _FULL in g[n]],
               marker="D", markersize=4.5, linewidth=1.5, color=color(_FULL),
-              label=label(_FULL) + "（实测）", zorder=3)
-    ax_c.scatter([200], [_FULL_EDGES_N200], marker="D", s=42, facecolor="none",
-                 edgecolor=color(_FULL), linewidth=1.4, zorder=3,
-                 label=label(_FULL) + " N=200（旧管线实测）")
-    anchor = 11664.0  # N=100 实测全量边数
-    guide = [anchor * (n / 100.0) ** 2 for n in ns]
+              label=label(_FULL), zorder=3)
+    # O(N²) 参考线：以实测最大规模的全量边数为锚（斜率 2）
+    anchor_n = max(n for n in ns if _FULL in g[n])
+    anchor = float(edges(g[anchor_n][_FULL]))
+    guide = [anchor * (n / float(anchor_n)) ** 2 for n in ns]
     ax_c.plot(ns, guide, color="#9aa5b1", linestyle=":", linewidth=1.2,
               label="O(N²) 参考（斜率 2）", zorder=2)
     for x, y in zip(ns, guide):
@@ -160,9 +153,8 @@ def plot_r03_time_breakdown(
     footnote(fig,
              "数据来源：results/metrics.json 的 scales[]。t_hint/t_selection/t_build/t_muas "
              "为 perf_counter 分段计时；lazy_edges = LazyPairwiseCost 实际现算边数"
-             "（按需估算 + 缓存，值与全量 eager 建表逐位一致）。全量对照只跑 N=50/100；"
-             "N=200 空心点为修正前旧管线的全量建矩阵实测（43,264 条，占端到端 85.6%）。"
-             "单 seed（42）。")
+             "（按需估算 + 缓存，值与全量 eager 建表逐位一致）。全量对照三个规模"
+             "全测。单 seed（42）。")
 
     stem = Path(out_dir) / "R03_time_breakdown"
     return save_figure(fig, stem, formats, dpi=dpi)

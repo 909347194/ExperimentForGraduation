@@ -1,6 +1,6 @@
 # exp05_baselines
 
-**status:** active（P0 + D0 + B3 已实现并接入统一评价；实测结果见文末「实测结果」）
+**status:** active（P0 + D0 + B3 已实现并接入统一评价；结果待全量网格跑完回填）
 
 **论文锚点:** §3.5.4 整体方法对照实验  
 **不负责:** 冒烟正确性（exp01）；选择规模主结论（exp02）；事件主结论（exp03）；内部消融主表（exp04）
@@ -118,7 +118,7 @@
 
 ---
 
-## 实现要点（2026-10-21）
+## 实现要点
 
 ```text
 task_allocation/baselines/
@@ -158,10 +158,7 @@ python3 run.py --arms M0,B2 --seeds 42
 
 ## 实测结果
 
-> 口径：5 seed（42–46）均值 ± 标准差；`results/summary.csv` 为准。
-> ⚠️ 距离定义：M0/B1/B2/B3 为 DEM 垂直切面三维航程，D0/B2e 为三维直线。
-
-（待全量网格运行完成后填入）
+待全量网格运行完成后填入（以 `results/summary.csv` 为准）。
 
 ---
 
@@ -176,6 +173,6 @@ python3 run.py --arms M0,B2 --seeds 42
 ## 下一步
 
 1. （P2）简化拍卖 / CBBA 风格对照：需明确通信假设，勿名不副实。
-2. （P1）选择关闭变体 M1 移到 exp04/大 N 时指 exp02，本目录不重复。
+2. （P1）选择关闭变体归 exp04，大 N 规模归 exp02，本目录不重复。
 3. summary 定稿后按 experiments/README.md 的 plot/ 约定补论文插图
    （report/ 层：多 seed 误差棒对照图）。

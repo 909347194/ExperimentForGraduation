@@ -3,21 +3,19 @@
 
 【report 层 · 结论与论文插图】
 
-回答「候选预筛的截断规模该按什么标定？」——原结论 2 说「α 需按机队总吞吐
-标定」；本扫描给出更精确的答案：intersect 口径下候选名额 ⌈α·K⌉ 提到 40
-毫无用处，因为**选择数被 ⌈max_ratio·K⌉=16 封顶**。
+回答「候选预筛的截断规模该按什么标定？」——intersect 口径下候选名额
+⌈α·K⌉ 提到 40 毫无用处，因为**选择数被 ⌈max_ratio·K⌉=16 封顶**。
 
 双联面板：
 
     (a) 候选 n_cand vs 选择 n_sel（名额族）   每组 N 下两变体的候选名额
                       （20 / 40，浅柱）与最终选择数（16 / 16，深柱）；
                       红色虚线为 ⌈max_ratio·K⌉=16 的封顶线——n_sel 触线即停。
-    (b) 名额族 F1 对照   同 sel 下两变体交付收益几乎相同
-                      （133.2 vs 129.1 @ N=50，差异 < 4%），
+    (b) 名额族 F1 对照   同 sel 下两变体交付收益几乎相同（差异 < 4%），
                       说明候选名额在该区间是「死旋钮」。
 
 读图要点：若瓶颈在 α，(a) 中 sel 应随 k 上升；(b) 中两柱应明显分化。
-修正后的标定口径（选择数接到 cap(t)、候选名额只需 ≥ 选择数）见图 r05。
+标定口径的答案（选择数接到 cap(t)、候选名额只需 ≥ 选择数）见图 r05。
 
 数据来源：``metrics.json`` 的
 ``scales[].selection.{capability_n_cand,n_selected,capability_n_sel}``
@@ -148,7 +146,7 @@ def plot_r04_bottleneck(
              "数据来源：results/metrics.json 的 scales[]（quota_a2.5 / quota_a5 两变体）。"
              "intersect 口径下 capability 只能收紧不能放宽：候选名额 α·K 上取整从 20 提到 40，"
              "选择数仍被 max_ratio·K 上取整=16 封顶（capability_n_sel），故 F1 差异 < 4%。"
-             "修正口径（mode=primary，选择数接到 cap(t)）见图 r05。单 seed（42）。")
+             "能力驱动口径（mode=primary，选择数接到 cap(t)）见图 r05。单 seed（42）。")
 
     stem = Path(out_dir) / "R04_bottleneck"
     return save_figure(fig, stem, formats, dpi=dpi)

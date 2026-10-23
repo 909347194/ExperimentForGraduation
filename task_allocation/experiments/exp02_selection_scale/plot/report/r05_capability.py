@@ -10,16 +10,13 @@
 双联面板（x = 候选/选择规模 n_cand / n_sel，对数轴）：
 
     (a) 绝对口径   y = F1。能力族三点（n_cand=10/20/40）沿曲线爬升，
-                      全量对照为同 N 红色虚线；cap_x1（n_cand≈cap(t)=40）
-                      达到全量的 93.5%（N=50）/ 83.4%（N=100）。
-                      灰色带 = cap(t) 附近（40±2）。
-    (b) 相对口径（仅 N=50/100，有全量对照）   左轴 = 质量保持率 %（实心），
-                      右轴 = 耗时比 %（空心，对数）。cap_x1 在 N=100 用
-                      13% 的耗时拿到 83.4% 的质量（7.6× 加速）；
-                      N=50 为 87% 耗时 / 93.5% 质量（1.15×）。
+                      全量对照为同 N 红色虚线；cap_x1（n_cand≈cap(t)）
+                      达到全量的高质量保持率。灰色带 = cap(t) 附近（±3）。
+    (b) 相对口径（有全量对照的规模）   左轴 = 质量保持率 %（实心），
+                      右轴 = 耗时比 %（空心，对数）。
 
-读图要点：(a) 中 n_cand 从 41 加到 50（全量）只多 7% F1 却多 16% 耗时——
-cap(t) 右侧收益速衰，即「天然平衡点」。
+读图要点：(a) 中 n_cand 超过 cap(t) 后（加到全量）收益速衰而耗时继续涨——
+cap(t) 即「天然平衡点」。
 
 数据来源：``metrics.json`` 的 ``scales[]``（cap_x* 阶梯 + quota_a2.5 +
 full_baseline 参考）。
@@ -48,6 +45,7 @@ import numpy as np
 
 from ..theme import FIG_WIDE, FS, footnote, plt, save_figure, style_axes
 from ._common import (
+    cap_t,
     color,
     f1,
     grouped,
@@ -62,7 +60,20 @@ __all__ = ["plot_r05_capability"]
 
 _FULL = "full_baseline"
 _CAP_POINTS = ("cap_x0.25", "cap_x0.5", "cap_x1")
-_CAP_T = 40  # cap(t)≈40（实测 41/40/40，见 metrics 的 capability_cap）
+_CAP_T_FALLBACK = 40  # metrics 无 capability_cap 时的兜底值
+
+
+def _cap_t_of(metrics: dict[str, Any]) -> int:
+    """cap(t) 代表值：cap_x* 各行 capability_cap 的中位数（兜底 40）。"""
+    vals = [
+        cap_t(row)
+        for row in (metrics.get("scales") or [])
+        if str(row.get("variant")) in _CAP_POINTS and cap_t(row) is not None
+    ]
+    if not vals:
+        return _CAP_T_FALLBACK
+    vals.sort()
+    return int(vals[len(vals) // 2])
 
 
 def plot_r05_capability(
@@ -79,11 +90,12 @@ def plot_r05_capability(
     ns = sorted(g)
     variants = [v for v in variants_present(metrics) if v != _FULL]
     ns_with_full = [n for n in ns if _FULL in g[n]]
+    cap_t_val = _cap_t_of(metrics)
 
     fig, (ax_a, ax_b) = plt.subplots(1, 2, figsize=(FIG_WIDE, 4.4))
 
     # cap(t) 平衡带
-    band = (max(_CAP_T - 3, 1), _CAP_T + 3)
+    band = (max(cap_t_val - 3, 1), cap_t_val + 3)
     for ax in (ax_a, ax_b):
         ax.axvspan(band[0], band[1], color="#9aa5b1", alpha=0.18, zorder=1)
 
@@ -181,7 +193,8 @@ def plot_r05_capability(
 
     # cap(t) 带标注（放在两轴顶部）
     for ax in (ax_a, ax_b):
-        ax.text(_CAP_T, 1.0, "cap(t)≈40", transform=ax.get_xaxis_transform(),
+        ax.text(cap_t_val, 1.0, f"cap(t)≈{cap_t_val}",
+                transform=ax.get_xaxis_transform(),
                 ha="center", va="bottom", fontsize=FS["annotation"] - 0.5,
                 color="#6b7280")
 
@@ -190,8 +203,8 @@ def plot_r05_capability(
     fig.tight_layout(rect=(0, 0.06, 1, 0.93))
     footnote(fig,
              "数据来源：results/metrics.json 的 scales[]。k = n_selected；cap(t)=下取整"
-             "(budget_scale·B/c)（B=机队总航程 640 km，c=最近可用机三维航程中位数），实测 41/40/40。"
-             "全量对照只测 N=50/100，故 (b) 相对面板仅含这两个规模；N=200 仅参与 (a)。"
+             "(budget_scale·B/c)（B=机队总航程 640 km，c=最近可用机三维航程中位数），"
+             "实测见 metrics 的 capability_cap 字段。全量对照三个规模全测。"
              "灰色带 = cap(t)±3。单 seed（42）。")
 
     stem = Path(out_dir) / "R05_capability"

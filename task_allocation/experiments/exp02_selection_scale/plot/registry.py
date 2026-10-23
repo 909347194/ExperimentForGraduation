@@ -27,7 +27,7 @@
     r01_tradeoff     吞吐—耗时—质量全局权衡（核心图；论文主图候选）
     r02_compression  成功标准 1：压缩真实发生且与 N 解耦
     r03_time_breakdown 成功标准 2：二阶段耗时与 N 无关 + O(n²) 瓶颈已除
-    r04_bottleneck   瓶颈定位：选择名额 max_ratio·K 而非 α（修正原结论 2）
+    r04_bottleneck   瓶颈定位：选择名额 max_ratio·K 而非 α
     r05_capability   成功标准 3/4：能力驱动 k≈cap(t) 的平衡点
 """
 
