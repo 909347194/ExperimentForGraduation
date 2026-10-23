@@ -49,7 +49,7 @@
       { n: '1', t: '首任务匹配', d: '温度自适应 softmax：早期较大候选集软采样保多样性，随温度衰减收敛为贪心匹配' },
       { n: '2', t: '巡游边匹配', d: '按迭代行替换：以已访问任务为新起点行继续匹配——访问顺序真正进入进化搜索空间' },
       { n: '3', t: '扰动增强', d: '匹配后辅以 swap / insert / reverse 扰动，跳出局部结构' },
-      { n: '4', t: '段结构规范化', d: '重建航次分段：起始基因按 UAV 升序、终止基因稳定落段末——保证 SRP 不变式' },
+      { n: '4', t: '段结构规范化', d: '重建航次分段：起始基因按 UAV 升序、巡游基因紧跟其段——SRP 不变式（每任务恰一次、无终止基因）' },
     ].map((s, i) => (
       <Box key={s.n} style={{ width: 280, flexDirection: 'column', paddingLeft: i === 0 ? 0 : 13 }}>
         <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -67,7 +67,7 @@
     <Box style={{ flex: 1, background: '#F0F5FC', border: '1px solid #D6DCE5', borderLeft: '4px solid #1E4FA8', borderRadius: 10, padding: '13px 18px' }}>
       <Text style={{ fontSize: 15.5, fontWeight: 'bold', color: '#0E3F8C' }}>选择性 y=0 的决策位置：不占编码维度</Text>
       <Text style={{ fontSize: 13.5, color: '#4A5568', lineHeight: 1.65, marginTop: 5 }}>
-        DE 空间中每个任务都被分配，「暂不执行」由解码后的可行性修复在评估端裁量（航程超限移除），并支持「任务少时并入更少机」的合并修复——空闲机零成本。
+        DE 空间中每个任务都被分配，「暂不执行」不占基因维度——由解码端修复链裁量（物理不可行才移除/改派，能装必装由覆盖门禁保证），并支持「任务少时并入更少机」的合并修复 _consolidate：空闲是解码侧概念，不进基因。
       </Text>
     </Box>
     <Box style={{ flex: 1, background: '#F0F5FC', border: '1px solid #D6DCE5', borderLeft: '4px solid #0E3F8C', borderRadius: 10, padding: '13px 18px' }}>

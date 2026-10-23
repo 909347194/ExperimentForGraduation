@@ -4,7 +4,7 @@
     <Box style={{ width: 6, height: 34, background: '#1E4FA8' }} />
     <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#0E3F8C' }}>exp01：多 seed 阶梯——改进方向一致且可复现</Text>
   </Box>
-  <Text style={{ position: 'absolute', top: 78, left: 60, fontSize: 15, color: '#8B97A8' }}>长程滚动 24 周期 · Poisson λ=5 · 3 seed 全新复跑（当前代码版本）</Text>
+  <Text style={{ position: 'absolute', top: 78, left: 60, fontSize: 15, color: '#8B97A8' }}>长程滚动 24 周期 · Poisson λ=5 · 3 seed 复跑（10-21 代码口径）</Text>
 
   <Box style={{ position: 'absolute', top: 116, left: 40, width: 380, height: 534, background: '#0E3F8C', borderRadius: 12, padding: '34px 30px', flexDirection: 'column' }}>
     <Text style={{ fontSize: 15, color: '#85B7EB', letterSpacing: 2 }}>按时率（memetic 口径，n=3）</Text>

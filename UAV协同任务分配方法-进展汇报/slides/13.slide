@@ -4,7 +4,7 @@
     <Box style={{ width: 6, height: 34, background: '#1E4FA8' }} />
     <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#0E3F8C' }}>exp02：规模标定——求解规模与任务规模 N 解耦</Text>
   </Box>
-  <Text style={{ position: 'absolute', top: 78, left: 60, fontSize: 15, color: '#8B97A8' }}>17 格变体扫描（N = 50 / 100 / 200 × 名额族与能力族），下图为「吞吐—耗时—质量」权衡核心图</Text>
+  <Text style={{ position: 'absolute', top: 78, left: 60, fontSize: 15, color: '#8B97A8' }}>17 格变体扫描（N = 50/100/200 × 名额族与能力族，10-20 扫描口径），下图为「吞吐—耗时—质量」权衡核心图</Text>
 
   <Box style={{ position: 'absolute', top: 112, left: 60, background: '#FFFFFF', border: '1px solid #D6DCE5', borderRadius: 10, padding: 8 }}>
     <Image src="assets/fig_exp02_tradeoff.png" style={{ width: 1144, height: 459, objectFit: 'cover', borderRadius: 6 }} />
