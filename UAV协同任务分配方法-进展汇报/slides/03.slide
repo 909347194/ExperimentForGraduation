@@ -39,22 +39,22 @@
         <Text style={{ fontSize: 14, color: '#FFFFFF', fontWeight: 'bold' }}>P4 · 五大挑战</Text>
       </Box>
       <Box style={{ padding: '7px 16px', background: '#1E4FA8', borderRadius: 6 }}>
-        <Text style={{ fontSize: 14, color: '#FFFFFF', fontWeight: 'bold' }}>P5 · 总体求解框架</Text>
+        <Text style={{ fontSize: 14, color: '#FFFFFF', fontWeight: 'bold' }}>P5–P6 · 框架与滚动闭环</Text>
       </Box>
     </Box>
   </Box>
 
   <Box style={{ position: 'absolute', bottom: 76, left: 80, flexDirection: 'row', gap: 12, alignItems: 'center' }}>
-    {['01', '02', '03', '04'].map((n, i) => (
+    {['01', '02', '03'].map((n, i) => (
       <Box key={n} style={{ padding: '6px 16px', borderRadius: 14, background: i === 0 ? '#1E4FA8' : '#F0F5FC' }}>
         <Text style={{ fontSize: 14, fontWeight: 'bold', color: i === 0 ? '#FFFFFF' : '#8B97A8' }}>{n}</Text>
       </Box>
     ))}
-    <Text style={{ fontSize: 14, color: '#8B97A8', marginLeft: 8 }}>研究问题 · 方法两阶段 · 实验验证</Text>
+    <Text style={{ fontSize: 14, color: '#8B97A8', marginLeft: 8 }}>研究问题 · 两阶段方法 · 滚动闭环</Text>
   </Box>
 
   <Box style={{ position: 'absolute', bottom: 0, left: 0, width: 1280, height: 44, background: '#F7F9FC', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: '0 40px', borderTop: '1px solid #E5E7EB' }}>
     <Text style={{ fontSize: 13, color: '#8B97A8' }}>动态滚动的多机巢多无人机协同任务分配 · 进展汇报</Text>
-    <Text style={{ fontSize: 15, color: '#1E4FA8', fontWeight: 'bold' }}>03 / 16</Text>
+    <Text style={{ fontSize: 15, color: '#1E4FA8', fontWeight: 'bold' }}>03 / 12</Text>
   </Box>
 </Slide>
