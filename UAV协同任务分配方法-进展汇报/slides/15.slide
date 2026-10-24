@@ -19,7 +19,7 @@
       <Box style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
         <Box style={{ width: 8, height: 8, borderRadius: 4, background: '#1E4FA8', marginTop: 11 }} />
         <Text style={{ fontSize: 19, color: '#1A2230', lineHeight: 1.7, flex: 1 }}>
-          以<span style={{ fontWeight: 'bold' }}>离散映射差分进化（DMDE）</span>为基础做结构扩展，支持部分分配、顺序搜索与异巢终止
+          以<span style={{ fontWeight: 'bold' }}>离散映射差分进化（DMDE）</span>为基础做结构扩展，支持部分分配、顺序搜索与异巢终止；交付后再做成本 polish，只接受严格改进
         </Text>
       </Box>
     </Box>

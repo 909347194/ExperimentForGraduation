@@ -19,7 +19,7 @@
     <Box style={{ width: 56, height: 4, background: '#FFC107', marginTop: 30 }} />
     <Text style={{ fontSize: 18, color: '#DCE7F5', lineHeight: 1.9, marginTop: 28, textAlign: 'center' }}>
       动态任务选择缩空间 · 选择性 MUAS 精优化 · 滚动闭环不丢任务<br />
-      覆盖门禁守完成语义 · 四层准字典序保可行 · DMDE 搜归属与顺序
+      覆盖门禁守完成语义 · 四层准字典序保可行 · DMDE 搜归属顺序 · polish 压航程
     </Text>
   </Box>
 
