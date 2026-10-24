@@ -71,7 +71,7 @@
     <Box style={{ background: '#F7F9FC', border: '1px solid #D6DCE5', borderRadius: 10, padding: '13px 18px', flexDirection: 'column' }}>
       <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#0E3F8C' }}>设计判断</Text>
       <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.7, marginTop: 6 }}>
-        固定表述：搜索用 f 不含 −m·F1，F1 只作事后指标——「能装必交付」由覆盖门禁承担、非加权近似；W_hard/W_skip 由指标上下界推导，λ/w_late/w_time 为层内偏好参数；big-M 旧式（−m·F1_eff）保留为兼容口径。
+        固定表述：搜索用 f 不含 −m·F1，F1 只作事后指标；「能装必交付」由覆盖门禁承担；λ/w_late/w_time 为层内偏好参数；big-M 旧式保留为兼容口径。实测 λ=1e-1 下完成项 : 成本项 ≈ 800:1，成本项只在收益等价时裁决——成本余量主要由交付后 polish 获取（3 seed −4.09%）
       </Text>
     </Box>
   </Box>

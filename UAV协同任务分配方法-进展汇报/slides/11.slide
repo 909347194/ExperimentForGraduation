@@ -60,7 +60,7 @@
   <Box style={{ position: 'absolute', top: 442, left: 60, width: 1160, flexDirection: 'row', gap: 20 }}>
     {[
       { t: '第一阶段：轻量不构造成组合问题', d: '只为「值得考虑的任务」快速排序与筛选，落选任务留池下周期再评——避免对整个动态任务池做昂贵组合搜索，同时保住与执行代价的联系，分层动机见 P6。', tag: '缩空间' },
-      { t: '第二阶段：四类决策联合优化', d: '任务是否执行 y × 归属 x × 访问顺序 π × 终点机巢 z 联合确定；起点固定、终点可选、允许部分空闲——这是多机巢动态滚动的 MTSP 变体。', tag: '精优化' },
+      { t: '第二阶段：四类决策联合优化', d: '任务是否执行 y × 归属 x × 访问顺序 π × 终点机巢 z 联合确定；起点固定、终点可选——多机巢动态滚动 MTSP 变体；交付后再做成本 polish（跨机改派 + 组内重排，只接受严格改进）', tag: '精优化' },
       { t: '滚动闭环：能力范围内做更多', d: '完成出池、未选留池、故障释放、新任务到达；迟到不等于废飞，完成口径只认物理约束——保证长程运行下的任务不丢失。', tag: '闭环运行' },
     ].map((c) => (
       <Box key={c.tag} style={{ flex: 1, background: '#F7F9FC', border: '1px solid #D6DCE5', borderTop: '4px solid #1E4FA8', borderRadius: 10, padding: '14px 18px', flexDirection: 'column' }}>
