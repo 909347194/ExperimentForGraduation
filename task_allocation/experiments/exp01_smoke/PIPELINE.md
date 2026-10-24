@@ -97,9 +97,14 @@ fleet / robustness / comparison / config）用于再归类，但**不建目录**
 
 ```bash
 # 只出结论层（跨 seed 稳健性）
-python -c "from plot import render_from_results as r; \
-r('task_allocation/experiments/exp01_smoke/results', groups=['report'])"
-# 或跑实验时限定：python run.py --group scene --figure geo_overview
+python -c "from task_allocation.experiments.exp01_smoke.plot import \
+render_from_results as r; r('task_allocation/experiments/exp01_smoke/results', \
+groups=['report'])"
+# 或跑实验时限定：python run.py --group report
+#   ⚠️ 分层名必须与 plot/registry.py 的 FigureSpec.group 一致，只有
+#      setup / initial / process / report 四个。旧文档写的 scene 不存在，
+#      resolve 会抛 ValueError（2026-10-24 修复 P0-3）。
+#   单张图：python run.py --figure geo_overview
 ```
 
 ---

@@ -54,7 +54,7 @@ def main(argv: list[str] | None = None) -> int:
     fmts = tuple(f.strip().lower().lstrip(".")
                  for f in args.formats.split(",") if f.strip())
     from config import load_config
-    from plot import make_plots
+    from task_allocation.experiments.exp01_smoke.plot import make_plots
 
     raw_cfg = load_config(EXP_DIR / "config.yaml")
     dpi = args.dpi or int((raw_cfg.get("plot", {}) or {}).get("dpi", 200))

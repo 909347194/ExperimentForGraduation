@@ -12,6 +12,7 @@
     plot/__init__.py ──► registry.py ──► scene|process|report/*.py ──► base/*.py ──► theme.py
 """
 
+# 同 plot/__init__.py：包内导入用单点相对（2026-10-23 修正误改的四点导入）。
 from . import dem as _dem, geo as _geo
 from .dem import __all__ as _DEM_ALL
 from .geo import __all__ as _GEO_ALL

@@ -241,5 +241,5 @@ if __name__ == "__main__":
     _r = _P(__file__).resolve().parents[2]   # 实验根 = plot 的上两级
     if str(_r) not in sys.path:
         sys.path.insert(0, str(_r))
-    from plot import run_script
+    from task_allocation.experiments.exp01_smoke.plot import run_script
     run_script(_P(__file__).stem, sys.argv[1:])

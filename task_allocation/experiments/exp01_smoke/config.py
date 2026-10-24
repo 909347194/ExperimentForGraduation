@@ -163,6 +163,13 @@ def build_config_bundle(cfg: Mapping[str, Any]) -> ConfigBundle:
     problem_model = MUASProblemConfig(
         allow_unassigned=bool(m.get("allow_unassigned", True)),
         allow_idle_uav=bool(m.get("allow_idle_uav", True)),
+        # 双目标口径（2026-10-23 修复透传）：此前 yaml 的 muas.lexicographic /
+        # muas.big_m 在本装配里被漏掉——算法恒按 dataclass 默认（lexicographic
+        # =True、big_m=None）跑，而 plot/setup/setup_params.py 直接从 yaml 取值
+        # 标注「字典序 / 加权和」。即 yaml 改了算法不动、图却跟着变 ⇒ 图会说谎。
+        # 现显式透传：yaml 与算法同源，消融改 false 才真正切到 legacy 加权和。
+        lexicographic=bool(m.get("lexicographic", True)),
+        big_m=(None if m.get("big_m") is None else float(m["big_m"])),
         lambda_cost=float(m.get("lambda_cost", 1.0e-2)),
         w_penalty=float(m.get("w_penalty", 1.0)),
         # 惩罚量纲解耦开关：留空/None = 历史口径（惩罚随 F2 一起乘 λ）
@@ -225,6 +232,28 @@ def build_config_bundle(cfg: Mapping[str, Any]) -> ConfigBundle:
         coverage_first_max_rounds=int(m.get("coverage_first_max_rounds", 4)),
         monotone_polish_max_rounds=int(m.get("monotone_polish_max_rounds", 30)),
         monotone_polish_eps=float(m.get("monotone_polish_eps", 1.0e-6)),
+        # 重排期航程优化（2026-10-24 修）：零迟到时仍评估「最近邻」候选，
+        # 仅在「仍零迟到 且 航程严格更短」时采纳 ⇒ 执行集不变（F1 不动）、
+        # 只压航程。语义 = 覆盖优先、成本随后，不触碰主适应度阶梯。
+        # False = 修复前行为（早退把航程一起退掉）。
+        # ⚠️ 默认 False：2026-10-24 A/B 实测正式配置下净持平且总航程 +4%
+        # （多出尾巴周期），仅搜索不充分的冒烟档有收益。详见 muas_stage 注释。
+        reorder_range_optimize=bool(m.get("reorder_range_optimize", False)),
+        reorder_range_eps=float(m.get("reorder_range_eps", 1.0)),
+        # 交付后成本 polish（2026-10-24 用户裁定）：DMDE 收敛后对**交付解**
+        # 做组内 2-opt/Or-opt 纯成本重排。四道门：航程 / 迟到不增（数+量
+        # 逐分量）/ 执行集由构造不变 / 成本严格降。不触碰主适应度阶梯，
+        # 可与覆盖门禁 / coverage_first 叠加。默认开；消融显式 False。
+        cost_polish_enabled=bool(m.get("cost_polish_enabled", True)),
+        cost_polish_max_rounds=int(m.get("cost_polish_max_rounds", 30)),
+        cost_polish_eps=float(m.get("cost_polish_eps", 1.0)),
+        # 跨机指派成本 polish（2026-10-24 用户裁定转向）：组内重排之后补
+        # 归属维度——单任务跨机改派（含拉空闲机），四道门同组内口径。
+        # 3 seed A/B 钉死组内维度已穷尽（63 周期解 3 次接受、0.014%）
+        # 之后转向此维度；默认开，消融显式 False。
+        cost_polish_relocate_enabled=bool(
+            m.get("cost_polish_relocate_enabled", True)
+        ),
         marginal_tour_cap=(
             None if m.get("marginal_tour_cap") is None
             else int(m["marginal_tour_cap"])

@@ -5,7 +5,7 @@
 好坏，只回答「闭环按理论口径执行了吗」：落盘数据是否满足协议与模型的全部
 不变量。任一 FAIL 都意味着实现与理论口径脱节。
 
-不变量清单（A~M）：
+不变量清单（A~O）：
   A 终局守恒   到达 = 完成 + 淘汰 + 不可达 + 池内剩余（任务不丢、不重复计）
   B 完成唯一   跨周期 completed 互斥；与 solution 任务表的 completed_at 一致
   C 闸门语义   物理不可行交付不计完成；迟到 ⊆ 完成；废飞 ⊆ 出动
@@ -40,13 +40,25 @@
   L 容量/巢    逐周期机巢占用 ≤ capacity；终点机巢 id 合法
   M 段长口径   ETA（对称缓存 make_distance_fn）与代价矩阵（有序 estimate）
                段长一致（WARN 级：地形跟随航程方向相关，对称缓存是近似）
+  O 无幻影腿   metrics final_path_m == Σ有任务航次 est_cost（空航次恒 0；
+               2026-10-24 旧实现给闲置机计「机→巢」未飞行的腿，J 项只重算
+               dump 内航次故看不见，本项补盲区）
 
 用法（仓库根或本目录）：
     python3 task_allocation/experiments/exp01_smoke/audit_correctness.py
     python3 task_allocation/experiments/exp01_smoke/audit_correctness.py --results results_s43
 
-``--results`` 指定结果目录名（相对实验目录，默认 ``results``）；
-多 seed / 消融变体各自审计。退出码：有 FAIL → 1，仅 WARN → 0。
+``--results`` 指定结果目录名（相对实验目录，默认 ``results``）。
+
+**审计覆盖面（2026-10-24 修复 P0-1）**：若该目录下存在 ``seed_{id}/`` 子目录
+（多 seed 运行时 run.py 逐 seed 落盘），则**逐 seed 全量复核**再合并同名项
+（同名项须全部 PASS 才 PASS，失败详情标注 seed）；否则只审顶层产物——顶层
+``solution.json`` 只含代表 seed 的 tours，旧版因此漏审其余全部 seed。
+
+判据常数取 ``results/effective_config.json``（run.py 落盘的生效配置，含
+``--set``），缺该文件时回退 ``config.yaml``（2026-10-24 修复 P0-2）。
+
+退出码：有 FAIL → 1，仅 WARN → 0。
 run.py / run_chunked.py 每次运行末尾自动调用本审计（持续门禁）。
 """
 
@@ -56,6 +68,7 @@ import json
 import math
 import sys
 from pathlib import Path
+from typing import Any
 
 # 任意调用方式可跑（python -m / 任意 cwd）：脚本目录先入 sys.path，
 # 供 `from paths import` 在非脚本路径调用下也能解析（2026-10-22 修复）。
@@ -72,19 +85,84 @@ from task_allocation.methods.muas.cost.vertical_section import make_distance_fn
 EXP_DIR = Path(__file__).resolve().parent
 DATA_DIR = paths.ROOT / "task_allocation" / "data"
 
-RESULTS: list[tuple[str, bool, str, bool]] = []
+# 场景（DEM 地形 + 代价估算器）重建代价高，逐 seed 审计时复用一次
+_SCENE_CACHE: dict[str, Any] = {}
 
 
-def check(name: str, ok: bool, detail: str = "", warn: bool = False) -> None:
-    """warn=True 的失败只记 WARN（不影响 exit code），用于已知低危口径差异。"""
-    RESULTS.append((name, bool(ok), detail, warn))
+def _ensure_scene(cfg: dict) -> tuple[Any, Any]:
+    """构建（并缓存）审计重算所需的地形估算器与检查端距离函数。"""
+    if "dist" not in _SCENE_CACHE:
+        scenario = build_scenario(cfg, DATA_DIR)
+        terrain = build_terrain(scenario, cfg)
+        estimator = build_cost_estimator(terrain, cfg)
+        _SCENE_CACHE["dist"] = make_distance_fn(estimator)
+        _SCENE_CACHE["estimator"] = estimator
+    return _SCENE_CACHE["estimator"], _SCENE_CACHE["dist"]
 
 
-def main(results_name: str = "results") -> int:
-    results_dir = EXP_DIR / results_name
+def _load_effective_config(results_dir: Path) -> dict:
+    """**生效**配置：优先 ``effective_config.json``（run.py 落盘，含 --set）。
+
+    早期版本直接读 ``config.yaml`` 原文，看不到命令行 ``--set`` 注入的覆盖，
+    于是 E/G/D/J 项的判据常数与 run_meta 记录的生效配置指纹分裂——跑
+    ``--set`` 消融时判据按旧常数裁断（2026-10-24 修复 P0-2）。
+    旧产物没有该文件时回退 yaml（行为与旧版一致）。
+    """
+    eff = results_dir / "effective_config.json"
+    if eff.is_file():
+        try:
+            return json.loads(eff.read_text(encoding="utf-8")) or {}
+        except (OSError, ValueError):
+            pass
+    return load_config(EXP_DIR / "config.yaml")
+
+
+def _discover_targets(results_dir: Path) -> list[tuple[str, Path]]:
+    """审计目标：多 seed 时逐 ``seed_{id}`` 目录；否则只审顶层产物。"""
+    seed_dirs = sorted(
+        (d for d in results_dir.glob("seed_*")
+         if (d / "metrics.json").is_file() and (d / "solution.json").is_file()),
+        key=lambda p: p.name,
+    )
+    if seed_dirs:
+        return [(d.name, d) for d in seed_dirs]
+    return [("顶层产物(代表 seed)", results_dir)]
+
+
+def _merge(per_target) -> list[tuple[str, bool, str, bool]]:
+    """合并逐 seed 的检查结果：同名项全部 PASS 才算 PASS，详情标注失败 seed。"""
+    merged: dict[str, list] = {}
+    order: list[str] = []
+    for label, rows in per_target:
+        for name, ok, detail, warn in rows:
+            if name not in merged:
+                merged[name] = [True, [], bool(warn)]
+                order.append(name)
+            if not ok:
+                merged[name][0] = False
+                merged[name][1].append(f"{label}: {detail}")
+    return [
+        (n, merged[n][0], "; ".join(merged[n][1]), merged[n][2]) for n in order
+    ]
+
+
+def _run_checks(
+    results_dir: Path, cfg: dict, estimator, dist
+) -> list[tuple[str, bool, str, bool]]:
+    """对**单个**结果目录（一个 seed 的完整产物）跑全部不变量检查。
+
+    多 seed 时 :func:`main` 对每个 ``results/seed_{id}/`` 各调一次，再合并同
+    名项（2026-10-24 修复 P0-1）：早期版本只读顶层产物 ⇒ 3 seed 跑完只有代表
+    seed 被验证；而 D/J/K/M/N 五项依赖 solution 的 tours 与 fitness_weights，
+    ``metrics.json`` 里的 ``per_seed[seed]["cycles"]`` 不足以补审。
+    """
     m = json.loads((results_dir / "metrics.json").read_text(encoding="utf-8"))
     sol = json.loads((results_dir / "solution.json").read_text(encoding="utf-8"))
-    cfg = load_config(EXP_DIR / "config.yaml")
+    RESULTS: list[tuple[str, bool, str, bool]] = []
+
+    def check(name: str, ok: bool, detail: str = "", warn: bool = False) -> None:
+        """warn=True 的失败只记 WARN（不影响 exit code），用于已知低危口径差异。"""
+        RESULTS.append((name, bool(ok), detail, warn))
 
     s = m["summary"]
     cycles = m["cycles"]
@@ -185,10 +263,8 @@ def main(results_name: str = "results") -> int:
                 quant_ok = False  # complete_after_cycle：完成时刻 =周期推进时刻
 
     # ── 代价/距离重建（D 的 ETA 与 J 的航程共用）────────────────
-    scenario = build_scenario(cfg, DATA_DIR)
-    terrain = build_terrain(scenario, cfg)
-    estimator = build_cost_estimator(terrain, cfg)
-    dist = make_distance_fn(estimator)  # 检查端 ETA 口径（与运行端同款对称缓存）
+    # estimator / dist 由 _ensure_scene 按**生效配置**构建并跨 seed 复用——
+    # 每个 seed 重建一次 DEM 地形太慢，且配置在各 seed 间相同。
 
     def nest_pos(nid):
         n = nests[nid]
@@ -489,6 +565,27 @@ def main(results_name: str = "results") -> int:
           not range_bad, str(range_bad[:3]))
     check("K 起点链无瞬移：起点 = 上周期终点机巢", not chain_bad, str(chain_bad[:3]))
 
+    # ── O 无幻影腿：metrics final_path_m == dump est_cost 之和 ────
+    # 不变量由来：path_cost(final)=Σ_{全部航次} tour_path_cost；空航次恒 0
+    # （不起飞不飞行，与 _tour_cost 守卫/_advance_execution 同口径），而
+    # dump 过滤器 `if t.task_ids` 只快照有任务航次 ⇒ 两侧必须相等。
+    # 2026-10-24 旧实现给 _assemble 填了 home nest 的闲置机计「机→巢」
+    # 幻影腿，生产数据三 seed 被虚报 403/1091/388 m（占 0.024~0.065%）
+    # 而 J 项（只重算 dump 内的航次）完全看不见——本项补该盲区。
+    muas_by_cycle = {int(c["cycle"]): c["muas"] for c in cycles}
+    phantom_bad = []
+    for c in sol["cycles"]:
+        mu = muas_by_cycle.get(int(c["cycle"])) or {}
+        fp = mu.get("final_path_m")
+        if fp is None:
+            continue  # 旧数据/空转周期无该字段
+        est_sum = sum(float(t["est_cost"]) for t in c["tours"])
+        if abs(float(fp) - est_sum) > max(1.0, 1e-6 * float(fp)):
+            phantom_bad.append((c["cycle"], round(float(fp), 1),
+                                round(est_sum, 1)))
+    check("O 无幻影腿：final_path_m == Σ有任务航次 est_cost（容差 1m）",
+          not phantom_bad, str(phantom_bad[:3]))
+
     # ── M 段长口径（WARN 级）────────────────────────────────────
     # make_distance_fn 记忆化把 (A,B)/(B,A) 当对称存取，而地形跟随航程方向
     # 相关（爬升规则从起点扫描）→ ETA/时间模型（对称）与代价矩阵（有序）
@@ -511,6 +608,23 @@ def main(results_name: str = "results") -> int:
             cap_bad.append((c["cycle"], c["capacity_violations"]))
     check(f"L 机巢占用 ≤ capacity({cap}) 且无超容记录", not cap_bad, str(cap_bad[:3]))
 
+    return RESULTS
+
+
+def main(results_name: str = "results") -> int:
+    """审计入口：多 seed 逐目录复核后合并同名项；有 FAIL 记退出码 1。"""
+    results_dir = EXP_DIR / results_name
+    cfg = _load_effective_config(results_dir)
+    estimator, dist = _ensure_scene(cfg)
+    targets = _discover_targets(results_dir)
+    if len(targets) > 1:
+        print(f"[audit] 逐 seed 审计：{len(targets)} 个目录（"
+              f"{', '.join(lb for lb, _ in targets)}）")
+    per_target = [
+        (label, _run_checks(d, cfg, estimator, dist)) for label, d in targets
+    ]
+    RESULTS = _merge(per_target)
+
     # ── 报告 ────────────────────────────────────────────────────
     width = max(len(n) for n, _, _, _ in RESULTS)
     n_fail = n_warn = 0
@@ -528,7 +642,8 @@ def main(results_name: str = "results") -> int:
     print()
     verdict = ("，方法闭环与理论口径一致 ✔" if n_fail == 0
                else f"，{n_fail} 项不一致 ✘")
-    print(f"审计结论：{len(RESULTS) - n_fail - n_warn}/{len(RESULTS)} 通过"
+    scope = f"{len(targets)} 个 seed 目录合并" if len(targets) > 1 else "单目录"
+    print(f"审计结论（{scope}）：{len(RESULTS) - n_fail - n_warn}/{len(RESULTS)} 通过"
           + (f"，{n_warn} 项 WARN（已知低危口径差异）" if n_warn else "")
           + verdict)
     return 1 if n_fail else 0
