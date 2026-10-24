@@ -118,7 +118,7 @@ def test_evict_reenables_insertion_infeasible_task():
     tasks, uavs, nests = _fixture_evictable()
     ev = _evaluator(tasks, uavs, nests)
     work, ends = _initial_work()
-    ok = ev._reflow_task(3, work, ends, require_window=True)
+    ok = ev._reflow_task(3, work, ends, active_completion=True)
     assert ok, "换机补全失败：T_new 单飞 UAV1 可行（76 km）却被判不可达"
     assigned = {tid for tids in work.values() for tid in tids}
     assert assigned == {0, 1, 2, 3}, f"任务丢失：{assigned}"
@@ -163,7 +163,7 @@ def test_refill_of_evicted_uav_is_not_an_eviction():
     tasks[2] = _task(2, 0.0, -35_000.0)
     ev = _evaluator(tasks, uavs, nests)
     work, ends = _initial_work()
-    ok = ev._reflow_task(3, work, ends, require_window=True)
+    ok = ev._reflow_task(3, work, ends, active_completion=True)
     assert ok is False, (
         f"T_b 唯一去处是回填 UAV1（未真正腾空），换机应失败：work={work}"
     )
@@ -182,7 +182,7 @@ def test_defers_genuinely_unreachable():
     far = _task(9, 200_000.0, 0.0)  # 距巢 200 km：任何单飞 ≫ 80 km
     ev = _evaluator(tasks + [far], uavs, nests)
     work, ends = _initial_work()
-    ok = ev._reflow_task(9, work, ends, require_window=True)
+    ok = ev._reflow_task(9, work, ends, active_completion=True)
     assert ok is False, f"物理不可达的任务被硬塞：{ok}"
 
 
@@ -191,6 +191,6 @@ def test_evict_depth_gate_locked():
     tasks, uavs, nests = _fixture_evictable()
     ev = _evaluator(tasks, uavs, nests)
     work, ends = _initial_work()
-    assert ev._reflow_task(3, work, ends, require_window=True, depth=0) is True
+    assert ev._reflow_task(3, work, ends, active_completion=True, depth=0) is True
     work2, ends2 = _initial_work()
-    assert ev._reflow_task(3, work2, ends2, require_window=True, depth=2) is False
+    assert ev._reflow_task(3, work2, ends2, active_completion=True, depth=2) is False

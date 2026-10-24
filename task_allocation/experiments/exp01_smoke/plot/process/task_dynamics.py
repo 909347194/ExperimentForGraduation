@@ -78,8 +78,8 @@ _FLOW_SERIES = (
      PALETTE["selected"]),
     ("完成", lambda c: c.get("n_completed"), PALETTE["executed"]),
     ("延期滞留", lambda c: c.get("n_deferred"), PALETTE["deferred"]),
-    ("过期 / 释放",
-     lambda c: len(c.get("expired_ids") or []) + len(c.get("released_ids") or []),
+    ("超期滞留 / 释放",
+     lambda c: len(c.get("overdue_ids") or []) + len(c.get("released_ids") or []),
      PALETTE["release"]),
 )
 
@@ -145,7 +145,8 @@ def _state_grid(tasks: Sequence[dict[str, Any]],
         t_k = _num(cyc.get("current_time"))
         executed = {int(i) for i in (cyc.get("executed_ids") or [])}
         deferred = {int(i) for i in (cyc.get("deferred_ids") or [])}
-        gone |= {int(i) for i in (cyc.get("expired_ids") or [])}
+        # 2026-10-24 无超期淘汰：过期任务滞留池中、不出池，不计入 gone；
+        # gone 仅含 released（事件释放/剔除，真正离开池）。
         gone |= {int(i) for i in (cyc.get("released_ids") or [])}
 
         for r, task in enumerate(tasks):
@@ -207,7 +208,7 @@ def plot_task_dynamics(
 
     done_cum = _cumsum([_num(c.get("n_completed")) for c in cycles])
     gone_cum = _cumsum(
-        [len(c.get("expired_ids") or []) + len(c.get("released_ids") or [])
+        [len(c.get("released_ids") or [])   # 离开池仅 released（过期不出池）
          for c in cycles]
     )
     deferred = [_num(c.get("n_deferred")) for c in cycles]

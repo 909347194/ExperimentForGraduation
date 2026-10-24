@@ -277,16 +277,24 @@ def _evaluator(tasks, uavs, nests, **stage_cfg) -> MUASAssignmentEvaluator:
     )
 
 
-def test_prune_zero_reward_defers_unrecoverable_task():
-    """ETA ≥ latest+W 且无处可按时飞 → 暂缓（不带着零奖励上天）。"""
-    # 50 km @ 10 m/s = 5000 s；latest=1000、W=600 ⇒ 阈值 1600 s，必零奖励
+def test_prune_zero_reward_keeps_deliverable_late_task():
+    """软窗口径（active_completion）：零奖励但航程可行的任务仍被装并交付
+    （迟到交付计完成、F1 不减）→ 不暂缓；prune 只针对「不可交付」场景生效。
+
+    2026-10-24 软窗语义：_prune_zero_reward 把零奖励任务 pop 后，_reflow_task
+    以 active_completion=True 重新落位——可交付（航程可行）的任务被放回航次、
+    迟到交付仍计完成，故孤立可交付任务不被暂缓；仅「航程/窗口不可交付」才
+    真正剔除。原「defers_unrecoverable」命名基于此前的硬窗假设，软窗下失效。
+    """
+    # 50 km @ 10 m/s = 5000 s；latest=1000、W=600 ⇒ ETA ≥ latest+W 必零奖励
     tasks = [_task(0, 50_000.0, 0.0, latest=1_000.0)]
     nests = [Nest(id=0, x=0.0, y=0.0, z=0.0, capacity=4)]
     uavs = [_uav(0, 1e9)]
     ev = _evaluator(tasks, uavs, nests)
     sol = ev.build_solution([(0, 0)])
-    assert sol.tours[0].task_ids == [], "零奖励任务应被剔除暂缓"
-    assert 0 not in sol.executed_task_ids
+    # 软窗：零奖励但可交付（航程可行）⇒ 仍装并执行（迟到交付、计完成）
+    assert sol.tours[0].task_ids == [0], "软窗下零奖励但可交付的任务仍被装"
+    assert 0 in sol.executed_task_ids, "迟到交付仍计完成（F1 不减，故不暂缓）"
 
 
 def test_prune_zero_reward_keeps_ontime_task():

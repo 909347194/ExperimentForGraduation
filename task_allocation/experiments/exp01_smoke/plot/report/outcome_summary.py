@@ -91,18 +91,21 @@ def plot_outcome_summary(
     thru_final = thru_curve[-1] if thru_curve else 0.0
 
     done_ids: set[int] = set()
-    expired_ids: set[int] = set()
+    overdue_ids: set[int] = set()
     gated_ids: set[int] = set()
     for c in cycles:
         done_ids.update(int(i) for i in (c.get("completed_ids") or []))
-        expired_ids.update(int(i) for i in (c.get("expired_ids") or []))
+        overdue_ids.update(int(i) for i in (c.get("overdue_ids") or []))
         gated_ids.update(int(i) for i in (c.get("infeasible_ids") or []))
     n_arrived = int(summary.get("n_arrived", 0))
     n_done_total = int(summary.get("n_completed", len(done_ids)))
+    # 2026-10-24 无超期淘汰：过期任务滞留池中、不出池，不减完成；
+    # n_remain 守恒 = arrived − done − unreachable（超期任务已计入 done 或 remain）。
     n_remain = int(summary.get("n_remaining_pool",
-                               max(n_arrived - n_done_total - len(expired_ids), 0)))
-    n_expired = len(expired_ids)
-    n_gated = len(gated_ids - done_ids - expired_ids)
+                               max(n_arrived - n_done_total
+                                   - int(summary.get("n_unreachable", 0)), 0)))
+    n_overdue = len(overdue_ids)
+    n_gated = len(gated_ids - done_ids - overdue_ids)
     n_late_total = int(summary.get("n_late", 0))
     # 2026-10-24 A2：删除出动池化的 on_time_rate 键后，(d) 表「按时率」
     # 取交付集条件率 on_time_rate_final（论文口径）；出动池化正确执行率
@@ -163,7 +166,7 @@ def plot_outcome_summary(
     parts = [
         ("已完成", n_done_total, PALETTE["executed"]),
         ("滞留池中", n_remain, PALETTE["deferred"]),
-        ("到期作废", n_expired, PALETTE["release"]),
+        ("超期滞留", n_overdue, PALETTE["release"]),  # 诊断：超期但仍交付/滞留，非终局损失
         ("物理拦回", n_gated, "#b279a2"),
     ]
     parts = [(k, v, c) for k, v, c in parts if v > 0]

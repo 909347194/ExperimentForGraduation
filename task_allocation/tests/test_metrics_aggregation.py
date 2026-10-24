@@ -66,7 +66,7 @@ class _FakeTask:
 
 class _FakeRecord:
     def __init__(self, cycle, muas=None, executed=(), late=(), infeasible=(),
-                 expired=(), unreachable=(), lateness=None,
+                 expired=(), unreachable=(), overdue=(), lateness=None,
                  selection_extra=None, pool_counts=None, tours=None):
         self.cycle = cycle
         self.current_time = 600.0 * cycle
@@ -77,6 +77,7 @@ class _FakeRecord:
         self.late_ids = list(late)
         self.infeasible_ids = list(infeasible)
         self.expired_ids = list(expired)
+        self.overdue_ids = list(overdue)
         self.unreachable_ids = list(unreachable)
         self.lateness_by_task = dict(lateness or {})
         self.completed_ids = []
@@ -251,13 +252,15 @@ def test_zero_reward_accounting_disabled_decay():
 # ---------------------------------------------------------------------------
 
 def test_final_completion_rate_excludes_unreachable():
-    """η_final 分母只排除物理不可达、淘汰（须为 0，进分母作缺陷信号）；按时率按最终交付口径。"""
+    """η_final 分母只排除物理不可达；2026-10-24「无超期淘汰」后淘汰结构性为 0
+    （不再进分母作缺陷信号，但 A2 审计铁律仍断言其为 0）；超期滞留改
+    overdue_ids 纯诊断（n_overdue_ever 计数，不出池）。按时率按最终交付口径。"""
     t0 = _FakeTask(0, 5.0, 0.0, 6000.0, completed_at=600.0)
-    t1 = _FakeTask(1, 5.0, 0.0, 6000.0, completed_at=None)   # 淘汰（缺陷信号）→ 进分母
+    t1 = _FakeTask(1, 5.0, 0.0, 6000.0, completed_at=None)   # 超期滞留（诊断）→ overdue
     t2 = _FakeTask(2, 5.0, 0.0, 6000.0, completed_at=None)   # 物理不可达 → 不进分母
     records = [
         _FakeRecord(1, muas={"feasible": True}, executed=[0],
-                    expired=[1], unreachable=[2]),
+                    overdue=[1], unreachable=[2]),
     ]
     m = exp01_metrics.build_metrics(_facts(records, [t0, t1, t2], [t0]))
     s = m["summary"]
@@ -265,7 +268,10 @@ def test_final_completion_rate_excludes_unreachable():
     # A1（2026-10-24）：naive 完成率键已删除（正确性验证台不留双口径），
     # 旧断言 completion_rate == 1/3 随之移除；naive 值可由 n_completed/
     # n_arrived 复算，不进 summary。
-    assert abs(s["elimination_rate"] - 0.5) < 1e-5, s        # 1 / (3−1)
+    # 2026-10-24「无超期淘汰」：eliminated 结构性为 0（不再从 expired 累计），
+    # 超期任务改 overdue 诊断，n_overdue_ever 计数。
+    assert abs(s["elimination_rate"] - 0.0) < 1e-9, s        # 无超期淘汰：结构性 0
+    assert s["n_overdue_ever"] == 1, s                       # 超期滞留诊断计数
     assert abs(s["unreachable_rate"] - 1 / 3) < 1e-5, s
     assert abs(s["on_time_rate_final"] - 1.0) < 1e-5, s      # 交付 1、按时 1
     assert abs(s["path_per_completion_m"] - s["total_path_m"]) < 1e-5, s
