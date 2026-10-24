@@ -155,6 +155,76 @@ class MUASStageConfig:
     monotone_polish_max_rounds: int = 30
     # 单调 polish 严格改进阈值（绝对；吸收浮点求和噪声）。
     monotone_polish_eps: float = 1e-6
+    # 重排期的航程（成本）优化（2026-10-24 修）：``_best_order`` 原早退
+    # 「原序零迟到 → 直接返回」把候选判据 ``(迟到数, 迟到量, 航程)`` 的
+    # 最后一位整段作废——exp01 常态零迟到 ⇒ 航程从未进入比较，实测
+    # polish 增益 100% 来自 F1（见 docs/fitness_path_optimization_
+    # diagnosis_2026-10-24.md §3）。开启后：零迟到时仍评估「最近邻」这一
+    # 唯一以航程为目标的候选，仅在「仍零迟到 且 航程严格更短」时采纳。
+    # 语义 = 「覆盖优先、成本随后」：执行集与可行性均不变（F1 不动、
+    # 不引入迟到），只压航程，因此**不触碰主适应度阶梯**，可与任意
+    # 口径（含覆盖门禁）叠加。False = 修复前行为（早退全退）。
+    #
+    # ⚠️ 2026-10-24 A/B 实测**（默认关闭，勿擅自开启）**：
+    #   单周期冒烟（pop20/gen20）航程 −16.7%（419→349 km）看似有效，但
+    #   正式配置（pop50/gen100、3 seed）**净持平且总航程 +4.0%**：
+    #     ① 主周期 km/任务 27.04 → 27.03（持平）——访问顺序本就是 DE 编码的
+    #        一部分（cost_vector[K,N) 巡游段，见 test_tour_order_encoding），
+    #        搜索充分时「最近邻」贪心覆盖 DE 搜出来的顺序，净收益为零；
+    #     ② 非空周期 10 → 13（多 3 个只完成 1~2 个任务的尾巴周期，
+    #        39~159 km/任务）⇒ 总航程被尾巴拉高，按时率 −2.4pp、
+    #        正确执行率 −5.3pp、s_coverage 0.9958→0.9736。
+    #   结论：**「最近邻」不是正确的航程优化器**。早退确实是真缺陷（航程
+    #   从未进入比较），但正确解法是 2-opt/Or-opt 组内重排，且应作用于
+    #   **交付解**而非解码期（避免干扰 DE 搜索）。见 docs/fitness_path_
+    #   optimization_diagnosis_2026-10-24.md §9。
+    reorder_range_optimize: bool = False
+    # 采纳航程改进的严格阈值（米，绝对）。吸收浮点求和噪声，避免为
+    # 1e-9 级的差异改序（改序本身有下游 ETA 重算成本）。
+    reorder_range_eps: float = 1.0
+    # ── 交付后成本 polish（2026-10-24 用户裁定，诊断报告 §9 排序 1+2）───
+    # DMDE 搜索结束、交付解确定后，对**交付解本身**做组内 2-opt（段反转）
+    # / Or-opt（段长 1~3 迁移）纯成本重排。与同文件其它两个"成本优化"的
+    # 区别：
+    #   · vs reorder_range_optimize（解码期最近邻，2026-10-24 A/B 证伪、
+    #     默认关闭）：① 作用对象是**交付解**而非解码期——访问顺序本就是
+    #     DE 编码的一部分（cost_vector[K,N) 巡游段，test_tour_order_
+    #     encoding 证明被反映射真实消费），解码期强加贪心等于用贪心覆盖
+    #     搜索结果（正式档实测净持平、总航程 +4.0%）；② 求解器是
+    #     2-opt/Or-opt 而非最近邻构造——只接受严格改进，不可能更差；
+    #     ③ 走廉价原语（_tour_cost / 单趟 ETA），不过完整 evaluate 链。
+    #   · vs polish_assignment（local_search.py 的 relocate/swap/
+    #     position，默认开启）：邻域互补——position 只移单任务，2-opt 的
+    #     段反转 / Or-opt 的段迁移是 TSP 类问题的强邻域；且本 polish 在
+    #     run_selective_muas 终态（polish/memetic/coverage_first 之后）
+    #     统一执行，候选不进适应度缓存、不占 n_evals 口径。
+    # 四道门（与 _polish_routes_monotone 同纪律）：
+    #   1. 航程门：改序后全航程（起点→任务→终点巢）≤ 该机剩余航程；
+    #   2. 迟到门：迟到任务数不增 **且** 迟到总量不增（逐分量，不制造
+    #      新违约、不加深旧违约 ⇒ soft_violation 不增）；
+    #   3. 执行集门：2-opt/Or-opt 是航次内置换 ⇒ 任务集由构造不变
+    #      （run_selective_muas 采纳端再以 executed ⊇ 旧解复核）；
+    #   4. 成本门：航程严格下降 > eps 才采纳（first-improvement，接受
+    #      即重启扫描；无随机，逐位可复现）。
+    # 语义 = 覆盖优先、成本随后：F1 不动、迟到不增、路径严格降 ⇒ 任意
+    # λ>0 下适应度严格改进，**不触碰主适应度阶梯**，可与覆盖门禁 /
+    # coverage_first 任意叠加。默认开启（生产口径）；消融对照显式 False。
+    cost_polish_enabled: bool = True
+    # 轮数上限（整轮无改进即停；first-improvement 下 n_rounds ≈ 接受数+1）。
+    cost_polish_max_rounds: int = 30
+    # 采纳阈值（米，绝对；吸收浮点求和噪声）。
+    cost_polish_eps: float = 1.0
+    # ── 跨机指派成本 polish（2026-10-24 用户裁定，组内重排之后的转向）───
+    # 组内 2-opt/Or-opt 只改访问顺序；本开关打开**归属维度**：把单任务从
+    # 供体机改派到受体机（含可用但空闲的机），四道门与 _cost_polish_routes
+    # 同构（两侧航程门 / 两侧迟到门 / 执行集由构造保持 / 净航程严格下降）。
+    # 背景：3 seed A/B 钉死组内维度已穷尽——63 个周期解仅 3 次接受、
+    # 总增益 2262 m（占四 seed 总航程 0.014%），覆盖/按时逐位不变。
+    # 若本维度同样零接受 ⇒ exp01 交付解的航程在「顺序 × 归属」两个后处理
+    # 维度均已局部最优，残余差距只能来自搜索期目标权重（λ 弱杠杆），
+    # 为「不再拧适应度」提供实证边界。默认开启（与 cost_polish_enabled
+    # 同生产口径）；消融对照显式 False。
+    cost_polish_relocate_enabled: bool = True
     # 剔除判据的裕度：仅当 λ·节省 > 收益 × (1 + margin) 时才剔除
     prune_margin: float = 0.0
     # 等待补偿（论文 §3.2 的 W_i(t)）：任务滞留越久越不容易被剔除，
@@ -296,6 +366,10 @@ class MUASStageConfig:
             raise ValueError("memetic_max_rounds 必须 >= 1")
         if self.memetic_max_evals < 1:
             raise ValueError("memetic_max_evals 必须 >= 1")
+        if self.cost_polish_max_rounds < 1:
+            raise ValueError("cost_polish_max_rounds 必须 >= 1")
+        if self.cost_polish_eps < 0:
+            raise ValueError("cost_polish_eps 不能为负")
 
 
 @dataclass(frozen=True)
@@ -1072,10 +1146,33 @@ class MUASAssignmentEvaluator:
                 return None
             return (n_late, round(late_total, 6), round(length, 6))
 
-        # 早退：原序已零迟到 → 不必重排。绝大多数航次走这条路（每代每体都要
-        # 解码一次，不早退会把求解时间从 ~72 s 抬到 ~121 s，见实测）。
         base_key = _evaluate(list(tids))
         if base_key is not None and base_key[0] == 0:
+            # 原早退：零迟到 → 直接返回原序（每代每体都要解码一次，不早退
+            # 会把求解时间从 ~72 s 抬到 ~121 s，见实测）。
+            #
+            # 2026-10-24 修复：早退不能连「航程」一起退掉。候选判据是
+            # ``(迟到数, 迟到量, 航程)`` 字典序，航程排第 3；原序零迟到时
+            # 直接返回 ⇒ 航程永远进不了比较。exp01 各周期 final_late_s 常
+            # 态为 0 ⇒ **航程从未被优化过**，实测 polish 增益 100% 来自 F1
+            # （反证：若来自路径需 Δpath 达 154 万 km，实测 435 km）。
+            # 证据见 docs/fitness_path_optimization_diagnosis_2026-10-24.md §3。
+            #
+            # 改为：零迟到时仍评估「最近邻」这一唯一以航程为目标的候选
+            # （candidates[-1]），仅在「仍零迟到 且 航程严格更短」时采纳。
+            # 语义 = 覆盖优先、成本随后：执行集不变（F1 不动）、不引入迟到、
+            # 不超剩余航程，纯成本改进 ⇒ 不触碰主适应度阶梯。
+            # 性能：只多一次 _evaluate（全候选评估 72→121 s，单候选约其 1/4）。
+            if not self.config.reorder_range_optimize:
+                return list(tids)
+            nn_seq = candidates[-1]
+            nn_key = _evaluate(nn_seq) if list(nn_seq) != list(tids) else None
+            if (
+                nn_key is not None
+                and nn_key[0] == 0
+                and nn_key[2] < base_key[2] - self.config.reorder_range_eps
+            ):
+                return list(nn_seq)
             return list(tids)
 
         best_seq = list(tids)
@@ -2011,6 +2108,337 @@ class MUASAssignmentEvaluator:
                 break
         return work, ends, stats
 
+    # -- 交付后成本 polish（2-opt / Or-opt，2026-10-24）-------------------
+    def _eta_list(self, uav_id: int, tids: Sequence[int]) -> list[float]:
+        """单趟算航次各任务的预计到达时刻（与 :meth:`_arrival_time_of` 同口径）。
+
+        ``_arrival_time_of`` 每查一个位置重算整条前缀（O(n²/趟）；
+        ``_best_order`` 的 5 候选评估就这么用，搜索期每代每体一次可接受）。
+        交付后 polish 的邻域是 O(n²) 个候选，逐个 O(n²) 会到 O(n⁴)——
+        这里改成单趟 O(n) 累加（与 ``_polish_routes_monotone.arrivals_of``
+        同结构），测试以逐位相等锁死与 ``_arrival_time_of`` 的一致性。
+        """
+        uav = self._uav_by_id.get(uav_id)
+        speed = max(float(getattr(uav, "speed", 10.0) or 10.0), 1e-6)
+        service = float(getattr(self.problem.config, "default_service_time", 0.0) or 0.0)
+        t = float(self.config.current_time)
+        prev = (
+            (float(uav.x), float(uav.y), float(uav.z))
+            if uav is not None else (0.0, 0.0, 0.0)
+        )
+        out: list[float] = []
+        for tid in tids:
+            task = self._task_by_id.get(tid)
+            if task is None:
+                out.append(t)
+                continue
+            t += self.problem.costs.travel(
+                prev, (float(task.x), float(task.y), float(task.z))
+            ) / speed
+            est = getattr(task, "earliest", None)
+            if est is not None and t < est:
+                t = est
+            out.append(t)
+            t += service
+            prev = (float(task.x), float(task.y), float(task.z))
+        return out
+
+    def _late_key(self, uav_id: int, tids: Sequence[int]) -> tuple[int, float]:
+        """航次迟到键 ``(迟到任务数, 迟到总量秒)``；无时间窗时恒 ``(0, 0)``。"""
+        n_late = 0
+        late_total = 0.0
+        for tid, t_arr in zip(tids, self._eta_list(uav_id, tids)):
+            latest = self._task_latest(tid)
+            if latest is not None and t_arr > float(latest) + 1e-6:
+                n_late += 1
+                late_total += t_arr - float(latest)
+        return (n_late, round(late_total, 6))
+
+    def _cost_polish_routes(
+        self,
+        routes: Mapping[int, Sequence[int]],
+        end_nests: Mapping[int, int | None],
+    ) -> tuple[dict[int, list[int]], dict[int, int | None], dict[str, int]]:
+        """交付解的组内 2-opt / Or-opt 成本重排（**覆盖不侵蚀**）。
+
+        只改访问顺序、不改归属与任务集（航次内置换），四道门：
+
+        1. **航程门**：候选全航程（起点→任务→终点巢，:meth:`_tour_cost`）
+           ≤ 该机剩余航程（与 ``_consolidate`` 的结构性航程门同口径）；
+        2. **迟到门**：候选迟到键 ``(数, 总量)`` 逐分量不差于基线——
+           不制造新违约、不加深旧违约（⇒ ``soft_violation`` 不增）；
+        3. **执行集门**：置换由构造保持任务集（采纳端再复核）；
+        4. **成本门**：航程严格下降 > ``cost_polish_eps`` 才采纳。
+
+        策略：first-improvement + 接受即重启邻域扫描；整轮无改进即收敛。
+        全程无随机，同输入逐位可复现。终点机巢在调用方重选（见
+        :meth:`post_cost_polish`），这里只按当前 ``ends`` 估价。
+        """
+        work: dict[int, list[int]] = {k: list(v) for k, v in routes.items()}
+        ends: dict[int, int | None] = dict(end_nests)
+        eps = float(self.config.cost_polish_eps)
+        max_rounds = max(1, int(self.config.cost_polish_max_rounds))
+        stats = {"n_2opt": 0, "n_oropt": 0, "n_rounds": 0, "converged": 0}
+
+        def cost_of(uid: int, tids: Sequence[int]) -> float:
+            return self._tour_cost(uid, tids, ends.get(uid))
+
+        for round_idx in range(max_rounds):
+            stats["n_rounds"] = round_idx + 1
+            improved = False
+            for uid in sorted(work):
+                if improved:
+                    break  # first-improvement：接受即重启（下一轮从头扫）
+                tids = work[uid]
+                n = len(tids)
+                if n < 2:
+                    continue
+                limit = self._range_limit(uid)
+                base_cost = cost_of(uid, tids)
+                base_late = self._late_key(uid, tids)
+
+                # ── 2-opt：反转段 [i, j]（i<j）──────────────────────
+                for i in range(n - 1):
+                    if improved:
+                        break
+                    for j in range(i + 1, n):
+                        cand = tids[:i] + tids[i:j + 1][::-1] + tids[j + 1:]
+                        c = cost_of(uid, cand)
+                        if c > limit + 1e-6:
+                            continue
+                        if c >= base_cost - eps:
+                            continue
+                        late_n, late_t = self._late_key(uid, cand)
+                        if late_n > base_late[0] or late_t > base_late[1] + 1e-6:
+                            continue
+                        work[uid] = cand
+                        stats["n_2opt"] += 1
+                        improved = True
+                        break
+
+                # ── Or-opt：段长 1~3 迁往其它插入位 ──────────────────
+                if not improved:
+                    for seg in range(1, 4):
+                        if improved or seg > n:
+                            break
+                        for i in range(n - seg + 1):
+                            if improved:
+                                break
+                            rest = tids[:i] + tids[i + seg:]
+                            moving = tids[i:i + seg]
+                            for p in range(len(rest) + 1):
+                                if p == i:
+                                    continue  # 恒等移动
+                                cand = rest[:p] + moving + rest[p:]
+                                c = cost_of(uid, cand)
+                                if c > limit + 1e-6:
+                                    continue
+                                if c >= base_cost - eps:
+                                    continue
+                                late_n, late_t = self._late_key(uid, cand)
+                                if late_n > base_late[0] or late_t > base_late[1] + 1e-6:
+                                    continue
+                                work[uid] = cand
+                                stats["n_oropt"] += 1
+                                improved = True
+                                break
+            if not improved:
+                stats["converged"] = 1
+                break
+        return work, ends, stats
+
+    def _cost_polish_relocate(
+        self,
+        routes: Mapping[int, Sequence[int]],
+        end_nests: Mapping[int, int | None],
+    ) -> tuple[dict[int, list[int]], dict[int, int | None], dict[str, int]]:
+        """交付解的**跨机单任务改派**成本 polish（归属维度，2026-10-24）。
+
+        组内 2-opt/Or-opt（:meth:`_cost_polish_routes`）只改访问顺序；
+        本算子改**归属**：把单任务从供体机 ``src`` 迁到受体机 ``dst``
+        （含可用但当前空闲的机——空闲机起终点都按当前位置估价，终点巢
+        由 :meth:`post_cost_polish` 下游 :meth:`_choose_end_nests` 重选）。
+
+        对每个 (src, 位置 pos, 任务 tid, dst) 计算机械最优插入位的净变化::
+
+            Δ = tour_cost(src 移除 tid) + tour_cost(dst 插入 tid)
+              − tour_cost(src) − tour_cost(dst)
+
+        四道门（与 :meth:`_cost_polish_routes` 同纪律，逐机判定）：
+
+        1. **航程门**：供体移除后、受体插入后各自的全程代价分别 ≤ 两机
+           剩余航程（受体超限的插入位直接跳过）；
+        2. **迟到门**：两侧迟到键 ``(数, 总量)`` 逐分量不差于基线——
+           不制造新违约、不加深旧违约（⇒ ``soft_violation`` 不增）；
+        3. **执行集门**：改派保持任务集（采纳端再以 executed ⊇ 旧解复核）；
+        4. **成本门**：Δ < −``cost_polish_eps`` 才采纳。
+
+        策略：first-improvement + 接受即重启邻域扫描；无随机、按 id 升序，
+        逐位可复现。诊断另计 ``blocked_range`` / ``blocked_late``：几何上
+        更便宜但被航程门/迟到门拦死的改派数——用于区分「无余量」与
+        「有余量被约束堵住」（后者才是搜索期/约束口径的问题）。
+        """
+        work: dict[int, list[int]] = {k: list(v) for k, v in routes.items()}
+        ends: dict[int, int | None] = dict(end_nests)
+        eps = float(self.config.cost_polish_eps)
+        max_rounds = max(1, int(self.config.cost_polish_max_rounds))
+        all_uavs = sorted(self._uav_by_id)
+        stats = {
+            "n_relocate": 0,
+            "n_rounds": 0,
+            "converged": 0,
+            "blocked_range": 0,
+            "blocked_late": 0,
+        }
+
+        for round_idx in range(max_rounds):
+            stats["n_rounds"] = round_idx + 1
+            improved = False
+            for src in sorted(work):
+                if improved:
+                    break  # first-improvement：接受即重启（下一轮从头扫）
+                tids = work[src]
+                if not tids:
+                    continue
+                limit_src = self._range_limit(src)
+                base_src_cost = self._tour_cost(src, tids, ends.get(src))
+                base_src_late = self._late_key(src, tids)
+                for pos in range(len(tids)):
+                    if improved:
+                        break
+                    tid = tids[pos]
+                    src_new = tids[:pos] + tids[pos + 1:]
+                    src_cost_new = self._tour_cost(src, src_new, ends.get(src))
+                    if src_cost_new > limit_src + 1e-6:
+                        continue  # 移除任务不可能超限；防御性保留
+                    src_late_new = self._late_key(src, src_new)
+                    if (
+                        src_late_new[0] > base_src_late[0]
+                        or src_late_new[1] > base_src_late[1] + 1e-6
+                    ):
+                        continue  # 供体迟到键不劣化（移除只可能更好；仍验证）
+                    for dst in all_uavs:
+                        if dst == src:
+                            continue
+                        dst_tids = work.get(dst, [])
+                        limit_dst = self._range_limit(dst)
+                        end_dst = ends.get(dst)
+                        base_dst_cost = (
+                            self._tour_cost(dst, dst_tids, end_dst)
+                            if dst_tids
+                            else 0.0
+                        )
+                        base_dst_late = (
+                            self._late_key(dst, dst_tids) if dst_tids else (0, 0.0)
+                        )
+                        # 全部插入位中通过两道门的最便宜者（并列取最前位）
+                        best_cost = float("inf")
+                        best_cand: list[int] | None = None
+                        cheap_cost = float("inf")  # 仅几何最便宜（归因用）
+                        for p in range(len(dst_tids) + 1):
+                            cand = dst_tids[:p] + [tid] + dst_tids[p:]
+                            c = self._tour_cost(dst, cand, end_dst)
+                            if c < cheap_cost:
+                                cheap_cost = c
+                            if c > limit_dst + 1e-6:
+                                continue  # 航程门
+                            ln, lt = self._late_key(dst, cand)
+                            if ln > base_dst_late[0] or lt > base_dst_late[1] + 1e-6:
+                                continue  # 迟到门
+                            if c < best_cost - 1e-12:
+                                best_cost = c
+                                best_cand = cand
+                        if best_cand is None:
+                            # 归因：几何更便宜但被门拦死才计数
+                            if (
+                                cheap_cost < float("inf")
+                                and src_cost_new + cheap_cost
+                                < base_src_cost + base_dst_cost - eps
+                            ):
+                                if cheap_cost > limit_dst + 1e-6:
+                                    stats["blocked_range"] += 1
+                                else:
+                                    stats["blocked_late"] += 1
+                            continue
+                        if (
+                            src_cost_new + best_cost
+                            >= base_src_cost + base_dst_cost - eps
+                        ):
+                            continue  # 成本门：非严格下降
+                        # ── 采纳 ─────────────────────────────────────
+                        work[src] = src_new
+                        work[dst] = list(best_cand)
+                        if not src_new:
+                            ends[src] = None  # 供体清空 ⇒ 本轮闲置
+                        stats["n_relocate"] += 1
+                        improved = True
+                        break
+            if not improved:
+                stats["converged"] = 1
+                break
+        return work, ends, stats
+
+    def post_cost_polish(
+        self, solution: AllocationSolution
+    ) -> tuple[AllocationSolution, dict[str, int]]:
+        """交付解的「跨机改派 + 组内 2-opt/Or-opt → 终态联合重解」后处理。
+
+        对已构建的解（DMDE 原始交付解 / assignment polish 后 / memetic
+        档案 / coverage_first 后处理，whichever 胜出）取 routes 做：
+
+        1. :meth:`_cost_polish_relocate`——跨机单任务改派（归属维度），
+           四道门（两侧航程 / 两侧迟到 / 执行集由构造保持 / 净航程严格
+           下降）；``cost_polish_relocate_enabled=False`` 时整段跳过；
+        2. :meth:`_cost_polish_routes`——组内 2-opt/Or-opt（顺序维度），
+           四道门，执行集与迟到不劣化，只压航程；
+        3. ①→② 交替至一个联合轮次零接受（上限 3 轮：改派会改末任务、
+           改末任务会改插入代价，两维度有二阶交互）；
+        4. 全零接受 ⇒ 原样返回（逐位不变，零开销）；
+        5. 有改进 ⇒ 与 :meth:`build_solution` 终态同序的下游联合重解：
+           重排（时间窗）→ 航程闸 → 终点巢精确重解（改序/改派会改末任务
+           ⇒ 返航腿与巢容量竞争都变）→ 航程闸 → 重装配。
+
+        调用方按「执行集 ⊇ 旧解 且 硬违约不增 且 交付航程严格下降」
+        择优采纳（见 ``run_selective_muas``）；被拒则交付解保持原样。
+        """
+        routes = {
+            t.uav_id: list(t.task_ids) for t in solution.tours if t.task_ids
+        }
+        ends = {t.uav_id: t.end_nest_id for t in solution.tours}
+        if not routes:
+            return solution, {}
+        stats: dict[str, int] = {}
+        n_accepted = 0
+        # 联合局部搜索：改派（归属）↔ 重排（顺序）交替，各自收敛后若无
+        # 新接受即停。上界 3 轮——两维度交互是二阶项，exp01 量级下 1~2
+        # 轮即收敛；上限只是防御性边界。
+        for joint in range(3):
+            before = n_accepted
+            if self.config.cost_polish_relocate_enabled:
+                routes, ends, rstats = self._cost_polish_relocate(routes, ends)
+                for k in ("n_relocate", "blocked_range", "blocked_late"):
+                    stats[k] = int(stats.get(k, 0)) + int(rstats.get(k, 0))
+                n_accepted += int(rstats.get("n_relocate", 0))
+            routes, ends, ostats = self._cost_polish_routes(routes, ends)
+            for k in ("n_2opt", "n_oropt"):
+                stats[k] = int(stats.get(k, 0)) + int(ostats.get(k, 0))
+            n_accepted += int(ostats.get("n_2opt", 0)) + int(ostats.get("n_oropt", 0))
+            if n_accepted == before:
+                break  # 一个完整联合轮次零接受 ⇒ 两维度均局部最优
+        stats["n_accepted"] = int(n_accepted)
+        if n_accepted == 0:
+            return solution, stats
+        # 下游联合重解（与 build_solution 末段同序）：重排/改派改了末任务
+        # ⇒ 返航腿/终点巢竞争变，必须重选终点巢再闸一次航程，否则交付解
+        # 的 path_cost 口径与 polish 内的估价脱节。
+        routes = self._reorder_for_deadlines(routes)
+        routes, ends = self._repair_range(routes, ends)
+        if routes:
+            ends = self._choose_end_nests(routes)
+        routes, ends = self._repair_range(routes, ends)
+        sol = self._assemble(routes, ends)
+        return sol, stats
+
     def post_polish(
         self, solution: AllocationSolution
     ) -> tuple[AllocationSolution, dict[str, int]]:
@@ -2631,6 +3059,9 @@ def run_selective_muas(
     # 覆盖优先两段式的终态后处理诊断（2026-10-23）；预构建解通道不走
     # 后处理（基线的构造策略即其方法本身），保持空字典。
     mono_stats: dict[str, int] = {}
+    # 交付后成本 polish 诊断（2026-10-24）；预构建解通道不走（基线的
+    # 构造策略即其方法本身），保持空字典。
+    cost_polish_stats: dict[str, int] = {}
     if isinstance(prebuilt, AllocationSolution):
         # 预构建解通道（构造式基线，exp05_baselines）：extra["solution"] 即
         # 交付解——不走 assignment 解码修复链 / polish / memetic 档案，
@@ -2708,6 +3139,47 @@ def run_selective_muas(
             else:
                 mono_stats = dict(mono_stats)
                 mono_stats["rejected"] = 1
+
+        # ── 交付后成本 polish（2026-10-24 用户裁定，诊断报告 §9 排序 1+2）
+        # 对最终交付解（DMDE 原始 / assignment polish / memetic 档案 /
+        # coverage_first 后处理，whichever 胜出）做「跨机改派（归属）+
+        # 组内 2-opt/Or-opt（顺序）」纯成本局部搜索。与解码期
+        # reorder_range_optimize（最近邻，A/B 证伪）的关键区别：作用于
+        # 交付解不干扰 DE 搜索；只接受严格改进故不可能更差；走廉价原语
+        # 不过完整修复链。采纳判据与 coverage_first 终态后处理同构：
+        # 执行集不减少、硬违约不增、交付航程严格下降。
+        # 预构建解通道（构造式基线）不适用——基线的构造策略即其方法本身。
+        if stage_cfg.cost_polish_enabled:
+            path_before_cp = float(problem.path_cost(final))
+            cand, cost_polish_stats = evaluator.post_cost_polish(final)
+            cost_polish_stats["path_before_m"] = round(path_before_cp, 3)
+            # 诊断口径：零接受/被拒时 path_after 恒等于 path_before（旧代码
+            # 漏初始化，落盘 0.0 会被误读成「航程被清零」——2026-10-24 修复）。
+            cost_polish_stats.setdefault("path_after_m", round(path_before_cp, 3))
+            cost_polish_stats.setdefault("path_gain_m", 0.0)
+            if int(cost_polish_stats.get("n_accepted", 0)) > 0:
+                problem.evaluate(cand)
+                cand_fitness = float(problem.scalar_fitness(cand))
+                cand_n_hard, cand_excess = problem.hard_stats(cand)
+                cand_path = float(problem.path_cost(cand))
+                old_exec = set(final.executed_task_ids)
+                new_exec = set(cand.executed_task_ids)
+                if (
+                    new_exec >= old_exec
+                    and cand_n_hard <= final_n_hard
+                    and cand_excess <= final_excess_m + 1e-9
+                    and cand_path < path_before_cp - stage_cfg.cost_polish_eps
+                ):
+                    final = cand
+                    final_fitness = cand_fitness
+                    final_n_hard, final_excess_m = cand_n_hard, cand_excess
+                    cost_polish_stats["path_after_m"] = round(cand_path, 3)
+                    cost_polish_stats["path_gain_m"] = round(
+                        path_before_cp - cand_path, 3
+                    )
+                else:
+                    cost_polish_stats = dict(cost_polish_stats)
+                    cost_polish_stats["rejected"] = 1
 
     model_type = (
         "balanced" if len(participating) == len(task_list)
@@ -2792,6 +3264,38 @@ def run_selective_muas(
             "monotone_polish_converged": bool(mono_stats.get("converged", 0)),
             "monotone_polish_reloaded": int(mono_stats.get("n_reloaded", 0)),
             "monotone_polish_rejected": int(mono_stats.get("rejected", 0)),
+            # 交付后成本 polish 诊断（2026-10-24，组内 2-opt/Or-opt）。
+            # enabled=False 或预构建解通道 ⇒ 全 0（逐位等于旧口径）；
+            # rejected=1 表示候选未达采纳判据（执行集减少/硬违约增/
+            # 航程未严格下降），交付解保持原样。path_gain_m = 采纳时
+            # 交付航程的绝对下降量（米）。
+            "cost_polish_enabled": bool(stage_cfg.cost_polish_enabled),
+            "cost_polish_rounds": int(cost_polish_stats.get("n_rounds", 0)),
+            "cost_polish_n_2opt": int(cost_polish_stats.get("n_2opt", 0)),
+            "cost_polish_n_oropt": int(cost_polish_stats.get("n_oropt", 0)),
+            # 跨机改派诊断（2026-10-24，归属维度）：n_relocate = 采纳的
+            # 单任务跨机迁移数；blocked_range / blocked_late = 几何上更
+            # 便宜但分别被航程门 / 迟到门拦死的改派数——两者均 >0 而
+            # n_relocate=0 表示「有余量、被约束堵住」（搜索期/约束口径
+            # 问题），全 0 表示「归属维度亦已局部最优」。
+            "cost_polish_n_relocate": int(cost_polish_stats.get("n_relocate", 0)),
+            "cost_polish_relocate_blocked_range": int(
+                cost_polish_stats.get("blocked_range", 0)
+            ),
+            "cost_polish_relocate_blocked_late": int(
+                cost_polish_stats.get("blocked_late", 0)
+            ),
+            "cost_polish_converged": bool(cost_polish_stats.get("converged", 0)),
+            "cost_polish_rejected": int(cost_polish_stats.get("rejected", 0)),
+            "cost_polish_path_before_m": float(
+                cost_polish_stats.get("path_before_m", 0.0)
+            ),
+            "cost_polish_path_after_m": float(
+                cost_polish_stats.get("path_after_m", 0.0)
+            ),
+            "cost_polish_path_gain_m": float(
+                cost_polish_stats.get("path_gain_m", 0.0)
+            ),
             # memetic M1 精英档案诊断（2026-10-19）。enabled=False 时
             # n_polish/n_accepted=0、final_fitness=None、trajectory=[]，
             # 行为逐位等于非 memetic 基线。trajectory 长度 == len(cost_history)，
