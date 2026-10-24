@@ -9,18 +9,22 @@
        已选但经一阶检验确无任何可行插入的任务允许不交付，记
        capacity_shortfall（能力不足，不算 voluntary_skip）。
 
-口径（与既有实现严格同源，D1/D2 定稿）：
+口径（2026-10-24 用户裁定：无超期淘汰、迟到软约束、shortfall 非永久丢失）：
 
-- **自身窗**（``window_mode="self"``）：插入只硬约束 j 自身到达 ≤ deadline；
-  同航次后续任务被推晚属迟到（T2 软计价），不构成 skip。
+- **窗口不否决**（``window_mode="soft"``）：可装判据只剩硬约束
+  （航程 / 巢容量等）；deadline 是软偏好，迟到交付合法（计迟到、
+  计完成），由 ``w_late·L`` 计价（T2）。旧「自身窗硬约束」（D1/D2）
+  已废除——否则 blown-deadline 任务永远判 shortfall、无法交付，
+  「shortfall 非永久丢失」不成立。
 - 航程判据 = :meth:`problem.SelectiveMUASProblem.tour_path_cost` 全航程
   （起点 → 任务链 → 终点巢）≤ ``uav.remaining_range``——与
   ``check_range_constraint(margin=1.0)``、``muas_stage._repair_range``
   同一口径。
-- ETA 与 ``muas_stage._arrival_time_of`` 同口径：DEM 三维航程 / speed，
-  早到等待 ``earliest`` 后再判 deadline（与完成闸门一致）。
-- deadline 取法与判废口径一致：``time_window`` 元组优先、``.latest``
-  回退（``muas_stage._task_latest`` 同源）。
+- ETA 口径与 ``muas_stage._arrival_time_of`` 同源：DEM 三维航程 / speed，
+  早到等待 ``earliest``（仅用于 EDD 救援排序，不再判废）。
+- 开班（模式 A）终点巢名额：容量账按「起飞释放原巢名额、落地占终点巢
+  名额」现算（design_nest_state.md §0：容量从 uav.nest_id 现算，
+  不落第二份状态）；``constraints.nest_capacity`` 关闭时不查容量。
 - 开班（模式 A）终点巢名额：容量账按「起飞释放原巢名额、落地占终点巢
   名额」现算（design_nest_state.md §0：容量从 uav.nest_id 现算，
   不落第二份状态）；``constraints.nest_capacity`` 关闭时不查容量。
@@ -46,7 +50,7 @@ from typing import Any, Mapping, Sequence
 
 from task_allocation.common.types import UAV, UAVTour
 
-WINDOW_MODE = "self"
+WINDOW_MODE = "soft"
 _EPS = 1e-6
 
 __all__ = [
@@ -125,13 +129,13 @@ def arrival_at(problem: Any, uav: UAV, seq: Sequence[int], pos: int) -> float:
 
 
 def _window_ok(problem: Any, uav: UAV, seq: Sequence[int], pos: int) -> bool:
-    """自身窗：只判第 ``pos`` 个任务自身到达 ≤ deadline（D1 口径）。"""
-    if pos >= len(seq):
-        return True
-    dl = _task_deadline(problem, seq[pos])
-    if dl is None:
-        return True
-    return arrival_at(problem, uav, seq, pos) <= dl + _EPS
+    """（已废除的判据，保留为恒真占位）迟到软约束下窗口不否决可装性。
+
+    2026-10-24 口径：deadline 是软偏好，迟到由 ``w_late·L`` 计价；
+    可装判据只剩硬约束（航程 / 巢容量）。函数恒返回 ``True``，保留
+    签名是为不破坏既有调用点。
+    """
+    return True
 
 
 def _tour_cost(problem: Any, uav: UAV, seq: Sequence[int], end_nest: int | None) -> float:
@@ -208,7 +212,7 @@ def _check_open(
     tid: int,
     loads: Mapping[int | None, int],
 ) -> bool:
-    """模式 A：空闲机开单任务航次是否可行（航程 + 自身窗 + 巢容量）。"""
+    """模式 A：空闲机开单任务航次是否可行（航程 + 巢容量；窗口不否决）"""
     task = problem.task_by_id.get(tid)
     if task is None:
         return False
@@ -240,7 +244,7 @@ def _check_insert(
     end_nest: int | None,
     tid: int,
 ) -> bool:
-    """模式 B：tid 插入现有航次是否存在可行位（全链航程 + 自身窗）。"""
+    """模式 B：tid 插入现有航次是否存在可行位（全链航程；窗口不否决）。"""
     for pos in range(len(seq) + 1):
         cand = list(seq[:pos]) + [tid] + list(seq[pos:])
         end = end_nest
@@ -324,9 +328,9 @@ def repair_coverage(
 
     - 模式 B 优先（填充现有航次，取全链代价最小位），模式 A 兜底
       （空闲机开班，终点巢取容量可行的最近巢）；
-    - deferred 按 deadline 升序（EDD，最紧急先救）；
-    - 不做挤出（插入要求全链航程可行、自身窗可行，不会破坏他人硬约束，
-      后续任务迟到进 T2），因此通常一轮收敛；``max_rounds`` 仅防御性上限。
+    - deferred 按 deadline 升序（EDD，最紧急先救；仅排序启发式，不判废）；
+    - 不做挤出（插入只要求全链航程可行，不破坏他人硬约束，
+      迟到一律进 T2 计价），因此通常一轮收敛；``max_rounds`` 仅防御性上限。
     - 返回的 gate_stats：``n_skip`` = 修复后仍存在可行插入却未装的残值
       （正常恒 0；非 0 = 轮数耗尽/未收敛的防御信号），
       ``n_shortfall`` = 一阶检验能力不足（允许不交付）。

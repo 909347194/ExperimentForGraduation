@@ -68,7 +68,8 @@ class TaskPoolSnapshot:
         tasks: T_t = remain ∪ new ∪ release，即本周期参与任务选择的任务
         remain_ids / new_ids / release_ids: 三个来源的 task_id，互不相交且并集为 tasks
         executing_ids: 已分配执行中的任务，不参与本周期选择
-        expired_ids: 本周期被判过期而出池的任务
+        overdue_ids: 本周期已过 deadline 仍在池中的任务（**无超期淘汰**，
+            2026-10-24 口径：超期任务滞留池中、仍可迟到交付，只作诊断）
         current_time: 本周期的时间戳
     """
 
@@ -78,7 +79,7 @@ class TaskPoolSnapshot:
     new_ids: tuple[int, ...]
     release_ids: tuple[int, ...]
     executing_ids: tuple[int, ...]
-    expired_ids: tuple[int, ...]
+    overdue_ids: tuple[int, ...]
     current_time: float = 0.0
 
     @property
@@ -94,7 +95,7 @@ class TaskPoolSnapshot:
             "n_new": len(self.new_ids),
             "n_release": len(self.release_ids),
             "n_executing": len(self.executing_ids),
-            "n_expired": len(self.expired_ids),
+            "n_overdue": len(self.overdue_ids),
         }
 
 
@@ -134,7 +135,7 @@ class TaskPool:
         current_time: float = 0.0,
     ) -> None:
         self._tasks: dict[int, Task] = {}
-        self._finished: dict[int, Task] = {}  # DONE / EXPIRED，保留供查历史
+        self._finished: dict[int, Task] = {}  # DONE（无超期淘汰后仅 DONE 出池），保留供查历史
         self._source: dict[int, TaskSource] = {}
         self._executing: dict[int, int] = {}  # task_id -> uav_id
         self._planning_ids: list[int] = []  # 当前周期的 T_t
@@ -177,7 +178,7 @@ class TaskPool:
             new_ids=tuple(i for i in self._planning_ids if self._source.get(i) == TaskSource.NEW),
             release_ids=tuple(i for i in self._planning_ids if self._source.get(i) == TaskSource.RELEASE),
             executing_ids=tuple(sorted(self._executing)),
-            expired_ids=(),
+            overdue_ids=(),
             current_time=self._current_time,
         )
 
@@ -210,7 +211,7 @@ class TaskPool:
         return self._tasks.get(task_id) or self._finished.get(task_id)
 
     def finished_tasks(self) -> list[Task]:
-        """已出池任务（DONE / EXPIRED），按出池顺序。"""
+        """已出池任务（DONE；2026-10-24 起无超期淘汰，不再有 EXPIRED 出池），按出池顺序。"""
         return list(self._finished.values())
 
     def stats(self) -> dict[str, int]:
@@ -259,7 +260,10 @@ class TaskPool:
 
         1. 上周期 ``SELECTED`` 但未进入执行的任务回到 ``PENDING``（算 remain）
         2. 归类来源：新增 -> NEW，上周期释放 -> RELEASE，其余 -> REMAIN
-        3. 按 ``latest`` 判过期，出池
+        3. 超期诊断（**无超期淘汰**，2026-10-24 口径）：只标注已过
+           ``latest`` 的滞留任务，**不出池**——迟到是软约束，超期任务
+           仍可交付（计迟到），唯一出池途径是完成（DONE）或静态
+           物理不可达（UNREACHABLE）
         4. 冻结本周期 T_t，之后到达的任务只进池、不进本周期 T_t
         """
         if current_time is not None:
@@ -284,8 +288,8 @@ class TaskPool:
         self._new_pending.clear()
         self._release_pending.clear()
 
-        # 3) 过期检查（执行中的任务不受影响）
-        expired = self.expire(self._current_time)
+        # 3) 超期诊断（无超期淘汰：只标注，不出池）
+        overdue = self.overdue_tasks(self._current_time)
 
         # 4) 冻结 T_t：活动且未在执行
         self._planning_ids = [t.id for t in self._tasks.values() if t.id not in self._executing]
@@ -298,7 +302,7 @@ class TaskPool:
             new_ids=tuple(i for i in self._planning_ids if self._source.get(i) == TaskSource.NEW),
             release_ids=tuple(i for i in self._planning_ids if self._source.get(i) == TaskSource.RELEASE),
             executing_ids=tuple(sorted(self._executing)),
-            expired_ids=tuple(t.id for t in expired),
+            overdue_ids=tuple(t.id for t in overdue),
             current_time=self._current_time,
         )
 
@@ -413,7 +417,7 @@ class TaskPool:
     def mark_unreachable(self, task_ids: Iterable[int]) -> list[Task]:
         """物理不可达任务出池（UNREACHABLE）——「过于偏远」，非违约。
 
-        与 ``expire`` 的区别：这是**静态物理判定**的结果（所有机巢往返
+        与 ``overdue_tasks`` 的区别：这里是**静态物理判定**的结果（所有机巢往返
         航程都超过满电可及范围，见 selection.feasibility.static_unreachable），
         不是时间管理失败。用户原则（2026-10-15）下这是唯一合法的未完成
         原因，故单列计数，不混入「淘汰」。
@@ -436,29 +440,24 @@ class TaskPool:
             marked.append(task)
         return marked
 
-    def expire(self, current_time: float | None = None) -> list[Task]:
-        """超过 ``latest`` 的任务判过期并出池（EXPIRED）。
+    def overdue_tasks(self, current_time: float | None = None) -> list[Task]:
+        """已过 ``latest`` 仍在池中的任务（纯诊断，**无超期淘汰**）。
 
-        正在执行的任务不受影响（已在飞，不因时间窗失效）。
+        2026-10-24 口径：时间窗是迟到软约束，超期任务**滞留池中、仍可
+        迟到交付**（计迟到、计完成），不因超期出池、不标终局状态。
+        唯一出池途径：``mark_done``（完成）/ ``mark_unreachable``（静态
+        物理不可达）。旧 ``expire``（超期出池=淘汰）已废除。
         """
         t = self._current_time if current_time is None else float(current_time)
         if current_time is not None:
             self._current_time = t
-        expired: list[Task] = []
-        for task_id, task in list(self._tasks.items()):
-            if task_id in self._executing:
-                continue
-            if task.latest is None or t <= task.latest:
-                continue
-            task.status = TaskStatus.EXPIRED
-            self._tasks.pop(task_id)
-            self._source.pop(task_id, None)
-            self._planning_ids = [i for i in self._planning_ids if i != task_id]
-            self._new_pending.discard(task_id)
-            self._release_pending.discard(task_id)
-            self._finished[task_id] = task
-            expired.append(task)
-        return expired
+        return [
+            task
+            for task_id, task in list(self._tasks.items())
+            if task_id not in self._executing
+            and task.latest is not None
+            and t > task.latest
+        ]
 
     def snapshot_json(self) -> dict[str, object]:
         """当前周期的可机读切面（用于 results/*.json）。"""

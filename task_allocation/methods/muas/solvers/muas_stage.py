@@ -1330,9 +1330,8 @@ class MUASAssignmentEvaluator:
         完成任务」的长程目标一致。
 
         做法：逐航次按完成闸门同口径模拟 ETA，对第一个零奖励任务移除并
-        :meth:`_reflow_task`（``require_window`` + ``full_window``：只接受
-        「整条航次全部准时」的落点，不制造新违约；不做换机腾挪——剔除
-        场景下改派不成立就应当暂缓）。移除只会让后续任务更早，迭代至
+        :meth:`_reflow_task`（``full_window``：只接受「整条航次不新增迟到」
+        的落点，不制造新违约；不做换机腾挪——剔除场景下改派不成立就应当暂缓）。移除只会让后续任务更早，迭代至
         无零奖励任务即终止（每轮至少永久移除一个）。
         """
         decay = getattr(self.problem.config, "late_reward_decay_seconds", None)
@@ -1358,11 +1357,11 @@ class MUASAssignmentEvaluator:
                         continue
                     if self._arrival_time_of(uav_id, tids, pos) < latest + W - 1e-9:
                         continue
-                    # 零奖励：移除；改派到「整航次准时」处则保住，否则暂缓
+                    # 零奖励：移除；改派到「整航次不新增迟到」处则保住，否则暂缓
                     tids.pop(pos)
                     self._reflow_task(
                         tid, work, ends,
-                        require_window=True, full_window=True, allow_evict=False,
+                        active_completion=True, full_window=True, allow_evict=False,
                     )
                     changed = True
                     break
@@ -1547,16 +1546,14 @@ class MUASAssignmentEvaluator:
         uav_id: int,
         seq: Sequence[int],
         tid: int,
-        require_window: bool = False,
     ) -> list[int] | None:
         """``tid`` 插入 ``seq`` 的最优**可行**位；不可行返回 None。
 
         位置按插入代价最小选（归属由基因组定、位置可重算——与 repair_chain
         的 ``_reorder_for_deadlines`` 同性质，是 B1 对照臂的语义差异之一）；
         返航腿按最近巢保守估（终点巢此时未定，实际只会更远或相等）。
-        ``require_window``：True 时同时校验该位时间窗（救援/补全路径用，
-        与 ``_complete_coverage`` 的 ``require_window=True`` 同口径；主插入
-        路径默认 False，与 repair_chain「先装后重排」保持 parity）。
+        可行判据 = 航程（窗口是软约束，2026-10-24 口径：迟到计价、计完成，
+        不否决可装性）。
         """
         best_pos: int | None = None
         best_cost = float("inf")
@@ -1565,8 +1562,6 @@ class MUASAssignmentEvaluator:
             cand = list(seq[:pos]) + [tid] + list(seq[pos:])
             c = self._tour_cost(uav_id, cand, None)
             if c > limit + 1e-6:
-                continue
-            if require_window and not self._window_ok(uav_id, cand, pos):
                 continue
             if c < best_cost - 1e-12:
                 best_cost, best_pos = c, pos
@@ -1579,7 +1574,6 @@ class MUASAssignmentEvaluator:
         tid: int,
         routes: dict[int, list[int]],
         exclude: set[int],
-        require_window: bool = True,
     ) -> bool:
         """构造式解码的出列任务救援（第3层安全网，Fix⑥ 内化）。
 
@@ -1597,7 +1591,7 @@ class MUASAssignmentEvaluator:
             if uid in exclude or not routes.get(uid):
                 continue
             new_seq = self._feasible_insert(
-                uid, routes[uid], tid, require_window=require_window
+                uid, routes[uid], tid
             )
             if new_seq is None:
                 continue
@@ -1624,10 +1618,6 @@ class MUASAssignmentEvaluator:
                 if (
                     self._tour_cost(uid, [tid], None)
                     <= self._range_limit(uid) + 1e-6
-                    and (
-                        not require_window
-                        or self._window_ok(uid, [tid], 0)
-                    )
                 ):
                     routes[uid] = [tid]
                     return True
@@ -1862,11 +1852,11 @@ class MUASAssignmentEvaluator:
         尝试「插入现有航次的最优可行位置 → 拉入闲置可用机（**全机队**）开单
         任务航次」。只要航程可行就执行——可达性是存在量化，不是方案内判定。
 
-        真不可达的任务不会被硬塞：航程不可达（任何机单任务航次都超限，如
-        exp01 的 T19，最小单任务航次 82.4km）或**时间窗不可达**（飞得到但赶
-        不到 deadline，如 exp01 的 T10，15m/s 下需 4487s 而 deadline 仅
-        2914s）时 _reflow_task 返回 False，保持 y_j=0。这正是「可达即执行、
-        但不得违反约束」的边界。
+        真不可达的任务不会被硬塞：**航程/巢容量等硬约束**不可达（任何机
+        单任务航次都超限，如 exp01 的 T19，最小单任务航次 82.4km）时
+        _reflow_task 返回 False，保持 y_j=0。窗口是软约束（2026-10-24
+        口径：迟到计价、计完成），「飞得到但赶不到 deadline」的任务
+        **必须装**（如 exp01 的 T10：迟到交付＝完成，不是白飞）。
         """
         # 门禁口径（唯一主口径，2026-10-24）下经济性剔除已永久关闭：原 legacy
         # 加权和（lexicographic=False）路径已从代码移除，而门禁口径「完成是约束」
@@ -1883,9 +1873,8 @@ class MUASAssignmentEvaluator:
         for tid in self._task_ids:
             if tid in assigned:
                 continue
-            # require_window=True：可达＝航程可行 **且** 时间窗可行。只查航程
-            # 会补进「飞得到但赶不到 deadline」的任务，白飞一趟、还拉低 F1。
-            if self._reflow_task(tid, work, ends, require_window=True):
+            # 窗口是软约束（2026-10-24：迟到计价、计完成），主动补全不查窗。
+            if self._reflow_task(tid, work, ends, active_completion=True):
                 assigned.add(tid)
 
         return work, ends
@@ -1902,12 +1891,13 @@ class MUASAssignmentEvaluator:
         用户 2026-10-23 裁定（解码/repair 第一段）：先按覆盖目标装，再
         在不减少已装集合的约束下做成本 polish。本函数即第一段。
 
-        约定口径（与覆盖门禁同源，D1 自身窗）：**一阶判据** =
-        航程（全航程 ≤ 剩余航程）+ 自身时间窗（插入位任务到达 ≤
-        deadline）+ 开班机巢容量；救援通道含插入现有航次、闲置机开班
+        约定口径（与覆盖门禁同源，2026-10-24 软窗）：**一阶判据** =
+        航程（全航程 ≤ 剩余航程）+ 开班机巢容量；窗口不否决（迟到
+        软约束，迟到计价、计完成）；救援通道含插入现有航次、闲置机开班
         （参与集 → 全机队 fleet 口径）、换机腾位（Fix⑦，depth<2，
-        迁移任务受全航次窗约束）。不含「两个未覆盖任务拼班才装得下」
-        的组合可行——与 ``gate_stats`` 的 shortfall 声明同边界。
+        迁移任务受全航次单调纪律约束——不制造**新**迟到）。不含
+        「两个未覆盖任务拼班才装得下」的组合可行——与 ``gate_stats``
+        的 shortfall 声明同边界。
 
         顺序 EDD（deadline 升序，最紧急先装）——与
         :func:`coverage_gate.repair_coverage` 一致；每轮装载后重排 +
@@ -1935,10 +1925,9 @@ class MUASAssignmentEvaluator:
             )
             round_loaded = 0
             for tid in deferred:
-                # require_window=True：可达 = 航程可行且自身时间窗可行；
-                # allow_evict 默认开（换机腾位 Fix⑦，救援强度高于门禁的
-                # 插入/开班两级）。
-                if self._reflow_task(tid, work, ends, require_window=True):
+                # active_completion=True：主动补全（启用换机腾位 Fix⑦，
+                # 救援强度高于门禁的插入/开班两级）；窗口是软约束，不查窗。
+                if self._reflow_task(tid, work, ends, active_completion=True):
                     round_loaded += 1
             loaded += round_loaded
             if round_loaded == 0:
@@ -2500,7 +2489,7 @@ class MUASAssignmentEvaluator:
         task_id: int,
         work: dict[int, list[int]],
         ends: dict[int, int | None],
-        require_window: bool = False,
+        active_completion: bool = False,
         allow_evict: bool = True,
         depth: int = 0,
         full_window: bool = False,
@@ -2514,27 +2503,26 @@ class MUASAssignmentEvaluator:
         2b. Fix⑥：救援池扩到全可用机队（参与集外的闲置机同样可用）；
         2c. Fix⑦ 换机：某架机的单任务航次 ``[task_id]`` 可行，但它已被
             占用 → 尝试把它的现有任务整体迁到别处，空出该机飞 ``task_id``。
-        （仅 ``require_window`` 下启用，即主动覆盖补全；被动救援不动别人
+        （仅 ``active_completion`` 下启用，即主动覆盖补全；被动救援不动别人
         的任务，保持修复链最小干预。）
         3. 均不可行 → 返回 False：任务本轮 y_j=0，属**证明性暂缓**，
            而非旧实现的"顺手删除"（任务物理可行却因邻座航次装不下而被吞）。
 
         为什么需要 2c：exp01 的 T2 三个周期全部 defer——实测全程只有
-        UAV2 能飞它（单航次 47.0 km ≤ 80 km、到达余量 1149 s），其余 9 架
-        航程超限或时间窗不够；而 UAV2 每周期都被 DMDE 派了别的航次，
-        插入即迟到。只做「插入 + 拉闲置」判不出可达，必须允许换机。
+        UAV2 能飞它（单航次 47.0 km ≤ 80 km），其余 9 架航程超限；而
+        UAV2 每周期都被 DMDE 派了别的航次。只做「插入 + 拉闲置」判不出
+        可达，必须允许换机。
 
         全程确定性（无随机、按 id 升序遍历），评估缓存安全。
         ``depth``：换机链深度上限（``depth < 2`` 才允许 2c）——被腾出的
-        任务迁往别处时自身也可能需要换机（exp01 的 T7：插入任何现有航次
-        都迟到、能单飞的机都已有航次、闲置机又太远），一层不够；
+        任务迁往别处时自身也可能需要换机（exp01 的 T7），一层不够；
         但无限递归会震荡且拖慢 evaluate，故限制为两层。
         ``full_window``：为 True 时插入判断用 :meth:`_window_ok_all`
-        （整条航次所有任务不得迟到）。2c 的迁移调用置 True——换机是
-        事后强制补全，不看 fitness，只认可行性；若放行「被插任务来得及、
-        同航次后续任务被推迟到 deadline 之后」的插入，就把已守约的任务
-        搞成违约（exp01 换机版实测 95%→85%，3 个新 tw 违约全源于此），
-        违反「约束是硬边界」的方法论。可达即执行，但不得制造新违约。
+        （整条航次所有任务不得新增迟到）。2c 的迁移调用置 True——换机是
+        事后强制补全，不看 fitness，只认可行性与**单调修复纪律**：不得
+        把已守约的任务推成迟到（exp01 换机版实测 95%→85%，3 个新 tw
+        违约全源于此）。注意：迟到本身是软约束（T2 计价、计完成），
+        可装判据不查窗；此处仅约束「修复不得制造**新**迟到」。
         """
         # 1) 插入现有航次（含原航次——换个位置能装下就不用暂缓）
         best: tuple[float, int, list[int]] | None = None
@@ -2548,17 +2536,12 @@ class MUASAssignmentEvaluator:
                 c = self._tour_cost(uid, cand, ends.get(uid))
                 if (
                     c <= limit + 1e-6
-                    # require_window：主动补全时才校验时间窗。可达＝航程与时间窗
-                    # 双重可行；只查航程会把「飞得到但赶不到」的任务也塞进来
-                    # （exp01 的 T10：航程 67.3km 可达，但 15m/s 下需 4487s，
-                    #  而 deadline 仅 2914s → 白飞一趟还压低 F1）。
-                    # full_window：换机迁移用全航次校验（不得把同航次后续任务
-                    # 推迟到 deadline 之后——单点可行、全航次违约）。
-                    and (not require_window or (
-                        self._window_ok_all(uid, cand)
-                        if full_window
-                        else self._window_ok(uid, cand, pos)
-                    ))
+                    # 窗口是软约束（2026-10-24 口径：迟到计价、计完成），
+                    # 可装判据只查航程——「飞得到但赶不到」的任务必须装
+                    # （迟到交付＝完成，不是白飞）。full_window：换机迁移
+                    # 保留全航次单调纪律（不得把同航次后续任务搞迟到——
+                    # 修复不制造**新**迟到，与 cost_polish 四道门同纪律）。
+                    and (self._window_ok_all(uid, cand) if full_window else True)
                     and (best is None or c < best[0] - 1e-9)
                 ):
                     best = (c, uid, cand)
@@ -2571,7 +2554,6 @@ class MUASAssignmentEvaluator:
                 continue
             if (
                 self._tour_cost(u.id, [task_id], ends.get(u.id)) <= self._range_limit(u.id) + 1e-6
-                and (not require_window or self._window_ok(u.id, [task_id], 0))
             ):
                 work[u.id] = [task_id]
                 return True
@@ -2591,20 +2573,18 @@ class MUASAssignmentEvaluator:
                     continue
                 if (
                     self._tour_cost(u.id, [task_id], ends.get(u.id)) <= self._range_limit(u.id) + 1e-6
-                    and (not require_window or self._window_ok(u.id, [task_id], 0))
                 ):
                     work[u.id] = [task_id]
                     return True
         # 2c) Fix⑦ 换机：把「能单飞 task_id 但已被占用」的机腾出来。
-        # 仅主动补全（require_window）时启用；迁移允许有限深度递归换机。
-        if require_window and allow_evict and depth < 2:
+        # 仅主动补全（active_completion）时启用；迁移允许有限深度递归换机。
+        if active_completion and allow_evict and depth < 2:
             for uid in sorted(work):
                 if not work[uid]:
                     continue
                 if not (
                     self._tour_cost(uid, [task_id], ends.get(uid))
                     <= self._range_limit(uid) + 1e-6
-                    and self._window_ok(uid, [task_id], 0)
                 ):
                     continue
                 moved = list(work[uid])
@@ -2613,7 +2593,7 @@ class MUASAssignmentEvaluator:
                 ok = True
                 for tid in moved:
                     if not self._reflow_task(
-                        tid, trial, ends, require_window=True,
+                        tid, trial, ends, active_completion=True,
                         allow_evict=True, depth=depth + 1, full_window=True,
                     ):
                         ok = False

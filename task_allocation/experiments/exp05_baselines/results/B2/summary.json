@@ -1,0 +1,128 @@
+{
+  "arm": "B2",
+  "solver": "greedy",
+  "cost_model": "dem",
+  "label": "收益/代价比贪心插入",
+  "seeds": [
+    45
+  ],
+  "agg": {
+    "n_arrived": {
+      "mean": 60.0,
+      "std": 0.0
+    },
+    "n_completed": {
+      "mean": 60.0,
+      "std": 0.0
+    },
+    "completion_rate": {
+      "mean": 1.0,
+      "std": 0.0
+    },
+    "effective_completion_rate": {
+      "mean": 1.0,
+      "std": 0.0
+    },
+    "reward_yield": {
+      "mean": 0.935944,
+      "std": 0.0
+    },
+    "on_time_rate": {
+      "mean": 0.816667,
+      "std": 0.0
+    },
+    "n_late": {
+      "mean": 11.0,
+      "std": 0.0
+    },
+    "total_lateness_s": {
+      "mean": 8023.924,
+      "std": 0.0
+    },
+    "avg_lateness_s": {
+      "mean": 729.448,
+      "std": 0.0
+    },
+    "max_lateness_s": {
+      "mean": 1523.792,
+      "std": 0.0
+    },
+    "total_path_m": {
+      "mean": 1511895.0,
+      "std": 0.0
+    },
+    "n_infeasible_delivery": {
+      "mean": 0.0,
+      "std": 0.0
+    },
+    "n_capacity_violations": {
+      "mean": 0.0,
+      "std": 0.0
+    },
+    "cycle_feasible_rate": {
+      "mean": 1.0,
+      "std": 0.0
+    },
+    "n_eliminated": {
+      "mean": 0.0,
+      "std": 0.0
+    },
+    "n_unreachable": {
+      "mean": 0.0,
+      "std": 0.0
+    },
+    "throughput_per_cycle": {
+      "mean": 6.666667,
+      "std": 0.0
+    },
+    "n_cycles": {
+      "mean": 9.0,
+      "std": 0.0
+    },
+    "n_active_cycles": {
+      "mean": 5.0,
+      "std": 0.0
+    },
+    "solve_time_ms": {
+      "mean": 79.1,
+      "std": 0.0
+    },
+    "wall_seconds": {
+      "mean": 1.166,
+      "std": 0.0
+    }
+  },
+  "per_seed": [
+    {
+      "n_arrived": 60,
+      "n_completed": 60,
+      "completion_rate": 1.0,
+      "effective_completion_rate": 1.0,
+      "reward_yield": 0.935944,
+      "on_time_rate": 0.816667,
+      "n_late": 11,
+      "total_lateness_s": 8023.924,
+      "avg_lateness_s": 729.448,
+      "max_lateness_s": 1523.792,
+      "total_path_m": 1511895.0,
+      "n_infeasible_delivery": 0,
+      "infeasible_tag_counts": {},
+      "n_capacity_violations": 0,
+      "cycle_feasible_rate": 1.0,
+      "n_eliminated": 0,
+      "n_unreachable": 0,
+      "throughput_per_cycle": 6.666667,
+      "n_cycles": 9,
+      "n_active_cycles": 5,
+      "n_zero_reward_delivery": 0,
+      "avg_wait_s": 750.0,
+      "n_remaining_pool": 0,
+      "solve_time_ms": 79.1,
+      "wall_seconds": 1.166,
+      "arm": "B2",
+      "solver": "greedy",
+      "cost_model": "dem",
+      "seed": 45
+    }
+  ]
+}

@@ -190,8 +190,13 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
     all_lateness = [
         float(v) for r in records for v in r.lateness_by_task.values()
     ]
-    # 淘汰：deadline 已过仍在池中、被 expire 出池的任务（机制缺陷信号，须为 0）
-    n_eliminated = sum(len(r.expired_ids) for r in records)
+    # 淘汰：2026-10-24 口径「无超期淘汰」后**结构性为 0**（TaskPool 不再
+    # 超期出池；唯一出池途径 = 完成 / 静态物理不可达）。保留键作审计断言
+    # （audit_correctness 终局守恒），n_overdue_ever 为超期滞留诊断。
+    n_eliminated = 0
+    n_overdue_ever = len(
+        {int(i) for r in records for i in getattr(r, "overdue_ids", ())}
+    )
     # ── 有效完成口径（2026-10-16 审查 I4）──────────────────────────
     # 「迟到≠废飞」下迟到交付计完成，但迟到 ≥ W 的交付有效奖励折减为 0。
     # 完成率若不并列这个口径就会虚高（本跑 12 个迟到交付中 7 个实得 0）。
@@ -273,6 +278,7 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
         (len(completed) - n_late) / len(completed) if completed else 0.0
     )
     path_per_completion_m = (total_cost / len(completed)) if completed else 0.0
+    # 结构性 0（无超期淘汰）：仅作审计断言与恒等式分解项
     elimination_rate = (n_eliminated / n_final_denom) if n_final_denom else 0.0
     unreachable_rate = (n_unreachable / n_arrived) if n_arrived else 0.0
 
@@ -453,15 +459,31 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
                     False,
                 )
             ),
-            # 论文主表必报列序（2026-10-22 指标体系 v2）：随数据自描述，
-            # 表格生成按此序取数，不靠文档记忆
+            # 论文主表必报列序（2026-10-24 口径：本周期覆盖/吞吐、单位完成
+            # 航程、等待时间、耗时）：随数据自描述，表格生成按此序取数，
+            # 不靠文档记忆。淘汰率不当主失败指标（无超期淘汰，语义上
+            # 不存在）——机制缺陷账单列 paper_mechanism_audit。
             "paper_main_table": [
                 "completion_rate_final",
-                "on_time_rate_final",
+                "throughput_per_cycle",
                 "path_per_completion_m",
-                "total_path_m",
+                "avg_wait",
+                "solve_time_ms",
+            ],
+            # 软窗口时效账（迟到软约束：迟到计价、计完成）：与主表并列
+            "paper_soft_window_table": [
+                "on_time_rate_final",
+                "n_late",
+                "avg_lateness_s",
+                "max_lateness_s",
+            ],
+            # 机制缺陷审计账（淘汰≡0；skip 应 0；不可达/shortfall 物理解释）
+            "paper_mechanism_audit": [
                 "elimination_rate",
                 "unreachable_rate",
+                "n_voluntary_skip",
+                "n_capacity_shortfall",
+                "n_hard_violations_total",
             ],
             "dem_file": str(f.bundle.data.get("dem") or "未接入"),
             "dem_step_m": float(f.bundle.cost.get("dem_step_m", 0.0)),
@@ -487,6 +509,7 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
             # 废飞已飞航程（米；B1）：与 n_infeasible_delivery 同权报告
             "infeasible_wasted_path_m": round(infeasible_wasted_path_m, 3),
             "n_eliminated": n_eliminated,
+            "n_overdue_ever": n_overdue_ever,
             "n_unreachable": n_unreachable,
             "n_late": n_late,
             # ── 2026-10-24 指标体系审查 A2：删除池化 on_time_rate 键 ───
@@ -636,6 +659,7 @@ _SEED_AGG_KEYS = (
     "n_infeasible_delivery",
     "infeasible_wasted_path_m",
     "n_eliminated",
+    "n_overdue_ever",
     "n_unreachable",
     "n_late",
     "avg_lateness_s",
