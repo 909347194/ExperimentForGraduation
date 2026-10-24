@@ -72,9 +72,13 @@ _CJK_CANDIDATES = (
 
 #: 中文等宽字体链——用于「参数/明细表」类文本面板。
 #: matplotlib ≥3.6 支持按字形回退：ASCII（数字、列对齐）走 DejaVu Sans Mono，
-#: 中文字形自动回退到 Microsoft YaHei。直接写 ``family="monospace"`` 会落到
-#: DejaVu Sans Mono 一种字体上，中文全部缺字（豆腐块）。
-MONO_ZH = ["DejaVu Sans Mono", "Microsoft YaHei"]
+#: 中文字形自动回退到链上下一个可用中文字体。直接写 ``family="monospace"``
+#: 会落到 DejaVu Sans Mono 一种字体上，中文全部缺字（豆腐块）。
+#: 2026-10-24 指标口径修复重跑时补 "Noto Sans Mono CJK SC"：Linux 沙箱无
+#: Microsoft YaHei，等宽面板中文会整段缺字（按字形回退只在本列表内逐字体找，
+#: 不会跨到 font.sans-serif 链）；从系统 NotoSansCJK-Regular.ttc 提出 SC 面
+#: 装到 ~/.fonts 后该名可被 matplotlib 解析（ttc 集合默认只注册 JP 面）。
+MONO_ZH = ["DejaVu Sans Mono", "Microsoft YaHei", "Noto Sans Mono CJK SC", "PingFang SC", "SimHei"]
 
 #: 三档图幅（英寸）。论文版心 15 cm ≈ 5.9 in；通栏用于横向大面板。
 FIG_SINGLE = 5.9

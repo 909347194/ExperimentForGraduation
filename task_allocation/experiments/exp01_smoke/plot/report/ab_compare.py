@@ -7,12 +7,12 @@ config 里改动一个开关（本轮是 ``constraints.time_window``），跑同
 看结论往哪边倒——这张图把 ``PIPELINE.md`` §3 的对照表格变成可以直接插进
 论文的证据：
 
-    (a) 两组**比率类**指标对比：完成率 / 周期可行率（同量纲可同轴，带 ±σ）
+    (a) 两组**比率类**指标对比：最终完成率 / 周期可行率（同量纲可同轴，带 ±σ）
     (b) 两组**收益—代价**对比：F1 双轴看"多赚 vs 多飞"，配逐 seed 散点
-    (c) **权衡散点**：每个 seed 一个点（完成率 × 总代价），看两组是否分离
+    (c) **权衡散点**：每个 seed 一个点（最终完成率 × 总代价），看两组是否分离
     (d) **相对变化**：以首组为基准的 Δ%，一眼看清每项指标变好还是变坏
 
-读法要点：**代价下降未必是好事**。若某组代价低但完成率更低，多半是"少干活"
+读法要点：**代价下降未必是好事**。若某组代价低但最终完成率更低，多半是"少干活"
 而非"更省"——(c) 面板的逐 seed 散点就是用来识破这一点的。
 
 需要多份 ``metrics``，故走 ``extras["variants"]`` 通道（见
@@ -124,7 +124,7 @@ def plot_ab_compare(
     bar_w = 0.36
 
     # ── (a) 比率类指标：完成率 / 周期可行率 ───────────────────────
-    rate_keys = [("completion_rate", "完成率"), ("cycle_feasible_rate", "周期解可行率")]
+    rate_keys = [("completion_rate_final", "最终完成率"), ("cycle_feasible_rate", "周期解可行率")]
     offsets = [-bar_w / 2, bar_w / 2]
     for i, (key, name) in enumerate(rate_keys):
         means, stds = [], []
@@ -179,7 +179,7 @@ def plot_ab_compare(
     # ── (c) 权衡散点：每 seed 一个点 ─────────────────────────────
     rng = np.random.default_rng(7)
     for i, (tag, met) in enumerate(groups):
-        rs = [v * 100.0 for v in _series(met, "completion_rate")]
+        rs = [v * 100.0 for v in _series(met, "completion_rate_final")]
         cs = [c / 1000.0 for c in _series(met, "total_cost")]
         if not rs or not cs:
             continue
@@ -197,14 +197,14 @@ def plot_ab_compare(
                 linewidth=1.0, zorder=4,
             )
     style_axes(
-        ax_trade, title="(c) 权衡：完成率 × 总代价（× 为组内均值）",
-        xlabel="完成率 (%)", ylabel="总路径代价 (km)",
+        ax_trade, title="(c) 权衡：最终完成率 × 总代价（× 为组内均值）",
+        xlabel="最终完成率 (%)", ylabel="总路径代价 (km)",
     )
     ax_trade.legend(loc="upper left", framealpha=0.9)
 
     # ── (d) 相对变化 Δ%（以首组为基准）───────────────────────────
     delta_keys = [
-        ("completion_rate", "完成率", +1),
+        ("completion_rate_final", "最终完成率", +1),
         ("total_reward", "总收益", +1),
         ("total_cost", "总代价", -1),
         ("avg_wait", "平均等待", -1),
@@ -250,7 +250,7 @@ def plot_ab_compare(
     fig.text(0.5, -0.008, legend_note, ha="center", fontsize=8.5, color="0.35")
     fig.text(
         0.5, -0.034,
-        "代价下降需与完成率同读——只看代价下降会把“少干活”误判为“更省”。",
+        "代价下降需与最终完成率同读——只看代价下降会把“少干活”误判为“更省”。",
         ha="center", fontsize=8.5, color="0.35",
     )
 

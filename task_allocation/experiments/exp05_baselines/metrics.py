@@ -25,6 +25,11 @@ __all__ = [
 ]
 
 #: summary.csv 的列（论文主表数据源；均值行 = 同列 mean）
+# 2026-10-24 指标体系审查（与 exp01 同步，A1/A2）：
+#   删除 completion_rate（naive，分母含不可达）——完成率只留 final 口径，
+#     论文主表直读 completion_rate_final，杜绝「CSV 两列完成率」漂移；
+#   删除 on_time_rate（出动池化正确执行率）——按时率只留交付集条件率
+#     on_time_rate_final；逐周期正确执行率由 exp01 侧 correct_exec_rate 承担。
 CSV_COLUMNS = (
     "arm",
     "solver",
@@ -32,10 +37,8 @@ CSV_COLUMNS = (
     "seed",
     "n_arrived",
     "n_completed",
-    "completion_rate",
     "effective_completion_rate",
     "reward_yield",
-    "on_time_rate",
     "n_late",
     "total_lateness_s",
     "avg_lateness_s",
@@ -198,13 +201,8 @@ def build_summary(
     ]
     cycle_feasible_rate = (sum(feas_flags) / len(feas_flags)) if feas_flags else 0.0
     n_active_cycles = sum(1 for r in records if len(r.executed_ids) > 0)
-    n_executed_total = sum(len(r.executed_ids) for r in records)
-
-    on_time_rate = (
-        (n_executed_total - n_late - n_infeasible_delivery) / n_executed_total
-        if n_executed_total
-        else 0.0
-    )
+    # 2026-10-24 A2（与 exp01 同步）：删除出动池化 on_time_rate 及其
+    # n_executed_total 中间量——按时率只留交付集条件率 on_time_rate_final。
     avg_lateness = (sum(all_lateness) / len(all_lateness)) if all_lateness else 0.0
     max_lateness = max(all_lateness) if all_lateness else 0.0
     total_lateness = sum(all_lateness)
@@ -231,15 +229,17 @@ def build_summary(
     return {
         "n_arrived": n_arrived,
         "n_completed": len(completed),
-        "completion_rate": round((len(completed) / n_arrived) if n_arrived else 0.0, 6),
+        # A3（2026-10-24，与 exp01 同步）：分母对齐 n_final_denom，与
+        # completion_rate_final 同分母可比——旧口径用 n_arrived 时
+        # 「有效 < 最终」部分来自分母而非零奖励交付。
         "effective_completion_rate": round(
-            ((len(completed) - n_zero_reward_delivery) / n_arrived) if n_arrived else 0.0,
+            ((len(completed) - n_zero_reward_delivery) / n_final_denom)
+            if n_final_denom else 0.0,
             6,
         ),
         "reward_yield": round(
             (reward_effective / reward_possible) if reward_possible else 0.0, 6
         ),
-        "on_time_rate": round(on_time_rate, 6),
         "n_late": n_late,
         "total_lateness_s": round(total_lateness, 3),
         "avg_lateness_s": round(avg_lateness, 3),

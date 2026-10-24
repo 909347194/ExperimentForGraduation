@@ -99,11 +99,33 @@ f = W_hard·n_hard + w_exc·excess_m − m·F1_eff + w_late·L_tot + λ·path + 
   减少已装集合约束下做成本 polish。
 - 任务 ID ≠ `self.tasks` 下标（滚动 t.id 全局计数，映射用 `self._task_ids`）。
 
-### 指标口径
+### 指标口径（2026-10-24 审查清理后）
+
+exp01 的定位是**正确性验证台 + 口径标定台**（冒烟 + 审计 + 回归基线），
+不产出论文主表数值（主表由 exp05 summary.csv 承担）。因此只保留口径严格
+自洽的指标，近义冗余口径直接删除、不做兼容更名：
 
 - 恒等式：`arrived = done + unreach + elim + remain`。
-- `correct_exec_rate` 是逐周期未加权均值；论文按时率用池化 `on_time_rate`。
-- 正确执行率 = 按时出动 / 总出动（迟到计入完成、不计正确；物理不可行计废飞）。
+- **完成率只留 `completion_rate_final`**（η_final = 按时交付 ∪ 迟到交付 / 最终分母；
+  最终分母 = 到达 − 物理不可达 × 折减系数）。早期 naive 的 `completion_rate`
+  （分母含物理不可达）已删除——它系统性低估完成率且无对应论文口径。
+- **按时率两个口径并存、各有名字**：
+  - `correct_exec_rate`：逐周期未加权均值（正确执行率 = 按时出动 / 总出动，
+    迟到计入完成、不计正确；物理不可行计废飞）——过程口径；
+  - `on_time_rate_final`：交付集条件率（按时交付 / 全部交付，迟到交付计入分母
+    不按时计入分子）——结果口径，与 exp05/exp06 同键对账。
+  - 早期按出动池化的 `on_time_rate` 已删除（把「执行质量」与「交付结果」
+    混为一谈，是审查发现的同名不同义陷阱）。
+- `effective_completion_rate` 分母已与 `completion_rate_final` 对齐
+  （同为最终分母），二者可直接相除比较；零奖励交付 `n_zero_reward_delivery`
+  作为分子扣除项单列。
+- `infeasible_wasted_path_m`：废飞（物理不可行航次）已飞航程，按航次任务数
+  比例归属（`est_cost × n_bad/n_bound`）——B1 审查新增，量化「装上了但飞不到」
+  的代价。
+- `cand_hit_rate`：候选池命中率 = Σselection.n_selected / Σcapability_n_cand，
+  验证「候选池该富」的 P14 声明（选择阶段保留率）。
+- `max_backlog` 跨 seed 聚合取**峰值语义**（mean 位 = max、std = 0），不是
+  逐周期池化的均值。
 
 ## 参数放哪里
 

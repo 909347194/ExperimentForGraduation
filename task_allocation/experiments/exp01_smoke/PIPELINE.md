@@ -88,9 +88,9 @@ fleet / robustness / comparison / config）用于再归类，但**不建目录**
 | process | `task_dynamics` | 任务命运：池水位 / 流量 / 状态矩阵 / 等待与滞留 / 地理生命周期 | `metrics.json 的 cycles[].pool_counts / completed_ids / deferred_ids + solution.json 的 tasks[]` |
 | process | `fleet_state` | 机队与机巢：三口径出动 / 占用热力图 / 选巢归因 / 机队迁移 | `metrics.json 的 cycles[].muas / nest_occupancy + solution.json 的 tours / nests` |
 | process | `constraint_state` | 约束与时限：预筛归因 / 约束状态 / 罚项量纲 / 时间窗满足度 | `metrics.json 的 cycles[].selection.filter_reasons / muas.{violations,penalty,infeasible_tags} + tasks[].{earliest,latest,completed_at}` |
-| report | `outcome_summary` | 结果总览：完成率 CR 轨迹 / 未完成任务终局构成 / 双目标 / 关键指标 | `metrics.json 的 cycles[].pool_counts / completed_ids / summary + per_seed` |
+| report | `outcome_summary` | 结果总览：最终完成率 η_final 轨迹 / 未完成任务终局构成 / 双目标 / 关键指标 | `metrics.json 的 cycles[].pool_counts / completed_ids / summary + per_seed` |
 | report | `seed_summary` | 跨 seed 稳健性：三指标均值±σ / 分布箱线 / 逐 seed 演化 / 明细表 | `metrics.json 的 per_seed / seed_summary / seeds（仅多 seed 运行）` |
-| report | `ab_compare` | 两组配置对照：完成率 / 收益—代价 / 权衡 / Δ% | `results/metrics_<tag>.json 的 per_seed / seed_summary（需 ≥2 组对照）` |
+| report | `ab_compare` | 两组配置对照：最终完成率 / 收益—代价 / 权衡 / Δ% | `results/metrics_<tag>.json 的 per_seed / seed_summary（需 ≥2 组对照）` |
 
 **改图不必重跑**：`plot.render_from_results(results_dir)` 直接读已落盘的
 `metrics.json` + `solution.json` 重绘。只想出一部分图（例如凑论文插图）：

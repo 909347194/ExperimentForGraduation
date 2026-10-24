@@ -161,6 +161,30 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
     # 不计奖励）。2026-10-15 协议「迟到不是废飞」后，废飞只剩这一类
     # （航程/续航/终点机巢/结构类违约）；迟到交付计入完成。
     n_infeasible_delivery = sum(len(r.infeasible_ids) for r in records)
+    # ── 废飞已飞航程（2026-10-24 指标体系审查 B1）────────────────────
+    # 「废飞 = 完成闸门弹回的物理不可行交付」：UAV 已按航次飞行（航程已
+    # 消耗、位置已更新到终点巢），任务解绑回池。metrics 口径注释自述
+    # 「总航程下降若靠它换来则是净亏损，必须与吞吐同权报告」，但旧口径
+    # 只落了计数 n_infeasible_delivery、没有航程——本项补齐。
+    # 归属口径（约定，引用须注明）：含废飞任务的航次按**任务数比例**
+    # 分摊，est_cost × n_bad/n_bound；整航次不可行时 n_bad=n_bound ⇒
+    # 全额计入。不做逐任务路径析出（那要对每个废飞任务重估一次航次，
+    # 成本与诊断目的不成比例）。n_infeasible_delivery=0 时恒 0。
+    infeasible_path_by_cycle: dict[int, float] = {}
+    for r in records:
+        bad_ids = {int(t) for t in (r.infeasible_ids or [])}
+        if not bad_ids:
+            continue
+        wasted = 0.0
+        for tour in r.tours or []:
+            tids = [int(t) for t in (tour.get("task_ids") or [])]
+            if not tids:
+                continue
+            n_bad = sum(1 for t in tids if t in bad_ids)
+            if n_bad:
+                wasted += float(tour.get("est_cost") or 0.0) * (n_bad / len(tids))
+        infeasible_path_by_cycle[int(r.cycle)] = wasted
+    infeasible_wasted_path_m = sum(infeasible_path_by_cycle.values())
     # 迟到交付：完成但到达晚于 latest 的任务数（计入完成与吞吐）
     n_late = sum(len(r.late_ids) for r in records)
     all_lateness = [
@@ -308,6 +332,22 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
         s_cov_rates.append(len(set(r.executed_ids) & sel_ids) / denom)
     s_coverage_rate = (sum(s_cov_rates) / len(s_cov_rates)) if s_cov_rates else 0.0
 
+    # ── 候选池命中率（2026-10-24 指标体系审查 B2）──────────────────
+    # n_selected / n_cand（池化：Σ入选 / Σ候选上限）。候选池「该富」是
+    # 选择层的设计声明（n_cand=⌈αK⌉ 与机巢容量 cap 解耦，P14），命中率
+    # 直接验证它是否兑现：接近 1 ⇒ 候选池几乎被选空（名额外推）、选择
+    # 没有真实取舍；显著小于 1 ⇒ 池富余、边际收益/优先级确有取舍空间。
+    # 分子分母都取自 selection 段（T_t^sel 口径）；实际候选池规模
+    # （n_after_prefilter）与预选三级咬合情况见 P01_task_selection 图。
+    sel_cand_total = sum(
+        int((r.selection or {}).get("capability_n_cand") or 0) for r in records
+    )
+    sel_selected_total = sum(
+        int((r.selection or {}).get("n_selected") or 0) for r in records
+    )
+    cand_hit_rate = (
+        sel_selected_total / sel_cand_total if sel_cand_total else 0.0
+    )
     # ── 长程吞吐协议指标（2026-10-14 用户定口径，2026-10-15 修订）──────
     # 完成率不是目标；真实目标 = 持续到达下「尽可能多且正确地完成任务」。
     # 正确执行率 = 当周期按时出动 / 当周期出动（迟到交付与物理不可行交付
@@ -323,7 +363,7 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
         n_exec = len(r.executed_ids)
         if not n_exec:
             # 空转周期（池空/无出动）不入均值：旧口径记 0 再平均，
-            # 4 个空周期把 0.846 摊成 0.423，与 on_time_rate 矛盾
+            # 4 个空周期把 0.846 摊成 0.423，与池化正确执行率矛盾
             continue
         n_on_time = n_exec - len(r.late_ids) - len(r.infeasible_ids)
         per_cycle_correct[r.cycle] = max(n_on_time, 0) / n_exec
@@ -331,11 +371,9 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
         sum(per_cycle_correct.values()) / len(per_cycle_correct)
         if per_cycle_correct else 0.0
     )
-    n_executed_total = sum(len(r.executed_ids) for r in records)
-    on_time_rate = (
-        (n_executed_total - n_late - n_infeasible_delivery) / n_executed_total
-        if n_executed_total else 0.0
-    )
+    # 2026-10-24 A2：删除出动池化的 on_time_rate（(Σexec−Σlate−Σinfeasible)
+    # /Σexec）——与逐周期 correct_exec_rate、交付集条件率 on_time_rate_final
+    # 三者近义误引；正确性验证只保留后两个，池化值可由 cycles 复算。
     avg_lateness = (sum(all_lateness) / len(all_lateness)) if all_lateness else 0.0
     max_lateness = max(all_lateness) if all_lateness else 0.0
     throughput = (len(completed) / n_cycles) if n_cycles else 0.0
@@ -344,6 +382,19 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
         rate = per_cycle_correct.get(row.get("cycle"))
         # 空转周期显式置 None（JSON null），不再伪装成 0.0 的「错误率」
         row["correct_exec_rate"] = None if rate is None else round(rate, 6)
+        # 废飞已飞航程（米；B1）：无废飞的周期显式 0.0（不是缺字段）
+        row["infeasible_path_m"] = round(
+            infeasible_path_by_cycle.get(row.get("cycle"), 0.0), 3
+        )
+
+    # 覆盖门禁开关快照（2026-10-24）：problem 段自描述字段与 scalarization
+    # 标注共用，避免同一文件里两处各读一次 getattr 漂移。
+    _gate_cov = bool(
+        getattr(getattr(f.bundle, "stage_model", None), "coverage_gate", False)
+    )
+    _gate_lex = bool(
+        getattr(f.bundle.problem_model, "lexicographic_coverage", False)
+    )
 
     return {
         "status": "ok",
@@ -363,9 +414,19 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
             "uav_max_range_km": float(f.bundle.problem.get("uav_max_range", 0.0)) / 1000.0,
             "dmde_population": int(f.bundle.solver.pop_size),
             "dmde_max_iter": int(f.bundle.solver.max_generations),
+            # 适应度口径自描述（2026-10-24 门禁唯一主口径重构）：
+            # 非门禁 big-M 四层路径已从代码移除，problem_model.lexicographic
+            # 字段失效（设任何值不改变行为）——不能再读它标注口径（图/表
+            # 会描述一个不存在的口径）。实际口径由两个门禁开关决定：
+            #   coverage_gate          终态构造性修复（能救必救）
+            #   lexicographic_coverage W_skip 罚层 + 审计分账
+            # 两者同开 = 完整门禁口径（当前生产值）。
             "scalarization": (
-                "字典序（big-M，收益优先）"
-                if f.bundle.problem_model.lexicographic else "加权和 −F1+λ·F2"
+                "覆盖门禁口径（f = W_hard·n_hard + w_exc·excess_m + W_skip·n_skip"
+                " + w_late·L + λ·path + w_time·F3；F1 退为事后指标）"
+                if _gate_cov and _gate_lex
+                else "门禁部分开启（coverage_gate="
+                     f"{_gate_cov}, lexicographic_coverage={_gate_lex}）"
             ),
             "time_window": bool(f.bundle.problem_model.constraints.time_window),
             # 罚权自描述（2026-10-24）：口径类数值一律随数据落盘，图/表直读
@@ -381,12 +442,8 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
             ),
             "w_time": float(getattr(f.bundle.problem_model, "w_time", 0.0) or 0.0),
             # 覆盖门禁口径自描述（2026-10-22）：审计/跨配置对比直读
-            "lexicographic_coverage": bool(
-                getattr(f.bundle.problem_model, "lexicographic_coverage", False)
-            ),
-            "coverage_gate": bool(
-                getattr(getattr(f.bundle, "stage_model", None), "coverage_gate", False)
-            ),
+            "lexicographic_coverage": _gate_lex,
+            "coverage_gate": _gate_cov,
             # 交付后成本 polish 开关自描述（2026-10-24）：消融对比直读，
             # 不回源 yaml（同 lambda_cost 的自描述理由）
             "cost_polish_enabled": bool(
@@ -418,13 +475,26 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
         "summary": {
             "n_arrived": n_arrived,
             "n_completed": len(completed),
-            "completion_rate": (len(completed) / n_arrived) if n_arrived else 0.0,
+            # ── 2026-10-24 指标体系审查 A1：删除 naive 完成率键 ────────
+            # exp01 定位是**正确性验证台**（冒烟 + 口径标定 + 回归基线），
+            # 不产出论文主表数值；完成率只保留 canonical 口径
+            # completion_rate_final（分母剔除物理不可达）。旧键
+            # completion_rate（分母含不可达）与 final 双落盘只会制造
+            # 「图/表直读哪一键」的漂移，对正确性验证没有信息增量——
+            # 按「没用的就删」删除，需要时可从 n_arrived/n_completed 复算。
             "cycle_feasible_rate": round(cycle_feasible_rate, 6),
             "n_infeasible_delivery": n_infeasible_delivery,
+            # 废飞已飞航程（米；B1）：与 n_infeasible_delivery 同权报告
+            "infeasible_wasted_path_m": round(infeasible_wasted_path_m, 3),
             "n_eliminated": n_eliminated,
             "n_unreachable": n_unreachable,
             "n_late": n_late,
-            "on_time_rate": round(on_time_rate, 6),
+            # ── 2026-10-24 指标体系审查 A2：删除池化 on_time_rate 键 ───
+            # 旧键 on_time_rate（出动池化正确执行率）与 correct_exec_rate
+            # （逐周期未加权均值，长程协议主指标）、on_time_rate_final
+            # （交付集条件率，论文口径）三者同名近义、最易误引。正确性
+            # 验证需要的是后两个；池化值是加权混合体、无独立决策含义，
+            # 删除。三个量的差（周期权重 vs 池化）本就可从 cycles 复算。
             "avg_lateness_s": round(avg_lateness, 3),
             "max_lateness_s": round(max_lateness, 3),
             "correct_exec_rate": round(correct_exec_rate, 6),
@@ -435,9 +505,14 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
             ),
             # 有效完成口径（I4）：零奖励交付 / 有效完成率 / 奖励产出率
             "n_zero_reward_delivery": n_zero_reward_delivery,
+            # ── 2026-10-24 指标体系审查 A3：分母对齐 n_final_denom ──
+            # 旧口径分母用 n_arrived（未剔物理不可达），与
+            # completion_rate_final 不可直接比较——「有效 < 最终」部分
+            # 来自分母而非零奖励交付，是对账陷阱。改为同分母后，
+            # 两个率的差即零奖励交付的净贡献。
             "effective_completion_rate": round(
-                ((len(completed) - n_zero_reward_delivery) / n_arrived)
-                if n_arrived else 0.0,
+                ((len(completed) - n_zero_reward_delivery) / n_final_denom)
+                if n_final_denom else 0.0,
                 6,
             ),
             "reward_yield": round(
@@ -481,6 +556,8 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
             # ── 过程指标 v2 ──
             "quota_utilization": round(quota_utilization, 6),
             "quota_full_cycle_ratio": round(quota_full_cycle_ratio, 6),
+            # 候选池命中率（B2）：Σn_sel/Σn_cand，验证「候选池该富」
+            "cand_hit_rate": round(cand_hit_rate, 6),
             "avg_backlog": round(avg_backlog, 3),
             "max_backlog": int(max_backlog),
             "n_deferred_delivery": n_deferred_delivery,
@@ -548,15 +625,19 @@ def build_run_meta(
 
 
 # 需要跨 seed 聚合的数值型指标键（取自各次运行的 summary）
+# 2026-10-24 指标体系审查（exp01 = 正确性验证台，没用的口径直接删）：
+#   删除 completion_rate（naive，分母含不可达）——完成率只留 final 口径；
+#   删除 on_time_rate（出动池化正确执行率）——保留逐周期 correct_exec_rate
+#     与交付集条件率 on_time_rate_final，池化值可由 cycles 复算；
+#   新增 infeasible_wasted_path_m（B1 废飞已飞航程）、cand_hit_rate（B2）。
 _SEED_AGG_KEYS = (
     "n_completed",
-    "completion_rate",
     "cycle_feasible_rate",
     "n_infeasible_delivery",
+    "infeasible_wasted_path_m",
     "n_eliminated",
     "n_unreachable",
     "n_late",
-    "on_time_rate",
     "avg_lateness_s",
     "correct_exec_rate",
     "throughput_per_cycle",
@@ -591,6 +672,7 @@ _SEED_AGG_KEYS = (
     "unreachable_rate",
     "quota_utilization",
     "quota_full_cycle_ratio",
+    "cand_hit_rate",
     "avg_backlog",
     "max_backlog",
     "n_deferred_delivery",
@@ -602,12 +684,18 @@ _SEED_AGG_KEYS = (
     "n_arrived",
 )
 
+#: 跨 seed 聚合取**峰值**而非 mean±std 的键（2026-10-24 指标体系审查 D）：
+#: max_backlog 的「各 seed 峰值再求 mean±std」没有决策含义（峰值不可平均），
+#: 论文只报峰值 ⇒ 聚合层直接给 max，std 记 0.0 保持 {mean, std} schema 统一。
+_SEED_PEAK_KEYS = ("max_backlog",)
+
 
 def build_seed_summary(per_seed_summaries: Sequence[dict[str, Any]]) -> dict[str, Any]:
     """把多次随机种子运行的 summary 聚合成 mean±std。
 
     返回 ``{指标: {"mean": ..., "std": ...}}``；std 用总体标准差（ddof=0），
-    单个样本时 std=0。
+    单个样本时 std=0。``_SEED_PEAK_KEYS``（max_backlog）聚合为峰值：
+    mean 位放跨 seed 最大值、std 记 0.0（峰值不可平均，见 D 项注释）。
     """
     import numpy as np
 
@@ -616,6 +704,9 @@ def build_seed_summary(per_seed_summaries: Sequence[dict[str, Any]]) -> dict[str
         vals = [float(s.get(k, 0.0)) for s in per_seed_summaries if isinstance(s, dict)]
         if not vals:
             out[k] = {"mean": 0.0, "std": 0.0}
+            continue
+        if k in _SEED_PEAK_KEYS:
+            out[k] = {"mean": round(float(max(vals)), 6), "std": 0.0}
             continue
         arr = np.asarray(vals, dtype=float)
         out[k] = {
@@ -803,10 +894,10 @@ def print_cycle_report(records: Sequence[Any]) -> None:
 def print_summary(metrics: dict[str, Any], n_arrived: int, out_dir: Path) -> None:
     seeds = metrics.get("seeds")
     if seeds and len(seeds) > 1 and metrics.get("seed_summary"):
-        # 多 seed 复现：报告均值±标准差
+        # 多 seed 复现：报告均值±标准差（完成率用 final 口径，A1 删除 naive 键）
         ss = metrics["seed_summary"]
         _m = ss.get("n_completed", {})
-        _r = ss.get("completion_rate", {})
+        _r = ss.get("completion_rate_final", {})
         _c = ss.get("total_cost", {})
         _w = ss.get("avg_wait", {})
         _t = ss.get("solve_time_ms", {})
@@ -822,18 +913,20 @@ def print_summary(metrics: dict[str, Any], n_arrived: int, out_dir: Path) -> Non
         sm = metrics["summary"]
         print(
             f"[exp01] 汇总：完成 {sm['n_completed']}/{n_arrived}"
-            f"({sm['completion_rate']:.1%})，平均等待 {sm['avg_wait']:.0f}s，"
+            f"({sm['completion_rate_final']:.1%} final)，平均等待 {sm['avg_wait']:.0f}s，"
             f"总代价 {sm['total_cost']:.0f}m，求解 {sm['solve_time_ms']:.0f}ms，"
             f"池内剩余 {sm['n_remaining_pool']}"
         )
         print(
             f"[exp01] 长程口径：吞吐 {sm['throughput_per_cycle']:.3f}/周期，"
-            f"按时率 {sm.get('on_time_rate', 0.0):.1%}，"
+            f"正确执行率(逐周期均值) {sm['correct_exec_rate']:.1%}，"
+            f"按时率(交付集) {sm['on_time_rate_final']:.1%}，"
             f"迟到交付 {sm.get('n_late', 0)}（平均 {sm.get('avg_lateness_s', 0.0):.0f}s），"
             f"零奖励交付 {sm.get('n_zero_reward_delivery', 0)}"
             f"（有效完成率 {sm.get('effective_completion_rate', 0.0):.1%}，"
             f"奖励产出率 {sm.get('reward_yield', 0.0):.1%}），"
-            f"废飞(物理不可行) {sm['n_infeasible_delivery']}，"
+            f"废飞(物理不可行) {sm['n_infeasible_delivery']}"
+            f"（已飞航程 {sm.get('infeasible_wasted_path_m', 0.0):.0f}m），"
             f"不可达(过于偏远) {sm.get('n_unreachable', 0)}，"
             f"淘汰 {sm['n_eliminated']}"
         )

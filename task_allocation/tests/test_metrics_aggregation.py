@@ -1,11 +1,14 @@
 # -*- coding: utf-8 -*-
-"""exp01 指标汇总口径（2026-10-16 审查 I1/I2/I3/I4）的聚焦测试。
+"""exp01 指标汇总口径（2026-10-16 审查 I1/I2/I3/I4；2026-10-24 审查 A1/A2/A3/B1/B2/D）的聚焦测试。
 
 背景（审查实证，详见 ``docs/review_exp01_20261016.md``）：
 
   I1  ``correct_exec_rate`` 把空转周期记 0 再平均 → 0.423（真实 0.846），
-      与同摘要的 ``on_time_rate=0.80`` 互相矛盾；且 ``zip`` 注释在列表变短后
+      与同摘要的出动池化正确执行率互相矛盾；且 ``zip`` 注释在列表变短后
       会把周期行与正确率配错位。修复：空转周期不入均值、按 cycle 键控注释。
+      （该出动池化键 ``on_time_rate`` 已于 2026-10-24 A2 删除，正确执行率
+      只保留逐周期均值 ``correct_exec_rate`` 与交付集条件率
+      ``on_time_rate_final`` 两个口径。）
   I2  ``cycle_feasible_rate`` 把无解周期当 ``feasible=False`` → 1/8（真实 1/4）。
       修复：只统计真正求解过的周期（``feasible is not None``）。
   I3  ``total_cost = 路径(米) + w_penalty·惩罚(秒/单位)`` 混量纲，且报告口径
@@ -14,6 +17,14 @@
   I4  「迟到≠废飞」下迟到 ≥ W 折减为 0 奖励的交付仍计完成 → 完成率虚高。
       修复：并列 ``n_zero_reward_delivery`` / ``effective_completion_rate``
       / ``reward_yield`` 有效完成口径。
+  A1  naive 完成率（分母含物理不可达）与 final 双落盘 ⇒ 直读漂移。
+      处置：exp01 定位正确性验证台，**删除** naive 键，只留 final 口径。
+  A2  出动池化 ``on_time_rate`` 与 correct_exec_rate / on_time_rate_final
+      三者近义误引。处置：删除池化键。
+  A3  ``effective_completion_rate`` 分母对齐 ``n_final_denom``（与 final 可比）。
+  B1  新增 ``infeasible_wasted_path_m``（废飞已飞航程，与计数同权）。
+  B2  新增 ``cand_hit_rate``（Σn_sel/Σn_cand，验证候选池「该富」）。
+  D   ``max_backlog`` 跨 seed 聚合取峰值（峰值不可平均）。
 
 运行：``python3 task_allocation/tests/test_metrics_aggregation.py``
 （无 pytest 环境可直接跑；有 pytest 时同名 test_* 函数会被自动收集。）
@@ -56,7 +67,7 @@ class _FakeTask:
 class _FakeRecord:
     def __init__(self, cycle, muas=None, executed=(), late=(), infeasible=(),
                  expired=(), unreachable=(), lateness=None,
-                 selection_extra=None, pool_counts=None):
+                 selection_extra=None, pool_counts=None, tours=None):
         self.cycle = cycle
         self.current_time = 600.0 * cycle
         self.muas = dict(muas or {})
@@ -72,7 +83,7 @@ class _FakeRecord:
         self.deferred_ids = []
         self.released_by_fault = []
         self.replan = False
-        self.tours = []
+        self.tours = list(tours or [])
         self.cost_history = []
 
     def as_dict(self):
@@ -213,7 +224,8 @@ def test_zero_reward_delivery_accounting():
     ]
     m = exp01_metrics.build_metrics(_facts(records, tasks, tasks, decay_w=600.0))
     s = m["summary"]
-    assert s["n_completed"] == 2 and abs(s["completion_rate"] - 1.0) < 1e-9, s
+    # A1（2026-10-24）：naive 完成率键已删，完成率只报 final 口径
+    assert s["n_completed"] == 2 and abs(s["completion_rate_final"] - 1.0) < 1e-9, s
     assert s["n_zero_reward_delivery"] == 1, s
     assert abs(s["effective_completion_rate"] - 0.5) < 1e-9, s   # 1/2 有效
     assert abs(s["reward_yield"] - 0.5) < 1e-9, s                # 10/20 折减后
@@ -250,11 +262,16 @@ def test_final_completion_rate_excludes_unreachable():
     m = exp01_metrics.build_metrics(_facts(records, [t0, t1, t2], [t0]))
     s = m["summary"]
     assert abs(s["completion_rate_final"] - 0.5) < 1e-5, s   # 1 / (3−1)
-    assert abs(s["completion_rate"] - 1 / 3) < 1e-5, s       # 旧口径不动
+    # A1（2026-10-24）：naive 完成率键已删除（正确性验证台不留双口径），
+    # 旧断言 completion_rate == 1/3 随之移除；naive 值可由 n_completed/
+    # n_arrived 复算，不进 summary。
     assert abs(s["elimination_rate"] - 0.5) < 1e-5, s        # 1 / (3−1)
     assert abs(s["unreachable_rate"] - 1 / 3) < 1e-5, s
     assert abs(s["on_time_rate_final"] - 1.0) < 1e-5, s      # 交付 1、按时 1
     assert abs(s["path_per_completion_m"] - s["total_path_m"]) < 1e-5, s
+    # A2（2026-10-24）：出动池化 on_time_rate 键已删除
+    assert "on_time_rate" not in s, s
+    assert "completion_rate" not in s, s
 
 
 def test_quota_utilization_backlog_and_s_coverage():
@@ -294,6 +311,94 @@ def test_deferred_delivery_cross_cycle():
     s = m["summary"]
     assert s["n_deferred_delivery"] == 1, s   # t1 周期1到达、周期2交付
     assert abs(s["deferred_delivery_ratio"] - 0.5) < 1e-5, s
+
+
+# ---------------------------------------------------------------------------
+# 2026-10-24 指标体系审查：A3（分母对齐）/ B1（废飞航程）/ B2（命中率）/ D（峰值聚合）
+# ---------------------------------------------------------------------------
+
+def test_effective_completion_rate_denominator_excludes_unreachable():
+    """A3：有效完成率分母对齐 n_final_denom（剔除物理不可达）。
+
+    t0 按时交付（eff=R）；t1 物理不可达（出 final 分母）；t2 迟到 1200s
+    ≥ W=600 ⇒ eff=0 仍计完成。旧口径分母含 t1 ⇒ (2−1)/3≈0.333；新口径
+    (2−1)/2=0.5，与 completion_rate_final 同分母——两者之差即零奖励
+    交付的净贡献，不再混入分母差。
+    """
+    t0 = _FakeTask(0, 10.0, 0.0, 600.0, completed_at=600.0)
+    t1 = _FakeTask(1, 10.0, 0.0, 6000.0, completed_at=None)      # 物理不可达
+    t2 = _FakeTask(2, 10.0, 0.0, 600.0, completed_at=1800.0)     # 迟到 ≥ W
+    records = [
+        _FakeRecord(1, muas={"feasible": True}, executed=[0, 2], late=[2],
+                    lateness={"2": 1200.0}, unreachable=[1]),
+    ]
+    m = exp01_metrics.build_metrics(
+        _facts(records, [t0, t1, t2], [t0, t2], decay_w=600.0))
+    s = m["summary"]
+    assert abs(s["completion_rate_final"] - 1.0) < 1e-5, s      # 2 / (3−1)
+    assert s["n_zero_reward_delivery"] == 1, s
+    assert abs(s["effective_completion_rate"] - 0.5) < 1e-5, s  # (2−1) / (3−1)
+
+
+def test_infeasible_wasted_path_attribution():
+    """B1：废飞已飞航程按任务数比例归属；逐周期值落 cycles 行。
+
+    周期1 航次A：3 任务 est 3000m、其中 1 个废飞 ⇒ 1000m；
+    周期1 航次B：2 任务 est 1000m、无废飞 ⇒ 0；周期2 无废飞 ⇒ 0。
+    """
+    tasks = [_FakeTask(i, 5.0, 0.0, 6000.0) for i in range(5)]
+    records = [
+        _FakeRecord(1, muas={"feasible": False}, executed=[0, 1, 2, 3, 4],
+                    infeasible=[1],
+                    tours=[
+                        {"task_ids": [0, 1, 2], "est_cost": 3000.0,
+                         "feasible": False},
+                        {"task_ids": [3, 4], "est_cost": 1000.0,
+                         "feasible": True},
+                    ]),
+        _FakeRecord(2, muas={"feasible": True}, executed=[]),
+    ]
+    m = exp01_metrics.build_metrics(_facts(records, tasks, []))
+    s = m["summary"]
+    assert s["n_infeasible_delivery"] == 1, s
+    assert abs(s["infeasible_wasted_path_m"] - 1000.0) < 1e-6, s
+    rows = {row["cycle"]: row.get("infeasible_path_m") for row in m["cycles"]}
+    assert rows == {1: 1000.0, 2: 0.0}, rows
+
+
+def test_infeasible_wasted_path_zero_when_no_waste():
+    """B1：无废飞时废飞航程恒 0（不依赖 tours 字段是否存在）。"""
+    t0 = _FakeTask(0, 5.0, 0.0, 6000.0, completed_at=600.0)
+    records = [_FakeRecord(1, muas={"feasible": True}, executed=[0])]
+    m = exp01_metrics.build_metrics(_facts(records, [t0], [t0]))
+    assert m["summary"]["infeasible_wasted_path_m"] == 0.0
+
+
+def test_cand_hit_rate():
+    """B2：候选池命中率 = Σselection.n_selected / Σcapability_n_cand（池化）。"""
+    t0 = _FakeTask(0, 5.0, 0.0, 6000.0, completed_at=600.0)
+    t1 = _FakeTask(1, 5.0, 0.0, 6000.0, completed_at=1200.0)
+    records = [
+        _FakeRecord(1, muas={"n_selected": 18}, executed=[0],
+                    selection_extra={"capability_n_cand": 30, "n_selected": 18}),
+        _FakeRecord(2, muas={"n_selected": 20}, executed=[1],
+                    selection_extra={"capability_n_cand": 40, "n_selected": 20}),
+    ]
+    m = exp01_metrics.build_metrics(_facts(records, [t0, t1], [t0, t1]))
+    assert abs(m["summary"]["cand_hit_rate"] - 38 / 70) < 1e-5, m["summary"]
+
+
+def test_max_backlog_peak_aggregation():
+    """D：max_backlog 跨 seed 聚合取峰值（mean 位=跨 seed max，std=0）。"""
+    ss = exp01_metrics.build_seed_summary([
+        {"max_backlog": 5, "n_completed": 10},
+        {"max_backlog": 9, "n_completed": 12},
+        {"max_backlog": 7, "n_completed": 11},
+    ])
+    assert ss["max_backlog"] == {"mean": 9.0, "std": 0.0}, ss["max_backlog"]
+    # 普通键仍是 mean±std（ddof=0）：[10,12,11] ⇒ 11 ± sqrt(2/3)
+    assert abs(ss["n_completed"]["mean"] - 11.0) < 1e-9, ss["n_completed"]
+    assert abs(ss["n_completed"]["std"] - (2 / 3) ** 0.5) < 1e-6, ss["n_completed"]
 
 
 if __name__ == "__main__":
