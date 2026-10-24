@@ -5,7 +5,8 @@
   "cost_model": "euclidean",
   "distance_definition": "euclidean_3d",
   "seed": 43,
-  "timestamp_utc": "2026-10-21T13:35:44.268581+00:00",
+  "timestamp_utc": "2026-10-24T14:03:59.469318+00:00",
   "config_path": "task_allocation/experiments/exp05_baselines/config.yaml",
-  "repo_root": "/home/work/.openclaw/workspace/ExperimentForGraduation"
+  "repo_root": "/workspace/ExperimentForGraduation",
+  "config_fingerprint": "4a8498359c87c94d"
 }

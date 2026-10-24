@@ -1410,6 +1410,7 @@
       "cycle": 5,
       "executed_ids": [],
       "deferred_ids": [
+        1,
         13,
         22,
         28,
@@ -1425,6 +1426,8 @@
       "cycle": 6,
       "executed_ids": [],
       "deferred_ids": [
+        1,
+        13,
         22,
         28,
         50
@@ -1439,7 +1442,10 @@
       "cycle": 7,
       "executed_ids": [],
       "deferred_ids": [
+        1,
+        13,
         22,
+        28,
         50
       ],
       "completed_ids": [],
@@ -1451,47 +1457,13 @@
     {
       "cycle": 8,
       "executed_ids": [],
-      "deferred_ids": [],
-      "completed_ids": [],
-      "infeasible_ids": [],
-      "late_ids": [],
-      "tours": [],
-      "cost_history": []
-    },
-    {
-      "cycle": 9,
-      "executed_ids": [],
-      "deferred_ids": [],
-      "completed_ids": [],
-      "infeasible_ids": [],
-      "late_ids": [],
-      "tours": [],
-      "cost_history": []
-    },
-    {
-      "cycle": 10,
-      "executed_ids": [],
-      "deferred_ids": [],
-      "completed_ids": [],
-      "infeasible_ids": [],
-      "late_ids": [],
-      "tours": [],
-      "cost_history": []
-    },
-    {
-      "cycle": 11,
-      "executed_ids": [],
-      "deferred_ids": [],
-      "completed_ids": [],
-      "infeasible_ids": [],
-      "late_ids": [],
-      "tours": [],
-      "cost_history": []
-    },
-    {
-      "cycle": 12,
-      "executed_ids": [],
-      "deferred_ids": [],
+      "deferred_ids": [
+        1,
+        13,
+        22,
+        28,
+        50
+      ],
       "completed_ids": [],
       "infeasible_ids": [],
       "late_ids": [],
