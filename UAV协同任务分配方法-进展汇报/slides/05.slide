@@ -1,80 +1,62 @@
 <Slide style={{ width: 1280, height: 720, background: '#FFFFFF', position: 'relative', fontFamily: 'Source Han Sans CN, Microsoft YaHei, sans-serif' }}>
   <Box style={{ position: 'absolute', top: 0, left: 0, width: 1280, height: 12, background: '#1E4FA8' }} />
-  <Box style={{ position: 'absolute', top: 28, left: 40, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+  <Box style={{ position: 'absolute', top: 30, left: 40, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
     <Box style={{ width: 6, height: 34, background: '#1E4FA8' }} />
-    <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#0E3F8C' }}>总体求解框架：分层滚动闭环</Text>
+    <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#0E3F8C' }}>研究现状与空白</Text>
   </Box>
-  <Box style={{ position: 'absolute', top: 74, left: 60, padding: '6px 18px', background: '#0E3F8C', borderRadius: 6 }}>
-    <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#FFFFFF' }}>核心主张：快速任务选择缩空间 + 精细 MUAS 组合优化</Text>
-  </Box>
+  <Text style={{ position: 'absolute', top: 78, left: 60, fontSize: 15, color: '#8B97A8' }}>六条研究线各自成熟，交叉处是空白——检索 IEEE Xplore / Elsevier / 知网 2010–2025，共 20 篇代表工作</Text>
 
-  <Box style={{ position: 'absolute', top: 112, left: 60 }}>
-    <svg width={1160} height={296} viewBox='0 0 1160 296'>
-      <rect x='18' y='102' width='142' height='92' rx='10' fill='#F0F5FC' stroke='#1E4FA8' strokeWidth='1.2' />
-      <text x='89' y='140' font-size='16' font-weight='bold' fill='#0E3F8C' text-anchor='middle'>动态任务池</text>
-      <text x='89' y='166' font-size='13' fill='#4A5568' text-anchor='middle'>滚动到达 · 滞留留池</text>
-      <line x1='160' y1='148' x2='216' y2='148' stroke='#1E4FA8' strokeWidth='1.8' markerEnd='url(#ah1)' />
-      <rect x='220' y='30' width='332' height='236' rx='12' fill='#FFFFFF' stroke='#1E4FA8' strokeWidth='1.2' />
-      <rect x='220' y='30' width='332' height='44' rx='12' fill='#1E4FA8' />
-      <rect x='220' y='58' width='332' height='16' fill='#1E4FA8' />
-      <text x='386' y='58' font-size='16' font-weight='bold' fill='#FFFFFF' text-anchor='middle'>第一阶段 · 动态任务选择</text>
-      <rect x='240' y='86' width='292' height='38' rx='7' fill='#F0F5FC' stroke='#3D7BD9' strokeWidth='0.8' />
-      <text x='386' y='110' font-size='13.5' fill='#1A2230' text-anchor='middle'>① 优先级排序 P_i（五因素）</text>
-      <rect x='240' y='130' width='292' height='38' rx='7' fill='#F0F5FC' stroke='#3D7BD9' strokeWidth='0.8' />
-      <text x='386' y='154' font-size='13.5' fill='#1A2230' text-anchor='middle'>② 规模：n_cand富 / n_sel卡cap</text>
-      <rect x='240' y='174' width='292' height='38' rx='7' fill='#F0F5FC' stroke='#3D7BD9' strokeWidth='0.8' />
-      <text x='386' y='198' font-size='13.5' fill='#1A2230' text-anchor='middle'>③ 边际增益 Δ = ΔB / ΔC</text>
-      <rect x='240' y='218' width='292' height='38' rx='7' fill='#F0F5FC' stroke='#3D7BD9' strokeWidth='0.8' />
-      <text x='386' y='242' font-size='13.5' fill='#1A2230' text-anchor='middle'>两道闸门 prefilter / postcheck</text>
-      <line x1='552' y1='237' x2='606' y2='237' stroke='#1E4FA8' strokeWidth='1.8' markerEnd='url(#ah1)' />
-      <text x='579' y='225' font-size='13' font-weight='bold' fill='#1E4FA8' text-anchor='middle'>选择集</text>
-      <rect x='610' y='30' width='332' height='236' rx='12' fill='#FFFFFF' stroke='#1E4FA8' strokeWidth='1.2' />
-      <rect x='610' y='30' width='332' height='44' rx='12' fill='#0E3F8C' />
-      <rect x='610' y='58' width='332' height='16' fill='#0E3F8C' />
-      <text x='776' y='58' font-size='16' font-weight='bold' fill='#FFFFFF' text-anchor='middle'>第二阶段 · 选择性 MUAS</text>
-      <rect x='630' y='90' width='292' height='44' rx='7' fill='#F0F5FC' stroke='#3D7BD9' strokeWidth='0.8' />
-      <text x='776' y='118' font-size='14' fill='#1A2230' text-anchor='middle'>统一编码 + DMDE 进化搜索</text>
-      <line x1='776' y1='134' x2='776' y2='148' stroke='#3D7BD9' strokeWidth='1.2' markerEnd='url(#ah2)' />
-      <rect x='630' y='148' width='292' height='44' rx='7' fill='#F0F5FC' stroke='#3D7BD9' strokeWidth='0.8' />
-      <text x='776' y='176' font-size='14' fill='#1A2230' text-anchor='middle'>解码 + 可行性修复（Lamarckian 回写）</text>
-      <line x1='776' y1='192' x2='776' y2='206' stroke='#3D7BD9' strokeWidth='1.2' markerEnd='url(#ah2)' />
-      <rect x='630' y='206' width='292' height='44' rx='7' fill='#F0F5FC' stroke='#3D7BD9' strokeWidth='0.8' />
-      <text x='776' y='234' font-size='14' fill='#1A2230' text-anchor='middle'>终点机巢：最小费用流精确求解</text>
-      <line x1='942' y1='148' x2='996' y2='148' stroke='#1E4FA8' strokeWidth='1.8' markerEnd='url(#ah1)' />
-      <rect x='1000' y='102' width='142' height='92' rx='10' fill='#E8EFF8' stroke='#1E4FA8' strokeWidth='1.2' />
-      <text x='1071' y='140' font-size='16' font-weight='bold' fill='#0E3F8C' text-anchor='middle'>执行与反馈</text>
-      <text x='1071' y='166' font-size='13' fill='#4A5568' text-anchor='middle'>状态更新 · 事件重规划</text>
-      <path d='M 1071,194 L 1071,266 L 89,266 L 89,198' fill='none' stroke='#3D7BD9' strokeWidth='1.6' strokeDasharray='7 5' markerEnd='url(#ah1)' />
-      <text x='580' y='286' font-size='14' fill='#3D7BD9' text-anchor='middle'>周期 t+1：任务池更新 T(t+1) = remain ∪ new ∪ release，UAV 状态同步更新</text>
-      <defs>
-        <marker id='ah1' viewBox='0 0 10 10' refX='8' refY='5' markerWidth='7' markerHeight='7' orient='auto-start-reverse'>
-          <path d='M2 1L8 5L2 9' fill='none' stroke='#1E4FA8' strokeWidth='1.6' strokeLinecap='round' strokeLinejoin='round' />
-        </marker>
-        <marker id='ah2' viewBox='0 0 10 10' refX='8' refY='5' markerWidth='6' markerHeight='6' orient='auto-start-reverse'>
-          <path d='M2 1L8 5L2 9' fill='none' stroke='#3D7BD9' strokeWidth='1.4' strokeLinecap='round' strokeLinejoin='round' />
-        </marker>
-      </defs>
-    </svg>
-  </Box>
-
-  <Box style={{ position: 'absolute', top: 442, left: 60, width: 1160, flexDirection: 'row', gap: 20 }}>
+  <Box style={{ position: 'absolute', top: 112, left: 40, width: 1200, flexDirection: 'column', gap: 8 }}>
     {[
-      { t: '第一阶段：轻量不构造成组合问题', d: '只为「值得考虑的任务」快速排序与筛选，落选任务留池下周期再评——避免对整个动态任务池做昂贵组合搜索，同时保住与执行代价的联系。', tag: '缩空间' },
-      { t: '第二阶段：四类决策联合优化', d: '任务是否执行 y × 归属 x × 访问顺序 π × 终点机巢 z 联合确定；起点固定、终点可选、允许部分空闲——这是多机巢动态滚动的 MTSP 变体。', tag: '精优化' },
-      { t: '滚动闭环：能力范围内做更多', d: '完成出池、未选留池、故障释放、新任务到达；迟到不等于废飞，完成口径只认物理约束——保证长程运行下的任务不丢失。', tag: '闭环运行' },
-    ].map((c) => (
-      <Box key={c.tag} style={{ flex: 1, background: '#F7F9FC', border: '1px solid #D6DCE5', borderTop: '4px solid #1E4FA8', borderRadius: 10, padding: '14px 18px', flexDirection: 'column' }}>
-        <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Text style={{ fontSize: 17, fontWeight: 'bold', color: '#0E3F8C' }}>{c.t}</Text>
-          <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#FFFFFF', background: '#3D7BD9', padding: '3px 10px', borderRadius: 10 }}>{c.tag}</Text>
+      {
+        k: '多无人机\n任务分配',
+        w: '最近工作：毕文豪等 2024（系统工程与电子技术）综述：通用化建模、有限时间重分配仍未解；Du et al. 2025（IEEE T-ITS）、Freitas et al. 2025（IEEE Access）：精确优化实时性不足、拍卖/CBBA 通信开销大；Drones 2025, 9(8):530：CBBA 贪心缺全局路径最优',
+        g: '未覆盖：容量受限下「做哪些、放哪些」的取舍口径缺失；多数工作默认任务全部执行',
+      },
+      {
+        k: '多机巢\nMTSP',
+        w: '最近工作：羊钊等 2025（系统工程与电子技术）异巢起降山地巡检：一阶段 TSP 生成回路、二阶段机巢插入，但要求遍历全部航路点；Cheikhrouhou & Khoufi 2021（Comput. Sci. Rev.）MTSP 综述；Liu et al. 2019（J. Adv. Transp.）基地选址与巡逻路线联合',
+        g: '未覆盖：终点机巢决策与任务选择未分层联合；均默认全部执行、无弃单机制',
+      },
+      {
+        k: '选择性\nOP / TOP',
+        w: '最近工作：Vansteenwegen et al. 2011 / Gunawan et al. 2016（EJOR）OP 综述族；Narin, Becker & Batta 2023（J. Simulation）新兴目标 TOPTW——泊松到达、目标伪装撤离、允许重访；Xia et al. 2019 多机巢广义 TOP',
+        g: '未覆盖：单基地、平面代价假设；「允许不执行」未与三维 DEM、多机巢耦合',
+      },
+      {
+        k: '三维地形\n代价',
+        w: '最近工作：伍景琼等 2025（交通信息与安全）DEM 三维轨迹 + 电池容量评估：直线距离修正率 2.85%~18.94%；唐俊超 & 胡春鹤 2025（系统工程与电子技术）三维地形风场全覆盖，邻点滚动试探；WAFC-RRAS 2023 垂直切面近似飞行代价',
+        g: '未覆盖：三维代价停留在路径层，很少上溯为任务分配层代价矩阵',
+      },
+      {
+        k: '动态与\n滚动时域',
+        w: '最近工作：Song et al. 2016 滚动 MILP + RHTA，比 CPLEX 快 45~2100 倍；Han & Guo 2025 滚动 + 自适应 PSO + 充电站（结构最相近）；Drones 2025, 9(2):107 共享无人机服务：滚动时域 + VNS，任务不可行即拒绝',
+        g: '未覆盖：滚动重规划未同时容纳「允许不执行 + 机巢决策 + 三维 DEM 代价」',
+      },
+      {
+        k: '应急物流\n人道救援',
+        w: '最近工作：Yucesoy et al. 2025（ITOR 32(2):545）灾后无人机 OR 综述，分信息采集 / 配送 / 通信恢复三类；van Steenbergen 2024（Twente 博士论文）人道物流混型车队：UAV 只应承担最难到达的点；Zhang et al. 2025（Drones 9(7):501）GWO+CBBA 应急物资配送',
+        g: '未覆盖：默认需求全部响应、不容弃单；其「两阶段」指机队规模 + 任务分配，与本文同名异义',
+      },
+    ].map((r) => (
+      <Box key={r.k} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 14, background: '#F7F9FC', border: '1px solid #D6DCE5', borderRadius: 8, padding: '9px 16px' }}>
+        <Box style={{ width: 128, background: '#1E4FA8', borderRadius: 6, padding: '7px 10px', alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#FFFFFF', lineHeight: 1.5 }}>{r.k}</Text>
         </Box>
-        <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.6, marginTop: 8 }}>{c.d}</Text>
+        <Text style={{ fontSize: 11.5, color: '#4A5568', lineHeight: 1.55, flex: 1 }}>{r.w}</Text>
+        <Text style={{ fontSize: 11.5, color: '#BA7517', lineHeight: 1.55, width: 420 }}>{r.g}</Text>
       </Box>
     ))}
   </Box>
 
+  <Box style={{ position: 'absolute', top: 585, left: 40, width: 1200, background: '#0E3F8C', borderRadius: 10, padding: '14px 24px' }}>
+    <Text style={{ fontSize: 14.5, fontWeight: 'bold', color: '#FFFFFF', lineHeight: 1.65 }}>
+      结论：检索范围内未见同时满足「任务动态到达 × 允许不执行 × 多机巢异源起降 × 三维 DEM 代价 × 滚动重规划」的工作；六条线最好的同期成果各自只覆盖其中一至两项，且均未把「放弃」建模为合法决策。
+    </Text>
+  </Box>
+
   <Box style={{ position: 'absolute', bottom: 0, left: 0, width: 1280, height: 44, background: '#F7F9FC', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: '0 40px', borderTop: '1px solid #E5E7EB' }}>
     <Text style={{ fontSize: 13, color: '#8B97A8' }}>动态滚动的多机巢多无人机协同任务分配 · 进展汇报</Text>
-    <Text style={{ fontSize: 15, color: '#1E4FA8', fontWeight: 'bold' }}>05 / 12</Text>
+    <Text style={{ fontSize: 15, color: '#1E4FA8', fontWeight: 'bold' }}>05 / 18</Text>
   </Box>
 </Slide>

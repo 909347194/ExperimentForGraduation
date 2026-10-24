@@ -2,82 +2,41 @@
   <Box style={{ position: 'absolute', top: 0, left: 0, width: 1280, height: 12, background: '#1E4FA8' }} />
   <Box style={{ position: 'absolute', top: 30, left: 40, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
     <Box style={{ width: 6, height: 34, background: '#1E4FA8' }} />
-    <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#0E3F8C' }}>选择性多机巢 MUAS 优化模型与适应度</Text>
+    <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#0E3F8C' }}>五大挑战：为什么不能一次解完</Text>
   </Box>
-  <Text style={{ position: 'absolute', top: 78, left: 60, fontSize: 15, color: '#8B97A8' }}>左：论文组合优化模型　右：进化评价分层结构（覆盖门禁口径）</Text>
+  <Text style={{ position: 'absolute', top: 78, left: 60, fontSize: 15, color: '#8B97A8' }}>五条挑战是问题域的结构属性——任一被拿掉，静态规划就足够</Text>
 
-  <Box style={{ position: 'absolute', top: 116, left: 40, width: 610, flexDirection: 'column', gap: 14 }}>
-    <Box style={{ background: '#F7F9FC', border: '1px solid #D6DCE5', borderRadius: 10, padding: '14px 18px', flexDirection: 'column' }}>
-      <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#0E3F8C' }}>① 决策变量与耦合约束</Text>
-      <Box style={{ marginTop: 10, background: '#E8EFF8', borderRadius: 8, padding: '12px 14px' }}>
-        <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#0E3F8C' }}>
-          y<span style={{ fontSize: 12 }}>j</span> ∈ {"{0,1}"}　x<span style={{ fontSize: 12 }}>uj</span> ∈ {"{0,1}"}　π<span style={{ fontSize: 12 }}>u</span>=(T<span style={{ fontSize: 12 }}>u1</span>,…,T<span style={{ fontSize: 12 }}>un</span>)　z<span style={{ fontSize: 12 }}>ub</span> ∈ {"{0,1}"}
-        </Text>
-        <Text style={{ fontSize: 17, color: '#1E4FA8', marginTop: 8 }}>
-          Σ<span style={{ fontSize: 11 }}>u</span> x<span style={{ fontSize: 11 }}>uj</span> = y<span style={{ fontSize: 11 }}>j</span>　（每任务至多一机；y=0 即暂不执行）
-        </Text>
-      </Box>
-      <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.65, marginTop: 8 }}>
-        y：任务是否执行　x：UAV–任务归属　π：访问顺序　z：终点机巢（起点由停靠状态给定）——允许 n<span style={{ fontSize: 11 }}>u</span>=0，即部分 UAV 空闲
-      </Text>
+  <Box style={{ position: 'absolute', top: 116, left: 40, width: 660, flexDirection: 'column' }}>
+    <Box style={{ background: '#FFFFFF', border: '1px solid #D6DCE5', borderRadius: 10, padding: 10 }}>
+      <svg width={638} height={343} viewBox='0 0 638 343'><text x='319' y='22' text-anchor='middle' fontSize='15' fill='#0E3F8C' fontWeight='bold'>任务池状态演化示意（任务 × 周期状态矩阵）</text><text x='74.0' y='38' text-anchor='middle' fontSize='11' fill='#4A5568'>1</text><text x='130.0' y='38' text-anchor='middle' fontSize='11' fill='#4A5568'>2</text><text x='186.0' y='38' text-anchor='middle' fontSize='11' fill='#4A5568'>3</text><text x='242.0' y='38' text-anchor='middle' fontSize='11' fill='#4A5568'>4</text><text x='298.0' y='38' text-anchor='middle' fontSize='11' fill='#4A5568'>5</text><text x='354.0' y='38' text-anchor='middle' fontSize='11' fill='#4A5568'>6</text><text x='410.0' y='38' text-anchor='middle' fontSize='11' fill='#4A5568'>7</text><text x='466.0' y='38' text-anchor='middle' fontSize='11' fill='#4A5568'>8</text><text x='522.0' y='38' text-anchor='middle' fontSize='11' fill='#4A5568'>9</text><text x='578.0' y='38' text-anchor='middle' fontSize='11' fill='#4A5568'>10</text><text x='38' y='65.0' text-anchor='end' fontSize='11' fill='#4A5568'>T1</text><rect x='46' y='46' width='56' height='30' fill='#C9CFD8' stroke='#D6DCE5' strokeWidth='1' /><rect x='102' y='46' width='56' height='30' fill='#5FB878' stroke='#D6DCE5' strokeWidth='1' /><rect x='158' y='46' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='214' y='46' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='270' y='46' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='326' y='46' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='382' y='46' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='438' y='46' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='494' y='46' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='550' y='46' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><text x='38' y='95.0' text-anchor='end' fontSize='11' fill='#4A5568'>T2</text><rect x='46' y='76' width='56' height='30' fill='#C9CFD8' stroke='#D6DCE5' strokeWidth='1' /><rect x='102' y='76' width='56' height='30' fill='#F5A85C' stroke='#D6DCE5' strokeWidth='1' /><rect x='158' y='76' width='56' height='30' fill='#F5A85C' stroke='#D6DCE5' strokeWidth='1' /><rect x='214' y='76' width='56' height='30' fill='#5FB878' stroke='#D6DCE5' strokeWidth='1' /><rect x='270' y='76' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='326' y='76' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='382' y='76' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='438' y='76' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='494' y='76' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='550' y='76' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><text x='38' y='125.0' text-anchor='end' fontSize='11' fill='#4A5568'>T3</text><rect x='46' y='106' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='102' y='106' width='56' height='30' fill='#C9CFD8' stroke='#D6DCE5' strokeWidth='1' /><rect x='158' y='106' width='56' height='30' fill='#5FB878' stroke='#D6DCE5' strokeWidth='1' /><rect x='214' y='106' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='270' y='106' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='326' y='106' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='382' y='106' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='438' y='106' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='494' y='106' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='550' y='106' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><text x='38' y='155.0' text-anchor='end' fontSize='11' fill='#4A5568'>T4</text><rect x='46' y='136' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='102' y='136' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='158' y='136' width='56' height='30' fill='#C9CFD8' stroke='#D6DCE5' strokeWidth='1' /><rect x='214' y='136' width='56' height='30' fill='#F5A85C' stroke='#D6DCE5' strokeWidth='1' /><rect x='270' y='136' width='56' height='30' fill='#5FB878' stroke='#D6DCE5' strokeWidth='1' /><rect x='326' y='136' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='382' y='136' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='438' y='136' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='494' y='136' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='550' y='136' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><text x='38' y='185.0' text-anchor='end' fontSize='11' fill='#4A5568'>T5</text><rect x='46' y='166' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='102' y='166' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='158' y='166' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='214' y='166' width='56' height='30' fill='#C9CFD8' stroke='#D6DCE5' strokeWidth='1' /><rect x='270' y='166' width='56' height='30' fill='#F5A85C' stroke='#D6DCE5' strokeWidth='1' /><rect x='326' y='166' width='56' height='30' fill='#F5A85C' stroke='#D6DCE5' strokeWidth='1' /><rect x='382' y='166' width='56' height='30' fill='#F5A85C' stroke='#D6DCE5' strokeWidth='1' /><rect x='438' y='166' width='56' height='30' fill='#5FB878' stroke='#D6DCE5' strokeWidth='1' /><rect x='494' y='166' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='550' y='166' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><text x='38' y='215.0' text-anchor='end' fontSize='11' fill='#4A5568'>T6</text><rect x='46' y='196' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='102' y='196' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='158' y='196' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='214' y='196' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='270' y='196' width='56' height='30' fill='#C9CFD8' stroke='#D6DCE5' strokeWidth='1' /><rect x='326' y='196' width='56' height='30' fill='#5FB878' stroke='#D6DCE5' strokeWidth='1' /><rect x='382' y='196' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='438' y='196' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='494' y='196' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='550' y='196' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><text x='38' y='245.0' text-anchor='end' fontSize='11' fill='#4A5568'>T7</text><rect x='46' y='226' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='102' y='226' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='158' y='226' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='214' y='226' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='270' y='226' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='326' y='226' width='56' height='30' fill='#C9CFD8' stroke='#D6DCE5' strokeWidth='1' /><rect x='382' y='226' width='56' height='30' fill='#F5A85C' stroke='#D6DCE5' strokeWidth='1' /><rect x='438' y='226' width='56' height='30' fill='#F5A85C' stroke='#D6DCE5' strokeWidth='1' /><rect x='494' y='226' width='56' height='30' fill='#5FB878' stroke='#D6DCE5' strokeWidth='1' /><rect x='550' y='226' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><text x='38' y='275.0' text-anchor='end' fontSize='11' fill='#4A5568'>T8</text><rect x='46' y='256' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='102' y='256' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='158' y='256' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='214' y='256' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='270' y='256' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='326' y='256' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><rect x='382' y='256' width='56' height='30' fill='#C9CFD8' stroke='#D6DCE5' strokeWidth='1' /><rect x='438' y='256' width='56' height='30' fill='#F5A85C' stroke='#D6DCE5' strokeWidth='1' /><rect x='494' y='256' width='56' height='30' fill='#5FB878' stroke='#D6DCE5' strokeWidth='1' /><rect x='550' y='256' width='56' height='30' fill='#FFFFFF' stroke='#D6DCE5' strokeWidth='1' /><text x='326' y='304' text-anchor='middle' fontSize='11' fill='#4A5568'>滚动周期</text><text x='38' y='38' text-anchor='end' fontSize='11' fill='#4A5568'>任务</text><rect x='76' y='322' width='14' height='14' fill='#C9CFD8' stroke='#D6DCE5' strokeWidth='1' /><text x='98' y='334' fontSize='11' fill='#4A5568'>任务到达</text><rect x='266' y='322' width='14' height='14' fill='#F5A85C' stroke='#D6DCE5' strokeWidth='1' /><text x='288' y='334' fontSize='11' fill='#4A5568'>池内待处理</text><rect x='456' y='322' width='14' height='14' fill='#5FB878' stroke='#D6DCE5' strokeWidth='1' /><text x='478' y='334' fontSize='11' fill='#4A5568'>被选择执行并完成</text></svg>
     </Box>
-
-    <Box style={{ background: '#F7F9FC', border: '1px solid #D6DCE5', borderRadius: 10, padding: '14px 18px', flexDirection: 'column' }}>
-      <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#0E3F8C' }}>② 目标退化：完成是约束，成本是目标</Text>
-      <Box style={{ marginTop: 10, background: '#E8EFF8', borderRadius: 8, padding: '12px 14px' }}>
-        <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#0E3F8C' }}>
-          F<span style={{ fontSize: 12 }}>1</span> = Σ<span style={{ fontSize: 11 }}>j</span> R<span style={{ fontSize: 11 }}>j</span>(t)·y<span style={{ fontSize: 11 }}>j</span>
-          <span style={{ fontWeight: 'normal', color: '#4A5568' }}>（事后统计指标）　　</span>
-          min F<span style={{ fontSize: 12 }}>2</span> = C(x, π, z, y)
-        </Text>
-      </Box>
-      <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.65, marginTop: 8 }}>
-        F2 综合三维飞行代价与约束惩罚（航程、时间窗、终点可达、机巢容量末态泊位、三维地理、访问顺序）；「能装必交付」由覆盖门禁保证——F1 恒常、退化为事后指标
-      </Text>
-    </Box>
-
-    <Box style={{ background: '#0E3F8C', borderRadius: 10, padding: '13px 18px', flexDirection: 'column' }}>
-      <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#FFFFFF', lineHeight: 1.6 }}>
-        终点机巢子问题：给定路线后 min Σ c<span style={{ fontSize: 11 }}>ub</span>(π<span style={{ fontSize: 11 }}>u</span>)·z<span style={{ fontSize: 11 }}>ub</span>（容量约束），结构是小规模运输问题——用最小费用流<span style={{ color: '#FFC107' }}>精确求解</span>，联合考虑所有 UAV 的终点竞争，返航代价进入完整成本评价。
-      </Text>
-    </Box>
+    <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.7, marginTop: 12 }}>
+      任务池状态演化的示意（任务 × 周期状态矩阵）：任务到达（灰）→ 池内待处理（橙）→ 被选择执行并完成（绿）。任务持续到达、部分任务跨周期滞留（如末行滞留 4 个周期仍未执行）——不静默丢弃，而是留池待下周期再评，正是右侧五类挑战共同作用的投影。
+    </Text>
   </Box>
 
-  <Box style={{ position: 'absolute', top: 116, left: 674, width: 566, flexDirection: 'column', gap: 14 }}>
-    <Box style={{ background: '#F0F5FC', border: '1px solid #D6DCE5', borderTop: '4px solid #1E4FA8', borderRadius: 10, padding: '14px 18px', flexDirection: 'column' }}>
-      <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#0E3F8C' }}>③ 进化评价：四层准字典序（覆盖门禁口径）</Text>
-      <Box style={{ marginTop: 10, background: '#FFFFFF', borderRadius: 8, padding: '12px 14px' }}>
-        <Text style={{ fontSize: 17, fontWeight: 'bold', color: '#0E3F8C', lineHeight: 1.7 }}>
-          f = W<span style={{ fontSize: 11 }}>hard</span>·n<span style={{ fontSize: 11 }}>hard</span> + w<span style={{ fontSize: 11 }}>exc</span>·excess<span style={{ fontSize: 11 }}>m</span> + W<span style={{ fontSize: 11 }}>skip</span>·n<span style={{ fontSize: 11 }}>skip</span> + w<span style={{ fontSize: 11 }}>late</span>·L<span style={{ fontSize: 11 }}>tot</span> + λ·path + w<span style={{ fontSize: 11 }}>time</span>·F<span style={{ fontSize: 11 }}>3</span>
-        </Text>
+  <Box style={{ position: 'absolute', top: 116, left: 728, width: 512, height: 534, flexDirection: 'column', justifyContent: 'space-between' }}>
+    {[
+      { n: '1', t: '任务动态到达与持续滞留', d: '任务池按周期演化 T(t+1)=remain∪new∪release，滞留任务需要等待补偿，不能静默丢失' },
+      { n: '2', t: '无人机可用状态动态变化', d: '起降、充电、故障使可用集每周期不同，规划必须基于当前真实状态而非初始快照' },
+      { n: '3', t: '多机巢起降与终点选择', d: '异源起飞、异巢终止：起点由停靠状态确定，终点机巢是决策变量且受泊位容量约束' },
+      { n: '4', t: '任务数量与执行能力不匹配', d: '任务数远超单周期能力承载：默认全做不可行，工程上「偷偷丢弃」又不可审计——取舍必须成为模型内的合法决策' },
+      { n: '5', t: '三维地形抬升真实执行代价', d: 'DEM 修正率 2.85%~18.94%：真实三维航段代价显著高于平面直线距离，且高价值任务常伴随高航程代价——收益与代价必须联合权衡' },
+    ].map((c) => (
+      <Box key={c.n} style={{ flexDirection: 'row', gap: 14, alignItems: 'flex-start', background: '#F0F5FC', borderRadius: 8, padding: '12px 16px', borderLeft: '4px solid #1E4FA8' }}>
+        <Box style={{ width: 30, height: 30, borderRadius: 15, background: '#1E4FA8', alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#FFFFFF' }}>{c.n}</Text>
+        </Box>
+        <Box style={{ flex: 1, flexDirection: 'column' }}>
+          <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#1A2230' }}>{c.t}</Text>
+          <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.55, marginTop: 4 }}>{c.d}</Text>
+        </Box>
       </Box>
-      <Box style={{ marginTop: 10, flexDirection: 'column', gap: 6 }}>
-        {[
-          ['T0 物理硬约束', 'W_hard = κ·m·R_pool：任一次物理违约压倒其余各层全部差异——幽灵交付永不入选'],
-          ['T0.5 覆盖门禁', 'W_skip·n_skip：「能装却没装」即非法，不许成本权衡；构造修复下恒 0'],
-          ['T2 迟到（软）', 'w_late=0.01/s：迟到可接受但不免费，与航程代价同台竞争'],
-          ['T3 航程与时间', 'λ·path + w_time·F3，F3 = max_u T_u（最坏机时间）'],
-        ].map((r) => (
-          <Box key={r[0]} style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
-            <Box style={{ width: 116, background: '#1E4FA8', borderRadius: 4, alignItems: 'center', padding: '3px 0' }}>
-              <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#FFFFFF' }}>{r[0]}</Text>
-            </Box>
-            <Text style={{ fontSize: 13, color: '#4A5568', lineHeight: 1.55, flex: 1 }}>{r[1]}</Text>
-          </Box>
-        ))}
-      </Box>
-    </Box>
-
-    <Box style={{ background: '#F7F9FC', border: '1px solid #D6DCE5', borderRadius: 10, padding: '13px 18px', flexDirection: 'column' }}>
-      <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#0E3F8C' }}>设计判断</Text>
-      <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.7, marginTop: 6 }}>
-        固定表述：搜索用 f 不含 −m·F1，F1 只作事后指标——「能装必交付」由覆盖门禁承担、非加权近似；W_hard/W_skip 由指标上下界推导，λ/w_late/w_time 为层内偏好参数；big-M 旧式（−m·F1_eff）保留为兼容口径。
-      </Text>
-    </Box>
+    ))}
   </Box>
 
   <Box style={{ position: 'absolute', bottom: 0, left: 0, width: 1280, height: 44, background: '#F7F9FC', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: '0 40px', borderTop: '1px solid #E5E7EB' }}>
     <Text style={{ fontSize: 13, color: '#8B97A8' }}>动态滚动的多机巢多无人机协同任务分配 · 进展汇报</Text>
-    <Text style={{ fontSize: 15, color: '#1E4FA8', fontWeight: 'bold' }}>10 / 12</Text>
+    <Text style={{ fontSize: 15, color: '#1E4FA8', fontWeight: 'bold' }}>10 / 18</Text>
   </Box>
 </Slide>
