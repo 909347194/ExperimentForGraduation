@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""marginal_gain.py — 边际收益增量选择（论文 3.2.2）。"""
+"""marginal_gain.py — 边际收益增量选择（论文 3.4）。"""
 
 from __future__ import annotations
 
@@ -90,6 +90,13 @@ def _delta_benefit(
     selected: list[Task],
     distance_fn: Callable[[Sequence[float], Sequence[float]], float] | None = None,
 ) -> float:
+    """任务 i 加入当前选择集的边际收益 ΔB_i。
+
+    ``ΔB_i = max(R_i, 0) · (1 + 0.2 · exp(−d_min/500))``：以任务收益为基底，
+    乘一个**邻近加权**——与已选集合最近距离 ``d_min`` 越小加成越高（上限
+    1.2 倍），与插入式 ΔC 的空间邻近效应同向。两个常数（0.2 加成幅度 /
+    500 m 尺度）为实现内定值，与 ``priority.synergy_radius`` 不同源。
+    """
     base = max(task.reward, 0.0)
     if not selected:
         return base
@@ -116,15 +123,19 @@ def select_by_marginal_gain(
     """边际收益增量选择（论文 3.4）。
 
     选择任务数 ``n_sel``：``n_sel_override`` > ``max_selected`` >
-    ``⌈max_ratio·K⌉``（K = 可用 UAV 数），再与 ``capability_cap`` 取交。
+    ``⌈max_ratio·K⌉``（K = 可用 UAV 数）；仅在无 ``n_sel_override`` 时才与
+    ``capability_cap`` 取交——override 路径的规模合成已在 ``pipeline`` 的
+    :func:`capability.effective_cap` 完成。
 
     Args:
         capability_cap: 能力预算可承载数 cap(t)（:mod:`.capability`）。
-            非 None 时选择数上限取 ``min(⌈max_ratio·K⌉, cap(t))``
-            （intersect 口径），与候选预筛选同口径——规模跟着机队能力走。
+            仅在无 ``n_sel_override`` 时生效：选择数上限取
+            ``min(⌈max_ratio·K⌉, cap(t))``（intersect 口径）——选择规模
+            跟着机队能力走（候选池不受 cap 约束，见 pipeline）。
         n_sel_override: 直接指定选择数上限 n_sel，优先级高于 ``max_selected`` 与
-            ``capability_cap``。供 :func:`capability.effective_cap` 在
-            ``mode="primary"`` 下使用，使规模得以**超过**机数名额。
+            ``capability_cap``。由 :func:`pipeline.run` 传入
+            :func:`capability.effective_cap` 合成后的 n_sel；该路径不再与 cap
+            取交，且可**超过**机数名额 ⌈max_ratio·K⌉（mode="primary"）。
         forced_task_ids: 强制纳入的任务 id（Fix②）。非 None 时优先于
             ``config.forced_task_ids``；命中者在终刀获得 ``forced_bonus`` 强优先，
             保证不被名额/几何代价无限期挤出（不停饿兜底）。

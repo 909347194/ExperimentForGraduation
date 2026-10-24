@@ -10,10 +10,14 @@
 欧氏距离。**航程检查按往返口径**（2×travel vs range_margin×remaining_range）：
 航次必须返航，单程可达 ≠ 可服务。
 
-拒绝理由只有物理原因（2026-10-15 用户原则「任务不被完成只有物理约束被
-违反」）：无机可用、往返超航程。时间窗不是拒绝理由——迟到由适应度按
-``eff = R×max(0, 1−L/W)`` 折减定价（见 muas/config.py 的 late_reward_decay_seconds）；时间窗预筛
-仅在 ``check_time_window=True`` 的消融口径保留。
+拒绝理由只有物理/终态原因（2026-10-15 用户原则「任务不被完成只有物理约束
+被违反」）：无机可用、往返超航程（prefilter）、状态终局 ``status_*``（入池已判
+EXPIRED/UNREACHABLE/DONE）、机群预算超限 ``exceed_fleet_budget``（postcheck）。
+时间窗不是拒绝理由——迟到的定价走适应度：覆盖门禁主口径下 F1 为纯完成计数、
+迟到经 ``w_late·L`` 单一软计价；兼容口径（非 gate）才按
+``eff = R×max(0, 1−L/W)`` 折减计 F1（见 muas/config.py 的
+late_reward_decay_seconds）。时间窗预筛仅在 ``check_time_window=True`` 的
+消融口径保留。
 """
 
 from __future__ import annotations
@@ -38,8 +42,9 @@ class FeasibilityConfig:
     # <1.0 = 额外保守（排除物理可达的边际远站任务），仅消融时使用。
     range_margin: float = 1.0
     # 时间窗预筛总开关。**默认 False**（2026-10-15 用户原则）：
-    # 「任务不被完成只有物理约束被违反」——迟到是奖励定价问题
-    # （eff = R×max(0, 1−L/W)，见 problem.f1_reward），不是参选资格。
+    # 「任务不被完成只有物理约束被违反」——迟到是适应度定价问题
+    # （门禁口径 w_late·L 软计价；兼容口径 eff = R×max(0, 1−L/W) 折减，
+    # 见 problem.f1_reward），不是参选资格。
     # 生产路径不再以任何时间理由拒绝候选；仅消融对照时显式开启。
     check_time_window: bool = False
     budget_factor: float = 1.0
@@ -89,18 +94,21 @@ def prefilter(
     cost_hint: dict[int, float] | None = None,
     distance_fn: DistanceFn | None = None,
 ) -> tuple[list[ScoredTask], list[ScoredTask]]:
-    """初步可行性过滤（**只拦物理不可达**）。
+    """初步可行性过滤（**只拦物理不可达与终态**）。
 
     Args:
         cost_hint: ``task_id -> 三维行进代价``（与优先级 C_i(t) 同源）。
-            非 None 时航程检查以其为 travel；缺省回退欧氏距离。
+            非 None 时航程检查以其为 travel；缺省回退距离（distance_fn/
+            欧氏）。
         distance_fn: 统一距离口径（DEM 三维航程）。用于「选最近可用机」，
             缺省退回欧氏直线。
 
-    拒绝理由只有两类物理原因：``no_available_uav``（无机可用）与
-    ``exceed_round_trip_range``（往返航程超限）。时间窗不再作为拒绝理由
-    （2026-10-15 用户原则：迟到由适应度折减定价，不是参选资格）；
-    ``miss_time_window`` 仅在 ``check_time_window=True`` 的消融口径出现。
+    拒绝理由以物理原因为主：``no_available_uav``（无机可用）与
+    ``exceed_round_trip_range``（往返航程超限）；另有终态原因
+    ``status_{expired,unreachable,done}``（入池已判定的状态终局）。
+    时间窗不再作为拒绝理由（2026-10-15 用户原则：迟到由适应度定价，
+    不是参选资格）；``miss_time_window`` 仅在 ``check_time_window=True``
+    的消融口径出现。
     """
     cfg = config or FeasibilityConfig()
     passed: list[ScoredTask] = []
