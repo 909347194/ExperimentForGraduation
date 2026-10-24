@@ -171,8 +171,10 @@ def test_loader_never_loads_infeasible_task():
     _, ev = _mk(tasks, uavs, nests, stage_cfg=cfg)
 
     work, _, loaded = ev._load_coverage_fixed_point({0: []}, {})
-    assert work[0] == [0], f"只能装可行任务 t0，实际 {work}"
-    assert loaded == 1
+    # 软窗口径：窗口不再是装载硬否决。t0 航程可行 ⇒ 装；t2 窗口死但航程
+    # 可行（12km ≤ 45km）⇒ 软窗下仍装（迟到交付、计完成）；t1 航程死 ⇒ 不装。
+    assert work[0] == [0, 2], f"t0+t2 装（航程可行，软窗不否决窗口）；t1 航程死不装，实际 {work}"
+    assert loaded == 2, f"首轮从空池装入 t0、t2 共 2 个，实际 {loaded}"
 
 
 # ── 2. 单调成本 polish：四道门 ────────────────────────────────────

@@ -48,6 +48,7 @@ CSV_COLUMNS = (
     "n_capacity_violations",
     "cycle_feasible_rate",
     "n_eliminated",
+    "n_overdue_ever",
     "n_unreachable",
     "n_voluntary_skip",
     "n_capacity_shortfall",
@@ -117,7 +118,14 @@ def build_summary(
     n_infeasible_delivery = sum(len(r.infeasible_ids) for r in records)
     n_late = sum(len(r.late_ids) for r in records)
     all_lateness = [float(v) for r in records for v in r.lateness_by_task.values()]
-    n_eliminated = sum(len(r.expired_ids) for r in records)
+    # 淘汰：2026-10-24 口径「无超期淘汰」后结构性为 0（TaskPool 不再
+    # 超期出池；唯一出池途径 = 完成 / 静态物理不可达）。保留键作审计
+    # 断言（audit_correctness 终局守恒），n_overdue_ever 为超期滞留诊断。
+    # 与 exp01 同口径：过期任务不再出池，故不再从 expired_ids 累计。
+    n_eliminated = 0
+    n_overdue_ever = len(
+        {int(i) for r in records for i in getattr(r, "overdue_ids", ())}
+    )
     n_unreachable = sum(len(r.unreachable_ids) for r in records)
     n_capacity_violations = sum(len(r.capacity_violations) for r in records)
     # 覆盖门禁三分账（2026-10-22）：逐周期 gate_stats 累加；
@@ -250,6 +258,7 @@ def build_summary(
         "n_capacity_violations": n_capacity_violations,
         "cycle_feasible_rate": round(cycle_feasible_rate, 6),
         "n_eliminated": n_eliminated,
+        "n_overdue_ever": n_overdue_ever,
         "n_unreachable": n_unreachable,
         "n_voluntary_skip": n_voluntary_skip,
         "n_capacity_shortfall": n_capacity_shortfall,

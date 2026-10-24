@@ -7,7 +7,9 @@
 
 不变量清单（A~O）：
   A 终局守恒   到达 = 完成 + 淘汰 + 不可达 + 池内剩余（任务不丢、不重复计）
-  A2 淘汰为零   淘汰(elim)>0 = 机制缺陷（可完成必完成未达成），须硬 FAIL
+  A2 淘汰为零（结构性保证，非运行时检测）  n_eliminated 由「无超期淘汰」口径
+              结构性恒为 0（防御性断言，不具运行时检测力）；超期滞留由
+              n_overdue_ever 兜底 WARN（滞留≠丢失，人工复核调度失配）
   B 完成唯一   跨周期 completed 互斥；与 solution 任务表的 completed_at 一致
   C 闸门语义   物理不可行交付不计完成；迟到 ⊆ 完成；废飞 ⊆ 出动
   D 时间语义   迟到秒数 = 仿真 ETA − latest（连续时间口径，**不是**
@@ -201,12 +203,24 @@ def _run_checks(
     check("A 完成数与任务表一致",
           n_sol_completed == s["n_completed"],
           f"summary={s['n_completed']} 任务表 completed_at 非空={n_sol_completed}")
-    # ── A2 淘汰须为零（铁律：完成率对可完成集合恒 100%）────────────
-    # 淘汰(elim)>0 = 可完成任务机制性未完成 = 缺陷（非合法失败类、
-    # 非「假设被证伪」）。一旦出现，机制未达成「可完成必完成」，硬 FAIL 暴露。
-    check("A2 淘汰须为零（淘汰>0 = 可完成任务机制性未完成 = 缺陷）",
+    # ── A2 淘汰恒为零（结构性保证，非运行时检测）────────────────
+    # 2026-10-24「无超期淘汰」口径落地后，TaskPool 不再超期出池，唯一出池
+    # 途径 = 完成 / 静态物理不可达，故 n_eliminated **结构性恒为 0**。此处
+    # 断言已退化为「防御性不变量校验」：它验证落盘 summary 未被错误回填，
+    # 但**不再具备运行时缺陷检测能力**（恒真断言）。真正的超期滞留可观测
+    # 信号交给下方 n_overdue_ever 的 WARN——任务在 latest 之后仍滞留池中 =
+    # 调度失配（迟交 / 积压）信号，须人工复核而非硬 FAIL（滞留 ≠ 丢失）。
+    check("A2 淘汰恒为零（结构性保证：无超期淘汰口径后 n_eliminated 必为 0）",
           s["n_eliminated"] == 0,
-          f"n_eliminated={s['n_eliminated']}")
+          f"n_eliminated={s['n_eliminated']}（非 0 = summary 被错误回填，非运行时缺陷）")
+    if s.get("n_overdue_ever", 0) > 0:
+        # WARN（非 FAIL）：超期滞留是诊断信号，不是终局损失。任务仍计入
+        # 完成或剩余池（见 A 终局守恒），迟交交付合法计完成。出现即提示
+        # 复核调度（是否窗口过紧 / 选择漏斗误杀了可完成任务），不阻断交付。
+        check("超期滞留诊断：n_overdue_ever>0（任务 latest 后仍滞留池，须复核调度）",
+              False,
+              f"n_overdue_ever={s['n_overdue_ever']}（滞留≠丢失；迟交/积压信号，人工复核）",
+              warn=True)
 
     # ── B 完成唯一 ──────────────────────────────────────────────
     all_completed: list[int] = []

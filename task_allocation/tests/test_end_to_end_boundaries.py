@@ -163,7 +163,7 @@ def test_marginal_feasible_round_trip_completed():
         f"超满电任务应判 UNREACHABLE：{rec.unreachable_ids}"
     )
     # 物理口径：不可达不是淘汰、不是废飞
-    assert 1 not in rec.expired_ids
+    assert 1 not in rec.overdue_ids
     assert 1 not in rec.infeasible_ids
 
 
@@ -180,7 +180,7 @@ def test_dynamic_shortfall_defers_without_marking_unreachable():
     rec = records[0]
     assert 0 not in rec.completed_ids, "余量不足不应完成"
     assert rec.unreachable_ids == [], "满电可及 ≠ 静态不可达"
-    assert 0 not in rec.expired_ids, "不得记淘汰"
+    assert 0 not in rec.overdue_ids, "不得记淘汰"
     assert 0 in rec.deferred_ids, "应留在池中（deferred）"
 
 

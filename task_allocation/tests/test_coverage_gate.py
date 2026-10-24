@@ -115,9 +115,10 @@ def test_open_tour_rescuable_must_be_skipped_and_rescued():
 
 
 def test_infeasible_tasks_are_shortfall_not_skip():
-    """自身窗不可达（迟到）与航程不可达都归 capacity_shortfall。"""
+    """2026-10-24 软窗口径：窗口死但航程可行的任务判 voluntary_skip
+    （可装没装，软窗不否决可装性）；只有航程死才归 capacity_shortfall。"""
     tasks = [
-        _task(0, 10_000.0, 0.0, latest=100.0),   # ETA=1000s > latest=100 → 窗口死
+        _task(0, 10_000.0, 0.0, latest=100.0),   # ETA=1000s > latest=100 → 窗口死但航程可行（20km）
         _task(1, 200_000.0, 0.0),                 # 往返 400km > 80km → 航程死
     ]
     nests = [Nest(id=0, x=0.0, y=0.0, z=0.0, capacity=4)]
@@ -125,13 +126,22 @@ def test_infeasible_tasks_are_shortfall_not_skip():
     p = _problem(tasks, uavs, nests)
 
     stats = audit_coverage(p, {0: []}, {})
-    assert stats.n_skip == 0, f"无任何可行插入，不得判 skip：{stats.to_dict()}"
-    assert sorted(stats.shortfall_ids) == [0, 1]
+    # 软窗下 t0 窗口死但航程可行（20km ≤ 80km）= 可装没装 ⇒ voluntary_skip
+    assert stats.n_skip == 1 and stats.skip_ids == [0], (
+        f"窗口死但航程可行的 t0 软窗下判 skip：{stats.to_dict()}"
+    )
+    # t1 航程死 ⇒ capacity_shortfall
+    assert stats.shortfall_ids == [1], (
+        f"航程死的 t1 必须记 shortfall：{stats.to_dict()}"
+    )
 
     _, _, rstats = repair_coverage(p, {0: []}, {})
-    assert rstats.n_rescued == 0
-    assert rstats.n_skip == 0
-    assert sorted(rstats.shortfall_ids) == [0, 1]
+    # 软窗 + 空闲机：t0 窗口死但航程可行 ⇒ repair 救回（迟到交付、计完成，
+    # 不再判 skip）；t1 航程死 ⇒ 能力不足不可救，仍记 shortfall。
+    assert rstats.n_rescued == 1, f"窗口死但航程可行的 t0 必须被救回：{rstats.to_dict()}"
+    assert rstats.n_skip == 0, f"修复后 t0 不再判 skip：{rstats.to_dict()}"
+    assert rstats.skip_ids == [], f"修复后 skip_ids 应清空：{rstats.to_dict()}"
+    assert rstats.shortfall_ids == [1], f"t1 航程死须记 shortfall：{rstats.to_dict()}"
 
 
 # ── 3. 不动点收敛：竞争容量 + 幂等 ────────────────────────────────
@@ -265,7 +275,7 @@ def test_stage_hook_gate_stats_and_default_off():
     assert gs["n_skip"] == 0, f"终态不得留 voluntary_skip：{gs}"
     assert gs["shortfall_ids"] == [1], f"t1 一阶检验不可行应记 shortfall：{gs}"
     assert set(sol.executed_task_ids) == {0}
-    assert gs["window_mode"] == "self"
+    assert gs["window_mode"] == "soft"
 
     ev_off = _ev(MUASStageConfig(), gate_fit=False)
     sol_off = ev_off.build_solution([(0, 0)])
