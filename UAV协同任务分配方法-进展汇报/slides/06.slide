@@ -2,73 +2,58 @@
   <Box style={{ position: 'absolute', top: 0, left: 0, width: 1280, height: 12, background: '#1E4FA8' }} />
   <Box style={{ position: 'absolute', top: 30, left: 40, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
     <Box style={{ width: 6, height: 34, background: '#1E4FA8' }} />
-    <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#0E3F8C' }}>动态滚动与闭环运行：周期时序与状态更新</Text>
+    <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#0E3F8C' }}>研究动机：这五件事为什么必须放在一起解</Text>
   </Box>
-  <Text style={{ position: 'absolute', top: 78, left: 60, fontSize: 15, color: '#8B97A8' }}>每周期独立重算选择与分配，状态只经执行反馈演化——长程运行不丢任务</Text>
+  <Text style={{ position: 'absolute', top: 78, left: 60, fontSize: 15, color: '#8B97A8' }}>不是「想做五合一」——三条耦合链说明分开解会系统性失效，一处规模论证说明为什么必须分层</Text>
 
-  <Box style={{ position: 'absolute', top: 116, left: 40, width: 700, flexDirection: 'column', gap: 16 }}>
+  <Box style={{ position: 'absolute', top: 116, left: 40, width: 590, flexDirection: 'column', gap: 12 }}>
     <Box style={{ background: '#F7F9FC', border: '1px solid #D6DCE5', borderRadius: 10, padding: '16px 20px', flexDirection: 'column' }}>
-      <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#0E3F8C' }}>① 任务池演化（完成出池 · 未选留池 · 新到入池）</Text>
-      <Box style={{ marginTop: 12, background: '#E8EFF8', borderRadius: 8, padding: '14px 16px', alignItems: 'center' }}>
-        <Text style={{ fontSize: 23, fontWeight: 'bold', color: '#0E3F8C' }}>T(t+1) = remain ∪ new ∪ release</Text>
-      </Box>
-      <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.7, marginTop: 10 }}>
-        完成出池、未选留池、故障释放、新任务到达；滞留任务带等待补偿 W = 1−e<sup>−t/τ</sup> 参与下周期排序，不会被静默丢失——池水位守恒，arrived = done + unreach + elim + remain 每周期成立。
+      <Text style={{ fontSize: 17.5, fontWeight: 'bold', color: '#0E3F8C' }}>① 结构性缺口：取舍不是选择，而是被迫</Text>
+      <Text style={{ fontSize: 12.5, color: '#4A5568', lineHeight: 1.7, marginTop: 8 }}>
+        【供给端】单架次真实能力远低于直觉：山区输电有效巡检半径 5~7 km、单架次约 6 基杆塔（大疆机场 4 在 61 km 线路上 441 架次实测）；公开口径下单机日巡检 15~50 基。
+      </Text>
+      <Text style={{ fontSize: 12.5, color: '#4A5568', lineHeight: 1.7, marginTop: 6 }}>
+        【需求端】任务侧是万基量级：安溪 3057 km² 需约 60 座机巢才能覆盖；深圳 3600+ km 线路已纳入机巢自主巡检；缺陷复查与通道隐患持续插入，任务池只增不减。
+      </Text>
+      <Text style={{ fontSize: 12.5, color: '#4A5568', lineHeight: 1.7, marginTop: 6 }}>
+        【峰值重合】最尖锐的时刻被两头夹住：台风、强降雨既是缺陷与通道隐患的暴涨期（需求峰值），又是可飞窗口收缩、低温与高海拔电池效率下降的时期（供给谷值）——要飞的时候最飞不动。
+      </Text>
+      <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#1E4FA8', marginTop: 10 }}>
+        → 任务供给结构性大于机队吞吐，「全部执行」不是理想而是不可行
       </Text>
     </Box>
-
-    <Box style={{ background: '#F7F9FC', border: '1px solid #D6DCE5', borderRadius: 10, padding: '16px 20px', flexDirection: 'column' }}>
-      <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#0E3F8C' }}>② 机队状态更新（规划只用当前真实状态）</Text>
-      <Box style={{ marginTop: 12, background: '#E8EFF8', borderRadius: 8, padding: '12px 16px', flexDirection: 'column', gap: 5, alignItems: 'center' }}>
-        <Text style={{ fontSize: 16.5, fontWeight: 'bold', color: '#0E3F8C' }}>状态(u) = 停靠机巢 + 剩余航程 + 可用性　　每周期重算 K(t) 与 cap(t)</Text>
-        <Text style={{ fontSize: 13, color: '#4A5568' }}>B(t) = 可起飞子集剩余航程和；cap(t) = max(min_cap, ⌊B(t)/c_med⌋)</Text>
-      </Box>
-      <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.7, marginTop: 10 }}>
-        起降、充电、故障与返航迁移每周期改变可用集与停靠巢；充电中的机是幻影容量、不计入 B(t)——规划基于当前状态而非初始快照。
+    <Box style={{ background: '#E8EFF8', border: '1px solid #D6DCE5', borderRadius: 10, padding: '13px 20px', flexDirection: 'column' }}>
+      <Text style={{ fontSize: 15.5, fontWeight: 'bold', color: '#0E3F8C' }}>③ 五合一带来的组合规模，决定了必须分层求解</Text>
+      <Text style={{ fontSize: 12.5, color: '#4A5568', lineHeight: 1.7, marginTop: 6 }}>
+        y × x × π × z 全量联合的决策规模随 N! 与 B^U 增长，且每个滚动周期都要重算 → 单阶段在周期内不可解；分层后：选择层只做排序与边际比查表，把 N 压到 n_cand / n_sel（能力无关 / 卡 cap(t)），精优化层再在缩后的空间里做四类决策联合。
       </Text>
-    </Box>
-
-    <Box style={{ background: '#F0F5FC', border: '1px solid #D6DCE5', borderRadius: 10, padding: '12px 20px', flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-      <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#0E3F8C' }}>周期时序：</Text>
-      {['到达入池', '① 任务选择', '② MUAS 求解', '③ 执行出动', '④ 反馈更新'].map((s, i) => (
-        <Box key={s} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          {i > 0 && <Text style={{ fontSize: 16, color: '#3D7BD9', fontWeight: 'bold' }}>→</Text>}
-          <Box style={{ padding: '6px 12px', background: '#FFFFFF', borderRadius: 14, border: '1px solid #3D7BD9' }}>
-            <Text style={{ fontSize: 13, color: '#1E4FA8' }}>{s}</Text>
-          </Box>
-        </Box>
-      ))}
     </Box>
   </Box>
 
-  <Box style={{ position: 'absolute', top: 116, left: 764, width: 476, flexDirection: 'column', gap: 14 }}>
-    <Box style={{ background: '#F0F5FC', border: '1px solid #D6DCE5', borderTop: '4px solid #1E4FA8', borderRadius: 10, padding: '14px 20px', flexDirection: 'column' }}>
-      <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#0E3F8C' }}>③ 完成反馈闸门（完成只认物理约束）</Text>
-      <Box style={{ marginTop: 10, background: '#FFFFFF', borderRadius: 8, padding: '12px 14px', alignItems: 'center' }}>
-        <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#0E3F8C' }}>迟到照常完成 · 物理不可行回池</Text>
-        <Text style={{ fontSize: 16, color: '#1E4FA8', marginTop: 6 }}>迟到交付按 L 折价计收益、不计废飞；物理不可行才回池重选，是唯一合法的未完成原因</Text>
-      </Box>
-      <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.7, marginTop: 8 }}>
-        执行反馈只按物理可行性裁决——「任务不被完成只有物理约束被违反」；迟到由适应度按 w_late 计价，与航程代价同台竞争。
-      </Text>
-    </Box>
+  <Box style={{ position: 'absolute', top: 116, left: 650, width: 590, background: '#F7F9FC', border: '1px solid #D6DCE5', borderRadius: 10, padding: '16px 20px', flexDirection: 'column' }}>
+    <Text style={{ fontSize: 17.5, fontWeight: 'bold', color: '#0E3F8C' }}>② 五要素互相决定：分开解会系统性失效</Text>
+    <Text style={{ fontSize: 12.5, color: '#4A5568', lineHeight: 1.7, marginTop: 8 }}>
+      【地形 × 取舍】三维地形抬高航段代价 → 单架次可达任务数下降 → 供过于求进一步加剧；取舍因此从「可选项」变成「必选项」。
+    </Text>
+    <Text style={{ fontSize: 12.5, color: '#4A5568', lineHeight: 1.7, marginTop: 8 }}>
+      【取舍 × 机巢】选了哪些任务，才决定航线端点落在哪 → 终点机巢的最优解依赖被选中的任务集；先定巢再选任务会锁死次优。
+    </Text>
+    <Text style={{ fontSize: 12.5, color: '#4A5568', lineHeight: 1.7, marginTop: 8 }}>
+      【动态 × 滚动】新任务到达 + 机队位置 / 剩余航程 / 可用性变化 → 上一周期的「选择 + 分配 + 落巢」整体失效，增量修补会累积承诺偏差。
+    </Text>
+    <Text style={{ fontSize: 13, fontWeight: 'bold', color: '#1E4FA8', marginTop: 12 }}>
+      → 五条特征不是并列清单，而是互相决定的耦合体
+    </Text>
+  </Box>
 
-    <Box style={{ background: '#F7F9FC', border: '1px solid #D6DCE5', borderRadius: 10, padding: '13px 20px', flexDirection: 'column' }}>
-      <Text style={{ fontSize: 17, fontWeight: 'bold', color: '#0E3F8C' }}>④ 滞留与防饥饿（不停饿兜底）</Text>
-      <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.7, marginTop: 6 }}>
-        等待超阈值或逼近 latest 的任务强制纳入候选集并在终刀获强优先；边际接受判据带等待软加权 eff = ratio·(1+γ·age)——长程运行下没有任务被无限期挤出。
-      </Text>
-    </Box>
-
-    <Box style={{ background: '#0E3F8C', borderRadius: 10, padding: '14px 20px', flexDirection: 'column' }}>
-      <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#FFFFFF', lineHeight: 1.6 }}>
-        判断：滚动闭环把「求解一次」变成「持续服务」——每周期规模由 cap(t) 卡住、状态由执行反馈驱动，任务去留全程可审计，长程运行不丢任务。
-      </Text>
-    </Box>
+  <Box style={{ position: 'absolute', top: 505, left: 40, width: 1200, background: '#0E3F8C', borderRadius: 10, padding: '15px 24px' }}>
+    <Text style={{ fontSize: 14.5, fontWeight: 'bold', color: '#FFFFFF', lineHeight: 1.7 }}>
+      动机的准确表述：不是「把五个要素凑齐显得新」，而是这五件事在物理上互相决定、分开解会系统性失效；而它们合一带来的组合爆炸，又决定了必须在滚动周期内分层求解——先按能力缩空间，再在缩后空间里精优化。
+    </Text>
   </Box>
 
   <Box style={{ position: 'absolute', bottom: 0, left: 0, width: 1280, height: 44, background: '#F7F9FC', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: '0 40px', borderTop: '1px solid #E5E7EB' }}>
     <Text style={{ fontSize: 13, color: '#8B97A8' }}>动态滚动的多机巢多无人机协同任务分配 · 进展汇报</Text>
-    <Text style={{ fontSize: 15, color: '#1E4FA8', fontWeight: 'bold' }}>06 / 12</Text>
+    <Text style={{ fontSize: 15, color: '#1E4FA8', fontWeight: 'bold' }}>06 / 18</Text>
   </Box>
 </Slide>

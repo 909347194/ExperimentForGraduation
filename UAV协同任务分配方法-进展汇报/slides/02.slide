@@ -6,7 +6,7 @@
     <Text style={{ fontSize: 15, color: '#B5D4F4', letterSpacing: 4, marginTop: 8 }}>CONTENTS</Text>
     <Box style={{ width: 44, height: 3, background: '#FFC107', marginTop: 20 }} />
     <Text style={{ fontSize: 17, color: '#DCE7F5', lineHeight: 1.9, marginTop: 28 }}>
-      围绕「动态任务池 × 多机巢 × 选择性执行」三个关键词，讲清问题特征、两阶段分层框架与两阶段机制设计——只讲方法本身。
+      先用 P3–P8 讲清为什么要做、为什么必须放在一起解，再围绕「动态任务池 × 多机巢 × 选择性执行」三个关键词讲清问题特征、两阶段分层框架与两阶段机制设计。
     </Text>
     <Text style={{ fontSize: 14, color: '#85B7EB', lineHeight: 1.8, marginTop: 22 }}>
       公式与表述均可回溯到论文方法章。
@@ -15,9 +15,10 @@
 
   <Box style={{ position: 'absolute', top: 110, left: 428, width: 812, height: 540, flexDirection: 'column', justifyContent: 'space-between' }}>
     {[
-      { n: '01', t: '研究问题与总体框架', d: '任务动态到达与持续滞留、无人机状态动态变化、任务规模与执行能力失配——静态一次性规划失效，引出两阶段分层滚动框架', p: 'P3–P6' },
-      { n: '02', t: '第一阶段：动态任务选择', d: '基础优先级预筛选 + 边际收益增量选择 + 快速可行性检查，把任务池压缩为规模可控的候选集', p: 'P7–P8' },
-      { n: '03', t: '第二阶段：选择性 MUAS 与 DMDE', d: '多机巢选择性分配的组合优化模型、四层准字典序适应度、改进离散映射差分进化与终点机巢精确求解', p: 'P9–P11' },
+      { n: '01', t: '研究问题与总体框架', d: '任务动态到达与持续滞留、无人机状态动态变化、任务规模与执行能力失配——静态一次性规划失效，引出两阶段分层滚动框架', p: 'P9–P12' },
+      { n: '02', t: '第一阶段：动态任务选择', d: '基础优先级预筛选 + 边际收益增量选择 + 快速可行性检查，把任务池压缩为规模可控的候选集', p: 'P13–P14' },
+      { n: '03', t: '第二阶段：选择性 MUAS 与 DMDE', d: '多机巢选择性分配的组合优化模型、四层准字典序适应度、改进离散映射差分进化与终点机巢精确求解', p: 'P15–P17' },
+      { n: '00', t: '研究背景与定位', d: '背景 · 意义 · 现状 · 动机 · 边界 · 进展——为什么必须做、为什么一起解、能做到哪', p: 'P3–P8' },
     ].map((it) => (
       <Box key={it.n} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 20, background: '#F0F5FC', borderRadius: 10, padding: '18px 22px', border: '1px solid #D6DCE5', borderLeft: '4px solid #1E4FA8' }}>
         <Box style={{ width: 54, height: 54, background: '#1E4FA8', borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}>
@@ -35,6 +36,6 @@
 
   <Box style={{ position: 'absolute', bottom: 0, left: 0, width: 1280, height: 44, background: '#F7F9FC', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: '0 40px', borderTop: '1px solid #E5E7EB' }}>
     <Text style={{ fontSize: 13, color: '#8B97A8' }}>动态滚动的多机巢多无人机协同任务分配 · 进展汇报</Text>
-    <Text style={{ fontSize: 15, color: '#1E4FA8', fontWeight: 'bold' }}>02 / 12</Text>
+    <Text style={{ fontSize: 15, color: '#1E4FA8', fontWeight: 'bold' }}>02 / 18</Text>
   </Box>
 </Slide>

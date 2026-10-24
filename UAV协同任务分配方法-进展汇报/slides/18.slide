@@ -1,0 +1,32 @@
+<Slide style={{ width: 1280, height: 720, background: '#0E3F8C', position: 'relative', fontFamily: 'Source Han Sans CN, Microsoft YaHei, sans-serif' }}>
+  <Box style={{ position: 'absolute', top: 0, left: 0, width: 1280, height: 12, background: '#3D7BD9' }} />
+  <Box style={{ position: 'absolute', bottom: 0, left: 0, width: 1280, height: 12, background: '#3D7BD9' }} />
+
+  <Box style={{ position: 'absolute', top: 96, left: 140, width: 1000, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', background: 'rgba(255,255,255,0.08)', borderRadius: 24, border: '1px solid rgba(255,255,255,0.25)', padding: '12px 24px' }}>
+    {['01 问题与框架', '02 任务选择', '03 MUAS 与 DMDE'].map((c, i) => (
+      <Box key={c} style={{ flexDirection: 'row', alignItems: 'center' }}>
+        {i > 0 && <Text style={{ fontSize: 15, color: '#85B7EB', margin: '0 16px' }}>·</Text>}
+        <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#FFFFFF' }}>{c}</Text>
+      </Box>
+    ))}
+  </Box>
+
+  <Box style={{ position: 'absolute', top: 208, left: 100, width: 1080, flexDirection: 'column', alignItems: 'center' }}>
+    <Text style={{ fontSize: 16, color: '#85B7EB', letterSpacing: 8 }}>小 结</Text>
+    <Text style={{ fontSize: 42, fontWeight: 'bold', color: '#FFFFFF', textAlign: 'center', lineHeight: 1.55, marginTop: 24 }}>
+      分层求解：以能力标定筛选规模<br />以组合优化保证质量
+    </Text>
+    <Box style={{ width: 56, height: 4, background: '#FFC107', marginTop: 30 }} />
+    <Text style={{ fontSize: 18, color: '#DCE7F5', lineHeight: 1.9, marginTop: 28, textAlign: 'center' }}>
+      动态任务选择缩空间 · 选择性 MUAS 精优化 · 滚动闭环不丢任务<br />
+      覆盖门禁守完成语义 · 四层准字典序保可行 · DMDE 搜归属与顺序
+    </Text>
+  </Box>
+
+  <Box style={{ position: 'absolute', bottom: 88, left: 100, width: 1080, flexDirection: 'column', alignItems: 'center' }}>
+    <Text style={{ fontSize: 34, fontWeight: 'bold', color: '#FFFFFF' }}>请老师批评指正</Text>
+    <Text style={{ fontSize: 15, color: '#85B7EB', marginTop: 14 }}>
+      汇报人：XXX　·　指导教师：XXX　·　2026 年 10 月
+    </Text>
+  </Box>
+</Slide>

@@ -1,32 +1,74 @@
-<Slide style={{ width: 1280, height: 720, background: '#0E3F8C', position: 'relative', fontFamily: 'Source Han Sans CN, Microsoft YaHei, sans-serif' }}>
-  <Box style={{ position: 'absolute', top: 0, left: 0, width: 1280, height: 12, background: '#3D7BD9' }} />
-  <Box style={{ position: 'absolute', bottom: 0, left: 0, width: 1280, height: 12, background: '#3D7BD9' }} />
+<Slide style={{ width: 1280, height: 720, background: '#FFFFFF', position: 'relative', fontFamily: 'Source Han Sans CN, Microsoft YaHei, sans-serif' }}>
+  <Box style={{ position: 'absolute', top: 0, left: 0, width: 1280, height: 12, background: '#1E4FA8' }} />
+  <Box style={{ position: 'absolute', top: 30, left: 40, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+    <Box style={{ width: 6, height: 34, background: '#1E4FA8' }} />
+    <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#0E3F8C' }}>动态滚动与闭环运行：周期时序与状态更新</Text>
+  </Box>
+  <Text style={{ position: 'absolute', top: 78, left: 60, fontSize: 15, color: '#8B97A8' }}>每周期独立重算选择与分配，状态只经执行反馈演化——长程运行不丢任务</Text>
 
-  <Box style={{ position: 'absolute', top: 96, left: 140, width: 1000, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', background: 'rgba(255,255,255,0.08)', borderRadius: 24, border: '1px solid rgba(255,255,255,0.25)', padding: '12px 24px' }}>
-    {['01 问题与框架', '02 任务选择', '03 MUAS 与 DMDE'].map((c, i) => (
-      <Box key={c} style={{ flexDirection: 'row', alignItems: 'center' }}>
-        {i > 0 && <Text style={{ fontSize: 15, color: '#85B7EB', margin: '0 16px' }}>·</Text>}
-        <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#FFFFFF' }}>{c}</Text>
+  <Box style={{ position: 'absolute', top: 116, left: 40, width: 700, flexDirection: 'column', gap: 16 }}>
+    <Box style={{ background: '#F7F9FC', border: '1px solid #D6DCE5', borderRadius: 10, padding: '16px 20px', flexDirection: 'column' }}>
+      <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#0E3F8C' }}>① 任务池演化（完成出池 · 未选留池 · 新到入池）</Text>
+      <Box style={{ marginTop: 12, background: '#E8EFF8', borderRadius: 8, padding: '14px 16px', alignItems: 'center' }}>
+        <Text style={{ fontSize: 23, fontWeight: 'bold', color: '#0E3F8C' }}>T(t+1) = remain ∪ new ∪ release</Text>
       </Box>
-    ))}
+      <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.7, marginTop: 10 }}>
+        完成出池、未选留池、故障释放、新任务到达；滞留任务带等待补偿 W = 1−e<sup>−t/τ</sup> 参与下周期排序，不会被静默丢失——池水位全程守恒：arrived = done + unreach + elim + remain（终局核验口径）。
+      </Text>
+    </Box>
+
+    <Box style={{ background: '#F7F9FC', border: '1px solid #D6DCE5', borderRadius: 10, padding: '16px 20px', flexDirection: 'column' }}>
+      <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#0E3F8C' }}>② 机队状态更新（规划只用当前真实状态）</Text>
+      <Box style={{ marginTop: 12, background: '#E8EFF8', borderRadius: 8, padding: '12px 16px', flexDirection: 'column', gap: 5, alignItems: 'center' }}>
+        <Text style={{ fontSize: 16.5, fontWeight: 'bold', color: '#0E3F8C' }}>状态(u) = 停靠机巢 + 剩余航程 + 可用性　　每周期重算 K(t) 与 cap(t)</Text>
+        <Text style={{ fontSize: 13, color: '#4A5568' }}>B(t) = 可起飞子集剩余航程和；cap(t) = max(min_cap, ⌊B(t)/c_med⌋)</Text>
+      </Box>
+      <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.7, marginTop: 10 }}>
+        起降、充电、故障与返航迁移每周期改变可用集与停靠巢；充电中的机是幻影容量、不计入 B(t)——规划基于当前状态而非初始快照。
+      </Text>
+    </Box>
+
+    <Box style={{ background: '#F0F5FC', border: '1px solid #D6DCE5', borderRadius: 10, padding: '12px 20px', flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+      <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#0E3F8C' }}>周期时序：</Text>
+      {['到达入池', '① 任务选择', '② MUAS 求解', '③ 执行出动', '④ 反馈更新'].map((s, i) => (
+        <Box key={s} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          {i > 0 && <Text style={{ fontSize: 16, color: '#3D7BD9', fontWeight: 'bold' }}>→</Text>}
+          <Box style={{ padding: '6px 12px', background: '#FFFFFF', borderRadius: 14, border: '1px solid #3D7BD9' }}>
+            <Text style={{ fontSize: 13, color: '#1E4FA8' }}>{s}</Text>
+          </Box>
+        </Box>
+      ))}
+    </Box>
   </Box>
 
-  <Box style={{ position: 'absolute', top: 208, left: 100, width: 1080, flexDirection: 'column', alignItems: 'center' }}>
-    <Text style={{ fontSize: 16, color: '#85B7EB', letterSpacing: 8 }}>小 结</Text>
-    <Text style={{ fontSize: 42, fontWeight: 'bold', color: '#FFFFFF', textAlign: 'center', lineHeight: 1.55, marginTop: 24 }}>
-      分层求解：以能力标定筛选规模<br />以组合优化保证质量
-    </Text>
-    <Box style={{ width: 56, height: 4, background: '#FFC107', marginTop: 30 }} />
-    <Text style={{ fontSize: 18, color: '#DCE7F5', lineHeight: 1.9, marginTop: 28, textAlign: 'center' }}>
-      动态任务选择缩空间 · 选择性 MUAS 精优化 · 滚动闭环不丢任务<br />
-      覆盖门禁守完成语义 · 四层准字典序保可行 · DMDE 搜归属与顺序
-    </Text>
+  <Box style={{ position: 'absolute', top: 116, left: 764, width: 476, flexDirection: 'column', gap: 14 }}>
+    <Box style={{ background: '#F0F5FC', border: '1px solid #D6DCE5', borderTop: '4px solid #1E4FA8', borderRadius: 10, padding: '14px 20px', flexDirection: 'column' }}>
+      <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#0E3F8C' }}>③ 完成反馈闸门（完成只认物理约束）</Text>
+      <Box style={{ marginTop: 10, background: '#FFFFFF', borderRadius: 8, padding: '12px 14px', alignItems: 'center' }}>
+        <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#0E3F8C' }}>迟到照常完成 · 物理不可行回池</Text>
+        <Text style={{ fontSize: 16, color: '#1E4FA8', marginTop: 6 }}>迟到交付按 L 折价计收益、不计废飞；物理不可行才回池重选，是唯一合法的未完成原因</Text>
+      </Box>
+      <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.7, marginTop: 8 }}>
+        执行反馈只按物理可行性裁决——「任务不被完成只有物理约束被违反」；迟到由适应度按 w_late 计价，与航程代价同台竞争。
+      </Text>
+    </Box>
+
+    <Box style={{ background: '#F7F9FC', border: '1px solid #D6DCE5', borderRadius: 10, padding: '13px 20px', flexDirection: 'column' }}>
+      <Text style={{ fontSize: 17, fontWeight: 'bold', color: '#0E3F8C' }}>④ 滞留与防饥饿（不停饿兜底）</Text>
+      <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.7, marginTop: 6 }}>
+        等待超阈值或逼近 latest 的任务强制纳入候选集并在终刀获强优先；边际接受判据带等待软加权 eff = ratio·(1+γ·age)——长程运行下没有任务被无限期挤出。
+      </Text>
+    </Box>
+
+    <Box style={{ background: '#0E3F8C', borderRadius: 10, padding: '14px 20px', flexDirection: 'column' }}>
+      <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#FFFFFF', lineHeight: 1.6 }}>
+        判断：滚动闭环把「求解一次」变成「持续服务」——每周期规模由 cap(t) 卡住、状态由执行反馈驱动，任务去留全程可审计，长程运行不丢任务。
+      </Text>
+    </Box>
   </Box>
 
-  <Box style={{ position: 'absolute', bottom: 88, left: 100, width: 1080, flexDirection: 'column', alignItems: 'center' }}>
-    <Text style={{ fontSize: 34, fontWeight: 'bold', color: '#FFFFFF' }}>请老师批评指正</Text>
-    <Text style={{ fontSize: 15, color: '#85B7EB', marginTop: 14 }}>
-      汇报人：XXX　·　指导教师：XXX　·　2026 年 10 月
-    </Text>
+  <Box style={{ position: 'absolute', bottom: 0, left: 0, width: 1280, height: 44, background: '#F7F9FC', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: '0 40px', borderTop: '1px solid #E5E7EB' }}>
+    <Text style={{ fontSize: 13, color: '#8B97A8' }}>动态滚动的多机巢多无人机协同任务分配 · 进展汇报</Text>
+    <Text style={{ fontSize: 15, color: '#1E4FA8', fontWeight: 'bold' }}>12 / 18</Text>
   </Box>
 </Slide>

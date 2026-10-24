@@ -1,3 +1,4 @@
 .cache/
 .slidep/
 *.log
+.pytest_cache/

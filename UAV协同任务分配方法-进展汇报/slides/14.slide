@@ -1,0 +1,85 @@
+<Slide style={{ width: 1280, height: 720, background: '#FFFFFF', position: 'relative', fontFamily: 'Source Han Sans CN, Microsoft YaHei, sans-serif' }}>
+  <Box style={{ position: 'absolute', top: 0, left: 0, width: 1280, height: 12, background: '#1E4FA8' }} />
+  <Box style={{ position: 'absolute', top: 30, left: 40, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+    <Box style={{ width: 6, height: 34, background: '#1E4FA8' }} />
+    <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#0E3F8C' }}>基础优先级预筛选 + 边际收益增量选择</Text>
+  </Box>
+  <Text style={{ position: 'absolute', top: 78, left: 60, fontSize: 15, color: '#8B97A8' }}>五因素加权排序缩池，边际价值决定「加入当前组合后是否仍值得执行」</Text>
+
+  <Box style={{ position: 'absolute', top: 116, left: 40, width: 700, flexDirection: 'column', gap: 16 }}>
+    <Box style={{ background: '#F7F9FC', border: '1px solid #D6DCE5', borderRadius: 10, padding: '16px 20px', flexDirection: 'column' }}>
+      <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#0E3F8C' }}>① 基础任务优先级（五因素 min-max 归一化加权）</Text>
+      <Box style={{ marginTop: 12, background: '#E8EFF8', borderRadius: 8, padding: '14px 16px', alignItems: 'center' }}>
+        <Text style={{ fontSize: 23, fontWeight: 'bold', color: '#0E3F8C' }}>
+          P<span style={{ fontSize: 15 }}>i</span> = w<span style={{ fontSize: 15 }}>r</span>·R<span style={{ fontSize: 15 }}>i</span> + w<span style={{ fontSize: 15 }}>u</span>·U<span style={{ fontSize: 15 }}>i</span> + w<span style={{ fontSize: 15 }}>w</span>·W<span style={{ fontSize: 15 }}>i</span> + w<span style={{ fontSize: 15 }}>s</span>·G<span style={{ fontSize: 15 }}>i</span> − w<span style={{ fontSize: 15 }}>c</span>·C<span style={{ fontSize: 15 }}>i</span>
+        </Text>
+      </Box>
+      <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.7, marginTop: 10 }}>
+        五因素均先做 min-max 归一化：收益 R · 时间紧迫度 U · 等待补偿 W = 1−e<sup>−t/τ</sup>（防长期滞留）· 空间协同增益 G（近邻任务可同机连续执行，聚集是<span style={{ color: '#1E4FA8', fontWeight: 'bold' }}>正因素</span>）· 粗执行代价 C；权重和为 1，默认 0.30 / 0.25 / 0.15 / 0.15 / 0.15
+      </Text>
+    </Box>
+
+    <Box style={{ background: '#F7F9FC', border: '1px solid #D6DCE5', borderRadius: 10, padding: '16px 20px', flexDirection: 'column' }}>
+      <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#0E3F8C' }}>② 候选池（能力无关）/ 选择数（卡 cap）：机数名额 × 能力上界解耦</Text>
+      <Box style={{ marginTop: 12, background: '#E8EFF8', borderRadius: 8, padding: '12px 16px', flexDirection: 'column', gap: 5, alignItems: 'center' }}>
+        <Text style={{ fontSize: 16.5, fontWeight: 'bold', color: '#0E3F8C' }}>
+          n_cand = ceil(α·K)（能力无关）　　n_sel = min{"{"}ceil(max_ratio·K), cap(t){"}"}
+        </Text>
+        <Text style={{ fontSize: 13, color: '#4A5568' }}>
+          cap(t) = max(min_cap, ⌊B(t)/c_med⌋)；K = 可用无人机数，α = 2.5、max_ratio = 2.0 为机数倍率
+        </Text>
+      </Box>
+      <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.7, marginTop: 10 }}>
+        机数名额保护搜索复杂度；能力承载数只计<span style={{ fontWeight: 'bold' }}>可起飞子集</span>的剩余航程 B(t)——正在充电的机是幻影容量，不计入；紧急/释放任务可绕过名额强制纳入，但仍须过可行性检查
+      </Text>
+    </Box>
+
+    <Box style={{ background: '#F0F5FC', border: '1px solid #D6DCE5', borderRadius: 10, padding: '12px 20px', flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+      <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#0E3F8C' }}>机制串联：</Text>
+      {['按 P_i 排序', 'n_cand 候选(富)', '闸门① prefilter', 'n_sel 边际纳入(紧)', '闸门② postcheck'].map((s, i) => (
+        <Box key={s} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          {i > 0 && <Text style={{ fontSize: 16, color: '#3D7BD9', fontWeight: 'bold' }}>→</Text>}
+          <Box style={{ padding: '6px 12px', background: '#FFFFFF', borderRadius: 14, border: '1px solid #3D7BD9' }}>
+            <Text style={{ fontSize: 13, color: '#1E4FA8' }}>{s}</Text>
+          </Box>
+        </Box>
+      ))}
+    </Box>
+  </Box>
+
+  <Box style={{ position: 'absolute', top: 116, left: 764, width: 476, flexDirection: 'column', gap: 14 }}>
+    <Box style={{ background: '#F0F5FC', border: '1px solid #D6DCE5', borderTop: '4px solid #1E4FA8', borderRadius: 10, padding: '14px 20px', flexDirection: 'column' }}>
+      <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#0E3F8C' }}>③ 边际收益增量选择</Text>
+      <Box style={{ marginTop: 10, background: '#FFFFFF', borderRadius: 8, padding: '12px 14px', alignItems: 'center' }}>
+        <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#0E3F8C' }}>
+          Δ<span style={{ fontSize: 13 }}>i</span> = ΔB<span style={{ fontSize: 13 }}>i</span> / (ΔC<span style={{ fontSize: 13 }}>i</span> + ε)
+        </Text>
+        <Text style={{ fontSize: 16, color: '#1E4FA8', marginTop: 6 }}>
+          ΔC<span style={{ fontSize: 11 }}>i</span> = min<span style={{ fontSize: 12 }}>{"{"} C<span style={{ fontSize: 10 }}>ai</span> + C<span style={{ fontSize: 10 }}>ib</span> − C<span style={{ fontSize: 10 }}>ab</span> {"}"}
+          </span>（所有锚点对插入，统一 DEM 三维航程）
+        </Text>
+      </Box>
+      <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.7, marginTop: 8 }}>
+        插入式快速估计：对「已选集合 + 最近机巢」的<span style={{ fontWeight: 'bold' }}>所有锚点对</span>试接入任务 i，取最小三维航程增量——不预设任何顺序、不求解完整 MUAS，与已选任务空间相近者因增量代价低而胜出
+      </Text>
+    </Box>
+
+    <Box style={{ background: '#F7F9FC', border: '1px solid #D6DCE5', borderRadius: 10, padding: '13px 20px', flexDirection: 'column' }}>
+      <Text style={{ fontSize: 17, fontWeight: 'bold', color: '#0E3F8C' }}>④ 两道可行性闸门（粗粒度，弹回不淘汰）</Text>
+      <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.7, marginTop: 6 }}>
+        闸门① prefilter：是否有可用机 · 往返航程可达（DEM 口径）；闸门② postcheck：机群剩余航程预算——仅物理不可行才不进候选，否则留池下周期再评；时间窗迟到由适应度折减、非参选资格
+      </Text>
+    </Box>
+
+    <Box style={{ background: '#0E3F8C', borderRadius: 10, padding: '14px 20px', flexDirection: 'column' }}>
+      <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#FFFFFF', lineHeight: 1.6 }}>
+        判断：以受控折中换实时性——边际比只依赖代价矩阵查表与插入估计，单周期选择开销可忽略；代价是放弃全局组合最优，折中幅度由后续实验量化。
+      </Text>
+    </Box>
+  </Box>
+
+  <Box style={{ position: 'absolute', bottom: 0, left: 0, width: 1280, height: 44, background: '#F7F9FC', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: '0 40px', borderTop: '1px solid #E5E7EB' }}>
+    <Text style={{ fontSize: 13, color: '#8B97A8' }}>动态滚动的多机巢多无人机协同任务分配 · 进展汇报</Text>
+    <Text style={{ fontSize: 15, color: '#1E4FA8', fontWeight: 'bold' }}>14 / 18</Text>
+  </Box>
+</Slide>
