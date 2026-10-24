@@ -6,12 +6,16 @@
 当实验以多个随机种子重复（``experiment.seeds``）时，本图给出关键指标的
 **逐种子柱状 + 均值线 + ±标准差带**，直观回答「结果是否稳健」：
 
-    (a) 完成率         completion_rate（%）
+    (a) 最终完成率     completion_rate_final（%）
     (b) 总代价         total_cost（km）
     (c) 总收益         total_reward
 
 柱为各 seed 单次运行值，虚线为跨 seed 均值，阴影带为均值 ± 总体标准差
 （与 ``results/metrics.json`` 的 ``seed_summary`` 一致）。单 seed 实验无此图。
+
+完成率取 **final 口径**（分母剔除物理不可达）：2026-10-24 指标体系审查
+删除 naive 完成率键（分母含不可达、与 final 双落盘只会制造直读漂移），
+seed 稳健性图与论文主表同口径。
 
 数据来源：``results/metrics.json`` 的 ``per_seed`` / ``seed_summary`` / ``seeds``。
 
@@ -56,7 +60,7 @@ __all__ = ["plot_seed_summary"]
 
 #: (指标键, 显示名, 单位换算, 轴标签)
 _PANELS = (
-    ("completion_rate", "完成率", 100.0, "完成率 (%)"),
+    ("completion_rate_final", "最终完成率", 100.0, "最终完成率 (%)"),
     ("total_cost", "总代价", 1.0 / 1000.0, "总代价 (km)"),
     ("total_reward", "总收益", 1.0, "总收益"),
 )

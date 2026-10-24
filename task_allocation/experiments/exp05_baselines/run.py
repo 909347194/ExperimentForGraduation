@@ -432,11 +432,11 @@ def main(argv: list[str] | None = None) -> int:
             write_json(run_dir / "solution.json", solution)
             if verbose:
                 print(
-                    f"[exp05] {arm.id:<4} seed={seed}：完成率 "
-                    f"{summary['completion_rate']:.3f} / 有效完成 "
+                    f"[exp05] {arm.id:<4} seed={seed}：完成率(final) "
+                    f"{summary['completion_rate_final']:.3f} / 有效完成 "
                     f"{summary['effective_completion_rate']:.3f} / 奖励产出 "
-                    f"{summary['reward_yield']:.3f} / 按时 "
-                    f"{summary['on_time_rate']:.3f} / 航程 "
+                    f"{summary['reward_yield']:.3f} / 按时(交付集) "
+                    f"{summary['on_time_rate_final']:.3f} / 航程 "
                     f"{summary['total_path_m'] / 1000:.1f} km / "
                     f"{time.time() - t0:.1f}s"
                 )

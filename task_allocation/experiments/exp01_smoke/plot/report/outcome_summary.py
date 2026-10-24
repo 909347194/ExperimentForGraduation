@@ -104,7 +104,10 @@ def plot_outcome_summary(
     n_expired = len(expired_ids)
     n_gated = len(gated_ids - done_ids - expired_ids)
     n_late_total = int(summary.get("n_late", 0))
-    on_time_rate = float(summary.get("on_time_rate", 0.0))
+    # 2026-10-24 A2：删除出动池化的 on_time_rate 键后，(d) 表「按时率」
+    # 取交付集条件率 on_time_rate_final（论文口径）；出动池化正确执行率
+    # 由 correct_exec_rate（逐周期均值）承担，两个量都留在表里、各有名号。
+    on_time_final = float(summary.get("on_time_rate_final", 0.0))
     avg_late = float(summary.get("avg_lateness_s", 0.0))
 
     f1 = [float((c.get("muas") or {}).get("f1_reward", 0.0)) for c in cycles]
@@ -113,11 +116,19 @@ def plot_outcome_summary(
 
     n_seeds = len(metrics.get("seeds") or [])
     feas_rate = float(summary.get("cycle_feasible_rate", 0.0))
-    completion = float(summary.get("completion_rate", 0.0))
+    # 2026-10-24 A1：naive 完成率键已删，完成率只报 final 口径（主口径）
+    completion = float(summary.get("completion_rate_final", 0.0))
     correct_rate = float(summary.get("correct_exec_rate", 0.0))
     throughput = float(summary.get("throughput_per_cycle", 0.0))
     n_waste_total = int(summary.get("n_infeasible_delivery", 0))
+    # B1：废飞已飞航程（与计数同权，防「总航程下降靠废飞换来」）
+    waste_path_m = float(summary.get("infeasible_wasted_path_m", 0.0))
     n_eliminated_total = int(summary.get("n_eliminated", 0))
+    # B2：候选池命中率（验证「候选池该富」设计声明）
+    cand_hit = float(summary.get("cand_hit_rate", 0.0))
+    # E：门禁诊断（门禁是否按设计工作的直接证据）
+    n_gate_rescued = int(summary.get("n_gate_rescued", 0))
+    n_skip = int(summary.get("n_voluntary_skip", 0))
 
     fig, ((ax_a, ax_b), (ax_c, ax_d)) = plt.subplots(
         2, 2, figsize=(FIG_WIDE, 7.3))
@@ -193,18 +204,25 @@ def plot_outcome_summary(
     rows = [
         ("到达 / 完成任务", f"{n_arrived} / {n_done_total}"),
         ("正确执行吞吐（任务/周期）", f"{throughput:.3f}"),
-        ("平均正确执行率（按时/出动）", f"{correct_rate:.1%}"),
-        ("按时率 / 迟到交付", f"{on_time_rate:.1%} / {n_late_total}"),
+        ("平均正确执行率（逐周期，按时/出动）", f"{correct_rate:.1%}"),
+        ("按时率（交付集）/ 迟到交付", f"{on_time_final:.1%} / {n_late_total}"),
         ("平均迟到", f"{avg_late / 60:.1f} min"),
-        ("废飞（物理不可行）", str(n_waste_total)),
-        ("淘汰", str(n_eliminated_total)),
-        ("完成率 CR（辅助对账）", f"{completion:.1%}"),
+        ("有效完成率 / 奖励产出率",
+         f"{summary.get('effective_completion_rate', 0.0):.1%} / "
+         f"{summary.get('reward_yield', 0.0):.1%}"),
+        ("废飞（物理不可行）/ 已飞航程",
+         f"{n_waste_total} / {waste_path_m:.0f} m"),
+        ("淘汰（机制缺陷信号，须为 0）", str(n_eliminated_total)),
+        ("完成率 η_final（主口径）", f"{completion:.1%}"),
+        ("候选池命中率 Σn_sel/Σn_cand", f"{cand_hit:.1%}"),
+        ("门禁救回 / S 内可装未装（应 0）", f"{n_gate_rescued} / {n_skip}"),
         ("周期解可行率", f"{feas_rate:.0%}"),
         ("总收益 F1（折减后）", f"{summary.get('total_reward', 0.0):.1f}"),
         ("总路径代价", f"{summary.get('total_cost', 0.0) / 1000:.1f} km"),
         ("平均等待", f"{summary.get('avg_wait', 0.0):.0f} s"),
         ("平均可用机数 K", f"{summary.get('K_mean', summary.get('K_avail_mean', 0.0)):.1f}"),
-        ("求解总耗时", f"{summary.get('solve_time_ms', 0.0) / 1000:.1f} s"),
+        ("求解耗时（MUAS，不含选择阶段）",
+         f"{summary.get('solve_time_ms', 0.0) / 1000:.1f} s"),
         ("运行口径", "单 seed（调试）" if n_seeds <= 1 else f"{n_seeds} seeds 均值"),
     ]
     ax_d.set_axis_off()
@@ -219,7 +237,9 @@ def plot_outcome_summary(
                                          facecolor="#f5f6f7", edgecolor="none",
                                          zorder=0))
         warn = (k == "周期解可行率" and feas_rate < 0.999) or \
-               (k == "完成率 CR" and completion < 0.05)
+               (k == "完成率 η_final（主口径）" and completion < 0.05) or \
+               (k.startswith("淘汰") and n_eliminated_total > 0) or \
+               (k.startswith("门禁救回") and n_skip > 0)
         ax_d.text(0.02, y, k, fontsize=FS["tick"], va="center",
                   family=MONO_ZH, color="#3c4148", zorder=2)
         ax_d.text(0.98, y, v, fontsize=FS["tick"], va="center", ha="right",
@@ -230,11 +250,15 @@ def plot_outcome_summary(
                  fontsize=FS["suptitle"])
     fig.tight_layout(rect=(0, 0.035, 1, 0.95))
     footnote(fig, "口径（长程协议）：完成率不是目标，主指标 = 吞吐"
-                  "（累计完成/周期）与正确执行率（按时出动/总出动）；迟到不是废飞"
-                  "（2026-10-15）——迟到交付计入完成，有效奖励按迟到线性折减"
-                  "（W=600s）；废飞 = 物理不可行（航程/续航/终点机巢违约）的弹回"
-                  "交付，UAV 已飞航程但任务解绑回池不计完成；滞留 = 实验结束时仍在"
-                  "任务池；到期作废 = deadline 已过被淘汰。"
+                  "（累计完成/周期）与正确执行率（逐周期均值：按时出动/总出动）；"
+                  "迟到不是废飞（2026-10-15）——迟到交付计入完成，有效奖励按迟到"
+                  "线性折减（W=600s）；废飞 = 物理不可行（航程/续航/终点机巢违约）"
+                  "的弹回交付，UAV 已飞航程（已飞航程列与计数同权报告，防总航程"
+                  "下降靠废飞换来）；淘汰 = deadline 已过出池（机制缺陷信号，须为 0）；"
+                  "滞留 = 实验结束时仍在任务池。完成率只报 η_final（分母剔除物理"
+                  "不可达，2026-10-24 删除 naive 双键）；按时率为交付集条件率。"
+                  "候选池命中率 = Σn_sel/Σn_cand，验证候选池「该富」的设计声明。"
+                  "求解耗时仅 MUAS 求解口径（不含选择阶段）。"
                   "F1 = 任务收益和（折减后），F2 = 三维路径代价；红色数值为调试期回归信号。")
     return save_figure(fig, Path(out_dir) / "R01_outcome_summary", formats, dpi=dpi)
 

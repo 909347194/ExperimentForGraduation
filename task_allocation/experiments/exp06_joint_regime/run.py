@@ -153,10 +153,13 @@ def aggregate(cfg: dict) -> None:
                         "lambda_cost": lc, "seed": seed,
                         "n_arrived": s.get("n_arrived"),
                         "n_completed": s.get("n_completed"),
-                        "completion_rate": s.get("completion_rate"),
+                        # 2026-10-24：exp01 删除 naive completion_rate / 池化
+                        # on_time_rate（A1/A2）⇒ 完成率取 final 口径、按时率
+                        # 取交付集条件率，与论文主表同源
+                        "completion_rate_final": s.get("completion_rate_final"),
                         "effective_completion_rate": s.get("effective_completion_rate"),
                         "reward_yield": s.get("reward_yield"),
-                        "on_time_rate": s.get("on_time_rate"),
+                        "on_time_rate_final": s.get("on_time_rate_final"),
                         "n_late": s.get("n_late"),
                         "avg_lateness_s": s.get("avg_lateness_s"),
                         "n_infeasible_delivery": s.get("n_infeasible_delivery"),
@@ -194,9 +197,9 @@ def aggregate(cfg: dict) -> None:
     for r in rows:
         L.append(
             f"| {r['tag']} | {r['K']} | {r['arrival_lambda']:g} | {r['lambda_cost']:g} "
-            f"| {r['n_arrived']} | {r['n_completed']} | {r['completion_rate']:.3f} "
+            f"| {r['n_arrived']} | {r['n_completed']} | {r['completion_rate_final']:.3f} "
             f"| {r['n_eliminated']} | {r['n_unreachable']} | {r['n_infeasible_delivery']} "
-            f"| {r['on_time_rate']:.3f} | {r['total_path_m']/1000:.0f} "
+            f"| {r['on_time_rate_final']:.3f} | {r['total_path_m']/1000:.0f} "
             f"| {r.get('obs_backlog_last')} | {r.get('obs_cap_t_first')}→{r.get('obs_cap_t_last')} "
             f"| {r.get('obs_n_sel_over_cap_t_last')} |"
         )
@@ -210,7 +213,7 @@ def aggregate(cfg: dict) -> None:
         ok = (r["n_eliminated"] or 0) <= elim_max
         quota = r.get("obs_sel_total") or 0
         fill = f"{r['n_completed']}/{quota}" if quota else "-"
-        L.append(f"| {r['tag']} | {r['completion_rate']:.3f} | {r['n_eliminated']} "
+        L.append(f"| {r['tag']} | {r['completion_rate_final']:.3f} | {r['n_eliminated']} "
                  f"| {r['n_unreachable']} | {r['n_remaining_pool']} "
                  f"| {fill} | {'成立' if ok else '**被证伪**'} |")
     L.append("")
@@ -232,12 +235,12 @@ def aggregate(cfg: dict) -> None:
         if g_lo is None or g_hi is None:
             L.append(f"| {lam:g} | 缺格 | - | - | - | - | 待补跑 |")
             continue
-        d_comp = (g_hi["completion_rate"] or 0) - (g_lo["completion_rate"] or 0)
+        d_comp = (g_hi["completion_rate_final"] or 0) - (g_lo["completion_rate_final"] or 0)
         d_elim = (g_hi["n_eliminated"] or 0) - (g_lo["n_eliminated"] or 0)
         d_path = ((g_hi["total_path_m"] or 0) - (g_lo["total_path_m"] or 0)) / 1000.0
         safe = d_comp >= -1e-9 and d_elim <= 0
         L.append(
-            f"| {lam:g} | {g_lo['completion_rate']:.3f}→{g_hi['completion_rate']:.3f} "
+            f"| {lam:g} | {g_lo['completion_rate_final']:.3f}→{g_hi['completion_rate_final']:.3f} "
             f"| {d_comp:+.3f} | {g_lo['n_eliminated']}→{g_hi['n_eliminated']} "
             f"| {g_lo['total_path_m']/1000:.0f}→{g_hi['total_path_m']/1000:.0f} "
             f"| {d_path:+.0f} | {'**安全**' if safe else '**不安全，需回退**'} |")
@@ -249,9 +252,9 @@ def aggregate(cfg: dict) -> None:
             if not grp:
                 continue
             for r in grp:
-                L.append(f"- λ_cost={lc:g}：完成率 {r['completion_rate']:.3f}、"
+                L.append(f"- λ_cost={lc:g}：完成率 {r['completion_rate_final']:.3f}、"
                          f"淘汰 {r['n_eliminated']}、不可达 {r['n_unreachable']}、"
-                         f"残留 {r['n_remaining_pool']}、按时率 {r['on_time_rate']:.3f}、"
+                         f"残留 {r['n_remaining_pool']}、按时率 {r['on_time_rate_final']:.3f}、"
                          f"平均迟到 {r['avg_lateness_s']:.0f}s、"
                          f"积压末值 {r.get('obs_backlog_last')}、"
                          f"solve {r['solve_time_ms']/1000/60:.0f}min")

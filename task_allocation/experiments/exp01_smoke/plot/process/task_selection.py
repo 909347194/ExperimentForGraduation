@@ -82,6 +82,7 @@ def plot_task_selection(
     cycles = [c for c in (metrics.get("cycles") or []) if c.get("selection")]
     if not cycles:
         return []
+    summary = metrics.get("summary") or {}
 
     n = len(cycles)
     labels = [f"周期 {c.get('cycle')}" for c in cycles]
@@ -198,6 +199,8 @@ def plot_task_selection(
     # ── (f) 机制参数面板（压缩版：只留未在 setup_params 出现的运行值）──
     ax_param.axis("off")
     s0 = sel[0]
+    # 候选池命中率（2026-10-24 B2，全程聚合）：验证「候选池该富」设计声明
+    _hit = summary.get("cand_hit_rate")
     rows = [
         ("n_cand / n_sel",
          f"{s0.get('capability_n_cand', s0.get('capability_preselect_k'))} / "
@@ -209,6 +212,9 @@ def plot_task_selection(
         ("capability_cap（实际）",
          f"{min(cap)}–{max(cap)}" if cap else "—",
          "逐周期递减，恒 >> 池内规模"),
+        ("候选池命中率（全程）",
+         f"{float(_hit):.1%}" if isinstance(_hit, (int, float)) else "—",
+         "Σn_sel/Σn_cand；显著<1 ⇒ 池富余、有取舍"),
         ("n_forced_in（全程）",
          str(sum(n_forced)),
          "紧急任务强制入选"),
