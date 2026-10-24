@@ -157,14 +157,12 @@ selection:
 muas:
     allow_unassigned: true # 允许 y_j = 0（任务保留至下一周期）
     allow_idle_uav: true # 允许 n_u = 0（UAV 本周期空闲）
-    # 双目标标量化口径（方案 B 主线）：字典序——先最大化任务收益 F1=ΣR·y，
-    # 再在收益等价的解中最小化成本（含惩罚/最坏机时间）。
+    # 适应度口径：覆盖门禁（唯一主口径，2026-10-24）。big_m 仅作为 W_hard/
+    # W_skip 的推导基数（κ·m·R_pool），不再进 f 的 −m·F1 项；非门禁 big-M
+    # 四层路径已从代码移除（见 docs/objective_caliber_two_approaches_archive_2026-10-24.md）。
     # big_m: null → 按问题数据自动推导支配性权重；给数值则显式固定。
-    # lexicographic: false → 历史加权和 -F1 + λ·F2（消融对比）。
-    # 【2026-10-23 修复】此前 config.py 没有把这两个键传给 MUASProblemConfig：
-    # 算法恒按 dataclass 默认（true / null）跑，而 setup_params 图直接读 yaml
-    # 标注「字典序 / 加权和」⇒ 改 yaml 算法不动、图却跟着变。现已显式透传，
-    # yaml 与算法同源（改动这两个键会真实改变适应度口径，属口径切换，非微调）。
+    # lexicographic 字段为历史遗留、已失效（保留仅为向后兼容 yaml），
+    # 设任何值均不改变行为。
     lexicographic: true
     big_m: null
     # 2026-10-24 用户裁定：1e-2 → 1e-1（本实验口径切换，非全局默认）。
@@ -181,8 +179,9 @@ muas:
     # 时间窗违约以秒计，取 0.01~0.02 即「迟到 300 s ≈ 3~6 点奖励」。
     w_violation: 0.01
     w_nest_capacity: 1.0 # 机巢容量违反的惩罚权重
-    # ── 四层准字典序 T0 层（2026-10-18）────────────────────────────
-    # f = W_hard·n_hard + w_exc·excess_m − m·F1_eff + w_late·L_tot + λ·path + w_time·F3
+    # ── 门禁口径适应度（2026-10-24 起唯一主口径）────────────────────
+    # f = W_hard·n_hard + w_exc·excess_m + W_skip·n_skip + w_late·L_tot + λ·path + w_time·F3
+    #   （固定表述：搜索用 f 不含 −m·F1；F1 只作事后指标）
     #   T0 物理违约（硬）：range/endurance/时序/同步/巢容量/终点不可达/结构。
     #     任何一次违约压倒任意交付收益——「纸面可行、执行弹回」的幽灵 F1
     #     永不入选（旧口径 misc×1e3×wv 只折 10 单位，而单任务收益 m·R≈2.7e5）。
@@ -254,7 +253,7 @@ muas:
     # 剔除执行代价高于收益的任务（y_j = 0）。⚠️ 与「完成是约束」口径冲突：
     # 门禁 / coverage_first 开启时必须置 false（否则主动丢可完成任务换成本），
     # 见本段末「覆盖门禁」块说明。
-    prune_unprofitable: true
+    prune_unprofitable: false  # 与「完成是约束」冲突，门禁口径下必须关
     prune_margin: 0.0 # 剔除判据裕度：λ·节省 > R·(1+margin) 才剔除
     prune_max_rounds: 8
     # 零奖励剔除（2026-10-18 四层适应度配套）：ETA ≥ latest+W 的任务 eff≈0，
@@ -298,21 +297,18 @@ muas:
     #     ≤3 轮小迭代）。仅 exp04 消融显式开启，A/B 后再定是否转正。
     # 详见 experiments/exp04_ablation/notes.md 的 B1 节（三条红线）。
     decode_mode: repair_chain # repair_chain | constructive
-    # ── 覆盖门禁（2026-10-22 落地，2026-10-23 显式登记到 yaml）──────────
+    # ── 覆盖门禁（2026-10-22 落地；2026-10-24 定为唯一主口径）──────────
     # 目标口径是「完成是约束、成本是目标」，门禁即把该约束写成**构造性合法
-    # 条件**（非 big-M 软目标）。两个开关语义不同，必须成对理解：
+    # 条件**（非 big-M 软目标）。两个开关语义不同、但 2026-10-24 起一并开启
+    # 即完整门禁口径（非门禁 big-M 四层路径已从代码移除，见
+    # docs/objective_caliber_two_approaches_archive_2026-10-24.md）：
     #   coverage_gate          = 终态构造性修复（能救必救，skip 构造归零）
-    #   lexicographic_coverage = W_skip 罚层 + 审计分账（罚函数近似）
-    #   两者同开 = 完整门禁口径；只开后者 = 罚函数近似（重构要淘汰的旧形态）。
-    # 门禁开启后 f 去掉 −m·F1（F1 退为事后指标，砍迟到折减），主适应度只剩
-    # f = λ·F2 + w_time·F3。
-    # ⚠️ 当前生产口径 = **两者都关**（跑旧四层准字典序 λ=1e-2）。原因见
-    # experiments/EXPERIMENT_REPORT_E1E2_2026-10-23.md：门禁开启后完成率
-    # 57.0±2.45、淘汰 0→3（旧口径 60/60、淘汰 0），根因是可行域被成本压满后
-    # 丧失装载余量。故门禁属待修缺口，非默认口径。
-    coverage_gate: false
+    #   lexicographic_coverage = W_skip 罚层 + 审计分账（门禁口径的防御/对账层）
+    # 门禁口径下 f 去掉 −m·F1（F1 退为事后指标，砍迟到折减），主适应度只剩
+    # f = W_hard·n_hard + w_exc·excess_m + W_skip·n_skip + w_late·L + λ·path + w_time·F3。
+    coverage_gate: true
     coverage_gate_max_rounds: 8
-    lexicographic_coverage: false
+    lexicographic_coverage: true
     w_skip_violation: null
     # 覆盖优先两段式解码（2026-10-23 用户裁定）：先装到最大可行集（EDD 不动点），
     # 再在不减少已装集合的约束下做成本 polish。当前生产未启用（待与门禁联调）。
@@ -454,7 +450,7 @@ rolling:
     # 长程吞吐协议（2026-10-14 用户定）：完成率不是目标，周期可无限延长，
     # 真实目标 = 持续到达下「尽可能多且正确地完成任务」。3 周期窗口的完成率
     # 只是窗口长度产物，无区分度；多周期 + Poisson 到达流下，吞吐 / 正确
-    # 执行率 / 违约交付（废飞）/ 超期淘汰才有统计意义。
+    # 执行率 / 违约交付（废飞）/ 淘汰（须为 0）才有统计意义。
     # 【2026-10-22 用户裁定：本实验保持 fixed-60 冒烟口径】即初始 30 + 周期
     # 2/3 各 10/20（共 60 个任务），周期 4 起无新到达，靠 stop_when_stable
     # 早停（实测约 7 周期收敛）。长程 Poisson 流由 exp06_joint_regime 承担；

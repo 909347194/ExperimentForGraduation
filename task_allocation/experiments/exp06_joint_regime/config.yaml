@@ -41,7 +41,7 @@ criteria:
     # 用户假设 1（可完成的一定被完成）的积压域判据：
     assumption1:
         completion_rate_min: 1.0     # 完成率须维持 1.0
-        n_eliminated_max: 0          # 超期淘汰须为 0（淘汰>0 = 可完成任务未完成 = 假设被证伪）
+        n_eliminated_max: 0          # 淘汰须为 0（淘汰>0 = 机制缺陷：可完成任务未达成）
         # 注意：n_unreachable>0 是物理不可达，合法（与淘汰分账）
     h1_backlog:
         arrival_lambda: 25.0         # 真积压格（到达 ~25 > n_sel=20/周期产能）

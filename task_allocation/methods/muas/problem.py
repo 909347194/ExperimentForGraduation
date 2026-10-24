@@ -16,35 +16,39 @@
     允许 y_j=0（选择性）、n_u=0（空闲 UAV）
 
 目标：
-    max F1 = Σ_j R_j·y_j      （执行任务奖励和；实现为 f1_reward——非门禁
-                               口径按迟到秒数线性折减（F1_eff），门禁口径为
-                               纯完成计数，见适应度 T1 与 gate_mode）
-    min F2 = C(x, π, z, y)   （路径代价 + 惩罚）
-    min F3 = max_k T_k        （最坏机航迹时间，论文 §4.3 时效与负载均衡项）
+    F1 = Σ_j R_j·y_j  （执行任务奖励和；实现为 f1_reward——门禁口径下为
+                       纯完成计数、只作事后指标，不进搜索适应度，见
+                       :meth:`gate_mode` 与 :meth:`scalar_fitness`）
+    F2 = C(x, π, z, y)   （路径代价 + 惩罚）
+    F3 = max_k T_k        （最坏机航迹时间，论文 §4.3 时效与负载均衡项）
 
-适应度（DMDE 最小化标量）：
-    四层准字典序（方案 A/B 主线；非门禁口径）：
-        f(s) = W_hard·n_hard + w_exc·excess_m        # T0 物理违约（硬，真 big-M）
-              − big_m·F1_eff                          # T1 交付收益（含迟到折减）
-              + w_late·L_tot                          # T2 迟到（软，秒级）
-              + λ·path + w_time·F3                    # T3 航程/负载均衡
-      T0：W_hard = κ·big_m·R_pool —— 任何一次物理违约压倒任意交付收益
-          （幽灵 F1 永不入选：纸面可行、执行弹回的航次不计功）；
-      T1：big_m 主导 —— 任一 ≥ 最小正收益的收益优势支配任意次级差异
-          （先最大化任务收益，再在收益等价的解中最小化成本）；
-      T2：迟到秒数软计价 —— 迟到可接受，只与路径同台竞争；
-    legacy（lexicographic=False，消融对比）：
-        f(s) = -F1 + λ·path + w_v·penalty + w_time·F3
-    ；最老口径（w_violation=None）：惩罚随 F2 一起乘 λ。
+适应度（DMDE 最小化标量）—— **覆盖门禁口径为唯一主口径（2026-10-24 裁定）**：
+
+        f(s) = W_hard·n_hard + w_exc·excess_m          # T0 物理违约（硬）
+              + W_skip·n_voluntary_skip                # T0.5 覆盖门禁
+              + w_late·L_tot                           # T2 迟到（软，秒级）
+              + λ·path + w_time·F3                     # T3 航程/负载均衡
+
+  固定表述：**搜索用 f 不含 −m·F1；F1 只作事后指标**。
+  完整推导、与非门禁 big-M 四层口径的对比与移除理由见
+  ``docs/objective_caliber_two_approaches_archive_2026-10-24.md``。
+
+  - **T0**：``W_hard = κ·m·R_pool``（默认自动推导）使任何一次物理违约压倒
+    任意交付收益——幽灵 F1（纸面可行、执行弹回）永不入选；
+    ``excess_m``（超限米数）仅在不可行解之间做层内排序。
+  - **T0.5**：``W_skip = κ·m·R_pool``（同 T0 推导）使「能装却没装」
+    （voluntary_skip）与物理违约等价的非法解；门禁修复模式下 n_skip 恒 0
+    （构造性归零），本层不咬合，仅 audit 模式/防御路径生效。覆盖由门禁
+    （构造修复 + W_skip 层）承担，故 F1 对解无区分度、不进 f。
+  - **T2**：迟到秒数软计价（``w_violation``，0.01/s）——迟到可接受，
+    只与路径同台竞争；迟到与任务数的权衡由门禁（完成是约束）管。
+  - **T3**：``λ·path + w_time·F3``（完成等价时的最小化目标）。
+
 其中 F3 = max_k T_k 为各 UAV 航迹时间的最大值（瓶颈机），对应 Ming et al. 2017
 Eq.1 中的 a·max(Σ_i Σ_j t(i,j)·x(i,j)) 最坏机飞行时间项（该文式号已经原文
 核对；本模型将其扩展为含等待、服务与返航的整航迹时间）。w_time=0 时不激活
-负载均衡项，退化为双目标（F1/F2）形式。
-
-覆盖门禁口径（2026-10-22 起的主口径）：T0 与 T1 之间加
-W_skip·n_voluntary_skip 层，且 **搜索用 f 不含 −m·F1，F1 只作事后指标**
-——完整公式与固定表述见 :meth:`SelectiveMUASProblem.scalar_fitness`
-与 :meth:`SelectiveMUASProblem.gate_mode`。
+负载均衡项。m 仍落 fitness_weights 快照，仅供 W_hard/W_skip 推导与事后分析，
+不直接进 f。
 
 模块地图（包内分工；各模块符号仍可从本模块导入，既有路径不变）：
     config.py            约束开关与评价权重（ConstraintConfig / MUASProblemConfig）
@@ -379,7 +383,7 @@ class SelectiveMUASProblem(FitnessWeightsMixin):
             "m": float(self.f1_weight()),
             "w_hard": float(self.hard_weight()),
             "w_excess": float(self.range_excess_weight()),
-            "w_skip": (float(self.skip_weight()) if gate else None),
+            "w_skip": float(self.skip_weight()),
             "w_late": (None if self.config.w_violation is None
                        else float(self.config.w_violation)),
             "lambda": float(self.config.lambda_cost),
@@ -396,83 +400,48 @@ class SelectiveMUASProblem(FitnessWeightsMixin):
         return solution
 
     def scalar_fitness(self, solution: AllocationSolution) -> float:
-        """DMDE 最小化的标量适应度。
+        """DMDE 最小化的标量适应度（覆盖门禁口径，唯一主口径 2026-10-24）。
 
-        四层准字典序（2026-10-18，``lexicographic=True`` 且 ``w_violation``
-        给定时的生产口径）::
+        ::
 
-            f = W_hard·n_hard + w_exc·excess_m       # T0 物理违约（硬）
-              − m·F1_eff                              # T1 交付收益
-              + w_late·L_tot                          # T2 迟到（软，秒级）
-              + λ·path + w_time·F3                    # T3 航程/负载均衡
+            f = W_hard·n_hard + w_exc·excess_m          # T0 物理违约（硬）
+              + W_skip·n_voluntary_skip                # T0.5 覆盖门禁
+              + w_late·L_tot                           # T2 迟到（软，秒级）
+              + λ·path + w_time·F3                     # T3 航程/负载均衡
 
-        - **T0**：``W_hard = κ·m·R_pool``（默认自动推导）使任何一次物理违约
-          压倒任意交付收益——幽灵 F1（纸面可行、执行弹回）永不入选；
-          ``excess_m``（超限米数）仅在不可行解之间做层内排序。
-        - **T1**：``F1_eff`` 含迟到折减（``late_reward_decay_seconds``）；
-          ``m`` 保证「多交付 ≥1 个任务」支配一切次级差异。
+        **固定表述：搜索用 f 不含 −m·F1；F1 只作事后指标。**
+
+        - **T0**：``W_hard = κ·m·R_pool`` 使任何一次物理违约压倒任意交付收益
+          （幽灵 F1 永不入选）；``excess_m`` 仅在不可行解间做层内排序。
+        - **T0.5**：``W_skip``（同 T0 推导）使「能装却没装」的 voluntary_skip
+          与物理违约等价；门禁修复模式下 n_skip 恒 0（构造性归零），本层不咬合。
+          覆盖由门禁（构造修复 + W_skip 层）承担，F1 对解无区分度 ⇒ 不进 f。
         - **T2**：迟到秒数软计价（``w_violation``，0.01/s）——迟到可接受，
-          只与路径同台竞争；迟到与任务数的权衡由 T1 的折减管。
-        - **T3**：``λ·path + w_time·F3``（收益等价时的最小化目标）。
+          只与路径同台竞争。
+        - **T3**：``λ·path + w_time·F3``（完成等价时的最小化目标）。
 
-        legacy 加权和（``lexicographic=False``）：``f = -F1 + λ·path +
-        w_violation·penalty + w_time·F3``（惩罚不再乘 λ 的解耦口径）。
-        最老口径（``w_violation=None``）：惩罚随 F2 一起乘 λ。
-
-        **覆盖门禁口径（2026-10-22 起的主口径，见 :meth:`gate_mode`）**::
-
-            f = W_hard·n_hard + w_exc·excess_m       # T0  物理硬约束
-              + W_skip·n_voluntary_skip              # T0.5 覆盖门禁
-              + w_late·L_tot                         # T2  迟到（秒级软计价）
-              + λ·path + w_time·F3                   # T3  航程/负载均衡
-
-        即 **搜索用 f 不含 −m·F1；F1 只作指标**：合法解中 S 内可装载任务
-        已全部交付 ⇒ F1 恒为常数、对解无区分度；保留 −m·F1 只会让 m 机制
-        继续主导阶梯并把成本项挤成 tie-break（历史上 λ·path 仅占 m·F1 的
-        1/5.7e5）。覆盖由门禁承担（构造修复 + W_skip 层），目标层只剩
-        成本 + 迟到。``m`` 仍落 fitness_weights 快照，仅供 w_hard/w_skip
-        推导与事后分析，不直接进 f。
+        非门禁 big-M 四层口径（``−m·F1_eff`` 主导、F1 进搜索适应度）已于
+        2026-10-24 从代码移除；其讨论与设计理由见
+        ``docs/objective_caliber_two_approaches_archive_2026-10-24.md``。
+        ``m`` 仍落 ``fitness_weights`` 快照，仅供 ``W_hard``/``W_skip`` 推导
+        与事后分析，不直接进 f。
         """
         if not solution.meta.get("feasibility"):
             self.evaluate(solution)
         bt = solution.meta.get("bottleneck_time", self.bottleneck_time(solution))
-        m = self.f1_weight()
-        f1 = float(solution.f1_reward)
         wv = self.config.w_violation
-        if wv is None:
-            # 历史口径：惩罚随 F2 一起乘 λ（量纲未解耦，秒级惩罚被压缩）
-            return float(
-                -m * f1
-                + self.config.lambda_cost * solution.f2_cost
-                + self.config.w_time * bt
-            )
-        if not self.config.lexicographic:
-            # legacy 加权和 + 惩罚量纲解耦（消融对比口径，不含 T0 支配层）
-            return float(
-                -m * f1
-                + self.config.lambda_cost * self.path_cost(solution)
-                + float(wv) * self.violation_penalty(solution)
-                + self.config.w_time * bt
-            )
-        # 四层准字典序（生产口径）；覆盖门禁口径（见 gate_mode，2026-10-22
-        # 起的主口径）在 T0 与 T1 之间加 T0.5 层 W_skip·n_voluntary_skip——
-        # voluntary_skip 与物理硬约束等价的非法解，由解码器 repair 至不动点
-        # 构造性归零（gate 模式），W_skip 仅在 audit 模式/防御路径咬合。
+        # 覆盖门禁口径（2026-10-24 起唯一主口径）：**f 不含 −m·F1，F1 只作事后指标**。
+        # 合法解中 S 内可装载任务已全部交付 ⇒ F1 恒为常数、对解无区分度；覆盖由门禁
+        # （构造修复 + W_skip 层）承担，目标层只剩成本 + 迟到 + 硬违约。
         n_hard, excess_m = self.hard_stats(solution)
-        gate = self.gate_mode(solution)
-        skip_pen = 0.0
-        if gate:
-            n_skip = int((solution.meta.get("gate_stats") or {}).get("n_skip", 0))
-            skip_pen = self.skip_weight() * n_skip
-        # F1 项：门禁口径置零——**搜索用 f 不含 −m·F1，F1 只作事后指标**；
-        # 历史/消融口径（非门禁）保持 −m·F1 逐位不变。
-        f1_term = 0.0 if gate else -m * f1
+        n_skip = int((solution.meta.get("gate_stats") or {}).get("n_skip", 0))
+        skip_pen = self.skip_weight() * n_skip
+        late_pen = 0.0 if wv is None else float(wv) * self.soft_violation(solution)
         return float(
             self.hard_weight() * n_hard
             + self.range_excess_weight() * excess_m
             + skip_pen
-            + f1_term
-            + float(wv) * self.soft_violation(solution)
+            + late_pen
             + self.config.lambda_cost * self.path_cost(solution)
             + self.config.w_time * bt
         )

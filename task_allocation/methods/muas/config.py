@@ -109,14 +109,14 @@ class MUASProblemConfig:
     w_nest_capacity: float = 1.0
     lambda_cost: float = 1.0
     # ----双目标的单标量化口径（评价规则，方案 B 主线）------------------
-    # lexicographic=True（默认）：**字典序**——先最大化任务收益 F1，再在收益
-    # 等价的解中最小化次目标（路径代价/约束惩罚/最坏机时间）。实现保持 DMDE
-    # 单适应度框架（不碰选择机制）：f = -big_m·F1 + 次目标，big_m 使任一
-    # ≥ 最小正收益的收益优势支配任意次目标差异；更细粒度的收益差视为同收益、
-    # 由成本裁决（与 Ming 2017 单标量框架的唯一区别是 F1 项的支配性权重）。
-    #   big_m=None → 按问题数据自动推导（1 + 次目标上界 / 最小正收益）；
+    # big_m=None → 按问题数据自动推导（1 + 次目标上界 / 最小正收益）；
     #   big_m>0 → 显式给定（测试/消融用）。
-    # lexicographic=False → 历史加权和 f = -F1 + λ·F2（消融对比口径）。
+    # 注：big_m 在门禁口径（唯一主口径，2026-10-24）下**只**作为 W_hard/
+    #   W_skip 的推导基数（κ·m·R_pool），不再进 f 的 −m·F1 项。
+    # lexicographic 字段为**历史遗留、已失效**：曾用于切换「字典序 / 历史
+    # 加权和」两种评价路径，门禁口径落地后该路径已从代码移除（见
+    # docs/objective_caliber_two_approaches_archive_2026-10-24.md）。保留仅为
+    # 向后兼容 yaml；设任何值均不改变行为。
     lexicographic: bool = True
     big_m: float | None = None
     default_service_time: float = 0.0
@@ -134,8 +134,9 @@ class MUASProblemConfig:
     # _secondary_upper_bound 拆 1e6 虚构帽、换推导帽。
     # 注：stage 层 coverage_gate=True（终态构造性修复）也会进入同一口径
     # ——判据见 SelectiveMUASProblem.gate_mode（meta 带 gate_stats）。
-    # False（默认且两开关皆关）= 现行四层准字典序口径，逐位不变。
-    lexicographic_coverage: bool = False
+    # 2026-10-24 起恒为 True：覆盖门禁为唯一主口径，非门禁（big-M 四层
+    # ``−m·F1``）路径已从代码移除。保留字段仅为向后兼容 yaml，不再切换口径。
+    lexicographic_coverage: bool = True
     # W_skip 显式权重；None = 自动同 W_hard（κ·m·R_pool）。
     w_skip_violation: float | None = None
     # 本周期的规划时刻：时间窗游标从它起算，而不是从 0

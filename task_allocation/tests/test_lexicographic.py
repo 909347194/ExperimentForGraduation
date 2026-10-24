@@ -1,19 +1,20 @@
 # -*- coding: utf-8 -*-
-"""字典序评价（方案 B 主线）+ 解码端合并修复 聚焦测试。
+"""覆盖门禁口径（唯一主口径）+ 解码端合并修复 聚焦测试。
 
-契约：
+契约（2026-10-24：非门禁 big-M 路径已从代码移除，见
+``docs/objective_caliber_two_approaches_archive_2026-10-24.md``）：
 
-1. **收益支配成本**：多完成一个任务（哪怕代价暴涨）必须胜出——big-M 字典序；
-2. **收益等价成本裁决**：同完成量取更省解（这是"合并到更少机"的原动力）；
+1. **可装必须装**：一阶意义下可装载的任务必须交付；能装没装
+   （voluntary_skip）触发 W_skip 层、代价压倒任意成本差；
+2. **完成等价成本裁决**：同完成集合取更省解（"合并到更少机"的原动力）；
 3. **闲置合法**：部分 UAV 零任务不产生任何惩罚/违约；
 4. **合并修复**：任务少时整航次并入更少机，不删任务；
 5. **e2e**：少任务聚集场景下求解器输出用更少的机完成全部任务；
-6. **legacy 对照**：lexicographic=False 退化为加权和（丢任务换成本可以赢）。
+6. **完成是约束**：可达任务不得经济性剔除，暂缓只能源于可行性修复。
 
-背景（问题 2：原 DMDE 单适应度如何处理双目标）：
-    Ming 2017 为单标量目标；本方案保持 DMDE 单适应度/选择机制不动，
-    用支配性权重 big_m 实现字典序语义：先最大化任务收益 F1=ΣR_j y_j，
-    再在收益等价的解中最小化成本（含惩罚/最坏机时间）。
+背景：DMDE 单适应度框架不动，适应度仅含 硬违约 + W_skip·n_skip +
+迟到 + λ·path + w_time·F3；覆盖由门禁（构造修复 + W_skip 层）承担，
+成本项（含惩罚/最坏机时间）只在完成等价的解间裁决。
 """
 
 from __future__ import annotations
@@ -115,7 +116,12 @@ def _dominance_fixture():
 
 
 def test_reward_dominates_cost():
-    """完成 2 个任务（F1=2）的方案即使贵 4e5 也必须胜过只完成 1 个（F1=1）。"""
+    """完成 2 个任务（F1=2）的方案即使贵 4e5 也必须胜过只完成 1 个（F1=1）。
+
+    门禁口径下该优势由 W_skip 层提供：partial 把一阶可装载的任务 1 留在
+    S 内未交付 ⇒ 判 voluntary_skip ⇒ W_skip·1 压倒一切成本差（而非旧口径的
+    −m·F1 支配项）。F1 只作指标、不进 f，但"可装必须装"仍强制全交。
+    """
     tasks, uavs, nests, pairwise = _dominance_fixture()
     prob = _prob(tasks, uavs, nests, pairwise, lambda_cost=1.0)
 
@@ -123,25 +129,38 @@ def test_reward_dominates_cost():
     partial = _sol([(0, [0], 0)], cand=[0, 1])     # cost = 100+100
 
     assert prob.scalar_fitness(full) < prob.scalar_fitness(partial), (
-        "字典序失效：收益优势未支配成本差异"
+        "可装必须装失效：partial 留一阶可装载任务未交付应触发 W_skip 而更差"
     )
-    # 收益差必须体现在 f1 上
+    # 完成量差异体现在 f1 指标上（不进 f，但指标须正确）
     assert prob.evaluate(full).f1_reward == 2.0
     assert prob.evaluate(partial).f1_reward == 1.0
 
 
-def test_legacy_weighted_sum_prefers_cheap_partial():
-    """对照：lexicographic=False 的加权和会为省成本丢任务（说明开关有效）。"""
+def test_gate_caliber_forces_loadable_tasks_delivered():
+    """门禁口径（完成是约束）：可装却没装（voluntary_skip）必被 W_skip 压倒，
+    即便省下巨额航程也不得赢。"""
     tasks, uavs, nests, pairwise = _dominance_fixture()
-    prob = _prob(tasks, uavs, nests, pairwise, lambda_cost=1.0, lexicographic=False)
+    prob = _prob(tasks, uavs, nests, pairwise, lambda_cost=1.0)
 
     full = _sol([(0, [0, 1], 0)], cand=[0, 1])
     partial = _sol([(0, [0], 0)], cand=[0, 1])
-    assert prob.scalar_fitness(partial) < prob.scalar_fitness(full)
+    f_full = prob.scalar_fitness(full)
+    f_partial = prob.scalar_fitness(partial)
+    assert f_full < f_partial, (
+        "可装任务必须交付：partial 留一阶可装载任务 1 必触发 W_skip 罚层而更差"
+        f"（f_full={f_full}, f_partial={f_partial}）"
+    )
+    # partial 确属 voluntary_skip（任务 1 一阶可插入既有航次）
+    gs = prob.evaluate(partial).meta["gate_stats"]
+    assert gs["n_skip"] >= 1, f"partial 必须被记 voluntary_skip：{gs}"
 
 
 def test_explicit_big_m_override():
-    """big_m 显式给定时按给定值生效（1.0 ≈ legacy 权重口径）。"""
+    """big_m 显式给定时按给定值生效（用于 W_hard/W_skip 的推导基数）。
+
+    注：big_m 在门禁口径下**只**作为硬违约/门禁权重的推导基数
+    （W_hard = κ·m·R_pool），不再进入 f 的 −m·F1 项。
+    """
     tasks, uavs, nests, pairwise = _dominance_fixture()
     prob = _prob(tasks, uavs, nests, pairwise, lambda_cost=1.0, big_m=1.0)
     assert prob.f1_weight() == 1.0
@@ -244,38 +263,34 @@ def test_consolidation_does_not_drop_tasks():
 
 
 # ---------------------------------------------------------------------------
-# 6. 字典序下经济性剔除自动关闭
+# 6. 门禁口径下经济性剔除自动关闭（完成是约束）
 # ---------------------------------------------------------------------------
 
 
-def test_economic_prune_disabled_under_lexicographic():
-    """字典序（收益优先）下，丢正收益任务的经济性剔除不得生效。
+def test_gate_caliber_never_prunes_completable_task():
+    """门禁口径（完成是约束）：即便任务代价 ≫ 收益，也不经济性剔除——
+    可达任务必须交付，暂缓只能源于可行性修复。
 
-    构造：单任务、极高代价（λ·saving ≫ R），legacy 会剔除（y_j=0），
-    字典序必须保留任务（暂缓只能来自可行性修复）。
+    构造：单任务、极高代价（返航 1e5 ≫ 收益 1），求解器仍须交付它。
     """
     tasks = [_task(0, 100.0, 1.0)]
     uavs = [_uav(0, 0.0)]
     nests = [Nest(id=0, x=0.0, y=0.0, z=0.0, capacity=5)]
     pairwise = {(-1, 0): 1e5, (0, NEST_KEY): 1e5}  # 返航 1e5 ≫ 收益 1
 
-    for lexi, expect_done in ((True, True), (False, False)):
-        prob = _prob(tasks, uavs, nests, pairwise, lambda_cost=1.0,
-                     lexicographic=lexi)
-        cb = build_pairwise_costs(tasks, uavs, nests=nests, dem=None,
-                                  estimator=None, nest_offset=NEST_KEY)
-        stage = run_selective_muas(
-            tasks, uavs, nests, cb,
-            fleet_uavs=uavs,
-            problem_config=MUASProblemConfig(w_time=0.0, lexicographic=lexi),
-            stage_config=MUASStageConfig(),
-            solver_config=DMDEConfig(pop_size=6, max_generations=3, seed=1),
-            current_time=0.0,
-        )
-        done = bool(stage.solution.executed_task_ids)
-        assert done is expect_done, (
-            f"lexicographic={lexi}: 执行={done}，期望={expect_done}"
-        )
+    cb = build_pairwise_costs(tasks, uavs, nests=nests, dem=None,
+                              estimator=None, nest_offset=NEST_KEY)
+    stage = run_selective_muas(
+        tasks, uavs, nests, cb,
+        fleet_uavs=uavs,
+        problem_config=MUASProblemConfig(w_time=0.0),
+        stage_config=MUASStageConfig(),
+        solver_config=DMDEConfig(pop_size=6, max_generations=3, seed=1),
+        current_time=0.0,
+    )
+    assert bool(stage.solution.executed_task_ids), (
+        "门禁口径下可达任务不得被经济性剔除（完成是约束）"
+    )
 
 
 # ── 7. 交付解适应度对账（审计 N 项 N2 口径，2026-10-18）──────────────
@@ -304,13 +319,14 @@ def test_delivered_fitness_recompute_from_components():
                 "final_n_hard", "final_excess_m", "fitness_weights"):
         assert key in d, f"diagnostics 缺字段 {key}"
     w = d["fitness_weights"]
+    gs = d.get("gate_stats") or {}
     rec = (
         w["w_hard"] * d["final_n_hard"]
         + w["w_excess"] * d["final_excess_m"]
-        - w["m"] * d["final_f1"]
+        + (w["w_skip"] or 0.0) * int((gs or {}).get("n_skip", 0))
         + (w["w_late"] or 0.0) * d["final_late_s"]
         + w["lambda"] * d["final_path_m"]
-        + w["w_time"] * 0.0
+        + w["w_time"] * d["final_bottleneck_s"]
     )
     assert rec == pytest.approx(d["final_fitness"], rel=1e-9), (
         f"重算 {rec} != 记录 {d['final_fitness']}"

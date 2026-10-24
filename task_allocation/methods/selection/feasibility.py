@@ -137,7 +137,7 @@ def prefilter(
                 # 往返口径：航次必须返航（终点机巢由内层 MCF 选，最近巢
                 # 往返是下界），单程可达 ≠ 可服务。T52 实证：单程 39.9km
                 # < 0.95×80km 放行过，往返 79.7km 实则物理不可达，旧单程
-                # 口径下它每周期空转 churn 到超期淘汰。物理不可达是用户
+                # 口径下它每周期空转 churn 到淘汰。物理不可达是用户
                 # 原则下唯一合法的未完成原因，必须在预筛按往返拦死。
                 reason = "exceed_round_trip_range"
             elif cfg.check_time_window and t.latest is not None:

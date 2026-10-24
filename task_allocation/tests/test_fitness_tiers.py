@@ -139,29 +139,49 @@ def test_t0_excess_tiebreak():
     )
 
 
-# ── 3. T1 支配 T2/T3：多一个任务的收益压倒一切次级差异 ────────────
+# ── 3. 门禁口径不含 −m·F1：完成数的差异不进入 f ───────────────────
 
-def test_t1_dominates_secondary():
-    """都可行时，多交付一个任务永远更优，且优势 ≈ m·R（次级项可忽略）。"""
+def test_gate_caliber_excludes_f1_from_fitness():
+    """门禁口径（2026-10-24 唯一主口径）：scalar_fitness 的纯门禁形式
+    （硬违约 + W_skip·n_skip + 迟到 + λ·path + w_time·F3）与手工重算完全一致，
+    **且不含** −m·F1 项——若把 −m·F1 加回会与真实 f 系统性偏离。
+
+    覆盖由门禁（构造修复 + W_skip 层）承载，F1 只作事后指标。注意：本门禁对
+    problem.tasks（滚动时域下即本周期已选集 S）全体做一阶检验，故「少交付一个
+    可装载任务」会触发 W_skip 罚层而非 −m·F1 支配项——证明 f 不含 −m·F1 的方式
+    是手工重算对比，而非「两解完成数不同、差仅 λ·Δpath」（后者会混入 W_skip）。
+    """
     tasks = [_task(0, 30_000.0, 0.0), _task(1, -30_000.0, 0.0)]
     nests = [Nest(id=0, x=0.0, y=0.0, z=0.0, capacity=4)]
     uavs = [_uav(0, 1e9)]  # 航程不设限：两个解都物理可行
     p = _problem(tasks, uavs, nests)
 
-    sol_1 = _sol([UAVTour(uav_id=0, task_ids=[0], end_nest_id=0)])
-    sol_2 = _sol([UAVTour(uav_id=0, task_ids=[0, 1], end_nest_id=0)])
-    p.evaluate(sol_1)
-    p.evaluate(sol_2)
-    assert sol_1.meta["feasibility"]["n_hard"] == 0
-    assert sol_2.meta["feasibility"]["n_hard"] == 0
+    sol = _sol([UAVTour(uav_id=0, task_ids=[0, 1], end_nest_id=0)])
+    p.evaluate(sol)
+    assert sol.meta["feasibility"]["n_hard"] == 0
+    assert p.gate_mode(sol) is True
 
-    f_1, f_2 = p.scalar_fitness(sol_1), p.scalar_fitness(sol_2)
-    assert f_2 < f_1, "多交一个任务必须更优（最小化器下 f 更小）"
-    # 优势 = m·10（F1 差）− λ·Δpath（航程差 60 km）；前者应压倒后者
-    m = p.f1_weight()
-    d_path = p.path_cost(sol_2) - p.path_cost(sol_1)
-    assert f_1 - f_2 == pytest.approx(m * 10.0 - p.config.lambda_cost * d_path, rel=1e-9)
-    assert m * 10.0 > 100.0 * p.config.lambda_cost * d_path, "T1 应压倒 T3"
+    f = p.scalar_fitness(sol)
+    m, f1 = p.f1_weight(), float(sol.f1_reward)
+    det = sol.meta["feasibility"]
+    gs = sol.meta["gate_stats"]
+    wv = p.config.w_violation
+    manual = (
+        p.hard_weight() * det["n_hard"]
+        + p.range_excess_weight() * det["range_excess"]
+        + p.skip_weight() * gs["n_skip"]
+        + (0.0 if wv is None else float(wv) * det["soft_violation"])
+        + p.config.lambda_cost * p.path_cost(sol)
+        + p.config.w_time * sol.meta["bottleneck_time"]
+    )
+    # f 必须 = 纯门禁重算（不含 −m·F1）
+    assert manual == pytest.approx(f, rel=1e-12), (
+        f"门禁口径 f 必须=手工重算（不含 −m·F1）：{manual} vs {f}"
+    )
+    # 关键不变量：若把 −m·F1 加回会偏离真实 f（F1 不进搜索适应度）
+    assert f != pytest.approx(manual - m * f1, rel=1e-9), (
+        "f 不应等于「门禁重算 − m·F1」——F1 不进搜索适应度"
+    )
 
 
 # ── 4. T2 软计价：迟到按秒线性计入，不判不可行 ────────────────────
@@ -227,10 +247,12 @@ def test_fitness_weights_meta_snapshot():
     assert w["w_hard"] == pytest.approx(p.hard_weight())
     assert w["w_late"] == 0.01
     det = sol.meta["feasibility"]
+    gs = sol.meta.get("gate_stats") or {}
+    # 门禁口径（2026-10-24 唯一主口径）：f 不含 −m·F1；skip 罚层随 gate_stats 计入
     manual = (
         w["w_hard"] * det["n_hard"]
         + w["w_excess"] * det["range_excess"]
-        - w["m"] * sol.f1_reward
+        + (w["w_skip"] or 0.0) * gs.get("n_skip", 0)
         + w["w_late"] * det["soft_violation"]
         + w["lambda"] * p.path_cost(sol)
         + w["w_time"] * sol.meta["bottleneck_time"]

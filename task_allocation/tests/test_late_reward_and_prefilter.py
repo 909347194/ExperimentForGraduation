@@ -2,10 +2,12 @@
 """「迟到不是废飞」协议（2026-10-15）的两处落地聚焦测试。
 
 协议内容（用户裁定）：
-  ① 迟到交付算完成，但有效奖励按迟到时长线性折减
-     ``eff = R × max(0, 1 − L/W)``（W = late_reward_decay_seconds）；
+  ① 迟到交付算完成（计全额奖励，不折减）；门禁口径（唯一主口径，
+     2026-10-24）下 F1 为纯完成计数，迟到**不**经 late_reward_decay_seconds
+     折减——迟到统一走 T2 软计价 ``w_violation·L``（消「迟到双计」）。
+     late_reward_decay_seconds 仅用于解码期零奖励剔除（prune_zero_reward）；
   ② 选择期预筛只拦物理不可达（往返航程超限/无机可用）——时间窗不再是
-     拒绝理由，迟到完全由适应度（折减 + w_violation）裁决；时间窗预筛
+     拒绝理由，迟到完全由适应度（w_violation 计价）裁决；时间窗预筛
      仅在 check_time_window=True 的消融口径保留；
   ③ 完成闸门只拦物理不可行（航程/续航/终点机巢/结构类）——见
      test_completion_gate.py。
@@ -17,6 +19,8 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]  # task_allocation/
 REPO = ROOT.parent
@@ -81,33 +85,35 @@ def _fitness(p):
 
 
 def test_late_reward_decay_linear():
-    """迟到 5s：W=10 → eff=4×(1−0.5)=2；W=None → 历史全额 4。"""
+    """门禁口径（唯一主口径）下 F1 纯完成计数、迟到不折减：迟到 5s 仍全额 4，
+    W 取任何值（含 None）F1 不变。迟到只走 T2（w_violation·L），不进 F1。"""
     f1_dec, _, _ = _fitness(_problem(10.0, latest=5.0))
-    assert f1_dec == 2.0, f1_dec
+    assert f1_dec == 4.0, f1_dec
     f1_full, _, _ = _fitness(_problem(None, latest=5.0))
     assert f1_full == 4.0, f1_full
 
 
 def test_late_reward_decay_clamped_at_zero():
-    """迟到 ≥ W → 折减到 0（不出现负奖励）。"""
+    """门禁口径下 F1 不为迟到清零：迟到 ≥ W 仍全额 4（不再 clamp 到 0）。"""
     f1, _, _ = _fitness(_problem(5.0, latest=5.0))
-    assert f1 == 0.0, f1
+    assert f1 == 4.0, f1
     f1b, _, _ = _fitness(_problem(2.0, latest=5.0))
-    assert f1b == 0.0, f1b
+    assert f1b == 4.0, f1b
 
 
 def test_on_time_reward_undiscounted():
-    """按时交付（latest=1000 > 到达 10s）不折减，任何 W 下全额。"""
+    """按时交付（latest=1000 > 到达 10s）全额——任何 W 下均为 4。"""
     for w in (None, 10.0, 2.0):
         f1, _, _ = _fitness(_problem(w, latest=1000.0))
         assert f1 == 4.0, (w, f1)
 
 
-def test_fitness_uses_discounted_reward():
-    """适应度必须吃折减后的 F1：同解仅 W 不同 → 差 = -(2−4) = +2。"""
+def test_fitness_independent_of_reward_decay():
+    """门禁口径：f 不含 −m·F1、F1 不折减 ⇒ 适应度与 late_reward_decay_seconds
+    无关（迟到统一走 T2 的 w_violation·L，与 W 无关）。同解仅 W 不同 ⇒ f 相等。"""
     _, f_dec, _ = _fitness(_problem(10.0, latest=5.0))
     _, f_full, _ = _fitness(_problem(None, latest=5.0))
-    assert abs((f_dec - f_full) - 2.0) < 1e-9, (f_dec, f_full)
+    assert f_dec == pytest.approx(f_full, rel=1e-12), (f_dec, f_full)
 
 
 # ---------------------------------------------------------------------------

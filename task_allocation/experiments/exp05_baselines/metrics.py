@@ -128,7 +128,8 @@ def build_summary(
     n_capacity_shortfall = _gate_sum("n_shortfall")
     n_gate_rescued = _gate_sum("n_rescued")
     # ── 论文主表口径 v2（2026-10-22 指标体系，与 exp01 同源）──────────
-    # η_final 分母排除物理不可达、**保留超期淘汰**；
+    # η_final 分母只排除物理不可达；淘汰是机制缺陷信号、须为 0（不单列
+    # 合法失败类）；按时率 = 最终交付中按时比例（迟到交付计完成、不计按时）。
     # 按时率 = 最终交付中按时比例（迟到交付计完成、不计按时）。
     n_final_denom = n_arrived - n_unreachable
     completion_rate_final = (len(completed) / n_final_denom) if n_final_denom else 0.0

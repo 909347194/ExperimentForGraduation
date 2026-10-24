@@ -32,21 +32,21 @@ problem:
   w_violation: 0.01
   w_nest_capacity: 1.0
   w_time: 0.0
-  # 字典序四层准字典序（生产口径）：
-  #   f = W_hard·n_hard + w_exc·excess_m − m·F1_eff + w_late·L_tot + λ·path + w_time·F3
-  #   T0 物理违约（硬）> T1 交付收益 > T2 迟到（秒级软计价）> T3 航程
+  # 门禁口径（唯一主口径，2026-10-24）：
+  #   f = W_hard·n_hard + w_exc·excess_m + W_skip·n_skip + w_late·L_tot + λ·path + w_time·F3
+  #   （固定表述：搜索用 f 不含 −m·F1；F1 只作事后指标）
+  #   T0 物理违约（硬）> T0.5 覆盖门禁 > T2 迟到（秒级软计价）> T3 航程
   lexicographic: true
-  big_m: null # null = 按问题数据自动推导支配性权重
+  big_m: null # null = 按问题数据自动推导（仅作 W_hard/W_skip 推导基数，不进 f）
   # 迟到奖励折减容忍 W（s）：晚到任务 eff = R × max(0, 1 − L/W)；
   # 与 exp01 生产同值（1800）
   late_reward_decay_seconds: 1800.0
   w_hard_violation: null # null = 自动 κ·m·R_pool（可行解永远压到不可行解之前）
   hard_violation_kappa: 10.0
-  # 覆盖门禁（默认关，与 exp01 生产口径一致）：
-  #   lexicographic_coverage = W_skip 罚层 + 审计分账；
-  #   完整门禁口径还需 stage.coverage_gate=True（终态构造性修复）。
-  # exp02 量化的是选择层机制，与生产同口径保持关闭。
-  lexicographic_coverage: false
+  # 覆盖门禁（唯一主口径，与 exp01 生产口径一致；见
+  # docs/objective_caliber_two_approaches_archive_2026-10-24.md）：
+  #   coverage_gate = 终态构造性修复；lexicographic_coverage = W_skip 罚层 + 审计分账
+  lexicographic_coverage: true
   w_skip_violation: null
 
 constraints:
@@ -74,7 +74,7 @@ constraints:
 stage:
   # 选择性：字典序下经济性剔除自动关闭（丢正收益任务必降 F1），
   # 任务暂缓仅由可行性修复产生；键保留供消融对比
-  prune_unprofitable: true
+  prune_unprofitable: false  # 与「完成是约束」冲突，门禁口径下必须关
   prune_max_rounds: 8
   prune_margin: 0.0
   prune_wait_bonus: 1.0
@@ -95,7 +95,7 @@ stage:
   polish_max_evals: 800
   polish_eps: 1.0e-6
   # 覆盖门禁两层（默认关，与生产口径一致；消融时两开关同开 = 完整门禁口径）
-  coverage_gate: false
+  coverage_gate: true
   coverage_gate_max_rounds: 8
   coverage_first: false
 
