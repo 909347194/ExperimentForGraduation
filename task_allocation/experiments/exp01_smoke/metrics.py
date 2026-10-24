@@ -166,7 +166,7 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
     all_lateness = [
         float(v) for r in records for v in r.lateness_by_task.values()
     ]
-    # 超期淘汰：deadline 已过仍在池中、被 expire 出池的任务
+    # 淘汰：deadline 已过仍在池中、被 expire 出池的任务（机制缺陷信号，须为 0）
     n_eliminated = sum(len(r.expired_ids) for r in records)
     # ── 有效完成口径（2026-10-16 审查 I4）──────────────────────────
     # 「迟到≠废飞」下迟到交付计完成，但迟到 ≥ W 的交付有效奖励折减为 0。
@@ -192,7 +192,7 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
             n_zero_reward_delivery += 1
     # 静态物理不可达（「过于偏远」）：所有机巢往返航程超过满电可及范围，
     # 入池判定一次性出池。用户原则（2026-10-15）下唯一合法的未完成原因，
-    # 与超期淘汰分列——后者对物理可行任务是兜底失灵的信号，应趋 0。
+    # 与淘汰分列——淘汰对物理可行任务是机制失灵的信号，须恒为 0（非合法失败类）。
     n_unreachable = sum(len(r.unreachable_ids) for r in records)
     # 只统计真正求解过的周期（2026-10-16 审查 I2：空转周期 muas 无解，
     # 旧口径把它们当 feasible=False 摊薄，1/4 被记成 1/8）
@@ -239,8 +239,9 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
     )
     # ── 论文主表口径 v2（2026-10-22 指标体系）────────────────────────
     # 「可完成的最终都应完成，只是或早或晚；在此前提下控成本与时效」。
-    # η_final 分母排除物理不可达（问题固有、不归算法能力），
-    # **保留超期淘汰**（可做却永久丢失=失败，淘汰率单列正因如此）。
+    # η_final 分母**只排除物理不可达**（问题固有、不归算法能力）；
+    # 淘汰(elim)是机制缺陷信号、须为 0、不单列合法失败类——若出现，
+    # 它自然留在分母里压低 η_final，暴露「可完成却未完成」的缺陷。
     n_final_denom = n_arrived - n_unreachable
     completion_rate_final = (len(completed) / n_final_denom) if n_final_denom else 0.0
     # 按时率（最终交付口径）：迟到交付计完成、不计按时（与“做没做完”分开）

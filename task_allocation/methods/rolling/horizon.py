@@ -191,7 +191,7 @@ class CycleRecord:
     lateness_by_task: dict[str, float] = field(default_factory=dict)
     # 静态物理不可达（「过于偏远」）：所有机巢往返航程都超过满电可及
     # 范围，入池判定一次性出池。用户原则（2026-10-15）下唯一合法的
-    # 未完成原因，单列计数，不混入超期淘汰。
+    # 未完成原因，单列计数，不混入淘汰。
     unreachable_ids: list[int] = field(default_factory=list)
     # 分配结构与求解轨迹：不进 as_dict()/metrics.json（数值指标保持精简），
     # 由实验编排写入 results/solution.json，供分配图 / 收敛图取用。

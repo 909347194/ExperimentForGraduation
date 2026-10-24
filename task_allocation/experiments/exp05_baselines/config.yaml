@@ -185,10 +185,11 @@ selection:
 muas:
     allow_unassigned: true # 允许 y_j = 0（任务保留至下一周期）
     allow_idle_uav: true # 允许 n_u = 0（UAV 本周期空闲）
-    # 双目标标量化口径（方案 B 主线）：字典序——先最大化任务收益 F1=ΣR·y，
-    # 再在收益等价的解中最小化成本（含惩罚/最坏机时间）。
-    # big_m: null → 按问题数据自动推导支配性权重；给数值则显式固定。
-    # lexicographic: false → 历史加权和 -F1 + λ·F2（消融对比）。
+    # 适应度口径：覆盖门禁（唯一主口径，2026-10-24）。big_m 仅作 W_hard/
+    # W_skip 推导基数（κ·m·R_pool），不再进 f 的 −m·F1 项；非门禁 big-M
+    # 四层路径已从代码移除（见 docs/objective_caliber_two_approaches_archive_2026-10-24.md）。
+    # big_m: null → 按问题数据自动推导；给数值则显式固定。
+    # lexicographic 字段为历史遗留、已失效（保留仅向后兼容 yaml）。
     lexicographic: true
     big_m: null
     lambda_cost: 1.0e-2 # 次目标权重（收益当量/米）；字典序下只裁决收益等价的解
@@ -269,7 +270,7 @@ muas:
     #   给整数则固定（消融用）。无容量旧口径把每架机当成能同时覆盖全部任务，
     #   gain 与真实服务能力脱节；加容量后 gain 才反映航程/时间窗下的边际贡献。
     marginal_tour_cap: null
-    prune_unprofitable: true # 剔除执行代价高于收益的任务（y_j = 0）
+    prune_unprofitable: false # 与「完成是约束」冲突，门禁口径下必须关
     prune_margin: 0.0 # 剔除判据裕度：λ·节省 > R·(1+margin) 才剔除
     prune_max_rounds: 8
     # 零奖励剔除（2026-10-18 四层适应度配套）：ETA ≥ latest+W 的任务 eff≈0，
@@ -389,7 +390,7 @@ rolling:
     # 长程吞吐协议（2026-10-14 用户定）：完成率不是目标，周期可无限延长，
     # 真实目标 = 持续到达下「尽可能多且正确地完成任务」。3 周期窗口的完成率
     # 只是窗口长度产物，无区分度；24 周期 + Poisson 到达流下，吞吐 / 正确
-    # 执行率 / 违约交付（废飞）/ 超期淘汰才有统计意义。
+    # 执行率 / 违约交付（废飞）/ 淘汰（须为 0）才有统计意义。
     n_cycles: 60 # 安全上限（周期数本身不定）；真实停止由 stop_when_stable 收敛早停决定
     cycle_length: 600.0 # 每周期推进的时间（s）
     complete_after_cycle: true # 周期末把执行中的任务判为完成

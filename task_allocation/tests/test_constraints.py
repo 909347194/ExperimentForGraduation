@@ -174,8 +174,9 @@ def test_bottleneck_time_deterministic():
 
 
 def test_scalar_fitness_bottleneck_term():
-    # 锁定：w_time>0 时 scalar_fitness = -F1 + λ·F2 + w_time·max_k T_k
-    # 增量恰为 w_time·F3（F1、F2 不随 w_time 变化）
+    # 锁定：w_time>0 时 scalar_fitness 增量恰为 w_time·max_k T_k（F3 项）
+    # （门禁口径：f = 硬违约 + W_skip·n_skip + 迟到 + λ·path + w_time·F3；
+    #  F1 不进 f，但 F3 项的系数行为与此断言无关）
     prob0 = _bottleneck_problem(w_time=0.0)
     prob1 = _bottleneck_problem(w_time=2.0)
     f0 = prob0.scalar_fitness(_one_task_solution())

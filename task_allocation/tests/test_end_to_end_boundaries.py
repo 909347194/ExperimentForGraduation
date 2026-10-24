@@ -117,7 +117,8 @@ def test_fitness_weights_flow_to_record_muas():
     # 与配置一致（m 由 f1_weight 自动推导，只需存在且为正）
     assert fw.get("m", 0.0) > 0.0, f"m 应为正：{fw}"
     assert fw.get("lambda") == 1.0e-4, f"λ 口径漂移：{fw}"
-    assert fw.get("W_decay") == 600.0, f"W 口径漂移：{fw}"
+    # 门禁口径（唯一主口径）：F1 纯完成计数、迟到不折减 ⇒ W_decay 快照为 None
+    assert fw.get("W_decay") is None, f"门禁口径 W_decay 应为 None（F1 不折减）：{fw}"
     assert fw.get("w_late") == 0.01, f"w_late 口径漂移：{fw}"
     assert fw.get("w_hard", 0.0) > 0.0, f"W_hard 应为正：{fw}"
 
@@ -179,7 +180,7 @@ def test_dynamic_shortfall_defers_without_marking_unreachable():
     rec = records[0]
     assert 0 not in rec.completed_ids, "余量不足不应完成"
     assert rec.unreachable_ids == [], "满电可及 ≠ 静态不可达"
-    assert 0 not in rec.expired_ids, "不得记超期淘汰"
+    assert 0 not in rec.expired_ids, "不得记淘汰"
     assert 0 in rec.deferred_ids, "应留在池中（deferred）"
 
 

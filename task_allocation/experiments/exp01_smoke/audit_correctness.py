@@ -7,6 +7,7 @@
 
 不变量清单（A~O）：
   A 终局守恒   到达 = 完成 + 淘汰 + 不可达 + 池内剩余（任务不丢、不重复计）
+  A2 淘汰为零   淘汰(elim)>0 = 机制缺陷（可完成必完成未达成），须硬 FAIL
   B 完成唯一   跨周期 completed 互斥；与 solution 任务表的 completed_at 一致
   C 闸门语义   物理不可行交付不计完成；迟到 ⊆ 完成；废飞 ⊆ 出动
   D 时间语义   迟到秒数 = 仿真 ETA − latest（连续时间口径，**不是**
@@ -200,6 +201,12 @@ def _run_checks(
     check("A 完成数与任务表一致",
           n_sol_completed == s["n_completed"],
           f"summary={s['n_completed']} 任务表 completed_at 非空={n_sol_completed}")
+    # ── A2 淘汰须为零（铁律：完成率对可完成集合恒 100%）────────────
+    # 淘汰(elim)>0 = 可完成任务机制性未完成 = 缺陷（非合法失败类、
+    # 非「假设被证伪」）。一旦出现，机制未达成「可完成必完成」，硬 FAIL 暴露。
+    check("A2 淘汰须为零（淘汰>0 = 可完成任务机制性未完成 = 缺陷）",
+          s["n_eliminated"] == 0,
+          f"n_eliminated={s['n_eliminated']}")
 
     # ── B 完成唯一 ──────────────────────────────────────────────
     all_completed: list[int] = []
@@ -383,7 +390,7 @@ def _run_checks(
         c, nxt = cycles[i], cycles[i + 1]
         pc, pn = c["pool_counts"], nxt["pool_counts"]
         # 记账周期口径（2026-10-23 修正；原公式把四种事件混为同一周期，
-        # 在「任务滞留多周期后才超期淘汰」的场景下必然错位 FAIL）：
+        # 在「任务滞留多周期后才淘汰」的场景下必然错位 FAIL）：
         #   completed / unreachable：周期 t 解算期出池 ⇒ 影响 t→t+1 水位；
         #   infeasible（废飞回池）：``pool.release`` 进 ``_release_pending``，
         #     下周期 begin_cycle 归类为 RELEASE 来源 ⇒ **已含在

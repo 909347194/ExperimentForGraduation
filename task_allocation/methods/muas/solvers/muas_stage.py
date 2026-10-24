@@ -107,9 +107,10 @@ class MUASStageConfig:
     # 任务记往返惩罚，gain 才反映真实边际贡献。详见 _select_by_marginal_takeoff。
     marginal_tour_cap: int | None = None
     # 选择性：剔除「执行代价超过收益」的任务（y_j = 0，保留到下一周期）。
-    # 注意：字典序（lexicographic=True，默认）下经济性剔除与"收益优先"目标
-    # 冲突（丢正收益任务必降 F1），自动关闭——任务暂缓仅由可行性修复产生；
-    # 本开关仅在 legacy 加权和（lexicographic=False）下生效（消融对比口径）。
+    # 注意：门禁口径（唯一主口径，2026-10-24）下「完成是约束」，经济性剔除
+    # 与完成约束冲突（丢正收益任务即违反约束），已**永久关闭**——任务暂缓仅由
+    # 可行性修复产生；原 legacy 加权和（lexicographic=False）口径已从代码移除
+    # （见 docs/objective_caliber_two_approaches_archive_2026-10-24.md）。
     prune_unprofitable: bool = True
     prune_max_rounds: int = 8
     # 零奖励剔除（四层适应度配套）：对「ETA ≥ latest + W」的任务
@@ -143,7 +144,7 @@ class MUASStageConfig:
     # 门 = 航程 / 自身窗 / 迟到数不增 / 成本严格降）。
     # 动机：E1E2（2026-10-23）证实门禁单独上场时覆盖指标恒真而完成率
     # −5pp——「可装载」内生于当前解，成本-only 适应度把航程/窗口占满
-    # ⇒ 剩余任务一阶判 shortfall ⇒ 超期淘汰。覆盖优先构造把「留装载
+    # ⇒ 剩余任务一阶判 shortfall ⇒ 淘汰。覆盖优先构造把「留装载
     # 余量」的激励放回解码本身；单调 polish 保证成本优化不侵蚀覆盖。
     # 门禁证明「能装却不装」可被抹成 0，但**不能单独承担完成语义**——
     # 完成语义由「覆盖优先装载 + 单调 polish」两段式承担，门禁退居
@@ -1867,13 +1868,11 @@ class MUASAssignmentEvaluator:
         2914s）时 _reflow_task 返回 False，保持 y_j=0。这正是「可达即执行、
         但不得违反约束」的边界。
         """
-        # 口径分流：legacy 加权和（lexicographic=False）下经济性剔除是**开启**
-        # 的，「不划算」的任务由 _prune 主动剔除；此时若再做强制补全，等于把
-        # 被判不划算的任务又塞回去，架空消融基线。故仅在字典序（覆盖优先，
-        # 即「可达即执行」口径）下补全——这也正是本修复的方法论前提。
-        economic_prune = self.config.prune_unprofitable and not getattr(
-            self.problem.config, "lexicographic", True
-        )
+        # 门禁口径（唯一主口径，2026-10-24）下经济性剔除已永久关闭：原 legacy
+        # 加权和（lexicographic=False）路径已从代码移除，而门禁口径「完成是约束」
+        # 不容许丢弃可达任务。故强制补全始终执行（可达即执行），economic_prune
+        # 恒为 False——这正是本修复「可达即执行、但不得违反约束」的方法论前提。
+        economic_prune = False
         if economic_prune:
             return {k: list(v) for k, v in routes.items()}, dict(end_nests)
 

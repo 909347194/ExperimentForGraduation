@@ -239,9 +239,9 @@ def test_zero_reward_accounting_disabled_decay():
 # ---------------------------------------------------------------------------
 
 def test_final_completion_rate_excludes_unreachable():
-    """η_final 分母排除物理不可达、保留超期淘汰；按时率按最终交付口径。"""
+    """η_final 分母只排除物理不可达、淘汰（须为 0，进分母作缺陷信号）；按时率按最终交付口径。"""
     t0 = _FakeTask(0, 5.0, 0.0, 6000.0, completed_at=600.0)
-    t1 = _FakeTask(1, 5.0, 0.0, 6000.0, completed_at=None)   # 超期淘汰 → 进分母
+    t1 = _FakeTask(1, 5.0, 0.0, 6000.0, completed_at=None)   # 淘汰（缺陷信号）→ 进分母
     t2 = _FakeTask(2, 5.0, 0.0, 6000.0, completed_at=None)   # 物理不可达 → 不进分母
     records = [
         _FakeRecord(1, muas={"feasible": True}, executed=[0],

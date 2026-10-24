@@ -1,20 +1,21 @@
 # -*- coding: utf-8 -*-
-"""覆盖门禁（coverage gate）常驻回归测试（2026-10-22）。
+"""覆盖门禁（coverage gate）常驻回归测试。
 
-锁定的契约（用户裁定「合法解 = 物理硬约束 + 覆盖门禁」）：
+锁定的契约（2026-10-24 裁定：覆盖门禁为**唯一主口径**，非门禁 big-M 四层
+路径已从代码移除；讨论与理由见
+``docs/objective_caliber_two_approaches_archive_2026-10-24.md``）：
 
 1. **可救必救**：空闲机可开班/航次可插入的任务，audit 判 voluntary_skip，
    repair 必须救回；
 2. **能力不足记 shortfall**：航程或自身窗不可行的任务，两类判据都失败 ⇒
    capacity_shortfall（允许不交付），不得混入 voluntary_skip；
 3. **不动点收敛**：repair 幂等（再跑一轮零变化），修复后 audit n_skip 恒 0；
-4. **W_skip 层咬合**：lexicographic_coverage 下，能装没装的解显著更差；
-5. **默认关逐位不变**：开关关闭时不写 gate_stats、W_skip 不入权重、
-   F1 迟到折减行为与历史口径一致；
-6. **F1 纯完成计数 + 拆虚构帽**：门禁模式下迟到不折减 F1，
-   _secondary_upper_bound 换推导帽；
-7. **搜索用 f 不含 −m·F1（F1 只作指标）**：门禁口径（含 stage 层
-   coverage_gate 产物落 meta 的路径）下 f 与 F1 无关。
+4. **W_skip 层咬合**：门禁口径下，能装没装（voluntary_skip）的解显著更差；
+5. **门禁恒激活 + F1 纯完成计数**：gate_mode 恒 True，evaluate 必写
+   gate_stats、W_skip 必入权重；迟到不折减 F1（F1 只作指标），
+   _secondary_upper_bound 拆掉 1e6 虚构帽换推导帽；
+6. **搜索用 f 不含 −m·F1（F1 只作指标）**：门禁口径下 f 与 F1 无关，
+   仅 = 硬违约 + W_skip·n_skip + 迟到 + λ·path + w_time·F3。
 """
 
 from __future__ import annotations
@@ -185,10 +186,12 @@ def test_skip_layer_penalizes_voluntary_skip():
     )
 
 
-# ── 5. 默认关逐位不变 ────────────────────────────────────────────
+# ── 5. 门禁恒激活 + F1 纯完成计数 ────────────────────────────────
 
 
-def test_gate_off_keeps_legacy_behavior():
+def test_gate_caliber_always_active_and_f1_pure():
+    """覆盖门禁为唯一主口径：gate_mode 恒 True；evaluate 必写 gate_stats、
+    W_skip 必入权重；迟到任务 F1 纯完成计数（不折减）。"""
     tasks = [_task(0, 10_000.0, 0.0, latest=200.0)]  # ETA=1000 > 200 → 迟到
     nests = [Nest(id=0, x=0.0, y=0.0, z=0.0, capacity=4)]
     uavs = [_uav(0, 30_000.0)]
@@ -196,40 +199,35 @@ def test_gate_off_keeps_legacy_behavior():
 
     sol = _sol([UAVTour(uav_id=0, task_ids=[0], end_nest_id=0)], cand=[0])
     p.evaluate(sol)
-    assert "gate_stats" not in sol.meta, "默认关不得写 gate_stats"
-    assert sol.meta["fitness_weights"]["w_skip"] is None
-    # 历史口径：F1 迟到折减仍生效（迟到 800s / W=1000 → eff = 10×0.2）
-    assert abs(sol.f1_reward - 2.0) < 1e-6, f"默认关 F1 折减必须保持：{sol.f1_reward}"
+    # 门禁口径下 gate_stats 恒写入（无「默认关」状态）
+    assert "gate_stats" in sol.meta, "门禁口径下必须写 gate_stats"
+    assert sol.meta["fitness_weights"]["w_skip"] is not None
+    # F1 纯完成计数（不折减）：迟到 800s 不改变计数值
+    assert abs(sol.f1_reward - 10.0) < 1e-6, f"门禁口径 F1 必须纯完成计数：{sol.f1_reward}"
+    # gate_mode 恒 True（唯一口径）
+    assert p.gate_mode(sol) is True
 
 
 # ── 6. F1 纯完成计数 + 拆虚构帽 ───────────────────────────────────
 
 
-def test_gate_mode_f1_pure_and_secondary_bound_derived():
+def test_gate_caliber_f1_pure_and_derived_bound():
+    """门禁口径：① F1 纯完成计数（迟到不折减）；② 拆掉 1e6 虚构帽。"""
     tasks = [_task(0, 10_000.0, 0.0, latest=200.0)]  # 迟到 800s
     nests = [Nest(id=0, x=0.0, y=0.0, z=0.0, capacity=4)]
     uavs = [_uav(0, 30_000.0)]
-    kw = dict(w_time=0.0, w_violation=0.01, lambda_cost=1.0e-4,
-              late_reward_decay_seconds=1000.0)
-    p_gate = SelectiveMUASProblem.from_entities(
-        tasks, uavs, nests, pairwise_cost=_pairwise(tasks, uavs, nests),
-        config=MUASProblemConfig(**kw, lexicographic_coverage=True),
-    )
-    p_legacy = SelectiveMUASProblem.from_entities(
-        tasks, uavs, nests, pairwise_cost=_pairwise(tasks, uavs, nests),
-        config=MUASProblemConfig(**kw),
-    )
-
+    p = _problem(tasks, uavs, nests, late_reward_decay_seconds=1000.0)
     sol = _sol([UAVTour(uav_id=0, task_ids=[0], end_nest_id=0)], cand=[0])
-    p_gate.evaluate(sol)
+    p.evaluate(sol)
+
     assert abs(sol.f1_reward - 10.0) < 1e-6, (
         f"门禁模式 F1 必须纯完成计数（不折减）：{sol.f1_reward}"
     )
     assert sol.meta["fitness_weights"]["W_decay"] is None
 
-    assert p_gate._secondary_upper_bound() < p_legacy._secondary_upper_bound(), (
-        "门禁模式必须拆掉 1e6 虚构帽（推导帽更小）"
-    )
+    # 拆掉 1e6 虚构帽：推导帽必严格小于旧的 1e6·(n_t+8) 帽
+    legacy_cap = 1.0e6 * (len(tasks) + 8)
+    assert p._secondary_upper_bound() < legacy_cap, "门禁模式必须拆掉 1e6 虚构帽"
 
 
 # ── 7. stage 挂点集成：build_solution 末态修复 + gate_stats 落 meta ──
@@ -280,30 +278,37 @@ def test_stage_hook_gate_stats_and_default_off():
 def test_search_fitness_excludes_f1_under_gate():
     """门禁口径固定表述：**搜索用 f 不含 −m·F1；F1 只作事后指标**。
 
-    两条进入路径都必须生效：① problem.lexicographic_coverage=True；
-    ② stage 层 coverage_gate=True（gate_stats 落 solution.meta）。
-    判据：同一解在「带 gate_stats」与「不带」两态下的 f 差值恰为 m·F1。
+    验证：scalar_fitness 的纯门禁形式（硬违约 + W_skip·n_skip + 迟到 +
+    λ·path + w_time·F3）与手工重算完全一致，且**不含** −m·F1 项——若把
+    −m·F1 加回去，结果会系统性偏离。覆盖由门禁（构造修复 + W_skip 层）承担，
+    目标层只剩成本 + 迟到 + 硬违约。
     """
     tasks = [_task(0, 10_000.0, 0.0)]
     nests = [Nest(id=0, x=0.0, y=0.0, z=0.0, capacity=4)]
     uavs = [_uav(0, 80_000.0)]
-    p = _problem(tasks, uavs, nests)  # lexicographic_coverage 默认 False
+    p = _problem(tasks, uavs, nests)
 
-    sol_legacy = _sol([UAVTour(uav_id=0, task_ids=[0], end_nest_id=0)], cand=[0])
-    f_legacy = p.scalar_fitness(sol_legacy)
-    m, f1 = p.f1_weight(), float(sol_legacy.f1_reward)
-    assert f1 > 0.0 and m > 0.0, "前提：正收益任务已完成交付"
-    assert p.gate_mode(sol_legacy) is False, "无 gate_stats 且开关关 ⇒ 非门禁口径"
+    sol = _sol([UAVTour(uav_id=0, task_ids=[0], end_nest_id=0)], cand=[0])
+    p.evaluate(sol)
+    assert p.gate_mode(sol) is True, "门禁口径为唯一口径"
 
-    sol_gate = _sol([UAVTour(uav_id=0, task_ids=[0], end_nest_id=0)], cand=[0])
-    sol_gate.meta["gate_stats"] = {
-        "n_skip": 0, "skip_ids": [], "n_shortfall": 0,
-        "shortfall_ids": [], "n_gate_rescued": 0,
-    }
-    assert p.gate_mode(sol_gate) is True, "meta 带 gate_stats ⇒ 门禁口径"
-    f_gate = p.scalar_fitness(sol_gate)
-
-    assert f_gate == pytest.approx(f_legacy + m * f1, rel=1e-9), (
-        "门禁口径的 f 应不含 −m·F1：与历史口径之差恰为 m·F1（"
-        f"f_gate={f_gate}, f_legacy={f_legacy}, m·F1={m * f1}）"
+    f = p.scalar_fitness(sol)
+    m, f1 = p.f1_weight(), float(sol.f1_reward)
+    det = sol.meta["feasibility"]
+    gs = sol.meta["gate_stats"]
+    wv = p.config.w_violation
+    manual = (
+        p.hard_weight() * det["n_hard"]
+        + p.range_excess_weight() * det["range_excess"]
+        + p.skip_weight() * gs["n_skip"]
+        + (0.0 if wv is None else float(wv) * det["soft_violation"])
+        + p.config.lambda_cost * p.path_cost(sol)
+        + p.config.w_time * sol.meta["bottleneck_time"]
+    )
+    assert manual == pytest.approx(f, rel=1e-12), (
+        f"门禁口径 f 必须=手工重算（不含 −m·F1）：{manual} vs {f}"
+    )
+    # 关键不变量：若把 −m·F1 加回会与真实 f 系统性偏离（F1 不进搜索适应度）
+    assert f != pytest.approx(manual - m * f1, rel=1e-9), (
+        "f 不应等于「门禁重算 − m·F1」——F1 不进搜索适应度"
     )

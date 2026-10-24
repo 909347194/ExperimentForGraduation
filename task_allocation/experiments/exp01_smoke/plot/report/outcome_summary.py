@@ -197,7 +197,7 @@ def plot_outcome_summary(
         ("按时率 / 迟到交付", f"{on_time_rate:.1%} / {n_late_total}"),
         ("平均迟到", f"{avg_late / 60:.1f} min"),
         ("废飞（物理不可行）", str(n_waste_total)),
-        ("超期淘汰", str(n_eliminated_total)),
+        ("淘汰", str(n_eliminated_total)),
         ("完成率 CR（辅助对账）", f"{completion:.1%}"),
         ("周期解可行率", f"{feas_rate:.0%}"),
         ("总收益 F1（折减后）", f"{summary.get('total_reward', 0.0):.1f}"),

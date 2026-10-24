@@ -216,8 +216,14 @@ def test_gate_maps_uav_level_violation():
 # ---------------------------------------------------------------------------
 
 
-def _problem(w_violation):
-    tasks = [Task(id=0, x=0.0, y=100.0, z=0.0, reward=4.0, arrival_time=0.0)]
+def _problem(w_violation, lambda_cost=1e-4):
+    """构造单一**必迟到**任务：latest 极小 ⇒ 抵达必晚于窗口。"""
+    tasks = [
+        Task(
+            id=0, x=0.0, y=100.0, z=0.0, reward=4.0, arrival_time=0.0,
+            earliest=0.0, latest=1.0,
+        )
+    ]
     uavs = [
         UAV(
             id=0,
@@ -236,42 +242,39 @@ def _problem(w_violation):
         nests=nests,
         costs=build_cost_provider(tasks, nests, uavs),
         config=MUASProblemConfig(
-            lambda_cost=1e-4, w_penalty=1.0, w_violation=w_violation,
-            # legacy 加权和口径（2026-10-18 起四层准字典序的消融对照）：
-            # lexicographic=False → f=-F1+λ·path+w_violation·penalty+w_time·F3，
-            # 惩罚总量（硬+软）经 w_violation 直接计入。big_m=1 锁 m=1。
-            lexicographic=False,
-            big_m=1.0,  # 固定字典序权重=1，锁公式的数值口径
+            lambda_cost=lambda_cost, w_penalty=1.0, w_violation=w_violation,
         ),
     )
 
 
-def test_w_violation_decouples_penalty_from_lambda():
-    """w_violation 给定时惩罚不再乘 λ；None 时沿用历史口径。"""
-    pen = 1000.0
+def test_w_violation_prices_lateness_directly():
+    """门禁口径下 P1 解耦：w_violation 给定时，迟到秒数直接以 w_violation
+    单价（奖励当量/秒）计价，**不再随 F2 乘 λ**；w_violation=None 时软违约不计价。
 
-    def fitness(wv):
-        p = _problem(wv)
-        sol = p.solution_from_assignment([(0, 0)])
-        p.evaluate(sol, penalty=pen)  # 显式把惩罚计入 F2 与 meta["penalty"]
-        return p, sol, p.scalar_fitness(sol)
-
-    p_leg, sol_leg, f_legacy = fitness(None)
-    path = p_leg.path_cost(sol_leg)
-    reward = p_leg.f1_reward(sol_leg)
+    对照：λ 缩放只缩放路径项，不影响迟到项（迟到项与 λ 正交）。
+    """
     lam = 1e-4
+    p_none = _problem(None, lambda_cost=lam)
+    s_none = p_none.solution_from_assignment([(0, 0)])
+    p_none.evaluate(s_none)
+    f_none = p_none.scalar_fitness(s_none)
 
-    # 历史口径：惩罚随 F2 一起乘 λ → 1000 s 只值 0.1 个适应度单位
-    assert abs(f_legacy - (-reward + lam * (path + pen))) < 1e-9, f_legacy
+    p_wv = _problem(0.01, lambda_cost=lam)
+    s_wv = p_wv.solution_from_assignment([(0, 0)])
+    p_wv.evaluate(s_wv)
+    late = p_wv.soft_violation(s_wv)
+    assert late > 0.0, "构造任务必须迟到"
+    f_wv = p_wv.scalar_fitness(s_wv)
 
-    # w_violation=0：惩罚完全不计（仅剩路径代价）
-    _, _, f_zero = fitness(0.0)
-    assert abs(f_zero - (-reward + lam * path)) < 1e-9, f_zero
+    # 门禁口径：迟到仅经 w_violation·late 计价，与 λ 无关
+    assert abs((f_wv - f_none) - 0.01 * late) < 1e-6, (f_wv, f_none, late)
+    # 量化：迟到约 9 s 在 w_violation=0.01 下值约 0.09 奖励当量（不再被 λ 压没）
+    assert (f_wv - f_none) > 1e-3, "解耦后迟到应显著抬高适应度（最小化器下即更差）"
 
-    # w_violation=0.01：惩罚直接计入，1000 s → 10 个奖励当量（不再被 λ 压没）
-    _, _, f_dec = fitness(0.01)
-    assert abs(f_dec - (-reward + lam * path + 0.01 * pen)) < 1e-9, f_dec
-    # DMDE 是最小化器：惩罚更重 → 适应度更大（= 更差），软约束才真正有拉力
-    assert f_dec > f_legacy, "解耦后惩罚应显著抬高适应度（最小化器下即更差）"
-    # 量化对照：1000 s 违约在历史口径下只值 0.1，解耦后值 10（相差两个量级）
-    assert abs((f_dec - f_legacy) - (0.01 * pen - lam * pen)) < 1e-9
+    # 对照：λ 缩放只缩放路径项，迟到项与 λ 正交
+    p_wv10 = _problem(0.01, lambda_cost=1e-3)
+    s_wv10 = p_wv10.solution_from_assignment([(0, 0)])
+    p_wv10.evaluate(s_wv10)
+    f_wv10 = p_wv10.scalar_fitness(s_wv10)
+    path = p_wv.path_cost(s_wv)
+    assert abs((f_wv10 - f_wv) - (1e-3 - 1e-4) * path) < 1e-6, (f_wv10, f_wv, path)
