@@ -49,6 +49,10 @@ import re
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
+# 包内导入一律用单点相对（2026-10-23 修正）：此前被批量替换脚本误改成
+# `from ...plot import ...`（三点），按本包实际层级恒解析不到目标模块，
+# 且以顶层 `plot` 身份导入时直接抛 "attempted relative import beyond
+# top-level package" —— 任何一次出图都会 ImportError（run.py 的出图环节）。
 from . import registry as _registry  # noqa: F401  （对外再导出）
 from . import theme as _theme  # 必须最先导入：切到 Agg 后端再引 pyplot
 from .registry import FIGURES, GROUPS, Figure, resolve
@@ -132,6 +136,11 @@ def make_plots(
     """
     figures = resolve(names=names, groups=groups)
     if not figures:
+        # 空图集曾静默返回：分组名写错 / 图 id 拼错都表现为「什么都没出」而
+        # 无任何提示（2026-10-24：--group scene 是无效分层名，resolve 抛
+        # ValueError 才暴露；但拼错单个图 id 时仍会静默 0 张）。
+        print(f"[plot] 警告：图集为空（names={list(names) if names else None} "
+              f"groups={list(groups) if groups else None}）——请核对图 id / 分层名")
         return []
 
     out_dir = Path(out_dir)

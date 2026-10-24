@@ -128,6 +128,15 @@ def plot_setup_params(
     arrivals = (rolling.get("arrivals") or {}).get("counts") or []
     weights = sel.get("weights") or {}
 
+    # 口径类数值**优先读 metrics 自描述**（2026-10-24 修复 P1-4）：metrics 的
+    # problem 段由实际生效的 problem_model 落盘，吃得到 --set；而 cfg 是
+    # config.yaml 原文，看不到命令行覆盖 ⇒ 曾出现「算法按 --set 跑、图按 yaml
+    # 标」。缺该键（旧产物）时回退 cfg，行为与旧版一致。
+    prob_desc = metrics.get("problem") or {}
+
+    def _mw(key: str):
+        return prob_desc[key] if key in prob_desc else muas.get(key)
+
     fig = plt.figure(figsize=(FIG_WIDE, 6.0))
     gs = fig.add_gridspec(
         2, 3, width_ratios=[1.0, 1.0, 1.0], height_ratios=[1.0, 0.92],
@@ -165,9 +174,10 @@ def plot_setup_params(
         ("五权重 r/u/w/s/c", " / ".join(
             _fmt(weights.get(k)) for k in ("w_r", "w_u", "w_w", "w_s", "w_c"))),
         ("名额倍数", _fmt((sel.get("marginal") or {}).get("max_ratio"))),
-        ("双目标口径", "字典序" if muas.get("lexicographic") else "加权和"),
+        ("双目标口径", prob_desc.get("scalarization")
+         or ("字典序" if muas.get("lexicographic") else "加权和")),
         ("罚权 λ_c / w_v / w_t", " / ".join(
-            _fmt(muas.get(k)) for k in ("lambda_cost", "w_violation", "w_time"))),
+            _fmt(_mw(k)) for k in ("lambda_cost", "w_violation", "w_time"))),
         ("Lamarckian 回写", _fmt(muas.get("lamarckian"))),
         ("DEM 步长 / 离地", f"{_fmt(cost.get('dem_step_m'))} m / "
                         f"{_fmt(cost.get('min_clearance'))} m"),
@@ -272,5 +282,5 @@ if __name__ == "__main__":
     _r = _P(__file__).resolve().parents[2]   # 实验根 = plot 的上两级
     if str(_r) not in sys.path:
         sys.path.insert(0, str(_r))
-    from plot import run_script
+    from task_allocation.experiments.exp01_smoke.plot import run_script
     run_script(_P(__file__).stem, sys.argv[1:])

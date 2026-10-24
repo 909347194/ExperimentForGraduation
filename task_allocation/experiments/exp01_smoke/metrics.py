@@ -11,11 +11,13 @@
 
 from __future__ import annotations
 
+import copy
+import hashlib
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Mapping, Sequence
 
 import numpy as np
 
@@ -133,7 +135,22 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
     w_penalty = float(getattr(f.bundle.problem_model, "w_penalty", 1.0) or 0.0)
     total_f2 = sum(float(r.muas.get("f2_cost", 0.0) or 0.0) for r in records)
     total_penalty = sum(float(r.muas.get("penalty", 0.0) or 0.0) for r in records)
-    total_cost = total_f2 - w_penalty * total_penalty
+    # ── 纯路径：直读而非反解（2026-10-24 修复 P1-3）────────────────
+    # final_path_m = problem.path_cost(final)，每周期落盘（muas_stage 诊断），
+    # 不含惩罚。旧口径从 f2 反解（f2 − w_penalty·penalty），两者实测逐位
+    # 相等（三 seed 差 0.000000），但反解依赖「终态 evaluate 以 penalty=None
+    # 调用」这一未写进代码的隐含前提——gate / polish / coverage_first 任一
+    # 路径传入显式 penalty，反解就静默偏，而报告仍标「总三维路径代价」。
+    # 现改为直读；反解值保留作交叉校验（残差落盘，异常即可见）。
+    total_path_direct = sum(
+        float(r.muas.get("final_path_m", 0.0) or 0.0) for r in records
+    )
+    total_cost_inferred = total_f2 - w_penalty * total_penalty
+    has_direct = any(r.muas.get("final_path_m") is not None for r in records)
+    total_cost = total_path_direct if has_direct else total_cost_inferred
+    path_split_residual = (
+        abs(total_path_direct - total_cost_inferred) if has_direct else 0.0
+    )
     total_reward = sum(float(r.muas.get("f1_reward", 0.0) or 0.0) for r in records)
     solve_ms = sum(float(r.muas.get("solve_seconds", 0.0) or 0.0) for r in records) * 1000.0
     avail_counts = [r.selection.get("n_uav_avail", 0) for r in records]
@@ -201,6 +218,25 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
     n_voluntary_skip = _gate_sum("n_skip")
     n_capacity_shortfall = _gate_sum("n_shortfall")
     n_gate_rescued = _gate_sum("n_rescued")
+    # ── 交付后成本 polish 汇总（2026-10-24，组内 2-opt/Or-opt）─────────
+    # gain = 各周期采纳的交付航程下降量合计（米）；移动数/拒绝态同理。
+    # 未开启/旧数据缺字段按 0 计（schema 容缺约定）。
+    def _cp(key: str) -> float:
+        return sum(
+            float((r.muas or {}).get(f"cost_polish_{key}", 0.0) or 0.0)
+            for r in records
+        )
+    cp_gain_m = _cp("path_gain_m")
+    cp_n_2opt = int(_cp("n_2opt"))
+    cp_n_oropt = int(_cp("n_oropt"))
+    # 跨机改派（2026-10-24，归属维度）：采纳数 + 被航程门/迟到门拦死的
+    # 几何更优改派数。blocked_*>0 且 n_relocate=0 ⇒ 有余量被约束堵住。
+    cp_n_relocate = int(_cp("n_relocate"))
+    cp_blocked_range = int(_cp("relocate_blocked_range"))
+    cp_blocked_late = int(_cp("relocate_blocked_late"))
+    cp_rejected = sum(
+        int((r.muas or {}).get("cost_polish_rejected", 0) or 0) for r in records
+    )
     # ── 论文主表口径 v2（2026-10-22 指标体系）────────────────────────
     # 「可完成的最终都应完成，只是或早或晚；在此前提下控成本与时效」。
     # η_final 分母排除物理不可达（问题固有、不归算法能力），
@@ -241,8 +277,14 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
         for t in ts
     }
     deliver_cycle_of = {tid: r.cycle for r in records for tid in r.executed_ids}
+    # 分子限定为**已完成**任务（2026-10-24 修复 P1-1）：executed_ids ⊋ completed
+    # ——废飞回池的任务也在 executed 里（审计 C 项判据即断言
+    # infeasible ⊆ executed），全量统计会把废飞算成「跨周期推迟」，而分母是
+    # completed ⇒ 废飞非 0 时比率虚高、甚至 >1。本跑废飞恒 0 故未暴露。
+    completed_ids = {int(t.id) for t in completed}
     n_deferred_delivery = sum(
-        1 for tid, dc in deliver_cycle_of.items() if arrive_cycle_of.get(tid, dc) < dc
+        1 for tid, dc in deliver_cycle_of.items()
+        if tid in completed_ids and arrive_cycle_of.get(tid, dc) < dc
     )
     deferred_delivery_ratio = (
         n_deferred_delivery / len(completed) if completed else 0.0
@@ -325,12 +367,33 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
                 if f.bundle.problem_model.lexicographic else "加权和 −F1+λ·F2"
             ),
             "time_window": bool(f.bundle.problem_model.constraints.time_window),
+            # 罚权自描述（2026-10-24）：口径类数值一律随数据落盘，图/表直读
+            # 而不再回源 config.yaml——否则 --set 改了这些键，算法按新值跑、
+            # 图仍按 yaml 原文标注（图会说谎，与 10-23 修的 lexicographic
+            # 透传是同一类分裂，当时只修了算法侧）。
+            "lambda_cost": float(
+                getattr(f.bundle.problem_model, "lambda_cost", 0.0) or 0.0
+            ),
+            "w_violation": getattr(f.bundle.problem_model, "w_violation", None),
+            "w_penalty": float(
+                getattr(f.bundle.problem_model, "w_penalty", 1.0) or 0.0
+            ),
+            "w_time": float(getattr(f.bundle.problem_model, "w_time", 0.0) or 0.0),
             # 覆盖门禁口径自描述（2026-10-22）：审计/跨配置对比直读
             "lexicographic_coverage": bool(
                 getattr(f.bundle.problem_model, "lexicographic_coverage", False)
             ),
             "coverage_gate": bool(
                 getattr(getattr(f.bundle, "stage_model", None), "coverage_gate", False)
+            ),
+            # 交付后成本 polish 开关自描述（2026-10-24）：消融对比直读，
+            # 不回源 yaml（同 lambda_cost 的自描述理由）
+            "cost_polish_enabled": bool(
+                getattr(
+                    getattr(f.bundle, "stage_model", None),
+                    "cost_polish_enabled",
+                    False,
+                )
             ),
             # 论文主表必报列序（2026-10-22 指标体系 v2）：随数据自描述，
             # 表格生成按此序取数，不靠文档记忆
@@ -385,6 +448,9 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
             "total_cost": round(total_cost, 3),
             "total_penalty": round(total_penalty, 3),
             "total_f2": round(total_f2, 3),
+            # 直读 vs 反解的交叉校验残差（米）：非 0 说明 f2 里的惩罚与
+            # record.penalty 不同源（终态 evaluate 被传入显式 penalty）。
+            "path_split_residual_m": round(path_split_residual, 6),
             "solve_time_ms": round(solve_ms, 2),
             "K_mean": (sum(avail_counts) / len(avail_counts)) if avail_counts else 0.0,
             "n_deferred_last": records[-1].muas.get("n_deferred", 0) if records else 0,
@@ -392,6 +458,18 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
             "n_voluntary_skip": n_voluntary_skip,
             "n_capacity_shortfall": n_capacity_shortfall,
             "n_gate_rescued": n_gate_rescued,
+            # 交付后成本 polish 汇总（2026-10-24）：总航程下降量（米）与
+            # 移动数；rejected>0 表示有周期候选未达采纳判据（执行集减少/
+            # 硬违约增/航程未严格降），交付解保持原样。
+            "cost_polish_gain_m": round(cp_gain_m, 3),
+            "cost_polish_n_2opt": cp_n_2opt,
+            "cost_polish_n_oropt": cp_n_oropt,
+            # 跨机改派（归属维度，2026-10-24）：采纳数与被门拦死的几何更优
+            # 改派数。blocked_*>0 且 n_relocate=0 ⇒ 有余量、被约束堵住。
+            "cost_polish_n_relocate": cp_n_relocate,
+            "cost_polish_relocate_blocked_range": cp_blocked_range,
+            "cost_polish_relocate_blocked_late": cp_blocked_late,
+            "cost_polish_rejected": cp_rejected,
             # ── 论文主表 v2（η_final 口径：分母排除不可达、保留淘汰）──
             "completion_rate_final": round(completion_rate_final, 6),
             "on_time_rate_final": round(on_time_rate_final, 6),
@@ -417,6 +495,31 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
     }
 
 
+def config_fingerprint(raw_cfg: Mapping[str, Any]) -> str:
+    """当前**生效**配置（含 ``--set`` 覆盖）的稳定指纹。
+
+    与 exp05_baselines 同口径（2026-10-23 移植）：exp01 反复用作「口径
+    标定台」，换 λ / 代数 / 门禁开关后跑进同一个 ``results/`` 目录会覆盖
+    旧口径产物，事后无法区分某份 metrics.json 是哪套配置跑出来的
+    （旧数据已因口径不可比被整体清空过一次）。落盘到 run_meta 后可按
+    指纹回溯每份产物的生效配置。
+
+    seed 类字段**不进**指纹（2026-10-24 修复 P2-2）：随机种子是重复维度
+    而非口径维度，同口径换 seed 应得同一指纹，否则无法按指纹把「同口径」
+    产物归类（exp05 每 (arm,seed) 单独落盘故无此问题，exp01 只在代表
+    seed 上落一个 run_meta，指纹含 seed 就有歧义）。
+    """
+    cfg = copy.deepcopy(dict(raw_cfg))
+    for section, key in (
+        ("experiment", "seed"), ("experiment", "seeds"), ("solver", "seed"),
+    ):
+        node = cfg.get(section)
+        if isinstance(node, dict):
+            node.pop(key, None)
+    blob = json.dumps(cfg, sort_keys=True, ensure_ascii=False, default=str)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()[:16]
+
+
 def build_run_meta(
     f: RunFacts, *, cfg_path: Path, root: Path = paths.ROOT
 ) -> dict[str, Any]:
@@ -438,6 +541,8 @@ def build_run_meta(
         "config_path": str(Path(cfg_path).relative_to(root)),
         "repo_root": str(root),
         "dem_terrain": terrain_meta,
+        # 生效配置指纹（含 --set）：产物与配置的一一对应凭据
+        "config_fingerprint": config_fingerprint(f.bundle.raw),
     }
 
 
@@ -470,6 +575,13 @@ _SEED_AGG_KEYS = (
     "n_voluntary_skip",
     "n_capacity_shortfall",
     "n_gate_rescued",
+    "cost_polish_gain_m",
+    "cost_polish_n_2opt",
+    "cost_polish_n_oropt",
+    "cost_polish_n_relocate",
+    "cost_polish_relocate_blocked_range",
+    "cost_polish_relocate_blocked_late",
+    "cost_polish_rejected",
     "completion_rate_final",
     "on_time_rate_final",
     "path_per_completion_m",
@@ -627,6 +739,36 @@ def build_solution(f: RunFacts) -> dict[str, Any]:
                 "memetic_gain": (r.muas or {}).get("memetic_gain"),
                 "memetic_last_improve_gen": (r.muas or {}).get("memetic_last_improve_gen"),
                 "memetic_trajectory": (r.muas or {}).get("memetic_trajectory"),
+                # 交付后成本 polish 诊断（2026-10-24，组内 2-opt/Or-opt）：
+                # path_gain_m = 本周期交付航程的绝对下降量（米；0 = 无改进/
+                # 未开启/被拒）。缺省空值（旧数据/空转周期）。
+                "cost_polish_enabled": (r.muas or {}).get("cost_polish_enabled"),
+                "cost_polish_rounds": (r.muas or {}).get("cost_polish_rounds"),
+                "cost_polish_n_2opt": (r.muas or {}).get("cost_polish_n_2opt"),
+                "cost_polish_n_oropt": (r.muas or {}).get("cost_polish_n_oropt"),
+                # 跨机改派（归属维度，2026-10-24）：n_relocate = 本周期采纳的
+                # 跨机单任务迁移数；blocked_* = 几何更优但被航程门/迟到门
+                # 拦死的改派数（均 >0 而 n_relocate=0 ⇒ 余量被约束堵住）。
+                "cost_polish_n_relocate": (r.muas or {}).get(
+                    "cost_polish_n_relocate"
+                ),
+                "cost_polish_relocate_blocked_range": (r.muas or {}).get(
+                    "cost_polish_relocate_blocked_range"
+                ),
+                "cost_polish_relocate_blocked_late": (r.muas or {}).get(
+                    "cost_polish_relocate_blocked_late"
+                ),
+                "cost_polish_converged": (r.muas or {}).get("cost_polish_converged"),
+                "cost_polish_rejected": (r.muas or {}).get("cost_polish_rejected"),
+                "cost_polish_path_before_m": (r.muas or {}).get(
+                    "cost_polish_path_before_m"
+                ),
+                "cost_polish_path_after_m": (r.muas or {}).get(
+                    "cost_polish_path_after_m"
+                ),
+                "cost_polish_path_gain_m": (r.muas or {}).get(
+                    "cost_polish_path_gain_m"
+                ),
             }
             for r in f.records
         ],

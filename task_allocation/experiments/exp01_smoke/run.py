@@ -6,8 +6,13 @@
     config.py   config.yaml → 配置对象
     build.py    场景 / DEM 地形 / 机队 / 任务批次
     metrics.py  指标汇总、运行元信息、分配结果与终端报表
-    plot/       可视化（读 results/ 产物，写图到 plot/figures/）
+    plot/       可视化（读 results/ 产物，写图到 results/figures/）
     results/    数值产物（metrics.json / run_meta.json / solution.json）
+
+多 seed 时另落 ``results/seed_{id}/{metrics,solution}.json``；正确性审计需要
+solution 的 tours / fitness_weights 才能复核 D/J/K/M/N 项，只靠
+``metrics.json`` 的 ``per_seed[seed]["cycles"]`` 审不了其余 seed
+（2026-10-24 修复，见 docs/exp01_code_audit_2026-10-24.md P0-1）。
 
 链路（对齐 Chapter3_README §8 技术路线）::
 
@@ -33,8 +38,8 @@
   （``seeds`` 缺失或单元素 → 单 seed）。
 - ``--no-plots``  跳过出图。多种子 × 多代数的长跑调试时只关心 json
   数值，不必每次等 16 张图。
-- ``--no-audit``  跳过末尾的方法正确性审计（默认跑：23 项不变量/口径，
-  FAIL 终端报警）。"""
+- ``--no-audit``  跳过末尾的方法正确性审计（默认跑：20+ 项不变量/口径，
+  实际条数随数据形态浮动——条件分支是否触发；FAIL 终端报警）。"""
 
 from __future__ import annotations
 
@@ -80,7 +85,9 @@ from task_allocation.methods.uav_state import UAVFleet
 def _run_audit(out_dir: Path, *, verbose: bool) -> bool:
     """跑方法正确性审计（audit_correctness.py，持续门禁）。
 
-    从落盘 json 独立复核 23 项结构不变量与口径（A~N1/N2, J/K/L/M）。
+    从落盘 json 独立复核结构不变量与口径（A~N1/N2, J/K/L/M）。
+    多 seed 时审计脚本会遍历 ``results/seed_{id}/`` 逐 seed 复核——早期版本
+    只读顶层产物，3 seed 跑完只有 1/3 被验证（2026-10-24 修复 P0-1）。
     有 FAIL → 返回 False 并在终端醒目报警（主流程不阻断——产物已落盘，
     报警促人核查）；仅 WARN → 返回 True。审计本身异常（缺 json 等）
     不阻断主流程，只警告。
@@ -122,6 +129,10 @@ def _run_once(
     任务批次、机队状态、滚动闭环每次重建以保证相互独立。
     求解器种子同步设为 ``seed``，使每次重复在任务生成与优化两端都不相同。
     """
+    # 墙钟在**本函数内**计时并在 build_metrics 之前写入 RunFacts（2026-10-24
+    # 修复 P2-1）：旧口径由调用方在 build_metrics 之后回填 summary 字段，
+    # build_metrics 读到的恒为 0.0，调用顺序一改就退回历史 bug（I7）。
+    t_seed = time.time()
     # 每个 seed 用独立配置副本：实验种子 + 求解器种子都设为该 seed
     seed_cfg = copy.deepcopy(dict(raw_cfg))
     seed_cfg.setdefault("experiment", {})["seed"] = seed
@@ -173,7 +184,7 @@ def _run_once(
         records=records,
         pool=pool,
         fleet=fleet,
-        wall_seconds=0.0,  # 由外层统一累计
+        wall_seconds=round(time.time() - t_seed, 3),
     )
     return facts, build_metrics(facts), build_solution(facts)
 
@@ -198,12 +209,24 @@ def _parse_seed_list(tokens: list[str]) -> list[int]:
                 continue
             if "-" in part[1:]:  # 从第 2 字符起找 '-'，容忍前导符号
                 lo_s, hi_s = part.split("-", 1)
-                lo, hi = int(lo_s), int(hi_s)
+                try:
+                    lo, hi = int(lo_s), int(hi_s)
+                except ValueError:
+                    # 形如 1-3-5 会被切成 ("1", "3-5")，int 抛裸 ValueError
+                    # 用户只看到 traceback（2026-10-24 修复 P2-3）
+                    raise argparse.ArgumentTypeError(
+                        f"--seeds 区间格式非法：{part!r}（应为 lo-hi，如 42-46）"
+                    ) from None
                 if lo > hi:
                     lo, hi = hi, lo
                 seeds.extend(range(lo, hi + 1))
             else:
-                seeds.append(int(part))
+                try:
+                    seeds.append(int(part))
+                except ValueError:
+                    raise argparse.ArgumentTypeError(
+                        f"--seeds 无法解析为整数：{part!r}"
+                    ) from None
     if not seeds:
         raise argparse.ArgumentTypeError("--seeds 解析结果为空")
     seen: set[int] = set()
@@ -273,9 +296,13 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--group", action="append", dest="groups", metavar="LAYER",
-        choices=("scene", "process", "report"),
-        help="只出某一层的图：scene=环境初始配置 / process=运行过程 / "
-             "report=结论插图；可重复指定，省略则出全部",
+        # 取值必须与 plot/registry.py 里 FigureSpec.group 完全一致
+        # （setup / initial / process / report）。旧值 "scene" 不存在于
+        # 图集，而 resolve 对未知分层是抛 ValueError——照旧文档执行会在
+        # 求解完成后崩溃并跳过末尾审计（2026-10-24 修复 P0-3）。
+        choices=("setup", "initial", "process", "report"),
+        help="只出某一层的图：setup=实验设定面板 / initial=环境初始配置 / "
+             "process=运行过程 / report=结论插图；可重复指定，省略则出全部",
     )
     parser.add_argument(
         "--figure", action="append", dest="figures", metavar="ID",
@@ -328,17 +355,11 @@ def main(argv: list[str] | None = None) -> int:
     # ── 逐 seed 运行 ─────────────────────────────────────────────
     results: list[tuple[int, RunFacts, dict, dict]] = []
     for seed in seeds:
-        t_seed = time.time()
         facts, metrics, solution = _run_once(
             raw_cfg, seed,
             scenario=scenario, nests=nests, terrain=terrain,
             estimator=estimator, verbose=verbose,
         )
-        # 单 seed 墙钟：旧口径在 build_metrics 之后才回填 wall_seconds，
-        # summary 里恒为 0.0（2026-10-16 审查 I7）——现在在汇总前写入。
-        elapsed = round(time.time() - t_seed, 3)
-        facts.wall_seconds = elapsed
-        metrics["summary"]["wall_seconds"] = elapsed
         results.append((seed, facts, metrics, solution))
 
     # 代表性运行取首个 seed（供现有图与单值指标展示）
@@ -372,8 +393,30 @@ def main(argv: list[str] | None = None) -> int:
         write_json(out_dir / "metrics.json", final_metrics)
         write_json(out_dir / "run_meta.json", meta)
         write_json(out_dir / "solution.json", rep_solution)
+        # 生效配置（含 --set 覆盖）：审计判据的唯一可信来源。审计若读
+        # config.yaml 原文就看不到 --set，判据常数与 run_meta 指纹会分裂
+        # （2026-10-24 修复 P0-2）。
+        write_json(out_dir / "effective_config.json", raw_cfg)
+        if multi:
+            # 逐 seed 全量产物：D/J/K/M/N 五项依赖 solution 的 tours 与
+            # fitness_weights，metrics.json 的 per_seed[seed]["cycles"]
+            # 不足以审计其余 seed（2026-10-24 修复 P0-1）。目录名约定
+            # seed_{id}，audit_correctness.py 据此遍历。
+            for seed, _, m, sol in results:
+                sd = out_dir / f"seed_{seed}"
+                write_json(
+                    sd / "metrics.json",
+                    {**m, "seeds": [seed], "multi_seed": False},
+                )
+                write_json(sd / "solution.json", sol)
 
-    n_arrived = len(rep_facts.batch.all_tasks())
+    # 多 seed 时各 seed 到达数可能不同（poisson/uniform 到达流）⇒ 报表分母
+    # 取三 seed 均值，避免「分子是均值、分母是代表 seed 单值」不同源
+    # （2026-10-24 修复 P1-2）。fixed 到达下均值即该值，逐位不变。
+    if multi and final_metrics.get("seed_summary"):
+        n_arrived = round(final_metrics["seed_summary"]["n_arrived"]["mean"], 1)
+    else:
+        n_arrived = len(rep_facts.batch.all_tasks())
     if verbose:
         print_summary(final_metrics, n_arrived, out_dir)
 
@@ -381,7 +424,7 @@ def main(argv: list[str] | None = None) -> int:
     # --no-plots 只跳绘制，不影响已落盘的 json / solution。
     make_plots = bundle0.make_plots and not args.no_plots
     if make_plots:
-        from plot import make_plots  # 延迟导入：不出图时不引 matplotlib
+        from task_allocation.experiments.exp01_smoke.plot import make_plots  # 延迟导入：不出图时不引 matplotlib
 
         plot_cfg = bundle0.plot
         formats = tuple(plot_cfg.get("formats") or ("png",))
@@ -391,7 +434,7 @@ def main(argv: list[str] | None = None) -> int:
         # 即包含 allocation_anim / allocation_status），就自动补 gif——否则 GIF
         # 会停留在早年一次显式运行，与 json/PNG/表格全部脱节（2026-10-13 审查：
         # GIF 曾 stale 12 小时）。只想出静态图时用 --groups/--figures 排除动画图即可。
-        from plot.registry import resolve as _resolve_figures
+        from task_allocation.experiments.exp01_smoke.plot.registry import resolve as _resolve_figures
         if any(f.animated
                for f in _resolve_figures(names=args.figures, groups=args.groups)):
             if not ({"gif", "mp4"} & {str(f).lower().lstrip(".") for f in formats}):
