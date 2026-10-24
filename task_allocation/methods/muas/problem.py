@@ -251,7 +251,19 @@ class SelectiveMUASProblem(FitnessWeightsMixin):
         return float(total)
 
     def tour_path_cost(self, tour: UAVTour) -> float:
-        if not tour.task_ids and tour.end_nest_id is None:
+        # 空航次恒 0：不起飞则不产生航程——与 _tour_cost 的 `if tids:`
+        # 守卫、_advance_execution 跳过空航次（不更新位置/不耗航程）同口径。
+        # 旧实现在 `end_nest_id is not None`（_assemble 给闲置机填 home
+        # nest）时仍计「机→巢」幻影腿，**在 exp01 生产数据里一直触发**：
+        # 2026-10-24 量化——seed42 周期1 有 3 架闲置机、周期3 有 2 架，
+        # 幻影腿合计 403.2 m（占该 seed 上报总航程 0.026%；seed43/44 分别
+        # 1091.1/388.3 m）。注意 solution.json 的 dump 过滤器
+        # （`if t.task_ids`）会把闲置航次整条滤掉，**只看 dump 会误判
+        # 「无空航次」**——必须对比 metrics 的 final_path_m 与 dump 的
+        # est_cost 之和才能看见。该偏差进过 f2_cost（λ=1e-1 时约 40/2.7e7
+        # 点，对搜索可忽略）但污染所有历史**上报**绝对航程与
+        # path/完成；A/B 差值不受影响（两臂闲置结构相同，幻影腿相消）。
+        if not tour.task_ids:
             return 0.0
         cost = 0.0
         prev = -(1 + tour.uav_id)
@@ -260,8 +272,6 @@ class SelectiveMUASProblem(FitnessWeightsMixin):
             prev = tid
         if tour.end_nest_id is not None:
             cost += self.costs.cost(prev, self.costs.nest_key(tour.end_nest_id))
-        elif not tour.task_ids:
-            return 0.0
         return float(cost)
 
     def path_cost(self, solution: AllocationSolution) -> float:
