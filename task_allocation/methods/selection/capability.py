@@ -16,9 +16,14 @@
 
 cap(t) 公式不变：
 
-    B(t)  = budget_scale · budget_factor · Σ_{u ∈ U_t^avail} remaining_range(u)
+    B(t)  = budget_scale · budget_factor · Σ_{u ∈ U_t^fly} remaining_range(u)
     c̃     = 粗代价的 quantile 分位数（默认中位数）
     cap(t) = max(min_cap, ⌊B(t) / c̃⌋)
+
+其中 ``U_t^fly`` 为**可起飞子集**：至多 ``k_op = min(|U_avail|, S_t,
+max_participating)`` 架、按剩余航程降序取前 k_op（见 ``fleet_range_budget``），
+受起降/充电吞吐上限约束、确定无法出动的 UAV 不计入——与论文 3.3 的 B(t)
+口径一致。
 
 选择数 n_sel 与 cap(t) 的合成方式由 ``CapabilityScaleConfig.mode`` 决定（两种）：
 
@@ -129,7 +134,7 @@ def coarse_task_costs(
     """每任务的粗执行代价（与基础优先级 C_i(t) 同口径）。
 
     ``cost_hint``（task_id -> 三维代价）优先；缺省时取最近可用 UAV 的欧氏距离。
-    无可用 UAV 时返回 1e6 哨兵值（与 ``priority._coarse_exec_cost`` 一致）。
+    无可用 UAV 时返回 1e6 哨兵值（priority 经本函数取 C_i(t)，口径同源）。
     """
     avail = [u for u in uavs if u.is_available]
     out: list[float] = []
@@ -229,7 +234,7 @@ def effective_cap(
     故本函数只产出"紧承诺"规模，保证选择口径一致。
 
     Args:
-        quota: 机数名额（⌈α·K⌉ 或 ⌈max_ratio·K⌉ / ``max_selected``）。
+        quota: 机数名额（⌈max_ratio·K⌉ / ``max_selected``）。
         cap:   :func:`capability_task_cap` 的能力承载数；``None`` 表示能力未启用。
         config: 旋钮；``mode`` 决定合成方式。
 

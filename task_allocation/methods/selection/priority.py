@@ -46,7 +46,11 @@ class PriorityWeights:
 class PriorityConfig:
     alpha: float = 2.5
     weights: PriorityWeights | None = None
+    # G_i 空间协同增益的作用半径（m）。默认 500 仅供独立调用/单测；
+    # 生产 yaml（selection.priority.synergy_radius）取 5000，调用方应显式传入
+    # ——与 marginal_gain._delta_benefit 邻近加权的 500 m 尺度不同源。
     synergy_radius: float = 500.0
+    # W_i 等待补偿的时间尺度 τ（s）：W = 1 − e^{−waited/τ}
     wait_scale: float = 3600.0
     current_time: float = 0.0
 
@@ -148,9 +152,9 @@ def top_alpha_preselect(
             None）。保留以兼容独立调用：非 None 时仍按 ``min(⌈α·K⌉, cap(t))`` 收紧
             （仅供消融 / 单测，不反映解耦后的生产语义）。
         n_cand_override: 直接指定候选数 n_cand，优先级高于 ``alpha`` 与
-            ``hard_cap``。供 :func:`capability.effective_cap` 在
-            ``mode="primary"`` 下使用，使规模得以**超过**机数名额
-            （解决"能力充裕时欠选"）。
+            ``hard_cap``。由 :func:`pipeline.run` 传入每周期算好的 n_cand
+            （含 ``max_candidate_pool`` 计算上限截断与 ``n_cand ≥ n_sel``
+            可行性下限抬升），故规模得以**超过**机数名额 ⌈α·K⌉。
     """
     if n_avail <= 0 or not scored:
         return []
