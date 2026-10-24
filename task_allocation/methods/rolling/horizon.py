@@ -126,8 +126,9 @@ class HorizonConfig:
     # 置 False 则事件仅被记录、不触发本期重规划（供消融对比关停该机制）。
     event_replan: bool = True
     # 收敛早停（论文长程吞吐口径）：到达全部注入后，若池内未完成任务数
-    # len(pool) 连续 stable_patience 个周期不变，说明可完成的都已交付、剩余为
-    # 物理不可达/淘汰的死任务，提前停止（周期数本身不定）。n_cycles 仅作安全上限。
+    # len(pool) 连续 stable_patience 个周期不变，说明剩余为物理不可达的
+    # 死任务（无超期淘汰，2026-10-24 口径下任务只有 DONE/UNREACHABLE
+    # 两种出池途径），提前停止（周期数本身不定）。n_cycles 仅作安全上限。
     stop_when_stable: bool = False
     stable_patience: int = 4
 
@@ -168,7 +169,9 @@ class CycleRecord:
     deferred_ids: list[int] = field(default_factory=list)
     completed_ids: list[int] = field(default_factory=list)
     released_ids: list[int] = field(default_factory=list)
-    expired_ids: list[int] = field(default_factory=list)
+    # 超期滞留（无超期淘汰，2026-10-24 口径）：已过 latest 仍在池、可迟到交付；
+    # 旧字段 expired_ids（超期出池=淘汰）已废除。
+    overdue_ids: list[int] = field(default_factory=list)
     events: list[dict[str, Any]] = field(default_factory=list)
     nest_occupancy: dict[str, int] = field(default_factory=dict)
     capacity_violations: list[dict[str, Any]] = field(default_factory=list)
@@ -213,7 +216,7 @@ class CycleRecord:
             "deferred_ids": self.deferred_ids,
             "completed_ids": self.completed_ids,
             "released_ids": self.released_ids,
-            "expired_ids": self.expired_ids,
+            "overdue_ids": self.overdue_ids,
             "events": self.events,
             "nest_occupancy": self.nest_occupancy,
             "capacity_violations": self.capacity_violations,
@@ -338,14 +341,14 @@ class RollingHorizon:
             cycle=snap.cycle,
             current_time=self._time,
             pool_counts=dict(snap.counts),
-            expired_ids=list(snap.expired_ids),
+            overdue_ids=list(snap.overdue_ids),
         )
 
         # 2.5) 静态物理不可达筛选（用户原则 2026-10-15：任务不被完成
         # 只有物理约束被违反）。任务/巢位固定 + 每周期满电 ⇒ 判定与周期
         # 状态无关：所有机巢往返航程都超过满电可及范围的任务一次性出池
         # （UNREACHABLE），不留在池里空转——否则它每周期进选择、被规划器
-        # 丢弃、直到超期，把「过于偏远」误导记成「淘汰」。
+        # 丢弃，把「过于偏远」误导记成能力不足（shortfall）。
         unreachable = self._screen_unreachable(tasks)
         if unreachable:
             record.unreachable_ids = [t.id for t in unreachable]
@@ -567,7 +570,7 @@ class RollingHorizon:
         """
         if not self._conv_enabled:
             return False
-        cur = len(self.pool)  # 未完成任务数 = 已完成/淘汰/不可达之后剩余
+        cur = len(self.pool)  # 未完成任务数 = 已完成/不可达之后剩余
         if cycle <= last_arrival_cycle:
             # 仍在到达阶段：重置计数，避免把"到达导致的变化"误判为稳态
             self._conv_last_len = cur

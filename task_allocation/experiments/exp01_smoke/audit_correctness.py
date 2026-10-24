@@ -389,22 +389,18 @@ def _run_checks(
     for i in range(len(cycles) - 1):
         c, nxt = cycles[i], cycles[i + 1]
         pc, pn = c["pool_counts"], nxt["pool_counts"]
-        # 记账周期口径（2026-10-23 修正；原公式把四种事件混为同一周期，
-        # 在「任务滞留多周期后才淘汰」的场景下必然错位 FAIL）：
+        # 记账周期口径（2026-10-24 无超期淘汰后简化）：
         #   completed / unreachable：周期 t 解算期出池 ⇒ 影响 t→t+1 水位；
         #   infeasible（废飞回池）：``pool.release`` 进 ``_release_pending``，
         #     下周期 begin_cycle 归类为 RELEASE 来源 ⇒ **已含在
-        #     pn.n_release**，原公式再 +len(infeasible) 属双计（本场景为 0
+        #     pn.n_release**，再 +len(infeasible) 属双计（本场景为 0
         #     未暴露，但公式是错的）；
-        #   expired：在**下周期** begin_cycle 入口出池（task_pool.expire），
-        #     且快照 pool_counts 与 expired_ids 同在周期 t+1 ⇒ 水位效应落在
-        #     P_{t+1}，必须取 nxt.expired_ids（原公式取 c.expired_ids，错位
-        #     一个周期——这正是 coverage_first 冒烟 (7,1,2) 失败的成因）。
+        #   超期（overdue）：**不出池**（无超期淘汰），对水位无影响；
+        #     旧 expired 出池项已从递推式移除。
         # 迟交交付自然对冲：completed −1 且回池进 pn.n_release +1。
         expect = (pc["n_total"]
                   + pn.get("n_new", 0) + pn.get("n_release", 0)
                   - len(c.get("completed_ids", []))
-                  - len(nxt.get("expired_ids", []))
                   - len(c.get("unreachable_ids", [])))
         if pn["n_total"] != expect:
             level_bad.append((c["cycle"], pn["n_total"], expect))

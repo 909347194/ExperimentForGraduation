@@ -1,0 +1,11 @@
+{
+  "experiment": "exp05_baselines",
+  "arm": "D0",
+  "solver": "dmde",
+  "cost_model": "euclidean",
+  "distance_definition": "euclidean_3d",
+  "seed": 44,
+  "timestamp_utc": "2026-10-21T13:51:13.898197+00:00",
+  "config_path": "task_allocation/experiments/exp05_baselines/config.yaml",
+  "repo_root": "/home/work/.openclaw/workspace/ExperimentForGraduation"
+}

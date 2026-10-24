@@ -1,0 +1,128 @@
+{
+  "arm": "B3",
+  "solver": "vrptw",
+  "cost_model": "dem",
+  "label": "Solomon 插入式 VRPTW 启发（硬时间窗）",
+  "seeds": [
+    45
+  ],
+  "agg": {
+    "n_arrived": {
+      "mean": 60.0,
+      "std": 0.0
+    },
+    "n_completed": {
+      "mean": 57.0,
+      "std": 0.0
+    },
+    "completion_rate": {
+      "mean": 0.95,
+      "std": 0.0
+    },
+    "effective_completion_rate": {
+      "mean": 0.95,
+      "std": 0.0
+    },
+    "reward_yield": {
+      "mean": 0.969652,
+      "std": 0.0
+    },
+    "on_time_rate": {
+      "mean": 1.0,
+      "std": 0.0
+    },
+    "n_late": {
+      "mean": 0.0,
+      "std": 0.0
+    },
+    "total_lateness_s": {
+      "mean": 0.0,
+      "std": 0.0
+    },
+    "avg_lateness_s": {
+      "mean": 0.0,
+      "std": 0.0
+    },
+    "max_lateness_s": {
+      "mean": 0.0,
+      "std": 0.0
+    },
+    "total_path_m": {
+      "mean": 1255117.2,
+      "std": 0.0
+    },
+    "n_infeasible_delivery": {
+      "mean": 0.0,
+      "std": 0.0
+    },
+    "n_capacity_violations": {
+      "mean": 0.0,
+      "std": 0.0
+    },
+    "cycle_feasible_rate": {
+      "mean": 1.0,
+      "std": 0.0
+    },
+    "n_eliminated": {
+      "mean": 3.0,
+      "std": 0.0
+    },
+    "n_unreachable": {
+      "mean": 0.0,
+      "std": 0.0
+    },
+    "throughput_per_cycle": {
+      "mean": 3.8,
+      "std": 0.0
+    },
+    "n_cycles": {
+      "mean": 15.0,
+      "std": 0.0
+    },
+    "n_active_cycles": {
+      "mean": 4.0,
+      "std": 0.0
+    },
+    "solve_time_ms": {
+      "mean": 13.4,
+      "std": 0.0
+    },
+    "wall_seconds": {
+      "mean": 1.239,
+      "std": 0.0
+    }
+  },
+  "per_seed": [
+    {
+      "n_arrived": 60,
+      "n_completed": 57,
+      "completion_rate": 0.95,
+      "effective_completion_rate": 0.95,
+      "reward_yield": 0.969652,
+      "on_time_rate": 1.0,
+      "n_late": 0,
+      "total_lateness_s": 0,
+      "avg_lateness_s": 0.0,
+      "max_lateness_s": 0.0,
+      "total_path_m": 1255117.2,
+      "n_infeasible_delivery": 0,
+      "infeasible_tag_counts": {},
+      "n_capacity_violations": 0,
+      "cycle_feasible_rate": 1.0,
+      "n_eliminated": 3,
+      "n_unreachable": 0,
+      "throughput_per_cycle": 3.8,
+      "n_cycles": 15,
+      "n_active_cycles": 4,
+      "n_zero_reward_delivery": 0,
+      "avg_wait_s": 810.526,
+      "n_remaining_pool": 0,
+      "solve_time_ms": 13.4,
+      "wall_seconds": 1.239,
+      "arm": "B3",
+      "solver": "vrptw",
+      "cost_model": "dem",
+      "seed": 45
+    }
+  ]
+}

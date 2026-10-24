@@ -1,0 +1,128 @@
+{
+  "arm": "M0",
+  "solver": "dmde",
+  "cost_model": "dem",
+  "label": "本文方法（选择 + DMDE-MUAS + 方案 A 终点 + DEM）",
+  "seeds": [
+    45
+  ],
+  "agg": {
+    "n_arrived": {
+      "mean": 60.0,
+      "std": 0.0
+    },
+    "n_completed": {
+      "mean": 60.0,
+      "std": 0.0
+    },
+    "completion_rate": {
+      "mean": 1.0,
+      "std": 0.0
+    },
+    "effective_completion_rate": {
+      "mean": 1.0,
+      "std": 0.0
+    },
+    "reward_yield": {
+      "mean": 0.994909,
+      "std": 0.0
+    },
+    "on_time_rate": {
+      "mean": 0.933333,
+      "std": 0.0
+    },
+    "n_late": {
+      "mean": 4.0,
+      "std": 0.0
+    },
+    "total_lateness_s": {
+      "mean": 1521.665,
+      "std": 0.0
+    },
+    "avg_lateness_s": {
+      "mean": 380.416,
+      "std": 0.0
+    },
+    "max_lateness_s": {
+      "mean": 684.786,
+      "std": 0.0
+    },
+    "total_path_m": {
+      "mean": 1569965.2,
+      "std": 0.0
+    },
+    "n_infeasible_delivery": {
+      "mean": 0.0,
+      "std": 0.0
+    },
+    "n_capacity_violations": {
+      "mean": 0.0,
+      "std": 0.0
+    },
+    "cycle_feasible_rate": {
+      "mean": 1.0,
+      "std": 0.0
+    },
+    "n_eliminated": {
+      "mean": 0.0,
+      "std": 0.0
+    },
+    "n_unreachable": {
+      "mean": 0.0,
+      "std": 0.0
+    },
+    "throughput_per_cycle": {
+      "mean": 8.571429,
+      "std": 0.0
+    },
+    "n_cycles": {
+      "mean": 7.0,
+      "std": 0.0
+    },
+    "n_active_cycles": {
+      "mean": 3.0,
+      "std": 0.0
+    },
+    "solve_time_ms": {
+      "mean": 596507.5,
+      "std": 0.0
+    },
+    "wall_seconds": {
+      "mean": 662.957,
+      "std": 0.0
+    }
+  },
+  "per_seed": [
+    {
+      "n_arrived": 60,
+      "n_completed": 60,
+      "completion_rate": 1.0,
+      "effective_completion_rate": 1.0,
+      "reward_yield": 0.994909,
+      "on_time_rate": 0.933333,
+      "n_late": 4,
+      "total_lateness_s": 1521.665,
+      "avg_lateness_s": 380.416,
+      "max_lateness_s": 684.786,
+      "total_path_m": 1569965.2,
+      "n_infeasible_delivery": 0,
+      "infeasible_tag_counts": {},
+      "n_capacity_violations": 0,
+      "cycle_feasible_rate": 1.0,
+      "n_eliminated": 0,
+      "n_unreachable": 0,
+      "throughput_per_cycle": 8.571429,
+      "n_cycles": 7,
+      "n_active_cycles": 3,
+      "n_zero_reward_delivery": 0,
+      "avg_wait_s": 700.0,
+      "n_remaining_pool": 0,
+      "solve_time_ms": 596507.5,
+      "wall_seconds": 662.957,
+      "arm": "M0",
+      "solver": "dmde",
+      "cost_model": "dem",
+      "seed": 45
+    }
+  ]
+}
