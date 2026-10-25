@@ -20,8 +20,8 @@
       "std": 1.720465
     },
     "effective_completion_rate": {
-      "mean": 0.953333,
-      "std": 0.028674
+      "mean": 0.956554,
+      "std": 0.029021
     },
     "reward_yield": {
       "mean": 0.960784,
@@ -68,11 +68,19 @@
       "std": 1.74356
     },
     "n_unreachable": {
+      "mean": 0.2,
+      "std": 0.4
+    },
+    "n_unreachable_geo": {
       "mean": 0.0,
       "std": 0.0
     },
+    "n_unreachable_service": {
+      "mean": 0.2,
+      "std": 0.4
+    },
     "n_voluntary_skip": {
-      "mean": 17.6,
+      "mean": 18.4,
       "std": 8.138796
     },
     "n_capacity_shortfall": {
@@ -84,8 +92,8 @@
       "std": 0.0
     },
     "completion_rate_final": {
-      "mean": 0.953333,
-      "std": 0.028674
+      "mean": 0.956554,
+      "std": 0.029021
     },
     "on_time_rate_final": {
       "mean": 1.0,
@@ -100,20 +108,20 @@
       "std": 0.0
     },
     "unreachable_rate": {
-      "mean": 0.0,
-      "std": 0.0
+      "mean": 0.003333,
+      "std": 0.006667
     },
     "quota_utilization": {
-      "mean": 0.552778,
-      "std": 0.130056
+      "mean": 0.538528,
+      "std": 0.143101
     },
     "quota_full_cycle_ratio": {
-      "mean": 0.416667,
-      "std": 0.172804
+      "mean": 0.401667,
+      "std": 0.178917
     },
     "avg_backlog": {
-      "mean": 11.6584,
-      "std": 1.338586
+      "mean": 11.2184,
+      "std": 1.505192
     },
     "max_backlog": {
       "mean": 30.0,
@@ -132,28 +140,28 @@
       "std": 0.0
     },
     "s_coverage_rate": {
-      "mean": 0.522901,
-      "std": 0.214109
+      "mean": 0.506401,
+      "std": 0.224889
     },
     "throughput_per_cycle": {
-      "mean": 6.988889,
-      "std": 0.3433
+      "mean": 6.703889,
+      "std": 0.604294
     },
     "n_cycles": {
-      "mean": 8.2,
-      "std": 0.4
+      "mean": 8.6,
+      "std": 0.8
     },
     "n_active_cycles": {
       "mean": 4.2,
       "std": 0.4
     },
     "solve_time_ms": {
-      "mean": 11.32,
-      "std": 0.285657
+      "mean": 11.42,
+      "std": 0.305941
     },
     "wall_seconds": {
-      "mean": 0.9874,
-      "std": 0.052233
+      "mean": 0.9892,
+      "std": 0.05752
     }
   },
   "per_seed": [
@@ -174,6 +182,8 @@
       "n_eliminated": 0,
       "n_overdue_ever": 4,
       "n_unreachable": 0,
+      "n_unreachable_geo": 0,
+      "n_unreachable_service": 0,
       "n_voluntary_skip": 26,
       "n_capacity_shortfall": 1,
       "n_gate_rescued": 0,
@@ -196,8 +206,8 @@
       "n_zero_reward_delivery": 0,
       "avg_wait_s": 750.0,
       "n_remaining_pool": 4,
-      "solve_time_ms": 11.8,
-      "wall_seconds": 1.01,
+      "solve_time_ms": 11.5,
+      "wall_seconds": 0.996,
       "arm": "B3",
       "solver": "vrptw",
       "cost_model": "dem",
@@ -220,6 +230,8 @@
       "n_eliminated": 0,
       "n_overdue_ever": 2,
       "n_unreachable": 0,
+      "n_unreachable_geo": 0,
+      "n_unreachable_service": 0,
       "n_voluntary_skip": 16,
       "n_capacity_shortfall": 5,
       "n_gate_rescued": 0,
@@ -242,8 +254,8 @@
       "n_zero_reward_delivery": 0,
       "avg_wait_s": 817.241,
       "n_remaining_pool": 2,
-      "solve_time_ms": 11.5,
-      "wall_seconds": 1.027,
+      "solve_time_ms": 11.6,
+      "wall_seconds": 1.038,
       "arm": "B3",
       "solver": "vrptw",
       "cost_model": "dem",
@@ -266,6 +278,8 @@
       "n_eliminated": 0,
       "n_overdue_ever": 0,
       "n_unreachable": 0,
+      "n_unreachable_geo": 0,
+      "n_unreachable_service": 0,
       "n_voluntary_skip": 4,
       "n_capacity_shortfall": 0,
       "n_gate_rescued": 0,
@@ -288,8 +302,8 @@
       "n_zero_reward_delivery": 0,
       "avg_wait_s": 780.0,
       "n_remaining_pool": 0,
-      "solve_time_ms": 11.1,
-      "wall_seconds": 0.886,
+      "solve_time_ms": 10.9,
+      "wall_seconds": 0.879,
       "arm": "B3",
       "solver": "vrptw",
       "cost_model": "dem",
@@ -298,7 +312,7 @@
     {
       "n_arrived": 60,
       "n_completed": 57,
-      "effective_completion_rate": 0.95,
+      "effective_completion_rate": 0.966102,
       "reward_yield": 0.969652,
       "n_late": 0,
       "total_lateness_s": 0,
@@ -311,31 +325,33 @@
       "cycle_feasible_rate": 1.0,
       "n_eliminated": 0,
       "n_overdue_ever": 2,
-      "n_unreachable": 0,
-      "n_voluntary_skip": 16,
+      "n_unreachable": 1,
+      "n_unreachable_geo": 0,
+      "n_unreachable_service": 1,
+      "n_voluntary_skip": 20,
       "n_capacity_shortfall": 0,
       "n_gate_rescued": 0,
-      "completion_rate_final": 0.95,
+      "completion_rate_final": 0.966102,
       "on_time_rate_final": 1.0,
       "path_per_completion_m": 22019.6,
       "elimination_rate": 0.0,
-      "unreachable_rate": 0.0,
-      "quota_utilization": 0.45625,
-      "quota_full_cycle_ratio": 0.375,
-      "avg_backlog": 12.0,
+      "unreachable_rate": 0.016667,
+      "quota_utilization": 0.385,
+      "quota_full_cycle_ratio": 0.3,
+      "avg_backlog": 9.8,
       "max_backlog": 30,
       "n_deferred_delivery": 19,
       "deferred_delivery_ratio": 0.333333,
       "n_hard_violations_total": 0,
-      "s_coverage_rate": 0.4125,
-      "throughput_per_cycle": 7.125,
-      "n_cycles": 8,
+      "s_coverage_rate": 0.33,
+      "throughput_per_cycle": 5.7,
+      "n_cycles": 10,
       "n_active_cycles": 4,
       "n_zero_reward_delivery": 0,
       "avg_wait_s": 810.526,
-      "n_remaining_pool": 3,
-      "solve_time_ms": 11.1,
-      "wall_seconds": 0.991,
+      "n_remaining_pool": 2,
+      "solve_time_ms": 11.8,
+      "wall_seconds": 1.032,
       "arm": "B3",
       "solver": "vrptw",
       "cost_model": "dem",
@@ -358,6 +374,8 @@
       "n_eliminated": 0,
       "n_overdue_ever": 5,
       "n_unreachable": 0,
+      "n_unreachable_geo": 0,
+      "n_unreachable_service": 0,
       "n_voluntary_skip": 26,
       "n_capacity_shortfall": 7,
       "n_gate_rescued": 0,
@@ -380,8 +398,8 @@
       "n_zero_reward_delivery": 0,
       "avg_wait_s": 774.545,
       "n_remaining_pool": 5,
-      "solve_time_ms": 11.1,
-      "wall_seconds": 1.023,
+      "solve_time_ms": 11.3,
+      "wall_seconds": 1.001,
       "arm": "B3",
       "solver": "vrptw",
       "cost_model": "dem",

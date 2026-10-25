@@ -71,6 +71,14 @@
       "mean": 0.0,
       "std": 0.0
     },
+    "n_unreachable_geo": {
+      "mean": 0.0,
+      "std": 0.0
+    },
+    "n_unreachable_service": {
+      "mean": 0.0,
+      "std": 0.0
+    },
     "n_voluntary_skip": {
       "mean": 0.0,
       "std": 0.0
@@ -148,12 +156,12 @@
       "std": 0.4
     },
     "solve_time_ms": {
-      "mean": 66.82,
-      "std": 4.97007
+      "mean": 64.12,
+      "std": 2.349809
     },
     "wall_seconds": {
-      "mean": 0.905,
-      "std": 0.012198
+      "mean": 0.8796,
+      "std": 0.018337
     }
   },
   "per_seed": [
@@ -174,6 +182,8 @@
       "n_eliminated": 0,
       "n_overdue_ever": 0,
       "n_unreachable": 0,
+      "n_unreachable_geo": 0,
+      "n_unreachable_service": 0,
       "n_voluntary_skip": 0,
       "n_capacity_shortfall": 3,
       "n_gate_rescued": 0,
@@ -196,8 +206,8 @@
       "n_zero_reward_delivery": 3,
       "avg_wait_s": 750.0,
       "n_remaining_pool": 0,
-      "solve_time_ms": 76.5,
-      "wall_seconds": 0.916,
+      "solve_time_ms": 66.1,
+      "wall_seconds": 0.876,
       "arm": "B2",
       "solver": "greedy",
       "cost_model": "dem",
@@ -220,6 +230,8 @@
       "n_eliminated": 0,
       "n_overdue_ever": 0,
       "n_unreachable": 0,
+      "n_unreachable_geo": 0,
+      "n_unreachable_service": 0,
       "n_voluntary_skip": 0,
       "n_capacity_shortfall": 6,
       "n_gate_rescued": 0,
@@ -242,8 +254,8 @@
       "n_zero_reward_delivery": 1,
       "avg_wait_s": 830.0,
       "n_remaining_pool": 0,
-      "solve_time_ms": 66.1,
-      "wall_seconds": 0.916,
+      "solve_time_ms": 65.1,
+      "wall_seconds": 0.895,
       "arm": "B2",
       "solver": "greedy",
       "cost_model": "dem",
@@ -266,6 +278,8 @@
       "n_eliminated": 0,
       "n_overdue_ever": 0,
       "n_unreachable": 0,
+      "n_unreachable_geo": 0,
+      "n_unreachable_service": 0,
       "n_voluntary_skip": 0,
       "n_capacity_shortfall": 2,
       "n_gate_rescued": 0,
@@ -288,8 +302,8 @@
       "n_zero_reward_delivery": 0,
       "avg_wait_s": 800.0,
       "n_remaining_pool": 0,
-      "solve_time_ms": 62.6,
-      "wall_seconds": 0.902,
+      "solve_time_ms": 59.5,
+      "wall_seconds": 0.859,
       "arm": "B2",
       "solver": "greedy",
       "cost_model": "dem",
@@ -312,6 +326,8 @@
       "n_eliminated": 0,
       "n_overdue_ever": 0,
       "n_unreachable": 0,
+      "n_unreachable_geo": 0,
+      "n_unreachable_service": 0,
       "n_voluntary_skip": 0,
       "n_capacity_shortfall": 5,
       "n_gate_rescued": 0,
@@ -334,8 +350,8 @@
       "n_zero_reward_delivery": 0,
       "avg_wait_s": 750.0,
       "n_remaining_pool": 0,
-      "solve_time_ms": 64.1,
-      "wall_seconds": 0.883,
+      "solve_time_ms": 64.9,
+      "wall_seconds": 0.862,
       "arm": "B2",
       "solver": "greedy",
       "cost_model": "dem",
@@ -358,6 +374,8 @@
       "n_eliminated": 0,
       "n_overdue_ever": 0,
       "n_unreachable": 0,
+      "n_unreachable_geo": 0,
+      "n_unreachable_service": 0,
       "n_voluntary_skip": 0,
       "n_capacity_shortfall": 4,
       "n_gate_rescued": 0,
@@ -380,8 +398,8 @@
       "n_zero_reward_delivery": 3,
       "avg_wait_s": 780.0,
       "n_remaining_pool": 0,
-      "solve_time_ms": 64.8,
-      "wall_seconds": 0.908,
+      "solve_time_ms": 65.0,
+      "wall_seconds": 0.906,
       "arm": "B2",
       "solver": "greedy",
       "cost_model": "dem",
