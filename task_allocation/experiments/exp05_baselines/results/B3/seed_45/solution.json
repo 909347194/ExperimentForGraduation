@@ -1424,7 +1424,6 @@
       "executed_ids": [],
       "deferred_ids": [
         38,
-        43,
         46
       ],
       "completed_ids": [],
@@ -1438,7 +1437,6 @@
       "executed_ids": [],
       "deferred_ids": [
         38,
-        43,
         46
       ],
       "completed_ids": [],
@@ -1452,7 +1450,32 @@
       "executed_ids": [],
       "deferred_ids": [
         38,
-        43,
+        46
+      ],
+      "completed_ids": [],
+      "infeasible_ids": [],
+      "late_ids": [],
+      "tours": [],
+      "cost_history": []
+    },
+    {
+      "cycle": 9,
+      "executed_ids": [],
+      "deferred_ids": [
+        38,
+        46
+      ],
+      "completed_ids": [],
+      "infeasible_ids": [],
+      "late_ids": [],
+      "tours": [],
+      "cost_history": []
+    },
+    {
+      "cycle": 10,
+      "executed_ids": [],
+      "deferred_ids": [
+        38,
         46
       ],
       "completed_ids": [],

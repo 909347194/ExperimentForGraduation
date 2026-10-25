@@ -414,13 +414,23 @@ class TaskPool:
             released.append(task)
         return released
 
-    def mark_unreachable(self, task_ids: Iterable[int]) -> list[Task]:
-        """物理不可达任务出池（UNREACHABLE）——「过于偏远」，非违约。
+    def mark_unreachable(
+        self, task_ids: Iterable[int], *, reason: str = "geo"
+    ) -> list[Task]:
+        """不可达任务出池（UNREACHABLE）——「能力范围外」，非违约。
 
-        与 ``overdue_tasks`` 的区别：这里是**静态物理判定**的结果（所有机巢往返
-        航程都超过满电可及范围，见 selection.feasibility.static_unreachable），
-        不是时间管理失败。用户原则（2026-10-15）下这是唯一合法的未完成
-        原因，故单列计数，不混入「淘汰」。
+        与 ``overdue_tasks`` 的区别：这里是**能力边界判定**的结果，不是
+        时间管理失败。用户原则（2026-10-15）下这是唯一合法的未完成原因，
+        故单列计数，不混入「淘汰」。
+
+        两类归因（2026-10-25 口径对齐，完成率分母的合法排除项）：
+
+        - ``reason="geo"``：静态几何不可达——对所有机巢的往返航程都超过
+          满电可及范围（见 selection.feasibility.static_unreachable）。
+        - ``reason="service"``：机队服务不可达——几何可达（存在机巢往返
+          ≤ 满电航程），但连续 service_patience 个周期无可用 UAV 在往返
+          航程内（典型：机队漂移致空巢）。任务仍滞留则完成率虚低且无法
+          被解释，故与几何不可达同等出池、单列计数供归因。
 
         正在执行的任务不受影响（已在飞，物理上已证明可达）。
         """
@@ -431,6 +441,7 @@ class TaskPool:
                 continue
             task.status = TaskStatus.UNREACHABLE
             task.meta["unreachable_time"] = self._current_time
+            task.meta["unreachable_reason"] = str(reason)
             self._tasks.pop(task_id)
             self._source.pop(task_id, None)
             self._planning_ids = [i for i in self._planning_ids if i != task_id]

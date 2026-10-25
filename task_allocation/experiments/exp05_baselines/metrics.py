@@ -50,6 +50,8 @@ CSV_COLUMNS = (
     "n_eliminated",
     "n_overdue_ever",
     "n_unreachable",
+    "n_unreachable_geo",
+    "n_unreachable_service",
     "n_voluntary_skip",
     "n_capacity_shortfall",
     "n_gate_rescued",
@@ -127,6 +129,24 @@ def build_summary(
         {int(i) for r in records for i in getattr(r, "overdue_ids", ())}
     )
     n_unreachable = sum(len(r.unreachable_ids) for r in records)
+    # 不可达归因拆分（2026-10-25 口径对齐）：完成率分母排除的不可达任务分
+    # 两类——geo（静态几何不可达：所有机巢往返都超满电航程）与 service
+    # （机队服务不可达：几何可达但连续 service_patience 周期无可用 UAV 在
+    # 往返航程内，典型为机队漂移致空巢）。二者同为「能力范围外」，是分母
+    # 的合法排除项；单列供归因，避免把资源约束误读成物理约束（或反之）。
+    _unreach_reason: dict[int, str] = {}
+    for _t in finished:
+        if getattr(getattr(_t, "status", None), "value", "") == "unreachable":
+            _unreach_reason[int(_t.id)] = str(_t.meta.get("unreachable_reason", "geo"))
+    n_unreachable_geo = sum(
+        1 for r in records for i in r.unreachable_ids if _unreach_reason.get(int(i)) == "geo"
+    )
+    n_unreachable_service = sum(
+        1
+        for r in records
+        for i in r.unreachable_ids
+        if _unreach_reason.get(int(i)) == "service"
+    )
     n_capacity_violations = sum(len(r.capacity_violations) for r in records)
     # 覆盖门禁三分账（2026-10-22）：逐周期 gate_stats 累加；
     # 缺字段 = 未插桩/未开启（schema 容缺）按 0 计。
@@ -260,6 +280,8 @@ def build_summary(
         "n_eliminated": n_eliminated,
         "n_overdue_ever": n_overdue_ever,
         "n_unreachable": n_unreachable,
+        "n_unreachable_geo": n_unreachable_geo,
+        "n_unreachable_service": n_unreachable_service,
         "n_voluntary_skip": n_voluntary_skip,
         "n_capacity_shortfall": n_capacity_shortfall,
         "n_gate_rescued": n_gate_rescued,

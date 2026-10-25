@@ -5,7 +5,7 @@
   "cost_model": "euclidean",
   "distance_definition": "euclidean_3d",
   "seed": 45,
-  "timestamp_utc": "2026-10-24T14:29:31.501602+00:00",
+  "timestamp_utc": "2026-10-25T12:44:44.150900+00:00",
   "config_path": "task_allocation/experiments/exp05_baselines/config.yaml",
   "repo_root": "/workspace/ExperimentForGraduation",
   "config_fingerprint": "4a8498359c87c94d"

@@ -131,6 +131,20 @@ class HorizonConfig:
     # 两种出池途径），提前停止（周期数本身不定）。n_cycles 仅作安全上限。
     stop_when_stable: bool = False
     stable_patience: int = 4
+    # 服务不可达出池（2026-10-25 口径对齐）：任务**几何可达**（存在机巢使
+    # 往返 ≤ 满电航程，static_unreachable 判否）却连续 service_patience 个
+    # 周期「无可用 UAV 在往返航程内」时，判「机队服务不可达」出池。
+    #
+    # 为什么必须出池：预筛原先把「最近可用机往返超限」一律记
+    # exceed_round_trip_range（物理不可达），于是这类任务既不进
+    # UNREACHABLE（分母照算）、又每周期被拒（分子不计）——exp05 seed43
+    # 实证 3 个任务（最近巢往返 74km ≤ 80km，但机队漂移后该巢空巢）被
+    # 永久卡死，完成率虚低为 0.950。两把尺子（几何 vs 当前可用机）必须
+    # 同源归因，否则完成率既非 100% 也无可解释性。
+    #
+    # 与静态几何不可达同属「能力范围外」，是完成率分母的合法排除项；
+    # 单列计数（n_unreachable_service）供归因：机队漂移空巢 vs 真几何死。
+    service_patience: int = 4
 
 
 def tour_snapshot(tour: UAVTour) -> dict[str, Any]:
@@ -292,6 +306,10 @@ class RollingHorizon:
         self._conv_patience = int(self.hcfg.stable_patience)
         self._conv_streak = 0
         self._conv_last_len: int | None = None
+        # 服务不可达追踪（2026-10-25 口径对齐）：task_id → 连续「无可用 UAV
+        # 在往返航程内」的周期数。达到 hcfg.service_patience 即判机队服务
+        # 不可达出池（与静态几何不可达同等对待，单列归因 reason="service"）。
+        self._service_stall: dict[int, int] = {}
 
     # ------------------------------------------------------------------
     # 单周期
@@ -319,8 +337,44 @@ class RollingHorizon:
             )
         ]
         if hit:
-            self.pool.mark_unreachable([t.id for t in hit])
+            self.pool.mark_unreachable([t.id for t in hit], reason="geo")
         return hit
+
+    def _update_service_stall(
+        self, tasks: Sequence[Task], cost_hint: dict[int, float]
+    ) -> list[Task]:
+        """机队服务不可达追踪：几何可达但持续无可用机在往返航程内的任务出池。
+
+        ``cost_hint[t.id]`` = 最近**可用** UAV 到该任务的三维代价（第一阶段
+        粗粒度口径）。判据 ``2·cost_hint ≤ uav_max_range`` 即「本周期有可用
+        机能服务它」——与预筛 ``no_uav_in_range`` 同源同尺。连续
+        ``service_patience`` 个周期不满足，说明不是单周期运气问题，而是
+        机队结构性够不着（典型：机队漂移致空巢，最近巢本可往返 ≤ 满电）。
+
+        判据**独立于任务是否被选中/完成**（只看机队几何能力），因此不构成
+        循环定义；单列归因 ``reason="service"`` 与几何不可达区分。
+        """
+        patience = int(getattr(self.hcfg, "service_patience", 0) or 0)
+        if patience <= 0:
+            return []
+        max_range = float(self.hcfg.uav_max_range)
+        newly: list[int] = []
+        for t in tasks:
+            c = cost_hint.get(t.id, float("inf"))
+            serviceable = 2.0 * float(c) <= max_range
+            if serviceable:
+                self._service_stall.pop(t.id, None)
+            else:
+                n = self._service_stall.get(t.id, 0) + 1
+                self._service_stall[t.id] = n
+                if n >= patience:
+                    newly.append(t.id)
+        if not newly:
+            return []
+        marked = self.pool.mark_unreachable(newly, reason="service")
+        for tid in newly:
+            self._service_stall.pop(tid, None)
+        return marked
 
     def run_cycle(
         self,
@@ -443,6 +497,15 @@ class RollingHorizon:
             forced_task_ids=forced_ids,
         )
         cost_hint = self._cost_hint(tasks, avail, lazy)
+        # 2.6) 机队服务不可达出池（2026-10-25 口径对齐）：几何可达但连续
+        # service_patience 周期无可用机在往返航程内 → 与静态几何不可达
+        # 同等出池（单列归因 service），使完成率分母只含「能力范围内」
+        # 任务。必须在选择前移除，否则它每周期进候选又被拒，空转 churn。
+        svc_unreach = self._update_service_stall(tasks, cost_hint)
+        if svc_unreach:
+            svc_ids = {t.id for t in svc_unreach}
+            record.unreachable_ids.extend(t.id for t in svc_unreach)
+            tasks = [t for t in tasks if t.id not in svc_ids]
         sel = run_selection(
             tasks,
             self.fleet.all(),
@@ -451,6 +514,10 @@ class RollingHorizon:
             pairwise_cost=lazy,
             # 统一距离口径：第一阶段用与代价矩阵/ETA 同一把 DEM 尺子
             distance_fn=self._distance_fn,
+            # 几何可达性判据（与 static_unreachable 同源）：让预筛把往返
+            # 超限分成「真几何不可达」与「当前无可用机」两类归因
+            nests=self.nests,
+            max_range=self.hcfg.uav_max_range,
         )
         record.selection = dict(sel.diagnostics)
         record.selection["replan"] = replan

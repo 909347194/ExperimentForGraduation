@@ -223,6 +223,23 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
     # 入池判定一次性出池。用户原则（2026-10-15）下唯一合法的未完成原因，
     # 与淘汰分列——淘汰对物理可行任务是机制失灵的信号，须恒为 0（非合法失败类）。
     n_unreachable = sum(len(r.unreachable_ids) for r in records)
+    # 不可达归因拆分（2026-10-25 口径对齐，与 exp05 同源）：geo = 静态几何
+    # 不可达（所有机巢往返超满电航程）；service = 机队服务不可达（几何可达
+    # 但连续 service_patience 周期无可用 UAV 在往返航程内，典型为机队漂移
+    # 致空巢）。二者同为完成率分母的合法排除项，单列供归因。
+    _unreach_reason: dict[int, str] = {}
+    for _t in finished:
+        if getattr(getattr(_t, "status", None), "value", "") == "unreachable":
+            _unreach_reason[int(_t.id)] = str(_t.meta.get("unreachable_reason", "geo"))
+    n_unreachable_geo = sum(
+        1 for r in records for i in r.unreachable_ids if _unreach_reason.get(int(i)) == "geo"
+    )
+    n_unreachable_service = sum(
+        1
+        for r in records
+        for i in r.unreachable_ids
+        if _unreach_reason.get(int(i)) == "service"
+    )
     # 只统计真正求解过的周期（2026-10-16 审查 I2：空转周期 muas 无解，
     # 旧口径把它们当 feasible=False 摊薄，1/4 被记成 1/8）
     feas_flags = [
@@ -511,6 +528,8 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
             "n_eliminated": n_eliminated,
             "n_overdue_ever": n_overdue_ever,
             "n_unreachable": n_unreachable,
+            "n_unreachable_geo": n_unreachable_geo,
+            "n_unreachable_service": n_unreachable_service,
             "n_late": n_late,
             # ── 2026-10-24 指标体系审查 A2：删除池化 on_time_rate 键 ───
             # 旧键 on_time_rate（出动池化正确执行率）与 correct_exec_rate
@@ -661,6 +680,8 @@ _SEED_AGG_KEYS = (
     "n_eliminated",
     "n_overdue_ever",
     "n_unreachable",
+    "n_unreachable_geo",
+    "n_unreachable_service",
     "n_late",
     "avg_lateness_s",
     "correct_exec_rate",

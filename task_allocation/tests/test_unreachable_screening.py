@@ -164,6 +164,88 @@ def test_pool_mark_unreachable_unknown_id_ignored():
 
 
 # ---------------------------------------------------------------------------
+# 2b) 不可达归因拆分（2026-10-25 口径对齐）
+# ---------------------------------------------------------------------------
+
+
+def test_pool_mark_unreachable_records_reason():
+    """两类归因分别落 meta：geo（静态几何不可达）/ service（机队服务不可达）。
+
+    完成率分母按两类合计排除；单列供归因——把资源约束误记成物理约束
+    （或反之）会让完成率既非 100% 又无从解释（exp05 seed43 实证）。
+    """
+    tasks = [_task(0, x=100.0), _task(1, x=200.0)]
+    pool = TaskPool(tasks, current_time=0.0)
+    pool.begin_cycle(current_time=0.0)
+    pool.mark_unreachable([0], reason="geo")
+    pool.mark_unreachable([1], reason="service")
+    reasons = {
+        t.id: t.meta.get("unreachable_reason")
+        for t in pool.finished_tasks()
+        if t.status == TaskStatus.UNREACHABLE
+    }
+    assert reasons == {0: "geo", 1: "service"}
+
+
+def test_prefilter_separates_geo_from_service_unreachable():
+    """往返超限时按几何可达性分两类归因。
+
+    - 几何可达（存在机巢往返 ≤ 满电航程）但最近**可用机**往返超限
+      ⇒ ``no_uav_in_range``（机队服务不可达，典型为机队漂移致空巢）；
+    - 所有机巢往返都超限 ⇒ ``exceed_round_trip_range``（真几何不可达）。
+
+    travel 取自「最近可用 UAV」，而物理可达性应由「最近机巢」判定——
+    两把尺子混同会让任务既不进 UNREACHABLE（分母照算）又每周期被拒
+    （分子不计），完成率虚低且无法解释。
+    """
+    from task_allocation.common.types import ScoredTask
+
+    cfg = FeasibilityConfig(current_time=0.0)
+    nests = [_nest(0, 0.0)]  # 唯一机巢在原点
+    max_range = 25000.0
+
+    # 任务在 11km 处：巢往返 2×11000=22000 ≤ 25000 ⇒ 几何可达
+    task = _task(0, x=11000.0)
+    s = ScoredTask(task=task, priority=1.0)
+    # 唯一可用机远在 40km 处、剩余航程 20km：往返 2×29000=58000 > 20000
+    uav = UAV(id=0, x=40000.0, y=0.0, z=0.0, remaining_range=20000.0,
+              speed=10.0, nest_id=0)
+    passed, rejected = prefilter(
+        [s], [uav], cfg, cost_hint={0: 29000.0},
+        nests=nests, max_range=max_range,
+    )
+    assert not passed
+    assert rejected[0].filter_reason == "no_uav_in_range"
+
+    # 同场景但 max_range 收紧到 20km：巢往返 22000 > 20000 ⇒ 真几何不可达
+    _, rejected2 = prefilter(
+        [s], [uav], cfg, cost_hint={0: 29000.0},
+        nests=nests, max_range=20000.0,
+    )
+    assert rejected2[0].filter_reason == "exceed_round_trip_range"
+
+
+def test_prefilter_without_nests_keeps_geo_reason():
+    """向后兼容：不传 nests/max_range 时归因保持 exceed_round_trip_range。
+
+    旧调用方（含 pytest 既有基线）不因新增归因分离而改变行为。
+    """
+    from task_allocation.common.types import ScoredTask
+
+    cfg = FeasibilityConfig(current_time=0.0)
+    s = ScoredTask(task=_task(0, x=11000.0), priority=1.0)
+    uav = UAV(id=0, x=0.0, y=0.0, z=0.0, remaining_range=20000.0,
+              speed=10.0, nest_id=0)
+    passed, rejected = prefilter([s], [uav], cfg)
+    assert not passed and rejected[0].filter_reason == "exceed_round_trip_range"
+
+
+def test_service_patience_config_default():
+    """HorizonConfig.service_patience 默认 4（与 stable_patience 同族）。"""
+    assert HorizonConfig().service_patience == 4
+
+
+# ---------------------------------------------------------------------------
 # 3) horizon._screen_unreachable：端到端
 # ---------------------------------------------------------------------------
 

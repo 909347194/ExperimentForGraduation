@@ -101,6 +101,8 @@ def run(
     cost_hint: dict[int, float] | None = None,
     pairwise_cost: dict[tuple[int, int], float] | None = None,
     distance_fn: Callable[[Sequence[float], Sequence[float]], float] | None = None,
+    nests: Sequence[Any] | None = None,
+    max_range: float | None = None,
 ) -> SelectionResult:
     """运行选择流水线。
 
@@ -108,6 +110,10 @@ def run(
         distance_fn: 统一距离口径（DEM 三维航程），由滚动层从代价估算器注入。
             贯穿预筛（最近可用机）、边际收益（插入代价/空间邻近兜底）与候选
             集预算检查，保证第一阶段与第二阶段用同一把尺子量距离。
+        nests / max_range: 几何可达性判据（与 ``static_unreachable`` 同源的
+            「最近机巢往返 ≤ 满电航程」）。透传给预筛，把往返超限分两类归因：
+            ``exceed_round_trip_range``（真几何不可达）与
+            ``no_uav_in_range``（几何可达但当前无可用机——机队漂移空巢）。
     """
     cfg = config or SelectionConfig()
     n_avail = sum(1 for u in uavs if u.is_available)
@@ -226,7 +232,13 @@ def run(
             s.filter_reason = "not_in_n_cand"
 
     passed, rejected_pre = prefilter(
-        preselected, uavs, cfg.feasibility, cost_hint=cost_hint, distance_fn=distance_fn
+        preselected,
+        uavs,
+        cfg.feasibility,
+        cost_hint=cost_hint,
+        distance_fn=distance_fn,
+        nests=nests,
+        max_range=max_range,
     )
     diagnostics["n_after_prefilter"] = len(passed)
     diagnostics["n_rejected_prefilter"] = len(rejected_pre)

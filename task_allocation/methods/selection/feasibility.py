@@ -93,6 +93,8 @@ def prefilter(
     config: FeasibilityConfig | None = None,
     cost_hint: dict[int, float] | None = None,
     distance_fn: DistanceFn | None = None,
+    nests: Sequence[Nest] | None = None,
+    max_range: float | None = None,
 ) -> tuple[list[ScoredTask], list[ScoredTask]]:
     """初步可行性过滤（**只拦物理不可达与终态**）。
 
@@ -102,10 +104,21 @@ def prefilter(
             欧氏）。
         distance_fn: 统一距离口径（DEM 三维航程）。用于「选最近可用机」，
             缺省退回欧氏直线。
+        nests: 机巢列表（几何可达性判据，与 ``static_unreachable`` 同源）。
+            非 None 且 ``max_range`` 有效时，往返超限先分两种归因。
+        max_range: 满电航程上限（米）。与 ``nests`` 共同决定「真几何不可达」
+            与「当前无可用机」的分界。
 
     拒绝理由以物理原因为主：``no_available_uav``（无机可用）与
-    ``exceed_round_trip_range``（往返航程超限）；另有终态原因
-    ``status_{expired,unreachable,done}``（入池已判定的状态终局）。
+    ``exceed_round_trip_range``（**真几何不可达**——所有机巢往返都超限）；
+    另有终态原因 ``status_{expired,unreachable,done}``（入池已判定的状态终局）。
+
+    2026-10-25 口径对齐：往返超限但**几何可达**（存在机巢往返 ≤ 满电航程）
+    时，归因为 ``no_uav_in_range``（机队服务不可达——典型为机队漂移致
+    空巢），**不再伪装成物理不可达**。旧口径把资源约束误记成物理约束，
+    使任务既不进 UNREACHABLE（分母照算）、又每周期被拒（分子不计），
+    完成率虚低且无法解释。两类归因分开后，由滚动层按
+    ``service_patience`` 把服务不可达任务单列出池。
     时间窗不再作为拒绝理由（2026-10-15 用户原则：迟到由适应度定价，
     不是参选资格）；``miss_time_window`` 仅在 ``check_time_window=True``
     的消融口径出现。
@@ -137,9 +150,29 @@ def prefilter(
                 # 往返口径：航次必须返航（终点机巢由内层 MCF 选，最近巢
                 # 往返是下界），单程可达 ≠ 可服务。T52 实证：单程 39.9km
                 # < 0.95×80km 放行过，往返 79.7km 实则物理不可达，旧单程
-                # 口径下它每周期空转 churn 到淘汰。物理不可达是用户
-                # 原则下唯一合法的未完成原因，必须在预筛按往返拦死。
-                reason = "exceed_round_trip_range"
+                # 口径下它每周期空转 churn 到淘汰。
+                #
+                # 2026-10-25 归因分离：travel 取自「最近**可用** UAV」，而
+                # 物理可达性应由「最近**机巢**」判定（静态、与机队状态无关）。
+                # 机队漂移致空巢时，几何可达任务的 travel 会来自远处巢而
+                # 超限——那是服务能力不足（no_uav_in_range），不是物理不可达
+                # （exceed_round_trip_range）。两类混同会让完成率既非 100%
+                # 又无从解释（exp05 seed43：3 个任务最近巢往返 74km ≤ 80km，
+                # 却因空巢被永久误拒）。
+                geo_reachable = False
+                if nests and max_range and max_range > 0:
+                    for n in nests:
+                        dn = (
+                            float(distance_fn(n.position, t.position))
+                            if distance_fn is not None
+                            else _euclid(n.position, t.position)
+                        )
+                        if 2.0 * dn <= max_range:
+                            geo_reachable = True
+                            break
+                reason = (
+                    "no_uav_in_range" if geo_reachable else "exceed_round_trip_range"
+                )
             elif cfg.check_time_window and t.latest is not None:
                 eta = travel / max(u.speed, 1e-6)
                 # 消融口径：迟到容忍 W 内放行，超过则拒（奖励已趋零）。

@@ -20,8 +20,8 @@
       "std": 0.8
     },
     "effective_completion_rate": {
-      "mean": 0.963333,
-      "std": 0.022111
+      "mean": 0.96977,
+      "std": 0.016383
     },
     "reward_yield": {
       "mean": 0.868147,
@@ -68,8 +68,16 @@
       "std": 0.0
     },
     "n_unreachable": {
+      "mean": 0.4,
+      "std": 0.8
+    },
+    "n_unreachable_geo": {
       "mean": 0.0,
       "std": 0.0
+    },
+    "n_unreachable_service": {
+      "mean": 0.4,
+      "std": 0.8
     },
     "n_voluntary_skip": {
       "mean": 0.0,
@@ -84,8 +92,8 @@
       "std": 0.0
     },
     "completion_rate_final": {
-      "mean": 0.993333,
-      "std": 0.013333
+      "mean": 1.0,
+      "std": 0.0
     },
     "on_time_rate_final": {
       "mean": 0.731494,
@@ -100,20 +108,20 @@
       "std": 0.0
     },
     "unreachable_rate": {
-      "mean": 0.0,
-      "std": 0.0
+      "mean": 0.006667,
+      "std": 0.013333
     },
     "quota_utilization": {
-      "mean": 0.665957,
-      "std": 0.129128
+      "mean": 0.70666,
+      "std": 0.066948
     },
     "quota_full_cycle_ratio": {
-      "mean": 0.59,
-      "std": 0.182757
+      "mean": 0.606667,
+      "std": 0.152243
     },
     "avg_backlog": {
-      "mean": 9.3362,
-      "std": 0.614196
+      "mean": 8.8462,
+      "std": 0.664915
     },
     "max_backlog": {
       "mean": 30.0,
@@ -136,24 +144,24 @@
       "std": 0.0
     },
     "throughput_per_cycle": {
-      "mean": 7.116667,
-      "std": 0.378594
+      "mean": 6.826667,
+      "std": 0.63435
     },
     "n_cycles": {
-      "mean": 8.4,
-      "std": 0.489898
+      "mean": 8.8,
+      "std": 0.748331
     },
     "n_active_cycles": {
       "mean": 4.4,
       "std": 0.489898
     },
     "solve_time_ms": {
-      "mean": 66.08,
-      "std": 0.854166
+      "mean": 65.68,
+      "std": 0.708237
     },
     "wall_seconds": {
-      "mean": 0.2414,
-      "std": 0.0068
+      "mean": 0.2352,
+      "std": 0.012416
     }
   },
   "per_seed": [
@@ -174,6 +182,8 @@
       "n_eliminated": 0,
       "n_overdue_ever": 0,
       "n_unreachable": 0,
+      "n_unreachable_geo": 0,
+      "n_unreachable_service": 0,
       "n_voluntary_skip": 0,
       "n_capacity_shortfall": 6,
       "n_gate_rescued": 0,
@@ -196,8 +206,8 @@
       "n_zero_reward_delivery": 2,
       "avg_wait_s": 780.0,
       "n_remaining_pool": 0,
-      "solve_time_ms": 67.1,
-      "wall_seconds": 0.239,
+      "solve_time_ms": 65.8,
+      "wall_seconds": 0.234,
       "arm": "B2e",
       "solver": "greedy",
       "cost_model": "euclidean",
@@ -220,6 +230,8 @@
       "n_eliminated": 0,
       "n_overdue_ever": 0,
       "n_unreachable": 0,
+      "n_unreachable_geo": 0,
+      "n_unreachable_service": 0,
       "n_voluntary_skip": 0,
       "n_capacity_shortfall": 4,
       "n_gate_rescued": 0,
@@ -242,8 +254,8 @@
       "n_zero_reward_delivery": 0,
       "avg_wait_s": 790.0,
       "n_remaining_pool": 0,
-      "solve_time_ms": 66.2,
-      "wall_seconds": 0.25,
+      "solve_time_ms": 65.6,
+      "wall_seconds": 0.251,
       "arm": "B2e",
       "solver": "greedy",
       "cost_model": "euclidean",
@@ -252,7 +264,7 @@
     {
       "n_arrived": 60,
       "n_completed": 58,
-      "effective_completion_rate": 0.933333,
+      "effective_completion_rate": 0.965517,
       "reward_yield": 0.831191,
       "n_late": 16,
       "total_lateness_s": 17334.705,
@@ -265,31 +277,33 @@
       "cycle_feasible_rate": 1.0,
       "n_eliminated": 0,
       "n_overdue_ever": 0,
-      "n_unreachable": 0,
+      "n_unreachable": 2,
+      "n_unreachable_geo": 0,
+      "n_unreachable_service": 2,
       "n_voluntary_skip": 0,
       "n_capacity_shortfall": 2,
       "n_gate_rescued": 0,
-      "completion_rate_final": 0.966667,
+      "completion_rate_final": 1.0,
       "on_time_rate_final": 0.724138,
       "path_per_completion_m": 24931.697,
       "elimination_rate": 0.0,
-      "unreachable_rate": 0.0,
-      "quota_utilization": 0.434783,
-      "quota_full_cycle_ratio": 0.25,
-      "avg_backlog": 10.25,
+      "unreachable_rate": 0.033333,
+      "quota_utilization": 0.638298,
+      "quota_full_cycle_ratio": 0.333333,
+      "avg_backlog": 7.8,
       "max_backlog": 30,
       "n_deferred_delivery": 10,
       "deferred_delivery_ratio": 0.172414,
       "n_hard_violations_total": 0,
       "s_coverage_rate": 1.0,
-      "throughput_per_cycle": 7.25,
-      "n_cycles": 8,
+      "throughput_per_cycle": 5.8,
+      "n_cycles": 10,
       "n_active_cycles": 4,
       "n_zero_reward_delivery": 2,
       "avg_wait_s": 724.138,
-      "n_remaining_pool": 2,
-      "solve_time_ms": 66.9,
-      "wall_seconds": 0.23,
+      "n_remaining_pool": 0,
+      "solve_time_ms": 64.4,
+      "wall_seconds": 0.218,
       "arm": "B2e",
       "solver": "greedy",
       "cost_model": "euclidean",
@@ -312,6 +326,8 @@
       "n_eliminated": 0,
       "n_overdue_ever": 0,
       "n_unreachable": 0,
+      "n_unreachable_geo": 0,
+      "n_unreachable_service": 0,
       "n_voluntary_skip": 0,
       "n_capacity_shortfall": 2,
       "n_gate_rescued": 0,
@@ -334,8 +350,8 @@
       "n_zero_reward_delivery": 2,
       "avg_wait_s": 720.0,
       "n_remaining_pool": 0,
-      "solve_time_ms": 65.1,
-      "wall_seconds": 0.242,
+      "solve_time_ms": 66.5,
+      "wall_seconds": 0.226,
       "arm": "B2e",
       "solver": "greedy",
       "cost_model": "euclidean",
@@ -358,6 +374,8 @@
       "n_eliminated": 0,
       "n_overdue_ever": 0,
       "n_unreachable": 0,
+      "n_unreachable_geo": 0,
+      "n_unreachable_service": 0,
       "n_voluntary_skip": 0,
       "n_capacity_shortfall": 6,
       "n_gate_rescued": 0,
@@ -380,8 +398,8 @@
       "n_zero_reward_delivery": 3,
       "avg_wait_s": 800.0,
       "n_remaining_pool": 0,
-      "solve_time_ms": 65.1,
-      "wall_seconds": 0.246,
+      "solve_time_ms": 66.1,
+      "wall_seconds": 0.247,
       "arm": "B2e",
       "solver": "greedy",
       "cost_model": "euclidean",
