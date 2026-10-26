@@ -4,21 +4,21 @@
     <Box style={{ width: 6, height: 34, background: '#1E4FA8' }} />
     <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#0E3F8C' }}>研究进展与下一步</Text>
   </Box>
-  <Text style={{ position: 'absolute', top: 78, left: 60, fontSize: 15, color: '#8B97A8' }}>方法链已闭环，实验证据正在补齐——按当前事实口径汇报，不做未经验证的宣称</Text>
+  <Text style={{ position: 'absolute', top: 78, left: 60, fontSize: 15, color: '#8B97A8' }}>方法链已闭环，exp01/05/06 已全量重跑定稿——按当前事实口径汇报</Text>
 
   <Box style={{ position: 'absolute', top: 140, left: 40, width: 1200, flexDirection: 'row', gap: 22 }}>
     {[
       {
         tag: '已完成', sub: '问题模型与两阶段方法链',
-        d: '问题模型：y / x / π / z 四类决策 + 时间窗 · 航程 · 机巢容量等约束集\n两阶段：任务选择缩空间 → 选择性 MUAS 精优化；外层滚动闭环 + 防饥饿\nDMDE 扩展：哨兵基因统一编码、逆映射四步、Lamarckian 回写\n交付后成本 polish：跨机改派 + 组内 2-opt/Or-opt 联合局部搜索，只接受严格改进\n场景与代价：ASTER GDEM 三维代价场 + 8 机巢（巡检实例化）；基线族已实现',
+        d: '问题模型：y / x / π / z 四类决策 + 时间窗 · 航程 · 机巢容量等约束集\n两阶段：任务选择缩空间 → 选择性 MUAS 精优化；外层滚动闭环 + 防饥饿\nDMDE 扩展：哨兵基因统一编码、逆映射四步、Lamarckian 回写\n交付后成本 polish：跨机改派 + 组内 2-opt/Or-opt 联合局部搜索，只接受严格改进\n场景与代价：ASTER GDEM 三维代价场 + 8 机巢；实验 exp01/05/06 已全量定稿（λ=1e-1、不可达归因分离、跨实验报告已出）',
       },
       {
-        tag: '进行中', sub: 'exp01 结案，余下五组重跑',
-        d: 'exp01 冒烟档已结案：λ=1e-1 三 seed A/B，成本 polish 全组件定型\nexp02–exp06：规模标定 / 事件滚动 / 消融 / 基线对照 / 联合域待重跑\n选择层标定口径（机数名额 ∩ 能力 vs 能力驱动）待按实验结论切换\n覆盖门禁口径的开关尚未在生产配置中默认开启\n规模—吞吐—质量的权衡曲线待回填',
+        tag: '进行中', sub: 'exp02–04 标定/消融待做',
+        d: 'exp01/05/06 已定稿：λ=1e-1、不可达归因分离（几何 vs 机队服务）、6 臂基线对照 + 联合域 5 格\nexp02 规模标定 / exp03 事件滚动 / exp04 消融：待重跑出规模—吞吐—质量权衡曲线\n选择层标定口径（机数名额 ∩ 能力 vs 能力驱动）待 exp03/04 结论切换\n覆盖门禁开关尚未在生产配置默认开启（实验 config 显式启用）\n规模—吞吐—质量权衡曲线随 exp02 标定回填',
       },
       {
         tag: '下一步', sub: '出数 → 固化 → 外扩 → 成文',
-        d: '第一步：exp01 已出数（三 seed 均值口径），余下五组重跑出对照与消融\n第二步：固化生产口径（门禁开启 + 选择层标定）\n第三步：把实例化迁到应急派送 / 态势感知，检验口径可迁移性\n在此之前，不主张「优于某方法」的结论',
+        d: '第一步：exp02–04 出数后固化生产口径（门禁默认开启 + 选择层标定）\n第二步：把实例化迁到应急派送 / 态势感知，检验口径可迁移性\n对比结论按统一口径可比：完成率对软窗臂恒为不变量（1.000），区分度由按时率 / 航程 / 奖励产出承担，不依赖单一完成率指标做优劣宣称',
       },
     ].map((c) => (
       <Box key={c.tag} style={{ flex: 1, background: '#F7F9FC', border: '1px solid #D6DCE5', borderRadius: 10, padding: '18px 22px', flexDirection: 'column' }}>
@@ -31,7 +31,7 @@
 
   <Box style={{ position: 'absolute', top: 470, left: 40, width: 1200, background: '#0E3F8C', borderRadius: 10, padding: '15px 24px' }}>
     <Text style={{ fontSize: 14.5, fontWeight: 'bold', color: '#FFFFFF', lineHeight: 1.7 }}>
-      诚实口径：方法可以讲、公式可以讲、机制可以讲；「跑得多快、比谁更好」目前没有数据支撑，本轮汇报不给出任何对比结论，且全部结论限于广域巡检实例化场景。
+      诚实口径：方法可以讲、公式可以讲、机制可以讲；已建立可复算对照实验（6 臂基线 + 联合域 5 格），按统一口径（完成率 + 按时率 + 航程 + 奖励产出）可比；全部结论限于广域巡检实例化场景。
     </Text>
   </Box>
 

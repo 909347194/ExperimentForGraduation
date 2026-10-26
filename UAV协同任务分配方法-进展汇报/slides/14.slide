@@ -67,7 +67,7 @@
     <Box style={{ background: '#F7F9FC', border: '1px solid #D6DCE5', borderRadius: 10, padding: '13px 20px', flexDirection: 'column' }}>
       <Text style={{ fontSize: 17, fontWeight: 'bold', color: '#0E3F8C' }}>④ 两道可行性闸门（粗粒度，弹回不淘汰）</Text>
       <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.7, marginTop: 6 }}>
-        闸门① prefilter：是否有可用机 · 往返航程可达（DEM 口径）；闸门② postcheck：机群剩余航程预算——仅物理不可行才不进候选，否则留池下周期再评；时间窗迟到由适应度折减、非参选资格
+        闸门① prefilter：几何可达性——按机巢判定往返航程≤满电航程（DEM 口径），几何可达但连续多周期无可用机判为机队服务不可达；闸门② postcheck：机群剩余航程预算——仅几何/机队不可行才不进候选，否则留池下周期再评；时间窗迟到由适应度折减、非参选资格
       </Text>
     </Box>
 
