@@ -100,17 +100,19 @@ def _ensure_project_root() -> bool:
 
 
 def _find_dem_tif() -> "Path | None":
-    """向上查找 ASTER GDEM 瓦片（task_allocation/data/ASTGTMV003_N29E091_dem.tif）。"""
+    """向上查找 DEM 瓦片（task_allocation/data/Chengguan_DEM.tif 或任意 *_dem.tif）。"""
     base = Path(__file__).resolve()
     for p in [base, *base.parents]:
-        direct = p / "data" / "ASTGTMV003_N29E091_dem.tif"
+        data_dir = p / "data"
+        if not data_dir.is_dir():
+            continue
+        # 优先精确文件名（城关区 DEM），其次任意 *_dem.tif 兜底
+        direct = data_dir / "Chengguan_DEM.tif"
         if direct.is_file():
             return direct
-        data_dir = p / "data"
-        if data_dir.is_dir():
-            hits = sorted(data_dir.glob("ASTGTMV*_dem.tif"))
-            if hits:
-                return hits[0]
+        hits = sorted(data_dir.glob("*_dem.tif"))
+        if hits:
+            return hits[0]
     return None
 
 

@@ -2,9 +2,14 @@
 logs/
 *.log
 
-# 图件（PNG/GIF 体积大，且均可由 results/*.json 经 render_from_json.py 重新生成）
-task_allocation/experiments/exp01_smoke/results*/figures/*.gif
-task_allocation/experiments/exp01_smoke/results*/figures/*.png
+# 实验结果产物（2026-10-26 起：不推送、不追踪；均可由代码重跑再生成）
+review_2026-10-26/
+task_allocation/experiments/**/results*/
+task_allocation/experiments/_archive/
+task_allocation/experiments/report_*/
+task_allocation/experiments/exp01_smoke/report.pdf
+task_allocation/data/Chengguan_shp/
+task_allocation/data/shp/
 
 # LaTeX 编译中间文件
 *.aux

@@ -217,6 +217,69 @@ def test_polish_rejects_range_violating_relocate():
     assert prob.hard_stats(sol)[0] == 0, "交付解不得含硬违约"
 
 
+def test_coverage_guard_tracks_current_best_not_initial():
+    """回归①（2026-10-26）：覆盖守护必须锚定「当前最优解集」而非初始解集。
+
+    场景（2 机 3 任务，脚本化假评价器模拟修复链行为）：
+      base   [(0,0),(1,1)]           → exec {0,1},   f=100
+      候选1  [(1,0),(1,1)]           → exec {0,1,2}, f=90   ← 修复链补回任务2
+      候选2  [(0,1),(1,0)]           → exec {0,1},   f=80   ← 只降成本、丢任务2
+
+    修复前：best_exec 在第 231 行冻结为初始 {0,1}，候选2 因 {0,1}⊇{0,1}
+    通过守护被接受 → 交付 exec {0,1}、f=80（覆盖被静默侵蚀）。
+    修复后（接受时同步 best_exec）：候选1 接受后 best_exec={0,1,2}，候选2
+    因 {0,1}⊉{0,1,2} 被守护拒绝 → 交付 exec {0,1,2}、f=90。
+    """
+    from collections import namedtuple
+
+    class _Sol:
+        def __init__(self, executed):
+            self.executed_task_ids = sorted(executed)
+
+    class _Res:
+        def __init__(self, fitness, executed):
+            self.fitness = fitness
+            self.solution = _Sol(executed)
+
+    class _Eval:
+        def __init__(self):
+            self.participating = [0, 1]
+            self.tasks = [0, 1, 2]
+            self.n_evals = 0
+
+        def evaluate(self, cand):
+            self.n_evals += 1
+            key = tuple(cand)
+            if key == ((0, 0), (1, 1)):
+                fit, ex = 100.0, {0, 1}
+            elif key == ((1, 0), (1, 1)):
+                fit, ex = 90.0, {0, 1, 2}      # 修复链新增任务2
+            elif key == ((0, 1), (1, 0)):
+                fit, ex = 80.0, {0, 1}         # 仅降成本、丢任务2
+            else:
+                fit, ex = 1e9, set()
+            return _Res(fit, ex)
+
+    class _ProblemCfg:
+        lexicographic_coverage = True          # 触发 coverage_blind
+
+    class _Problem:
+        config = _ProblemCfg()
+
+    ev = _Eval()
+    ev.problem = _Problem()
+    res = polish_assignment(
+        ev, [(0, 0), (1, 1)], MUASStageConfig(polish_enabled=True)
+    )
+    # 守护必须守住修复链新增的完成量：交付解仍含任务2。
+    assert set(res.best_solution.executed_task_ids) == {0, 1, 2}, (
+        f"覆盖被侵蚀：交付执行集回退为 {res.best_solution.executed_task_ids}"
+    )
+    assert res.best_fitness == 90.0, (
+        f"应停在携带新增任务的 f=90，而非丢任务后的 f=80：{res.best_fitness}"
+    )
+
+
 def test_position_move_reorders_when_window_off():
     """时间窗关闭时修复链不重排顺序 → position 移动直接省路径。"""
     nests = [Nest(id=0, x=1000.0, y=0.0, z=0.0, capacity=10, available=True)]

@@ -654,18 +654,24 @@ class RollingHorizon:
         self,
         n_cycles: int | None = None,
         arrivals: Mapping[int, Sequence[Task]] | None = None,
+        progress_cb=None,
     ) -> list[CycleRecord]:
         """连续推进多个周期。
 
         Args:
             n_cycles: 周期数；省略取 :class:`HorizonConfig` 的 ``n_cycles``。
             arrivals: ``{周期号(1-based): [Task, ...]}``，该周期开始时到达的任务。
+            progress_cb: 可选回调，每个周期完成后调用 ``progress_cb(record,
+                step, n_total)``（``record`` 为该周期 ``CycleRecord``）。用于向
+                终端/日志实时回报进度，避免长跑看起来像卡死；传 ``None`` 则不回调。
         """
         n = int(n_cycles if n_cycles is not None else self.hcfg.n_cycles)
         arrivals = dict(arrivals or {})
         last_arrival = max(arrivals.keys()) if arrivals else 1
         for step in range(1, n + 1):
             self.run_cycle(new_tasks=arrivals.get(step))
+            if progress_cb is not None:
+                progress_cb(self.records[-1], step, n)
             if self._converged(step, last_arrival):
                 print(f"[horizon] 收敛于周期 {step}：池内未完成任务数连续 "
                       f"{self._conv_streak} 周期不变（={len(self.pool)}），提前停止。")

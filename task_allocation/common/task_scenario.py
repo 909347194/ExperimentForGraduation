@@ -23,11 +23,16 @@
 锚定机巢反而是人为缩小问题——盘内任务几乎一定可达，预筛与选择机制没有
 压力可测，因此保留它仅作为消融对照。
 
-实测（本仓 data/ASTGTMV003_N29E091_dem.tif + 8 机巢）：DEM 约 97.5×110.9 km，
-机巢跨度 69×86.7 km，全域任一点到最近机巢最大仅 41.7 km ⇒ 航程约束 100%
-满足（120 km 满电，单任务往返 83.4 km）；真正被触发的是**时间窗**
-（900~2400 s @ 15 m/s → 约 30% 天然不可达），其比例由 ``deadline_cycles_*``
-与 ``problem.uav_speed`` 共同决定，是实验旋钮而非缺陷。
+实测（本仓 data/Chengguan_DEM.tif + 6 机巢，城关区）：DEM 约 28.0×32.2 km，
+机巢跨度约 16.1×10.1 km，全域任一点到最近机巢最大约 17.7 km。任务点默认
+须落在 ``data.region_geojson``（城关区多边形）内——见
+``SyntheticTaskConfig.region_geojson``。
+
+约束压力两源（生产口径 ``uav_max_range=20 km``，2026-10-26 起）：
+**航程**——区域边缘到最近机巢往返可超 20 km（单程 >10 km 即真几何不可达），
+其比例由机巢布局与 ``uav_max_range`` 决定；**时间窗**——比例由
+``deadline_cycles_*`` 与 ``problem.uav_speed`` 共同决定，是实验旋钮而非缺陷。
+（旧 80 km 口径下航程 100% 满足、仅时间窗起作用的结论随 20 km 新口径作废。）
 
 当前任务点为**合成**；后续若补 ``data/task_location_data.csv``，
 只需把 ``build_synthetic_tasks`` 换成同签名的读取函数，下游无需改动。
@@ -37,6 +42,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Sequence
 
 import numpy as np
@@ -98,6 +104,13 @@ class SyntheticTaskConfig:
     # 【遗留别名】True → domain=nest_anchored；False → 绕机巢群中心撒点。
     # 仅为向后兼容旧 yaml 保留，新配置请直接写 ``domain``。
     anchor_to_nests: bool = True
+    # 任务区域门禁（城关区口径）：给出区域多边形 geojson（如
+    # ``Chengguan_district.geojson``，相对 task_allocation/data/ 或绝对路径），
+    # 任务点必须落在多边形内；落点出区则拒绝采样、在区域包络内重采，超时
+    # 残留点回退到机巢位置（机巢恒在区域内）。None = 不做区域限制。
+    # 该门禁与 ``domain`` 正交：无论 nest_anchored 还是 dem_extent，最终
+    # 任务都只在区域内产生（见 ``build_synthetic_tasks``）。
+    region_geojson: str | None = None
 
 
 def dem_planar_extent(
@@ -150,19 +163,221 @@ def task_domain_extent(
             raise ValueError("domain=dem_extent 需要 DEM，但 dem 为 None")
         dxmin, dymin, dxmax, dymax = dem_planar_extent(dem, frame, config.dem_inset_m)
         # 全域域（DEM）∪ 机巢：机巢本身恒在 DEM 内，取并集只为健壮
-        return (
+        x0, y0, x1, y1 = (
             min(dxmin, float(xs.min())),
             min(dymin, float(ys.min())),
             max(dxmax, float(xs.max())),
             max(dymax, float(ys.max())),
         )
-    r = max(float(config.spread_m), 1.0)
-    return (
-        float(xs.min()) - r,
-        float(ys.min()) - r,
-        float(xs.max()) + r,
-        float(ys.max()) + r,
-    )
+    else:
+        r = max(float(config.spread_m), 1.0)
+        x0, y0, x1, y1 = (
+            float(xs.min()) - r,
+            float(ys.min()) - r,
+            float(xs.max()) + r,
+            float(ys.max()) + r,
+        )
+    # 区域多边形门禁：任务域须把区域包络并进来（城关区口径）
+    renv = region_planar_envelope(config.region_geojson, frame)
+    if renv is not None:
+        x0, y0, x1, y1 = min(x0, renv[0]), min(y0, renv[1]), max(x1, renv[2]), max(y1, renv[3])
+    return (x0, y0, x1, y1)
+
+
+# ---------------------------------------------------------------------------
+# 区域多边形门禁（城关区 geojson）：任务必须在多边形内产生
+# ---------------------------------------------------------------------------
+# 不依赖 shapely：多边形顶点投到与机巢同一套局部 ENU 平面，用射线法做
+# 批量点在多边形判定；geojson 解析用标准库 json。缓存按 (路径, frame) 去重。
+
+_REGION_CACHE: dict = {}
+
+
+def _ring_ll_to_enu(ring_ll: np.ndarray, frame: "LocalFrame") -> np.ndarray:
+    """``[[lon, lat], ...]`` → 局部平面 ``[[x, y], ...]``（米）。"""
+    ring_ll = np.asarray(ring_ll, dtype=float)
+    lon = ring_ll[:, 0]
+    lat = ring_ll[:, 1]
+    enu = frame.to_enu(lat, lon, np.zeros_like(lat))
+    return np.column_stack([enu[:, 0], enu[:, 1]])
+
+
+def _pip(ring: np.ndarray, pts: np.ndarray) -> np.ndarray:
+    """射线法批量点在多边形环内判定（边界与顶点算内）。
+
+    ``ring`` 形状 ``(N, 2)``（闭合与否均可，末点不要求等于首点）；
+    ``pts`` 形状 ``(M, 2)``。返回 ``(M,)`` 布尔：点在环内（含边上/顶点上）为 True。
+
+    主体为射线法穿越计数（半开规则 ``yi > py != yj > py`` 自动把水平边排除为
+    不穿越）；对恰好落在边/顶点上的点，穿越计数不保证，故额外做一次
+    「点到线段距离为零」的显式边界检测并并入结果。水平边除零由
+    ``np.errstate`` 压制（其穿越项恒为 False，结果正确）。
+    """
+    ring = np.asarray(ring, dtype=float)
+    n = ring.shape[0]
+    m = np.asarray(pts, dtype=float).shape[0]
+    if n < 3:
+        return np.zeros(m, dtype=bool)
+    px = pts[:, 0]
+    py = pts[:, 1]
+    rx = ring[:, 0]
+    ry = ring[:, 1]
+    inside = np.zeros(m, dtype=bool)
+    on_edge = np.zeros(m, dtype=bool)
+    tol = 1e-9
+    j = n - 1
+    with np.errstate(divide="ignore", invalid="ignore"):
+        for i in range(n):
+            yi = ry[i]
+            yj = ry[j]
+            xi = rx[i]
+            xj = rx[j]
+            # 穿越计数异或：仅在 (yi>py)!=(yj>py) 且 px 在交点左侧时计一次
+            cross = ((yi > py) != (yj > py)) & (
+                px < (xj - xi) * (py - yi) / (yj - yi) + xi
+            )
+            inside = inside ^ cross
+            # 显式边界检测：叉积为零且投影参数落在 [0,1] ⇒ 点在该线段上
+            dx = xj - xi
+            dy = yj - yi
+            seg2 = dx * dx + dy * dy
+            if seg2 > 0.0:
+                cr = dx * (py - yi) - dy * (px - xi)
+                t = ((px - xi) * dx + (py - yi) * dy) / seg2
+                on_edge |= (np.abs(cr) <= tol * max(seg2 ** 0.5, 1.0)) & (t >= 0.0) & (t <= 1.0)
+            j = i
+    return inside | on_edge
+
+
+class RegionPolygon:
+    """平面 ENU 米制区域（城关区多边形），用作任务撒点门禁。
+
+    支持 MultiPolygon（每个 Polygon 含一个外部环 + 若干洞环）；点在区域内
+    = 落在任一 Polygon 的外部环内且不在任何洞内。
+    """
+
+    def __init__(self, polygons: list) -> None:
+        # polygons: list[(outer: ndarray(N,2), holes: list[ndarray(M,2)])]
+        self._polys = polygons
+
+    def envelope(self) -> tuple[float, float, float, float]:
+        """各环顶点包络 ``(xmin, ymin, xmax, ymax)``（米）。"""
+        xs: list[np.ndarray] = []
+        ys: list[np.ndarray] = []
+        for outer, holes in self._polys:
+            xs.append(outer[:, 0])
+            ys.append(outer[:, 1])
+            for h in holes:
+                xs.append(h[:, 0])
+                ys.append(h[:, 1])
+        xs = np.concatenate(xs)
+        ys = np.concatenate(ys)
+        return (float(xs.min()), float(ys.min()), float(xs.max()), float(ys.max()))
+
+    def contains(self, xy: np.ndarray) -> np.ndarray:
+        """批量判定 ``xy``（形状 ``(M, 2)``）是否落在区域内。"""
+        pts = np.asarray(xy, dtype=float)
+        out = np.zeros(pts.shape[0], dtype=bool)
+        for outer, holes in self._polys:
+            inside = _pip(outer, pts)
+            for h in holes:
+                inside = inside & (~_pip(h, pts))
+            out = out | inside
+        return out
+
+
+def _load_region(geojson_path, frame: "LocalFrame") -> "RegionPolygon | None":
+    """加载区域多边形 geojson（一层缓存，按 (路径, frame) 去重）。
+
+    geojson 为 EPSG:4490（CGCS2000，与 WGS84 亚米级一致）经纬度；顶点
+    ``.to_enu(lat, lon, 0)`` 投到与机巢同一局部 ENU 平面。
+    """
+    if not geojson_path:
+        return None
+    p = Path(geojson_path)
+    key = (p.resolve(), id(frame))
+    cached = _REGION_CACHE.get(key)
+    if cached is not None:
+        return cached
+    if not p.is_file():
+        raise FileNotFoundError(f"区域多边形文件不存在：{p}")
+
+    import json
+
+    with p.open(encoding="utf-8") as fh:
+        gj = json.load(fh)
+
+    feats = gj.get("features")
+    geoms: list = []
+    if feats:
+        for f in feats:
+            g = f.get("geometry") or f
+            geoms.append((g.get("type"), g.get("coordinates")))
+    else:
+        geoms.append((gj.get("type"), gj.get("coordinates")))
+
+    polys: list = []
+    for gtype, coords in geoms:
+        if gtype == "Polygon":
+            poly_specs = [coords]
+        elif gtype == "MultiPolygon":
+            poly_specs = coords
+        else:
+            continue
+        for poly in poly_specs:
+            outer = _ring_ll_to_enu(np.asarray(poly[0], dtype=float), frame)
+            holes = (
+                [_ring_ll_to_enu(np.asarray(h, dtype=float), frame) for h in poly[1:]]
+                if len(poly) > 1
+                else []
+            )
+            polys.append((outer, holes))
+
+    if not polys:
+        raise ValueError(f"geojson 未含 Polygon/MultiPolygon：{p}")
+    rp = RegionPolygon(polys)
+    _REGION_CACHE[key] = rp
+    return rp
+
+
+def region_planar_envelope(
+    region_geojson, frame: "LocalFrame"
+) -> "tuple[float, float, float, float] | None":
+    """区域多边形在局部平面的包络（供代价网格 extent 并入任务域）。"""
+    rp = _load_region(region_geojson, frame)
+    return rp.envelope() if rp is not None else None
+
+
+def _reject_outside_region(
+    rng: np.random.Generator,
+    xy: np.ndarray,
+    region: "RegionPolygon",
+    extent: tuple[float, float, float, float],
+    max_trials: int,
+    fallback_xy: np.ndarray | None = None,
+) -> tuple[np.ndarray, int]:
+    """把落在区域多边形外的点重采，返回 ``(xy, 累计重采次数)``。
+
+    ``extent`` 为重采采样域（区域包络或其与 DEM 包络的交）。多次重采仍
+    出区时，若有 ``fallback_xy``（机巢位置，恒在区域内）则把残留点回退到
+    机巢，保证任务最终产生于区域内。
+    """
+    xmin, ymin, xmax, ymax = extent
+    n = xy.shape[0]
+    pending = np.arange(n)
+    rejected = 0
+    for _ in range(max(1, int(max_trials))):
+        inside = region.contains(xy[pending])
+        rejected += int((~inside).sum())
+        pending = pending[~inside]
+        if pending.size == 0:
+            break
+        xy[pending, 0] = rng.uniform(xmin, xmax, size=pending.size)
+        xy[pending, 1] = rng.uniform(ymin, ymax, size=pending.size)
+    if pending.size > 0 and fallback_xy is not None:
+        fb = np.asarray(fallback_xy, dtype=float)
+        xy[pending] = fb[pending % fb.shape[0]]
+    return xy, rejected
 
 
 def _resolve_domain(config: SyntheticTaskConfig) -> str:
@@ -249,10 +464,27 @@ def build_synthetic_tasks(
 
     domain = _resolve_domain(config)
     n_rejected = 0
+    region = _load_region(config.region_geojson, frame) if config.region_geojson else None
+    region_rejected = 0
     if domain == DOMAIN_DEM_EXTENT:
         if dem is None:
             raise ValueError("domain=dem_extent 需要 DEM，但 dem 为 None")
-        extent = dem_planar_extent(dem, frame, float(config.dem_inset_m))
+        dem_ext = dem_planar_extent(dem, frame, float(config.dem_inset_m))
+        # 采样域：DEM 包络；若设区域门禁则取与区域包络的交（提升拒绝采样
+        # 效率，且出区重采不会反复落在 DEM 内但区域外的条带）。
+        extent = dem_ext
+        if region is not None:
+            renv = region.envelope()
+            xmin = max(dem_ext[0], renv[0])
+            ymin = max(dem_ext[1], renv[1])
+            xmax = min(dem_ext[2], renv[2])
+            ymax = min(dem_ext[3], renv[3])
+            if xmax <= xmin or ymax <= ymin:
+                raise ValueError(
+                    f"DEM 包络与区域多边形包络无交，检查数据："
+                    f"DEM{dem_ext} 区域{renv}"
+                )
+            extent = (xmin, ymin, xmax, ymax)
         # 矩形内均匀即面积均匀，无需极坐标 sqrt 修正
         xy = np.column_stack(
             [
@@ -276,6 +508,20 @@ def build_synthetic_tasks(
             anchors = np.repeat(center.reshape(1, 2), n, axis=0)
 
         xy = anchors + np.column_stack([dx, dy])
+        # 锚定撒点时重采域用区域包络（若设门禁）
+        extent = region.envelope() if region is not None else None
+
+    # 区域多边形门禁（城关区 geojson）：落点出区则重采；超时残留点回退
+    # 机巢位置（机巢恒在区域内），保证任务最终只产生于区内。
+    if region is not None:
+        xy, region_rejected = _reject_outside_region(
+            rng,
+            xy,
+            region,
+            extent if extent is not None else region.envelope(),
+            config.max_reject_trials,
+            fallback_xy=nest_arr,
+        )
 
     rewards = rng.uniform(config.reward_min, config.reward_max, size=n)
 
@@ -320,6 +566,7 @@ def build_synthetic_tasks(
                 meta={
                     "domain": domain,
                     "n_rejected": n_rejected,
+                    "region_rejected": region_rejected,
                     "z_fallback": fell_back,
                 },
             )
