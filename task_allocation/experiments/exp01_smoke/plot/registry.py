@@ -28,6 +28,7 @@
   初始环境、过程、结果；gif 只保留 P06_allocation_anim.gif」）::
 
       I01_geo_overview      初始环境
+      P04_allocation_gantt  过程（甘特图，2026-10-26 追加保留「保持原样」）
       P06_allocation_anim   过程（GIF，唯一保留的动图）
       R01_outcome_summary   结果
 
@@ -44,6 +45,7 @@ from dataclasses import dataclass
 from typing import Callable, Iterable, Sequence
 
 from .initial.geo_overview import plot_geo_overview
+from .process.allocation_gantt import plot_allocation_gantt
 from .process.allocation_anim import plot_allocation_anim
 from .report.outcome_summary import plot_outcome_summary
 
@@ -79,6 +81,7 @@ TOPICS: dict[str, str] = {
 #: / ``stem``），本字典只用于文档与排查，不参与出图。
 FIGURE_STEMS_PREFIX: dict[str, str] = {
     "geo_overview":     "I01",
+    "allocation_gantt": "P04",
     "allocation_anim":  "P06",
     "outcome_summary":  "R01",
 }
@@ -123,6 +126,15 @@ FIGURES: tuple[Figure, ...] = (
         func=plot_geo_overview,
     ),
     # ── ② process：求解过程 ────────────────────────────────────
+    Figure(
+        id="allocation_gantt",
+        group="process",
+        topic="allocation",
+        title="分配航迹条：线长 ∝ 真实航程 · 方块=任务 · 两端起降巢",
+        needs=("metrics", "solution"),
+        source="solution.json 的 cycles[].tours（est_cost）+ tasks[] / nests[]（线长按 est_cost 标定，段间距按三维几何）",
+        func=plot_allocation_gantt,
+    ),
     Figure(
         id="allocation_anim",
         group="process",

@@ -676,8 +676,8 @@ seed 44 指标零变化有两重原因：(a) 其周期 4--7 每周期仅 1 个�
 \section{图表}
 % ============================================================
 
-本实验共产出 3 张图件（2026-10-26 图件裁剪后）：初始环境 I01、
-过程 P06（GIF 动画，另出末帧海报）、结果 R01，全部位于 \texttt{results/figures/}。
+本实验共产出 4 张图件（2026-10-26 图件裁剪后）：初始环境 I01、
+过程 P04（甘特图）与 P06（GIF 动画，另出末帧海报）、结果 R01，全部位于 \texttt{results/figures/}。
 
 \subsection{初始环境}
 
@@ -690,6 +690,13 @@ seed 44 指标零变化有两重原因：(a) 其周期 4--7 每周期仅 1 个�
 \end{figure}
 
 \subsection{求解过程}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.90\textwidth]{P04_allocation_gantt.png}
+\caption{分配甘特图：各无人机航次的时间占用与任务执行时序（保持原样）。}
+\label{fig:gantt}
+\end{figure}
 
 \begin{figure}[H]
 \centering
@@ -743,7 +750,7 @@ gif 只保留分配过程动画（2026-10-26 图件裁剪），另有其末帧�
 \texttt{metrics.json} & 逐周期与汇总指标（本报告全部数值来源） \\
 \texttt{solution.json} & 场景、机群、任务、逐周期交付航次 \\
 \texttt{run\_meta.json} & 运行元数据（种子、DEM 参数、时间戳） \\
-\texttt{figures/} & 3 张图产物（I01 / P06 gif+poster / R01） \\
+\texttt{figures/} & 4 张图产物（I01 / P04 / P06 gif+poster / R01） \\
 \bottomrule
 \end{tabular}
 \end{table}
