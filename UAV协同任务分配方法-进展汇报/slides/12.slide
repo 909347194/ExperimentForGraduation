@@ -13,7 +13,7 @@
         <Text style={{ fontSize: 23, fontWeight: 'bold', color: '#0E3F8C' }}>T(t+1) = remain ∪ new ∪ release</Text>
       </Box>
       <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.7, marginTop: 10 }}>
-        完成出池、未选留池、故障释放、新任务到达；滞留任务带等待补偿 W = 1−e<sup>−t/τ</sup> 参与下周期排序，不会被静默丢失——池水位全程守恒：arrived = done + unreach + elim + remain（终局核验口径）。
+        完成出池、未选留池、故障释放、新任务到达；滞留任务带等待补偿 W = 1−e<sup>−t/τ</sup> 参与下周期排序，不会被静默丢失——池水位全程守恒：arrived = done + unreach_geo + unreach_service + elim + remain（终局核验口径）。
       </Text>
     </Box>
 
@@ -43,13 +43,13 @@
 
   <Box style={{ position: 'absolute', top: 116, left: 764, width: 476, flexDirection: 'column', gap: 14 }}>
     <Box style={{ background: '#F0F5FC', border: '1px solid #D6DCE5', borderTop: '4px solid #1E4FA8', borderRadius: 10, padding: '14px 20px', flexDirection: 'column' }}>
-      <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#0E3F8C' }}>③ 完成反馈闸门（完成只认物理约束）</Text>
+      <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#0E3F8C' }}>③ 完成反馈闸门（完成只认物理/机队约束）</Text>
       <Box style={{ marginTop: 10, background: '#FFFFFF', borderRadius: 8, padding: '12px 14px', alignItems: 'center' }}>
-        <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#0E3F8C' }}>迟到照常完成 · 物理不可行回池</Text>
-        <Text style={{ fontSize: 16, color: '#1E4FA8', marginTop: 6 }}>迟到交付按 L 折价计收益、不计废飞；物理不可行才回池重选，是唯一合法的未完成原因</Text>
+        <Text style={{ fontSize: 20, fontWeight: 'bold', color: '#0E3F8C' }}>迟到照常完成 · 不可达才出池</Text>
+        <Text style={{ fontSize: 16, color: '#1E4FA8', marginTop: 6 }}>迟到交付按 L 折价计收益、不计废飞；几何不可行或机队服务不可达才出池，是唯一合法的未完成原因</Text>
       </Box>
       <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.7, marginTop: 8 }}>
-        执行反馈只按物理可行性裁决——「任务不被完成只有物理约束被违反」；迟到由适应度按 w_late 计价，与航程代价同台竞争。
+        执行反馈只按可行性裁决——「任务不被完成只因几何不可行或机队服务不可达」；迟到由适应度按 w_late 计价，与航程代价同台竞争。
       </Text>
     </Box>
 
