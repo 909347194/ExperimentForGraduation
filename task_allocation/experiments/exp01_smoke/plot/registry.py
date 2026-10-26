@@ -7,37 +7,35 @@
 
     模块名 ≡ 图 id ≡ 绘制函数名去掉 ``plot_``；输出文件名 = 分类编号前缀 + 图 id
     分类：S=setup(①) / I=initial(②) / P=process(③) / R=report(④)，组内序号即叙事序
-    例：plot/process/task_selection.py → plot_task_selection → P01_task_selection.png
+    例：plot/process/allocation_anim.py → plot_allocation_anim → P06_allocation_anim.gif
 
 即**看到图文件名就能定位代码，看到代码就知道图叫什么**，且文件名按
-``S/I/P/R + 两位序号`` 排序，figures 目录天然有序不乱。
+``S/I/P/R + 两位序号`` 排序，figures 目录天然有序不乱。裁剪后编号不重排
+（P06 等旧编号被报告与论文引用，改名即断引用）。
 
 分层（按「论文叙事线」划分——读者从设定读到结论的顺序）::
 
-    setup     ① 实验设置：问题规模 / 算法超参 / 约束开关（参数即图）
     initial   ② 初始状态：地形、机巢、初始机队、首批任务（与算法无关）
     process   ③ 求解过程：滚动闭环逐周期「发生了什么」
-    report    ④ 结果分析：跨 seed 结论、配置对照（可直接进论文）
+    report    ④ 结果分析：总体结果（可直接进论文）
 
 每张图另带一个 ``topic`` 二级标签，用于在同一层内部再归类，但不建目录。
 
-## 合并记录（2026-10-12 重组：20 张 → 11 张）
+## 合并与裁剪记录
 
-为消除「同一问题被多张图重复回答」的混乱，按四问框架重组，
-**面板信息全部保留**（调试期观测不完备等于自断线索）::
+* 2026-10-12 重组：20 张 → 11 张（四问框架合并，面板信息保留）。
+* 2026-10-26 裁剪：16 张 → **3 张**（用户裁定「图有点过多，只保留必要的：
+  初始环境、过程、结果；gif 只保留 P06_allocation_anim.gif」）::
 
-    setup_params        新增（原参数只在 config.yaml）
-    geo_overview        保留（scene → initial）
-    task_selection      ← selection_funnel + selection_detail
-    dmde_search         ← convergence + cr_curve（DMDE 交叉变异曲线）
-    allocation          ← allocation_gantt + assignment_map + geo_evolution
-    task_dynamics       ← task_flow + task_wait + geo_task_lifecycle + cycle_metrics(a)
-    fleet_state         ← fleet_utilization + geo_fleet_transition + nest_choice
-    constraint_state    ← constraint_audit + time_window
-    outcome_summary     新增（论文核心结果图；吸收 cr_curve 旧完成率轨迹 +
-                          task_flow(d) 累计进度 + cycle_metrics(b) 双目标）
-    seed_summary        ← seed_summary + seed_distribution
-    ab_compare          保留
+      I01_geo_overview      初始环境
+      P06_allocation_anim   过程（GIF，唯一保留的动图）
+      R01_outcome_summary   结果
+
+  其余图（setup 参数面板、selection/dmde/allocation 系列静态图、
+  task_dynamics/fleet_state/constraint_state、seed_summary/ab_compare、
+  P07/P08 动图）从清单与代码一并移除；P06 的末帧海报仍随动画产出
+  （poster，供 PDF 静态插图用）。需要恢复时从 git 历史找回对应模块再加回
+  一行 FIGURES 即可。
 """
 
 from __future__ import annotations
@@ -46,21 +44,8 @@ from dataclasses import dataclass
 from typing import Callable, Iterable, Sequence
 
 from .initial.geo_overview import plot_geo_overview
-from .process.allocation import plot_allocation
-from .process.allocation_gantt import plot_allocation_gantt
-from .process.allocation_map import plot_allocation_map
 from .process.allocation_anim import plot_allocation_anim
-from .process.allocation_anim_map import plot_allocation_anim_map
-from .process.allocation_status import plot_allocation_status
-from .process.constraint_state import plot_constraint_state
-from .process.dmde_search import plot_dmde_search
-from .process.fleet_state import plot_fleet_state
-from .process.task_dynamics import plot_task_dynamics
-from .process.task_selection import plot_task_selection
-from .report.ab_compare import plot_ab_compare
 from .report.outcome_summary import plot_outcome_summary
-from .report.seed_summary import plot_seed_summary
-from .setup.setup_params import plot_setup_params
 
 __all__ = [
     "Figure",
@@ -73,49 +58,29 @@ __all__ = [
     "resolve",
 ]
 
-#: 四层——论文叙事线（读者从设定读到结论的顺序）
+#: 三层——论文叙事线（读者从设定读到结论的顺序）
 GROUPS: dict[str, str] = {
-    "setup": "① 实验设置：问题规模、算法超参、约束开关（参数即图）",
-    "initial": "② 初始状态：地形、机巢、初始机队、首批任务（与算法无关）",
-    "process": "③ 求解过程：滚动闭环逐周期发生了什么",
-    "report": "④ 结果分析：跨 seed 结论与配置对照（可直接进论文）",
+    "initial": "① 初始状态：地形、机巢、初始机队、首批任务（与算法无关）",
+    "process": "② 求解过程：滚动闭环逐周期发生了什么",
+    "report": "③ 结果分析：总体结果（可直接进论文）",
 }
 
 #: 二级标签——同层内按"看什么"再归类
 TOPICS: dict[str, str] = {
     "config": "实验配置快照",
-    "spatial": "空间分布与地理演化",
     "allocation": "单周期分配结果",
-    "mechanism": "跨周期机制与水位诊断",
-    "solver": "求解器内部行为（交叉变异与收敛）",
-    "constraint": "约束与时限咬合",
-    "fleet": "机队与机巢资源",
-    "robustness": "重复实验稳健性",
-    "comparison": "跨配置对照",
     "outcome": "总体结果与完成率",
 }
 
 #: 输出文件名「分类+编号」前缀映射（单一事实来源；与 FIGURES 顺序一致）。
 #: 分类：S=setup / I=initial / P=process / R=report；组内序号 = 叙事顺序。
+#: 编号沿用裁剪前的全局序号（P06 不重编为 P01），保持报告/论文引用稳定；
 #: 各 plot_* 模块里的保存文件名已同步为 ``{前缀}{id}``（见各文件 ``gif_name``
 #: / ``stem``），本字典只用于文档与排查，不参与出图。
 FIGURE_STEMS_PREFIX: dict[str, str] = {
-    "setup_params":       "S01",
-    "geo_overview":       "I01",
-    "task_selection":     "P01",
-    "dmde_search":        "P02",
-    "allocation":         "P03",
-    "allocation_gantt":   "P04",
-    "allocation_map":     "P05",
-    "allocation_anim":    "P06",
-    "allocation_status":  "P07",
-    "allocation_anim_map":"P08",
-    "task_dynamics":      "P09",
-    "fleet_state":        "P10",
-    "constraint_state":   "P11",
-    "outcome_summary":    "R01",
-    "seed_summary":       "R02",
-    "ab_compare":         "R03",
+    "geo_overview":     "I01",
+    "allocation_anim":  "P06",
+    "outcome_summary":  "R01",
 }
 
 
@@ -125,7 +90,7 @@ class Figure:
 
     Attributes:
         id:      图 id，**同时是**模块名与输出文件名（不含扩展名）
-        group:   所属层（setup / initial / process / report）
+        group:   所属层（initial / process / report）
         topic:   二级标签，见 ``TOPICS``
         title:   中文短标题，供图注与日志使用
         needs:   绘制所需产物，``("metrics",)`` 或 ``("metrics", "solution")``
@@ -147,17 +112,7 @@ class Figure:
 
 
 FIGURES: tuple[Figure, ...] = (
-    # ── ① setup：实验设了什么 ───────────────────────────────────
-    Figure(
-        id="setup_params",
-        group="setup",
-        topic="config",
-        title="实验设定总览：问题规模 / DMDE 超参 / 选择机制 / 约束开关 / 滚动设定",
-        needs=("metrics", "solution"),
-        source="config.yaml 全段 + solution.json 的 nests / tasks / uavs",
-        func=plot_setup_params,
-    ),
-    # ── ② initial：初始状态 ─────────────────────────────────────
+    # ── ① initial：初始状态 ─────────────────────────────────────
     Figure(
         id="geo_overview",
         group="initial",
@@ -167,52 +122,7 @@ FIGURES: tuple[Figure, ...] = (
         source="solution.json 的 dem / nests / tasks / uavs",
         func=plot_geo_overview,
     ),
-    # ── ③ process：求解过程（六张，按一个周期里发生的顺序） ──────
-    Figure(
-        id="task_selection",
-        group="process",
-        topic="mechanism",
-        title="动态任务选择：漏斗逐级收敛 / 保留率 / 能力上限 / 池守恒",
-        needs=("metrics",),
-        source="metrics.json 的 cycles[].selection 全字段 / muas.n_selected",
-        func=plot_task_selection,
-    ),
-    Figure(
-        id="dmde_search",
-        group="process",
-        topic="solver",
-        title="DMDE 搜索机制：动态交叉率 CR（公式 3-9）/ 探索—开发平衡 / 收敛曲线 / 求解开销",
-        needs=("solution",),
-        source="solution.json 的 cycles[].cost_history（长度−1 即 S）+ config.yaml 的 solver.zeta",
-        func=plot_dmde_search,
-    ),
-    Figure(
-        id="allocation",
-        group="process",
-        topic="allocation",
-        title="单周期分配结构：航迹条（线长 ∝ 航程）/ 逐周期空间演化（总览）",
-        needs=("metrics", "solution"),
-        source="solution.json 的 cycles[].tours + tasks[] / nests[] / dem",
-        func=plot_allocation,
-    ),
-    Figure(
-        id="allocation_gantt",
-        group="process",
-        topic="allocation",
-        title="分配航迹条（从 allocation 拆出）：线长 ∝ 真实航程 · 方块=任务 · 两端起降巢",
-        needs=("metrics", "solution"),
-        source="solution.json 的 cycles[].tours（est_cost）+ tasks[] / nests[]（线长按 est_cost 标定，段间距按三维几何）",
-        func=plot_allocation_gantt,
-    ),
-    Figure(
-        id="allocation_map",
-        group="process",
-        topic="allocation",
-        title="逐周期空间演化（从 allocation 拆出）：DEM + 航次回放 1×N",
-        needs=("metrics", "solution"),
-        source="solution.json 的 cycles[].tours + tasks[] / nests[] / dem；周期里程 = 该周期 tours 的 est_cost 之和（纯 DEM 航程，不含惩罚）",
-        func=plot_allocation_map,
-    ),
+    # ── ② process：求解过程 ────────────────────────────────────
     Figure(
         id="allocation_anim",
         group="process",
@@ -223,54 +133,7 @@ FIGURES: tuple[Figure, ...] = (
         func=plot_allocation_anim,
         animated=True,
     ),
-    Figure(
-        id="allocation_status",
-        group="process",
-        topic="fleet",
-        title="机队再平衡：各机巢驻巢无人机数随周期演化 + 返航巢迁移弧线（GIF）",
-        needs=("metrics", "solution"),
-        source="solution.json 的 cycles[].tours（uav_id / start_nest_id / end_nest_id）+ nests（capacity）；驻巢数按连续巢归属链逐周期累计；迁移弧线=相邻周期 end_nest 变化（标 UAV 编号）",
-        func=plot_allocation_status,
-        animated=True,
-    ),
-    Figure(
-        id="allocation_anim_map",
-        group="process",
-        topic="allocation",
-        title="分配过程动画（仅地图 · 高清大图）：DEM + 航迹回放 / 任务点亮（GIF）",
-        needs=("metrics", "solution"),
-        source="solution.json 的 cycles[].tours + tasks[] / nests[] / dem；allocation_anim 左栏地图的单独高清版（满幅满高铺底 DEM），不含右栏 DMDE 收敛与滚动进度条",
-        func=plot_allocation_anim_map,
-        animated=True,
-    ),
-    Figure(
-        id="task_dynamics",
-        group="process",
-        topic="mechanism",
-        title="任务命运：池水位 / 流量 / 状态矩阵 / 等待与滞留 / 地理生命周期",
-        needs=("metrics", "solution"),
-        source="metrics.json 的 cycles[].pool_counts / completed_ids / deferred_ids + solution.json 的 tasks[]",
-        func=plot_task_dynamics,
-    ),
-    Figure(
-        id="fleet_state",
-        group="process",
-        topic="fleet",
-        title="机队与机巢：三口径出动 / 占用热力图 / 选巢归因 / 机队迁移",
-        needs=("metrics", "solution"),
-        source="metrics.json 的 cycles[].muas / nest_occupancy + solution.json 的 tours / nests",
-        func=plot_fleet_state,
-    ),
-    Figure(
-        id="constraint_state",
-        group="process",
-        topic="constraint",
-        title="约束与时限：预筛归因 / 约束状态 / 罚项量纲 / 时间窗满足度",
-        needs=("metrics", "solution"),
-        source="metrics.json 的 cycles[].selection.filter_reasons / muas.{violations,penalty,infeasible_tags} + tasks[].{earliest,latest,completed_at}",
-        func=plot_constraint_state,
-    ),
-    # ── ④ report：结果分析 ──────────────────────────────────────
+    # ── ③ report：结果分析 ──────────────────────────────────────
     Figure(
         id="outcome_summary",
         group="report",
@@ -279,24 +142,6 @@ FIGURES: tuple[Figure, ...] = (
         needs=("metrics", "solution"),
         source="metrics.json 的 cycles[].pool_counts / completed_ids / summary + per_seed",
         func=plot_outcome_summary,
-    ),
-    Figure(
-        id="seed_summary",
-        group="report",
-        topic="robustness",
-        title="跨 seed 稳健性：三指标均值±σ / 分布箱线 / 逐 seed 演化 / 明细表",
-        needs=("metrics",),
-        source="metrics.json 的 per_seed / seed_summary / seeds（仅多 seed 运行）",
-        func=plot_seed_summary,
-    ),
-    Figure(
-        id="ab_compare",
-        group="report",
-        topic="comparison",
-        title="两组配置对照：完成率 / 收益—代价 / 权衡 / Δ%",
-        needs=("metrics",),
-        source="results/metrics_<tag>.json 的 per_seed / seed_summary（需 ≥2 组对照）",
-        func=plot_ab_compare,
     ),
 )
 
@@ -307,7 +152,7 @@ def figure_ids() -> tuple[str, ...]:
 
 
 def group_ids() -> tuple[str, ...]:
-    """四层 id（按 setup → initial → process → report 的定义顺序）。"""
+    """各层 id（按 initial → process → report 的定义顺序）。"""
     return tuple(GROUPS)
 
 

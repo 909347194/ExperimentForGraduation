@@ -24,9 +24,8 @@
 
 `metrics.json` 的 `cycles` 只装**代表 seed（首个）**；多 seed 运行时才附
 `seed_summary`（mean±std）与 `per_seed`（每 seed 全量 cycles），单 seed 运行
-`seed_summary=None`。因此默认单 seed 运行产 14 张图（S01/I01/P01–P11/R01），
-注册表共 **16 张**——`seed_summary`（R02）仅多 seed 运行产出，`ab_compare`（R03）
-需 ≥2 组对照配置。引用过程图时须注明"代表 seed"。
+`seed_summary=None`。因此默认单 seed 运行产 2 张静态图（I01/R01）+ 1 张动图（P06）。
+2026-10-26 图件裁剪后注册表共 **3 张**。引用过程图时须注明"代表 seed"。
 
 周期数不固定：`rolling.n_cycles` 只是安全上限，真实停止由
 `stop_when_stable`（enabled，patience=4）收敛早停决定——稳态剩余即物理不可达/
@@ -38,24 +37,23 @@
 
 | 配置段 | 被谁读取 | 落到哪个字段 | 哪张图用它 |
 |---|---|---|---|
-| `problem`（机巢数/容量/机队规模/速度/航程） | `build.build_scenario` / `build_uavs` | `metrics.problem`、`nests`、`fleet` | `geo_overview`、`fleet_state` |
-| `tasks`（规模/散布/收益/时间窗 `deadline_cycles_*`） | `build_task_config` → `build_arrivals` | `pool_counts.n_new`、`tasks[].latest`、`tasks[].arrival_time` | `task_dynamics` |
-| `selection`（α、权重、边际收益、防饥饿 `force_after_seconds`） | `RollingHorizon` → `selection.run` | `cycles[].selection.*`（`n_after_prefilter`/`n_after_marginal`/`n_selected`） | `task_selection` |
-| `muas`（λ、四层适应度权重、迟到折减窗、剔除开关、覆盖门禁开关） | `run_selective_muas` | `cycles[].muas.*`（`f1_reward`、`f2_cost`、`feasible`、`n_hard`、`coded_end_nests`、`n_evals`、`fitness_weights`、`final_*`） | `allocation`、`task_dynamics` |
-| `constraints`（约束开关 + 硬/软分桶权重） | `MUASProblemConfig.constraints` → `check_feasible`；`feasibility.check_time_window=false`（默认）关闭第一阶段时间窗预筛 | `cycles[].muas.violations`、`feasible` | `constraint_state` |
-| `solver`（种群/代数/ζ/δ） | `DMDEConfig` | `muas.n_evals`、`solution.cycles[].cost_history` | `dmde_search` |
-| `cost`（DEM 步长、离地余量、爬升率） | `build_terrain` / `build_cost_estimator` | `run_meta.dem_terrain`、`solution.dem` | `geo_overview`（高程底图） |
-| `rolling`（周期长/`complete_after_cycle`/`recharge_at_nest`/`stop_when_stable`/`faults`/`strict_capacity`/`event_replan`） | `HorizonConfig`、`EventTriggerConfig` | `cycles[].completed_ids`、`executed_ids`、`deferred_ids`、`expired_ids`、`infeasible_ids`、`released_by_fault`、`replan` | `task_dynamics`、`allocation` |
+| `problem`（机巢数/容量/机队规模/速度/航程） | `build.build_scenario` / `build_uavs` | `metrics.problem`、`nests`、`fleet` | `geo_overview` |
+| `tasks`（规模/散布/收益/时间窗 `deadline_cycles_*`） | `build_task_config` → `build_arrivals` | `pool_counts.n_new`、`tasks[].latest`、`tasks[].arrival_time` | `allocation_anim`、`outcome_summary` |
+| `selection`（α、权重、边际收益、防饥饿 `force_after_seconds`） | `RollingHorizon` → `selection.run` | `cycles[].selection.*`（`n_after_prefilter`/`n_after_marginal`/`n_selected`） | —（原 `task_selection` 图已裁剪） |
+| `muas`（λ、四层适应度权重、迟到折减窗、剔除开关、覆盖门禁开关） | `run_selective_muas` | `cycles[].muas.*`（`f1_reward`、`f2_cost`、`feasible`、`n_hard`、`coded_end_nests`、`n_evals`、`fitness_weights`、`final_*`） | `allocation_anim` |
+| `constraints`（约束开关 + 硬/软分桶权重） | `MUASProblemConfig.constraints` → `check_feasible`；`feasibility.check_time_window=false`（默认）关闭第一阶段时间窗预筛 | `cycles[].muas.violations`、`feasible` | —（原 `constraint_state` 图已裁剪） |
+| `solver`（种群/代数/ζ/δ） | `DMDEConfig` | `muas.n_evals`、`solution.cycles[].cost_history` | `allocation_anim`（右栏收敛曲线） |
+| `cost`（DEM 步长、离地余量、爬升率） | `build_terrain` / `build_cost_estimator` | `run_meta.dem_terrain`、`solution.dem` | `geo_overview`（高程底图）、`allocation_anim` |
+| `rolling`（周期长/`complete_after_cycle`/`recharge_at_nest`/`stop_when_stable`/`faults`/`strict_capacity`/`event_replan`） | `HorizonConfig`、`EventTriggerConfig` | `cycles[].completed_ids`、`executed_ids`、`deferred_ids`、`expired_ids`、`infeasible_ids`、`released_by_fault`、`replan` | `allocation_anim`、`outcome_summary` |
 | `plot`（formats/dpi） | `run.main` → `plot.make_plots` → `plot.registry` | — | 见图清单 |
 
 ### 2.1 图的分层与查找
 
 图的唯一事实来源是 `plot/registry.py`（`FIGURES`）——**新增一张图 = 在表里加一行**。
-图按「**看图目的**」分四层（论文叙事线），而不是按实现技术：
+图按「**看图目的**」分三层（论文叙事线），而不是按实现技术：
 
 | 层 | 回答什么问题 | 特性 |
 |---|---|---|
-| `setup` | 实验设了什么？（问题规模 / 算法超参 / 约束开关） | 参数即图，全部过程图的口径基准 |
 | `initial` | 实验开始前世界长什么样？（地形 / 机巢 / 初始机队 / 首批任务） | 一次性静态，**与求解无关** |
 | `process` | 这一轮怎么跑的？（滚动闭环的过程观测） | 随周期演化，看的是单次运行 |
 | `report` | 实验说明什么？（可直接进论文的结论图） | 常跨多 seed / 多组配置汇总 |
@@ -67,30 +65,16 @@
 plot/initial/geo_overview.py  →  plot_geo_overview  →  geo_overview.png
 ```
 
-层内另有 `topic` 二级标签（mechanism / allocation / spatial / solver / constraint /
-fleet / robustness / comparison / config）用于再归类，但**不建目录**——避免层级深过头。
+层内另有 `topic` 二级标签（config / allocation / outcome）用于再归类，但**不建目录**——避免层级深过头。
 
-当前 16 张图（此表由 `python -c "from plot import registry; print(registry.describe())"`
+当前 3 张图（此表由 `python -c "from plot import registry; print(registry.describe())"`
 生成，改动后请重跑覆盖）：
 
 | 层 | 图 id | 说明 | 数据来源 |
 |---|---|---|---|
-| setup | `setup_params` | 实验设定总览：问题规模 / DMDE 超参 / 选择机制 / 约束开关 / 滚动设定 | `config.yaml 全段 + solution.json 的 nests / tasks / uavs` |
 | initial | `geo_overview` | 初始态势：地形 · 机巢 · 初始机队 · 任务散布 | `solution.json 的 dem / nests / tasks / uavs` |
-| process | `task_selection` | 动态任务选择：漏斗逐级收敛 / 保留率 / 能力上限 / 池守恒 | `metrics.json 的 cycles[].selection 全字段 / muas.n_selected` |
-| process | `dmde_search` | DMDE 搜索机制：动态交叉率 CR（公式 3-9）/ 探索—开发平衡 / 收敛曲线 / 求解开销 | `solution.json 的 cycles[].cost_history（长度−1 即 S）+ config.yaml 的 solver.zeta` |
-| process | `allocation` | 单周期分配结构：航迹条（线长 ∝ 航程）/ 逐周期空间演化（总览） | `solution.json 的 cycles[].tours + tasks[] / nests[] / dem` |
-| process | `allocation_gantt` | 分配航迹条（从 allocation 拆出）：线长 ∝ 真实航程 · 方块=任务 · 两端起降巢 | `solution.json 的 cycles[].tours（est_cost）+ tasks[] / nests[]` |
-| process | `allocation_map` | 逐周期空间演化（从 allocation 拆出）：DEM + 航次回放 1×N | `solution.json 的 cycles[].tours + tasks[] / nests[] / dem` |
-| process | `allocation_anim` | 分配过程动画演变：滚动闭环航迹生长 / 任务点亮 + 当前周期 DMDE 收敛 + 机巢驻巢数实时标注（GIF） | `solution.json 的 cycles[].tours + cost_history + tasks[] / nests[] / dem` |
-| process | `allocation_status` | 机队再平衡：各机巢驻巢无人机数随周期演化 + 返航巢迁移弧线（GIF） | `solution.json 的 cycles[].tours（uav_id / start_nest_id / end_nest_id）+ nests` |
-| process | `allocation_anim_map` | 分配过程动画（仅地图 · 高清大图）：DEM + 航迹回放 / 任务点亮 + 机巢驻巢数实时标注（GIF） | `solution.json 的 cycles[].tours + tasks[] / nests[] / dem` |
-| process | `task_dynamics` | 任务命运：池水位 / 流量 / 状态矩阵 / 等待与滞留 / 地理生命周期 | `metrics.json 的 cycles[].pool_counts / completed_ids / deferred_ids + solution.json 的 tasks[]` |
-| process | `fleet_state` | 机队与机巢：三口径出动 / 占用热力图 / 选巢归因 / 机队迁移 | `metrics.json 的 cycles[].muas / nest_occupancy + solution.json 的 tours / nests` |
-| process | `constraint_state` | 约束与时限：预筛归因 / 约束状态 / 罚项量纲 / 时间窗满足度 | `metrics.json 的 cycles[].selection.filter_reasons / muas.{violations,penalty,infeasible_tags} + tasks[].{earliest,latest,completed_at}` |
-| report | `outcome_summary` | 结果总览：最终完成率 η_final 轨迹 / 未完成任务终局构成 / 双目标 / 关键指标 | `metrics.json 的 cycles[].pool_counts / completed_ids / summary + per_seed` |
-| report | `seed_summary` | 跨 seed 稳健性：三指标均值±σ / 分布箱线 / 逐 seed 演化 / 明细表 | `metrics.json 的 per_seed / seed_summary / seeds（仅多 seed 运行）` |
-| report | `ab_compare` | 两组配置对照：最终完成率 / 收益—代价 / 权衡 / Δ% | `results/metrics_<tag>.json 的 per_seed / seed_summary（需 ≥2 组对照）` |
+| process | `allocation_anim` | 分配过程动画演变：滚动闭环航迹生长 / 任务点亮 + 当前周期 DMDE 收敛（GIF） | `solution.json 的 cycles[].tours + cost_history + tasks[] / nests[] / dem` |
+| report | `outcome_summary` | 结果总览：完成率 CR 轨迹 / 未完成任务终局构成 / 双目标 / 关键指标 | `metrics.json 的 cycles[].pool_counts / completed_ids / summary + per_seed` |
 
 **改图不必重跑**：`plot.render_from_results(results_dir)` 直接读已落盘的
 `metrics.json` + `solution.json` 重绘。只想出一部分图（例如凑论文插图）：
@@ -102,8 +86,8 @@ render_from_results as r; r('task_allocation/experiments/exp01_smoke/results', \
 groups=['report'])"
 # 或跑实验时限定：python run.py --group report
 #   ⚠️ 分层名必须与 plot/registry.py 的 FigureSpec.group 一致，只有
-#      setup / initial / process / report 四个。旧文档写的 scene 不存在，
-#      resolve 会抛 ValueError（2026-10-24 修复 P0-3）。
+#      initial / process / report 三个（2026-10-26 图件裁剪后）。旧文档写的
+#      scene 不存在，resolve 会抛 ValueError（2026-10-24 修复 P0-3）。
 #   单张图：python run.py --figure geo_overview
 ```
 

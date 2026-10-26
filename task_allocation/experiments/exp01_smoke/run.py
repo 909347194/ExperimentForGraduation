@@ -354,12 +354,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--group", action="append", dest="groups", metavar="LAYER",
-        # 取值必须与 plot/registry.py 里 FigureSpec.group 完全一致
-        # （setup / initial / process / report）。旧值 "scene" 不存在于
-        # 图集，而 resolve 对未知分层是抛 ValueError——照旧文档执行会在
-        # 求解完成后崩溃并跳过末尾审计（2026-10-24 修复 P0-3）。
-        choices=("setup", "initial", "process", "report"),
-        help="只出某一层的图：setup=实验设定面板 / initial=环境初始配置 / "
+        # 取值必须与 plot/registry.py 里 Figure.group 完全一致
+        # （initial / process / report；2026-10-26 图件裁剪后 setup 层已删，
+        # 旧值 "scene" 不存在于图集，而 resolve 对未知分层是抛 ValueError——
+        # 照旧文档执行会在求解完成后崩溃并跳过末尾审计（2026-10-24 修复 P0-3）。
+        choices=("initial", "process", "report"),
+        help="只出某一层的图：initial=环境初始配置 / "
              "process=运行过程 / report=结论插图；可重复指定，省略则出全部",
     )
     parser.add_argument(

@@ -91,10 +91,74 @@ from ..theme import (
     declutter_figure,
     audit_frame,
 )
-from .allocation import _arrival_cycle_map
-from .allocation_status import _stationed_by_cycle
-
 __all__ = ["plot_allocation_anim"]
+
+
+# ── 私有数据助手（2026-10-26 图件裁剪：随 allocation / allocation_status
+#    模块一并移入本文件，P06 动画是唯一使用者）────────────────────────
+
+def _arrival_cycle_map(solution: dict[str, Any]) -> dict[int, int]:
+    """任务 id -> 到达周期号（供图面标注 ``T#·Ck``，Ck=到达周期）。
+
+    exp01 任务分批动态到达：``arrival_time`` 等于 ``(c-1)·Δt``（Δt=周期时长）。
+    据此把到达时刻映射到周期序号，直观区分「执行周期」与「到达周期」——
+    解释在线滚动下为何不能跨周期合并任务。
+    """
+    cycles = list(solution.get("cycles") or [])
+    if len(cycles) >= 2:
+        dt = float(cycles[1].get("current_time", 0.0)) - float(cycles[0].get("current_time", 0.0))
+    else:
+        dt = 600.0
+    if dt <= 0:
+        dt = 600.0
+    out: dict[int, int] = {}
+    for t in (solution.get("tasks") or []):
+        at = float(t.get("arrival_time", 0.0))
+        out[int(t["id"])] = int(round(at / dt)) + 1
+    return out
+
+
+def _stationed_by_cycle(solution: dict[str, Any]) -> tuple[list[dict[int, int]], list[int], dict[int, int]]:
+    """逐周期「各机巢驻留的无人机集合」。
+
+    返回 ``(snapshots, nest_ids, capacities)``：
+
+    * ``snapshots[k]`` 是 ``{uav_id: nest_id}``，k=0 为初始态（各 UAV 在其首飞
+      起点巢），k=c+1 为第 c 个周期结束后的驻巢分布；
+    * 未飞行的 UAV 保持上一周期位置（不更新）；
+    * ``nest_ids`` / ``capacities`` 供绘图标刻度与容量判断。
+
+    正确性依赖巢归属链连续（end_nest(c)==start_nest(c+1)）；若某 UAV 缺失
+    start_nest/end_nest 则该架不参与计数（只统计出现在 tours 里的活跃机队）。
+    """
+    nests = sorted(
+        (int(n["id"]) for n in (solution.get("nests") or [])),
+        key=lambda x: x,
+    )
+    capacities = {int(n["id"]): int(n.get("capacity", 0) or 0)
+                  for n in (solution.get("nests") or [])}
+
+    # 初始位置 = 每架 UAV 的「首飞起点巢」
+    location: dict[int, int] = {}
+    for cyc in solution.get("cycles") or []:
+        for t in cyc.get("tours") or []:
+            if not t.get("task_ids"):
+                continue
+            u = int(t["uav_id"])
+            sid = t.get("start_nest_id")
+            if sid is not None and u not in location:
+                location[u] = int(sid)
+
+    snapshots: list[dict[int, int]] = [dict(location)]  # k=0 初始态
+    for cyc in solution.get("cycles") or []:
+        for t in cyc.get("tours") or []:
+            if not t.get("task_ids"):
+                continue
+            eid = t.get("end_nest_id")
+            if eid is not None:
+                location[int(t["uav_id"])] = int(eid)
+        snapshots.append(dict(location))
+    return snapshots, nests, capacities
 
 # GIF 友好参数（位图动图体积极易膨胀，需压 dpi / 帧数）
 _GIF_DPI_CAP = 200      # 渲染 dpi 上限（超采样后再缩放到目标宽，保证文字/线条锐利）
@@ -206,7 +270,7 @@ def _frame_nest_counts(
       ``end_nest``；
     * 未参飞 UAV 保持上一周期位置不动（空转周期同理）。
 
-    ``snapshots`` 取自 ``allocation_status._stationed_by_cycle``：
+    ``snapshots`` 取自本模块的 ``_stationed_by_cycle``：
     ``snapshots[c]`` 为第 c 周期**开始时**的驻巢分布（``snapshots[0]``=初始
     态），其正确性依赖巢归属链连续（``end_nest(c)=start_nest(c+1)``，
     实测恒成立）。
@@ -320,7 +384,7 @@ def plot_allocation_anim(
     task_by_id = _task_by_id(solution)
     arrival_cycle = _arrival_cycle_map(solution)
     # 逐周期起始驻巢快照（供帧态「当前驻巢无人机数」标注，口径见
-    # _frame_nest_counts；与 allocation_status 同源，保证两图数字一致）
+    # _frame_nest_counts）
     snapshots, nest_ids, _capacities = _stationed_by_cycle(solution)
     n_tasks = len(tasks)
     n_cyc = len(cycles)
@@ -550,7 +614,6 @@ def plot_allocation_anim(
                   "各机巢三角形下方的「n 架」= 当前驻巢无人机数（逐帧随航迹更新）："
                   "航次执行期间该 UAV 在空、不计入任何巢，完成航次回到返航巢后计入，"
                   "与画面上的无人机图标、归巢空心环严格同步；零驻巢置灰。"
-                  "各机巢驻巢无人机数的逐周期演化已独立成图 allocation_status.gif。"
                   "里程 = 各航迹 est_cost 之和（km）。"
                   "底图地形与机巢为静态层。Ck 标出到达周期，晚到任务（如 T19·C3）"
                   "无法并入早周期航次。")
@@ -647,7 +710,7 @@ def plot_allocation_anim(
 def _last_change_index(hist: Sequence[float]) -> int:
     """best-so-far 序列最后一次发生改进（下降）的代索引；全程不变返回 0。
 
-    与 ``dmde_search.py`` 同一口径，用于把 x 轴截断到「有效改进窗口」。
+    用于把 x 轴截断到「有效改进窗口」。
     """
     last = 0
     prev = hist[0]
@@ -661,7 +724,7 @@ def _last_change_index(hist: Sequence[float]) -> int:
 def _draw_conv(ax, solution: dict[str, Any], c: int | None, p: float) -> None:
     """右栏上：当前周期 DMDE 收敛曲线（best-so-far），随动画进度 p 渐进揭示。
 
-    呈现约定（与 ``dmde_search.py`` / notes.md §9 一致，只改绘图不改数据）：
+    呈现约定（与 notes.md §9 一致，只改绘图不改数据）：
 
     1. 只画「当前周期」自己的曲线——各周期目标量级差可达 1 个数量级，
        跨周期共享 y 轴会把本周期改进压成像素级平线；

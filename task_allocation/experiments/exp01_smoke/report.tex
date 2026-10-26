@@ -5,7 +5,7 @@
 % 数据来源（路径均相对本文件）：
 %   results/metrics.json   逐周期与汇总指标
 %   results/solution.json  场景、机群、任务、交付航次
-%   results/figures/       图产物（17 个）
+%   results/figures/       图产物（3 张：I01 / P06 gif+poster / R01，2026-10-26 图件裁剪）
 %
 % 编译：latexmk -xelatex report.tex     （ctex 需 xelatex）
 % ============================================================
@@ -41,11 +41,22 @@
 \begin{document}
 \maketitle
 
+\begin{center}
+\fbox{\parbox{0.92\textwidth}{\small\textbf{⚠️ 口径切换说明（2026-10-26）}：
+本实验已切换至\textbf{城关区小区域口径}（DEM 裁剪 $28.1\times32.0$\,km、6 机巢、
+满电航程 20\,km、任务 20/5/5 共 30 个、时间窗 $U(2.0,4.0)$ 周期）；
+§1 的场景与参数设定、§4 图表已按新口径/新图集修订。
+\textbf{摘要与 §2 的实测数值、各结果表（§2.2 快照映射、§2.4--§2.8）
+仍为 2026-10-19 旧口径快照}（拉萨大区 $101.6\times115.0$\,km、8 机巢、60 任务、
+80\,km 航程），待按新口径重跑后逐一刷新；引用前请以新 run 的
+\fname{results/metrics.json} 为准。}}
+\end{center}
+
 \begin{abstract}
-\noindent 本报告记录 exp01\_smoke 实验的设置与结果。实验在真实 DEM 地形（SRTM/ASTER 级高程数据，
-200\,m 采样）上构建含 10 架无人机、8 个机巢、60 个带时间窗动态任务的场景，采用
-\textbf{任务选择 + MUAS 求解} 的两阶段分配框架与滚动时域调度，任务分三个周期（30/10/20）到达，
-以收敛早停终止。结果显示：60 个任务全部完成（完成率 100\%），
+\noindent 本报告记录 exp01\_smoke 实验的设置与结果。实验在真实 DEM 地形（拉萨市城关区 ASTER GDEM 裁剪，约 30\,m 采样）上构建含 10 架无人机、6 个机巢、30 个带时间窗动态任务的场景，采用
+\textbf{任务选择 + MUAS 求解} 的两阶段分配框架与滚动时域调度，任务分三个周期（20/5/5）到达，
+以收敛早停终止。\textbf{（下述数值为 2026-10-19 旧口径快照，待重跑刷新，见文首口径切换说明。）}
+结果显示：60 个任务全部完成（完成率 100\%），
 \textbf{违约交付（废飞）0 次、淘汰 0 个、静态不可达 0 个}；
 按时率 88.3\%（迟到 7 个，平均迟到 703\,s，最大 1505\,s），
 奖励产出率 97.7\%、零奖励交付 0 个、有效完成率 100\%；
@@ -136,13 +147,14 @@ $\Rightarrow$ $\eta_{\mathrm{final}}$ 与旧完成率同值（60/60）；废飞 
 \begin{itemize}
   \item \textbf{方法优于任何基线}——对比方法尚未接入统一评价（属 exp05 职责；
         未实现的算法不得进入正式结果表）；
-  \item \textbf{长程吞吐能力}——本实验仅 8 个周期、任务集中在第 1--3 周期到达，
-        第 4 周期末任务池即清零；长程协议（Poisson 到达、多周期）下的证据
+  \item \textbf{长程吞吐能力}——本实验任务集中在第 1--3 周期到达（20/5/5）、
+        第 4 周期起无新到达，靠收敛早停终止（约 7 周期）；长程协议（Poisson 到达、多周期）下的证据
         应由独立的滚动实验承担；
-  \item \textbf{选择层规模压缩收益}——本实验机多任务少（10 架 / 60 任务），
+  \item \textbf{选择层规模压缩收益}——本实验机多任务少（10 架 / 30 任务），
         $n_{\mathrm{cand}}$ 截断从未触发，该机制属 exp02 职责；
-  \item \textbf{100\% 完成率即方法有效}——场景泊位与航程容量相对宽松，
-        完成率饱和不区分方法好坏，性能对照须在统一基线下进行。
+  \item \textbf{100\% 完成率即方法有效}——完成率受场景容量与航程约束影响
+        （旧口径下容量宽松、完成率饱和；城关区新口径 20\,km 航程下存在真几何不可达
+        任务，完成率不再饱和），不区分方法好坏，性能对照须在统一基线下进行。
 \end{itemize}
 
 多 seed 稳健性（同场景、同配置、同超参，仅随机种子不同）：
@@ -210,15 +222,17 @@ exp05\_baselines    & 与构造性基线统一对照             & L3 性能优�
 
 \subsection{场景与地形}
 
-实验区域位于青藏高原（约 N29$^\circ$/E091$^\circ$，拉萨一带），地形高程数据取自
-\fname{ASTGTMV003\_N29E091\_dem.tif}，采样步长 200\,m，有效格网 508 $\times$ 575。
-本地平面坐标系原点取 $(\text{lat}_0,\text{lon}_0)=(29.5222025,\,91.47933125)$，
-8 个机巢的地理坐标据此投影得到，场景范围约 $101.6 \times 115.0$\,km。
+实验区域为\textbf{拉萨市城关区}（约 N29.5--29.8$^\circ$/E91.0--91.3$^\circ$），地形高程数据取自
+\fname{Chengguan\_DEM.tif}（ASTER GDEM 城关区裁剪，EPSG:4326，1 角秒采样 $\approx 30$\,m，
+有效格网 1045 $\times$ 1043），范围约 $28.1 \times 32.0$\,km；任务撒点同时受
+\fname{Chengguan\_district.geojson} 区域多边形门禁（2026-10-26 城关区口径）。
+机巢与任务的地理坐标经本地平面投影（\fname{methods/utils/coordinates.py}）后参与计算，
+6 个机巢据此布设，场景范围与 DEM 包络一致。
 
 \textbf{距离口径}：所有距离一律采用\textbf{垂直切面 DEM 三维航程}（考虑地形起伏的
 空间直线距离），而非二维平面欧氏距离；凡由距离推导时间（ETA、时间窗判定、航程约束、
 边际插入估计）均由统一的代价提供者计算，保证全链路口径一致。
-机巢间跨度约 90\,km。
+机巢间最大间距约 17.8\,km。
 
 \subsection{机群、机巢与任务}
 
@@ -231,19 +245,19 @@ exp05\_baselines    & 与构造性基线统一对照             & L3 性能优�
 \toprule
 参数 & 取值 & 说明 \\
 \midrule
-无人机数量 & 10 架 & 初始驻留：UAV $i \to$ 机巢 $i \bmod 8$ \\
-机巢数量 / 容量 & 8 个 / 每巢 4 架 & 共 32 个泊位，机巢容量为硬约束 \\
-满电航程 & 80\,km & 每周期末在机巢充电恢复至满电 \\
+无人机数量 & 10 架 & 初始驻留：UAV $i \to$ 机巢 $i \bmod 6$（轮转驻留） \\
+机巢数量 / 容量 & 6 个 / 每巢 4 架 & 共 24 个泊位，机巢容量为硬约束 \\
+满电航程 & 20\,km & 每周期末在机巢充电恢复至满电（城关区口径，2026-10-26） \\
 巡航速度 & 15\,m/s & 所有航段统一 \\
-任务总数 & 60 个 & 周期 1/2/3 分别到达 30/10/20 \\
-任务时间窗 & 周期相关 & $\text{latest}=\text{到达时刻}+U(4.5,9.0)\times\text{周期长}$ \\
+任务总数 & 30 个 & 周期 1/2/3 分别到达 20/5/5 \\
+任务时间窗 & 周期相关 & $\text{latest}=\text{到达时刻}+U(2.0,4.0)\times\text{周期长}$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 任务属性包括三维坐标、奖励值、最早/最晚可服务时刻与状态。
-任务奖励的量级约为 7.0（本批任务最小奖励 7.0156），
-时间窗跨度按 DEM 航时标定为 4.5--9.0 个周期。
+任务奖励 $R\sim U(1,10)$，时间窗跨度按城关区 DEM 航时重标定为 2.0--4.0 个周期
+（2026-10-26，周期长 600\,s）。
 
 \subsection{滚动时域与两阶段求解流程}
 
@@ -521,7 +535,8 @@ seed42 周期级明细（表~\ref{tab:polish_cyc}）显示增益集中在周期 
 \subsection{收敛特性与 DMDE 早收敛机理}
 \label{sec:convergence}
 
-本实验 DMDE 收敛曲线在前若干代即快速下降并早平（图~\ref{fig:dmde}），
+本实验 DMDE 收敛曲线在前若干代即快速下降并早平（逐周期收敛曲线见
+图~\ref{fig:anim} 右栏），
 表面看「收敛过快」，本质是其适应度结构使次级目标在已锁定的交付结构下
 几乎无梯度。五点机理：
 
@@ -661,98 +676,41 @@ seed 44 指标零变化有两重原因：(a) 其周期 4--7 每周期仅 1 个�
 \section{图表}
 % ============================================================
 
-本实验共产出 17 个图文件（含 3 个动画 GIF 及其末帧海报），
-全部位于 \texttt{results/figures/}。以下按用途分组列出主要图件。
+本实验共产出 3 张图件（2026-10-26 图件裁剪后）：初始环境 I01、
+过程 P06（GIF 动画，另出末帧海报）、结果 R01，全部位于 \texttt{results/figures/}。
 
-\subsection{场景与求解过程}
+\subsection{初始环境}
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.92\textwidth]{I01_geo_overview.png}
-\caption{场景总览：DEM 地形、8 个机巢位置与 60 个任务的空间分布。
-区域跨约 $101.6\times115.0$\,km，机巢跨度约 90\,km。}
+\caption{场景总览：DEM 地形、6 个机巢位置与 30 个任务的空间分布。
+区域为拉萨市城关区，约 $28.1\times32.0$\,km，机巢最大间距约 17.8\,km。}
 \label{fig:geo}
 \end{figure}
 
+\subsection{求解过程}
+
 \begin{figure}[H]
 \centering
-\begin{minipage}{0.48\textwidth}
-  \centering
-  \includegraphics[width=\textwidth]{P01_task_selection.png}
-  \caption{任务选择：各周期选中任务数、参与无人机数与顺延情况。}
-  \label{fig:sel}
-\end{minipage}\hfill
-\begin{minipage}{0.48\textwidth}
-  \centering
-  \includegraphics[width=\textwidth]{P02_dmde_search.png}
-  \caption{DMDE 搜索过程：适应度收敛曲线与目标分量的演化。}
-  \label{fig:dmde}
-\end{minipage}
+\includegraphics[width=0.92\textwidth]{P06_allocation_anim_poster.png}
+\caption{分配过程动画 \texttt{P06\_allocation\_anim.gif} 的末帧海报：滚动闭环
+航迹生长与任务点亮（左）+ 当前周期 DMDE 收敛曲线（右）。完整逐周期演化见同名 GIF。}
+\label{fig:anim}
 \end{figure}
 
-\subsection{分配结果}
+\subsection{结果汇总}
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.90\textwidth]{P03_allocation.png}
-\caption{分配结果总览：各无人机的任务归属与访问顺序。}
-\label{fig:alloc}
-\end{figure}
-
-\begin{figure}[H]
-\centering
-\includegraphics[width=0.90\textwidth]{P04_allocation_gantt.png}
-\caption{分配甘特图：各无人机航次的时间占用与任务执行时序，
-可看出任务在第 1--3 周期集中执行、第 4 周期收尾。}
-\label{fig:gantt}
-\end{figure}
-
-\begin{figure}[H]
-\centering
-\includegraphics[width=0.92\textwidth]{P05_allocation_map.png}
-\caption{分配地图：航次在真实地形上的空间轨迹（含返航腿）。
-本图为论文推荐使用的静态分配图。}
-\label{fig:map}
-\end{figure}
-
-\subsection{状态演化与结果汇总}
-
-\begin{figure}[H]
-\centering
-\begin{minipage}{0.48\textwidth}
-  \centering
-  \includegraphics[width=\textwidth]{P09_task_dynamics.png}
-  \caption{任务动力学：池内任务数、到达、完成与顺延的逐周期演化。}
-  \label{fig:dyn}
-\end{minipage}\hfill
-\begin{minipage}{0.48\textwidth}
-  \centering
-  \includegraphics[width=\textwidth]{P10_fleet_state.png}
-  \caption{机群状态：可用/忙碌/充电无人机数量与机巢占用的变化。}
-  \label{fig:fleet}
-\end{minipage}
-\end{figure}
-
-\begin{figure}[H]
-\centering
-\begin{minipage}{0.48\textwidth}
-  \centering
-  \includegraphics[width=\textwidth]{P11_constraint_state.png}
-  \caption{约束状态：航程、时间窗与机巢容量的满足情况。}
-  \label{fig:constraint}
-\end{minipage}\hfill
-\begin{minipage}{0.48\textwidth}
-  \centering
-  \includegraphics[width=\textwidth]{R01_outcome_summary.png}
-  \caption{结果汇总：完成、迟到、废飞、淘汰等核心指标的总体呈现。}
-  \label{fig:outcome}
-\end{minipage}
+\includegraphics[width=0.92\textwidth]{R01_outcome_summary.png}
+\caption{结果汇总：完成、迟到、废飞、淘汰等核心指标的总体呈现。}
+\label{fig:outcome}
 \end{figure}
 
 \subsection{动画图件}
 
-以下 3 个动画 GIF 及其末帧海报同样位于 \texttt{results/figures/}，
-动态展示分配与执行过程，建议在论文中以其\textbf{末帧海报}作为静态插图：
+gif 只保留分配过程动画（2026-10-26 图件裁剪），另有其末帧海报可用于论文静态插图：
 
 \begin{table}[H]
 \centering
@@ -763,10 +721,8 @@ seed 44 指标零变化有两重原因：(a) 其周期 4--7 每周期仅 1 个�
 \toprule
 文件 & 类型 & 内容 \\
 \midrule
-\texttt{P06\_allocation\_anim.gif} & 动画 & 分配过程逐周期演化 \\
-\texttt{P07\_allocation\_status.gif} & 动画 & 机群/任务状态逐周期演化 \\
-\texttt{P08\_allocation\_anim\_map.gif} & 动画 & 全周期地图分配动画（约 373\,MB，体积较大） \\
-\texttt{P06/P07/P08\_*\_poster.png} & 静态 & 上述动画的末帧海报，可直接用于论文 \\
+\texttt{P06\_allocation\_anim.gif} & 动画 & 分配过程逐周期演化（航迹生长 / 任务点亮 / DMDE 收敛） \\
+\texttt{P06\_allocation\_anim\_poster.png} & 静态 & 上述动画的末帧海报，可直接用于论文 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -787,7 +743,7 @@ seed 44 指标零变化有两重原因：(a) 其周期 4--7 每周期仅 1 个�
 \texttt{metrics.json} & 逐周期与汇总指标（本报告全部数值来源） \\
 \texttt{solution.json} & 场景、机群、任务、逐周期交付航次 \\
 \texttt{run\_meta.json} & 运行元数据（种子、DEM 参数、时间戳） \\
-\texttt{figures/} & 17 个图产物 \\
+\texttt{figures/} & 3 张图产物（I01 / P06 gif+poster / R01） \\
 \bottomrule
 \end{tabular}
 \end{table}

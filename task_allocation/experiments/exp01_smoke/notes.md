@@ -20,22 +20,21 @@ exp01_smoke/
 ├── audit_correctness.py  # 运行末尾自动执行:守恒/可行/口径自洽审计
 ├── paths.py      # 目录布局与 sys.path 引导
 ├── config.yaml   # 全部可调参数
-├── plot/         # 可视化模块(代码)——按"看图目的"分四层(论文叙事线)
+├── plot/         # 可视化模块(代码)——按"看图目的"分三层(论文叙事线)
 │   ├── __init__.py    # make_plots() 调度 + 从 results/ 直接重画
-│   ├── registry.py    # ★ 图清单(唯一事实来源):16 张图,新增 = 加一行
+│   ├── registry.py    # ★ 图清单(唯一事实来源):3 张图,新增 = 加一行
 │   ├── theme.py       # 学术绘图样式、中文字体、保存约定(唯一 import pyplot 处)
 │   ├── base/          # 被图依赖但自己不是图的绘制件
 │   │   ├── dem.py     #   DEM 取数/晕渲/分层设色
 │   │   └── geo.py     #   图标图例、UAV 配色与航段、行式排版(_row_figsize)
-│   ├── setup/         # ① 实验设置:问题规模/算法超参/约束开关(参数即图)
-│   ├── initial/       # ② 初始状态:地形/机巢/初始机队/首批任务(与算法无关)
-│   ├── process/       # ③ 求解过程:滚动闭环逐周期"发生了什么"(6 张)
-│   └── report/        # ④ 结果分析:跨 seed 结论与配置对照(可直接进论文)
+│   ├── initial/       # ① 初始状态:地形/机巢/初始机队/首批任务(与算法无关)
+│   ├── process/       # ② 求解过程:滚动闭环逐周期"发生了什么"(1 张)
+│   └── report/        # ③ 结果分析:总体结果(可直接进论文)
 └── results/      # 数值产物
     ├── metrics.json    # 数值指标(不含分配结构)
     ├── run_meta.json   # seed / 时间戳 / 配置路径 / DEM 网格
     ├── solution.json   # 任务表 + 机巢表 + 各周期航次与收敛轨迹 + dem + uavs
-    └── figures/        # 图产物:16 张 × {png, pdf}
+    └── figures/        # 图产物:3 张(2026-10-26 图件裁剪后)
 ```
 
 **拆分原则**：`run.py` 只做编排，不堆细节。产物按「数值 vs 结构」分流：
@@ -156,35 +155,24 @@ exp01 的定位是**正确性验证台 + 口径标定台**（冒烟 + 审计 + �
 3. 每个周期的 `check_feasible` 无 violation。
 4. `T_t^exec ⊆ T_t^sel ⊆ T_t`、`U_t^exec ⊆ U_t^avail` 恒成立。
 5. 恒等式 `arrived = done + unreach + elim + remain` 每周期成立（审计自动核对）。
-6. `make_plots: true` 时产出 16 张图 × 2 种格式，无缺字告警。
+6. `make_plots: true` 时产出 3 张图（I01 / P06 / R01），无缺字告警。
 7. 运行末尾 `audit_correctness.py` 全 PASS（N1 搜索期自洽 / N2 交付解可复算 / F 池水位守恒）。
 8. `run_meta.json` 的 `config_fingerprint` 与本次生效配置一致（换 λ / 代数 /
    门禁开关后指纹必变，产物可按指纹回溯口径）。
 
 > 出图约定：`plot.formats` 默认 `[png]`（矢量图需 `--pdf`；GIF 在图集含动画图时
-> 自动补）。16 张图中有 5 张带前置条件 —— 3 张动画图需多周期 tours，`seed_summary`
-> 需多 seed，`ab_compare` 需 ≥2 组对照 json；条件不满足时打印「跳过（数据不满足前置条件）」，属预期行为，不是失败。
+> 自动补）。3 张图中 `allocation_anim`（P06）为动画图（需多周期 tours），条件不满足时
+> 打印「跳过（数据不满足前置条件）」，属预期行为，不是失败。
 
 ## 图产物（results/figures/）
 
 | 层 | 图 id | 内容 | 数据来源 |
 |---|---|---|---|
-| setup | `setup_params` | 实验设定总览：问题规模 / DMDE 超参 / 选择机制 / 约束开关 / 滚动设定 | `config.yaml` 全段 + `solution.json` 的 nests / tasks / uavs |
 | initial | `geo_overview` | 初始态势：地形 · 机巢 · 初始机队 · 任务散布 | `solution.json` 的 dem / nests / tasks / uavs |
-| process | `task_selection` | 动态任务选择：漏斗逐级收敛 / 保留率 / 能力上限 / 池守恒 | `metrics.json` 的 cycles[].selection 全字段 / muas.n_selected |
-| process | `dmde_search` | DMDE 搜索机制：动态交叉率 CR / 探索—开发平衡 / 收敛曲线 / 求解开销 | `solution.json` 的 cycles[].cost_history + `config.yaml` 的 solver.zeta |
-| process | `allocation` | 单周期分配结构：航迹条（线长 ∝ 航程）/ 逐周期空间演化 | `solution.json` 的 cycles[].tours + tasks[] / nests[] / dem |
-| process | `allocation_gantt` | 分配航迹条：线长 ∝ 真实航程 · 方块=任务 · 两端起降巢 | `solution.json` 的 cycles[].tours + tasks[] / nests[] |
-| process | `allocation_map` | 逐周期空间演化：DEM + 航次回放 1×N | `solution.json` 的 cycles[].tours + tasks[] / nests[] / dem |
 | process | `allocation_anim` | 分配过程动画演变：滚动闭环航迹生长 / 任务点亮 + 当前周期收敛 + 机巢驻巢数实时标注（GIF） | `solution.json` 的 cycles[].tours + cost_history + tasks[] / nests[] / dem |
-| process | `allocation_status` | 机队再平衡：各巢驻巢无人机数演化 + 返航巢迁移弧线（GIF） | `solution.json` 的 cycles[].tours（uav_id / start_nest_id / end_nest_id）+ nests |
-| process | `allocation_anim_map` | 分配过程动画（仅地图 · 高清大图）：DEM + 航迹回放 / 任务点亮 + 机巢驻巢数实时标注（GIF） | `solution.json` 的 cycles[].tours + tasks[] / nests[] / dem |
-| process | `task_dynamics` | 任务命运：池水位 / 流量 / 状态矩阵 / 等待与滞留 / 地理生命周期 | `metrics.json` 的 cycles[].pool_counts / completed_ids / deferred_ids + `solution.json` 的 tasks[] |
-| process | `fleet_state` | 机队与机巢：三口径出动 / 占用热力 / 选巢归因 / 机队迁移 | `metrics.json` 的 cycles[].muas / nest_occupancy + `solution.json` 的 tours / nests |
-| process | `constraint_state` | 约束与时限：预筛归因 / 约束状态 / 罚项量纲 / 时间窗 | `metrics.json` 的 cycles[].selection.filter_reasons / muas.{violations,penalty,infeasible_tags} + `solution.json` 的 tasks[] |
 | report | `outcome_summary` | 结果总览：完成率 CR 轨迹 / 未完成任务终局构成 / 双目标 / 关键指标 | `metrics.json` 的 cycles[] / summary + per_seed |
-| report | `seed_summary` | 跨 seed 稳健性：三指标均值±σ / 分布箱线 / 逐 seed 演化 / 明细表 | `metrics.json` 的 per_seed / seed_summary / seeds(仅多 seed 运行) |
-| report | `ab_compare` | 两组配置对照：完成率 / 收益—代价 / 权衡 / Δ% | `results/metrics_<tag>.json`(需 ≥2 组对照) |
+
+（2026-10-26 图件裁剪：16 张 → 3 张，gif 只保留 P06；被裁图件见 git 历史。）
 
 每张图同时出 `png`（预览）与 `pdf`（矢量，直接进 LaTeX）；中文字体 Noto Sans CJK SC。
 

@@ -165,8 +165,7 @@ def build_config_bundle(cfg: Mapping[str, Any]) -> ConfigBundle:
         allow_idle_uav=bool(m.get("allow_idle_uav", True)),
         # 双目标口径（2026-10-23 修复透传）：此前 yaml 的 muas.lexicographic /
         # muas.big_m 在本装配里被漏掉——算法恒按 dataclass 默认（lexicographic
-        # =True、big_m=None）跑，而 plot/setup/setup_params.py 直接从 yaml 取值
-        # 标注「字典序 / 加权和」。即 yaml 改了算法不动、图却跟着变 ⇒ 图会说谎。
+        # =True、big_m=None）跑，而绘图层曾直接从 yaml 取值标注「字典序 / 加权和」。即 yaml 改了算法不动、图却跟着变 ⇒ 图会说谎。
         # 现显式透传：yaml 与算法同源，消融改 false 才真正切到 legacy 加权和。
         lexicographic=bool(m.get("lexicographic", True)),
         big_m=(None if m.get("big_m") is None else float(m["big_m"])),
