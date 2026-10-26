@@ -25,6 +25,7 @@ from task_allocation.common.task_scenario import (
     build_synthetic_tasks,
     build_task_batches,
     dem_planar_extent,
+    region_planar_envelope,
 )
 from task_allocation.common.types import Nest, Task, UAV
 from task_allocation.methods.muas.cost.dem_terrain import DEMTerrain
@@ -92,6 +93,14 @@ def build_terrain(scenario: Any, cfg: Mapping[str, Any]) -> DEMTerrain | None:
         dx0, dy0, dx1, dy1 = dem_planar_extent(scenario.dem, scenario.frame, inset)
         x0, y0 = min(x0, dx0), min(y0, dy0)
         x1, y1 = max(x1, dx1), max(y1, dy1)
+
+    # 区域多边形门禁：任务域把区域包络并进来（城关区口径）
+    region_rel = (cfg.get("data", {}) or {}).get("region_geojson")
+    if region_rel is not None:
+        renv = region_planar_envelope(Path(paths.DATA_DIR) / region_rel, scenario.frame)
+        if renv is not None:
+            x0, y0 = min(x0, renv[0]), min(y0, renv[1])
+            x1, y1 = max(x1, renv[2]), max(y1, renv[3])
     extent = (x0 - margin, y0 - margin, x1 + margin, y1 + margin)
     return scenario.dem.to_metric_terrain(scenario.frame, step_m=step_m, extent=extent)
 
@@ -137,6 +146,10 @@ def build_task_config(cfg: Mapping[str, Any], seed: int) -> SyntheticTaskConfig:
     t = cfg.get("tasks", {}) or {}
     rolling = cfg.get("rolling", {}) or {}
     cycle_length = float(rolling.get("cycle_length", 600.0))
+    # 区域门禁 geojson（城关区）：相对 task_allocation/data/，解析为绝对路径传入
+    data_cfg = cfg.get("data", {}) or {}
+    region_rel = data_cfg.get("region_geojson")
+    region_path = str(Path(paths.DATA_DIR) / region_rel) if region_rel else None
     return SyntheticTaskConfig(
         n_tasks=int(t.get("n_tasks", 10)),
         seed=int(seed),
@@ -152,6 +165,7 @@ def build_task_config(cfg: Mapping[str, Any], seed: int) -> SyntheticTaskConfig:
         deadline_cycles_max=float(t.get("deadline_cycles_max", 2.0)),
         cycle_length=cycle_length,
         anchor_to_nests=bool(t.get("anchor_to_nests", True)),
+        region_geojson=region_path,
     )
 
 

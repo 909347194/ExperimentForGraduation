@@ -36,10 +36,23 @@ solution 的 tours / fitness_weights 才能复核 D/J/K/M/N 项，只靠
 - ``--seeds``      覆盖 ``experiment.seeds``。支持 ``42``、``42,43,44``、
   ``42 43 44``、``42-46``（区间展开，去重保序）；缺省时按 yaml 走
   （``seeds`` 缺失或单元素 → 单 seed）。
+- ``--window MIN MAX``  快捷覆盖任务时间窗（周期数），等价于两条
+  ``--set tasks.deadline_cycles_min/max``。
+- ``--range-km KM``  快捷覆盖满电航程（公里），等价于
+  ``--set problem.uav_max_range=<KM*1000>``。
+- ``--set dotted.path=value``  覆盖任意节点；值支持
+  null/true/false/int/float/list[...]/dict{...}/str（dict/list 走 json 解析，
+  不再被当字符串吞掉）。
+- ``--dry-run``  只解析 + 合并配置并打印生效值（含所有覆盖），**不求解**——
+  验证命令行覆盖是否写对时不必等 10 分钟。
 - ``--no-plots``  跳过出图。多种子 × 多代数的长跑调试时只关心 json
   数值，不必每次等 16 张图。
 - ``--no-audit``  跳过末尾的方法正确性审计（默认跑：20+ 项不变量/口径，
-  实际条数随数据形态浮动——条件分支是否触发；FAIL 终端报警）。"""
+  实际条数随数据形态浮动——条件分支是否触发；FAIL 终端报警）。
+
+运行进度：``horizon.run`` 每完成一个滚动周期都会打印一行
+``[cycle k/N] 入池/选中/执行/顺延/不可达 + 单周期求解耗时``，长跑期间
+能直接看出进度与成本去向（无需等到全部收敛）。"""
 
 from __future__ import annotations
 
@@ -171,7 +184,11 @@ def _run_once(
         event_config=bundle.event,
         nest_offset=bundle.nest_offset,
     )
-    records = horizon.run(n_cycles=bundle.n_cycles, arrivals=batch.arrivals)
+    records = horizon.run(
+        n_cycles=bundle.n_cycles,
+        arrivals=batch.arrivals,
+        progress_cb=_emit_cycle_progress,
+    )
 
     facts = RunFacts(
         bundle=bundle,
@@ -239,13 +256,28 @@ def _parse_seed_list(tokens: list[str]) -> list[int]:
 
 
 def _coerce_set_value(v: str):
-    s = v.strip().lower()
-    if s in ("null", "none"):
+    """把 ``--set k=v`` 的 ``v`` 解析成合适类型。
+
+    优先级：null/none → None；true/false → bool；``[...]``/``{...}`` 字面量
+    走 json（支持 ``[3,4,5]``、``{"a":1}``）；再试 int → float；都不行则原样 str。
+    旧实现把 ``[3,4,5]`` 当字符串留着，list/dict 覆盖会被静默吞掉，是 CLI 的
+    主要坑（2026-10-26 修）。
+    """
+    import json
+
+    s = v.strip()
+    low = s.lower()
+    if low in ("null", "none"):
         return None
-    if s == "true":
+    if low == "true":
         return True
-    if s == "false":
+    if low == "false":
         return False
+    if s[:1] in ("[", "{") and s[-1:] in ("]", "}"):
+        try:
+            return json.loads(s)
+        except json.JSONDecodeError:
+            pass  # 解析失败则回退到下面的标量/字符串逻辑
     try:
         return int(s)
     except ValueError:
@@ -254,7 +286,33 @@ def _coerce_set_value(v: str):
         return float(s)
     except ValueError:
         pass
-    return v
+    return s
+
+
+def _emit_cycle_progress(record, step: int, n_total: int) -> None:
+    """逐周期进度行（挂到 ``horizon.run`` 的 ``progress_cb``）。
+
+    每行一个周期，给出「入池/选中/执行/顺延/不可达」规模与单周期求解耗时，
+    让长跑期间能看出进度与成本去向，而不是一片空白。字段均取自
+    ``CycleRecord``（选择层与二阶段诊断已落盘其中）。
+    """
+    sel = record.selection or {}
+    muas = record.muas or {}
+    n_in = sel.get("n_tasks_in", "?")
+    n_sel = muas.get("n_selected", "?")
+    n_exec = len(getattr(record, "executed_ids", []) or [])
+    n_defer = len(getattr(record, "deferred_ids", []) or [])
+    n_unreach = len(getattr(record, "unreachable_ids", []) or [])
+    solve = muas.get("solve_seconds", None)
+    evals = muas.get("n_evals", None)
+    solve_s = f"{solve:.2f}s" if isinstance(solve, (int, float)) else "?"
+    evals_s = f"{evals}" if evals is not None else "?"
+    print(
+        f"[cycle {step}/{n_total}] 入池={n_in} 选中={n_sel} "
+        f"执行={n_exec} 顺延={n_defer} 不可达={n_unreach} | "
+        f"求解={solve_s} 评估={evals_s}",
+        flush=True,
+    )
 
 
 def _apply_dotted_set(cfg: dict, items) -> None:
@@ -312,7 +370,23 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--set", action="append", default=[], metavar="dotted.path=value",
         help="深合并覆盖 config.yaml 任意节点（与 exp02/exp05 同语义），"
              "如 --set muas.lambda_cost=1e-1 --set experiment.output_dir=results_x；"
-             "支持多次；值支持 null/true/false/int/float/str",
+             "支持多次；值支持 null/true/false/int/float/list[...]/dict{...}/str。"
+             "想先确认覆盖是否生效而不跑求解，加 --dry-run。",
+    )
+    parser.add_argument(
+        "--window", nargs=2, metavar=("MIN", "MAX"), type=float,
+        help="快捷覆盖任务时间窗（周期数）：--window 2.0 4.0 等价于 "
+             "--set tasks.deadline_cycles_min=2.0 --set tasks.deadline_cycles_max=4.0",
+    )
+    parser.add_argument(
+        "--range-km", dest="range_km", type=float, metavar="KM",
+        help="快捷覆盖满电航程（公里）：--range-km 20 等价于 "
+             "--set problem.uav_max_range=20000",
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true",
+        help="只解析+合并配置并打印生效值（含 --set/--window/--range-km 覆盖结果），"
+             "不构建场景、不求解、不出图、不审计。验证命令行覆盖是否写对时很有用。",
     )
     return parser.parse_args(argv)
 
@@ -323,10 +397,39 @@ def main(argv: list[str] | None = None) -> int:
     raw_cfg = load_config(cfg_path)
     # --set 深合并（在 --seeds 覆盖与 bundle 构建之前）
     _apply_dotted_set(raw_cfg, args.set)
+    # 快捷覆盖（等价于对应的 --set，写起来更干净）
+    if args.window:
+        raw_cfg.setdefault("tasks", {})["deadline_cycles_min"] = args.window[0]
+        raw_cfg.setdefault("tasks", {})["deadline_cycles_max"] = args.window[1]
+    if args.range_km is not None:
+        raw_cfg.setdefault("problem", {})["uav_max_range"] = args.range_km * 1000.0
     # 命令行覆盖：--seeds 优先于 yaml 的 experiment.seeds（调试/长跑入口）
     if args.seeds:
         raw_cfg.setdefault("experiment", {})["seeds"] = _parse_seed_list(args.seeds)
     bundle0 = build_config_bundle(raw_cfg)
+
+    # ── 仅校验覆盖（不求解）：打印生效配置后退出 ────────────────
+    if args.dry_run:
+        exp = raw_cfg.get("experiment", {}) or {}
+        prob = raw_cfg.get("problem", {}) or {}
+        tasks = raw_cfg.get("tasks", {}) or {}
+        seeds = exp.get("seeds") or [exp.get("seed")]
+        print("===== --dry-run：生效配置（已合并 --set/--window/--range-km） =====")
+        print(f"  seeds              = {seeds}")
+        print(f"  n_nests            = {prob.get('n_nests')}")
+        print(f"  n_uavs             = {prob.get('n_uavs')}")
+        print(f"  uav_max_range (km) = {prob.get('uav_max_range')/1000.0}")
+        print(f"  deadline_cycles    = {tasks.get('deadline_cycles_min')} ~ "
+              f"{tasks.get('deadline_cycles_max')}")
+        print(f"  n_tasks (周期1)     = {tasks.get('n_tasks')}")
+        print(f"  domain             = {tasks.get('domain')}")
+        print(f"  output_dir         = {exp.get('output_dir', 'results')}")
+        print("  ── 完整合并后的 raw_cfg（json） ──")
+        import json
+
+        print(json.dumps(raw_cfg, ensure_ascii=False, indent=2, default=str))
+        print("===== --dry-run 结束（未执行求解） =====")
+        return 0
 
     out_dir = EXP_DIR / str(bundle0.experiment.get("output_dir", "results"))
     figures_dir = EXP_DIR / str(bundle0.experiment.get("figures_dir", "results/figures"))
@@ -361,6 +464,7 @@ def main(argv: list[str] | None = None) -> int:
             estimator=estimator, verbose=verbose,
         )
         results.append((seed, facts, metrics, solution))
+        print(f"[exp01] seed={seed} 完成，耗时 {facts.wall_seconds:.1f}s")
 
     # 代表性运行取首个 seed（供现有图与单值指标展示）
     rep_seed, rep_facts, rep_metrics, rep_solution = results[0]

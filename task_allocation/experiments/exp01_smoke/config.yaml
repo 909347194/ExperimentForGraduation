@@ -24,16 +24,17 @@ experiment:
 data:
     source: file
     path: nest_location_data.csv # 相对 task_allocation/data/
-    dem: ASTGTMV003_N29E091_dem.tif # 同上；不需要高程时置 null
+    dem: Chengguan_DEM.tif # 城关区 DEM；不需要高程时置 null
+    region_geojson: Chengguan_district.geojson # 任务撒点区域门禁（城关区多边形）
     coordinate_column: Coordinate
 
 # 本实验的问题规模设定（改这里做规模/容量灵敏度，不动数据文件）
 problem:
-    n_nests: 8 # 用前 8 个机巢（CSV 共 8 条）
+    n_nests: 6 # 用前 6 个机巢（城关区 CSV 共 6 条）
     nest_capacity: 4 # 单机巢容量（架）
-    n_uavs: 10 # 机队规模（<= n_nests × nest_capacity 才不初始超容；8×4=32）
+    n_uavs: 10 # 机队规模（<= n_nests × nest_capacity 才不初始超容；6×4=24）
     uav_speed: 15.0 # m/s
-    uav_max_range: 80000.0 # 满电航程（m）；机巢跨度约 90 km，80km 为正式口径（兼顾可达性与避免单 tour 过度填充）
+    uav_max_range: 20000.0 # 满电航程（m）；20 km（城关区口径，用户 2026-10-26 指定）。注意：区域到最近机巢最远约 17.7 km ⇒ 往返 35.4 km 超航程，远巢任务将出现真几何不可达（分母合法排除项）
 
 # 合成任务点（暂无实测任务数据；后续换 data/task_location_data.csv 时
 # 只需替换生成函数，本节参数可平移）
@@ -41,12 +42,14 @@ tasks:
     source: synthetic
     # 撒点域：dem_extent = 在 DEM 有效范围内全域均匀撒点（需求不确定的现实口径，默认）；
     # nest_anchored = 绕机巢 spread_m 半径内撒点（人为缩小问题，仅作消融对照）。
-    # 全域撒点后约 30% 任务因违反时间窗而天然不可达（航程 100% 可达），
-    # 这是约束的真实选择性压力，见 common/task_scenario.py 模块文档里的实测数据。
+    # 全域撒点后约束压力两源（城关区口径，uav_max_range=20 km）：
+    # 航程——区域到最近机巢最远约 17.7 km，往返 35.4 km 超 20 km ⇒ 远巢任务
+    # 真几何不可达（分母合法排除项，selection.feasibility 按归因分账）；
+    # 时间窗——见 common/task_scenario.py 模块文档里的实测数据。
     domain: dem_extent
     dem_inset_m: 0.0 # DEM 包络内缩（m）；>0 可避开边缘半像素/插值外推区
     max_reject_trials: 8 # 落点出 DEM 时的拒绝采样重试轮数
-    n_tasks: 30 # 第 1 周期到达的初始任务数；后两周期到达 10、20（见 rolling.arrivals），共 60
+    n_tasks: 20 # 第 1 周期到达的初始任务数；后两周期到达 5、5（见 rolling.arrivals），共 30（2026-10-26 用户指定口径）
     spread_m: 12000.0 # 相对锚点机巢的散布半径（m）；仅 domain=nest_anchored 生效
     reward_min: 1.0
     reward_max: 10.0
@@ -80,8 +83,12 @@ tasks:
     #   4.5~9.0 → 95%（19/20）  ← 当前默认：4.2~9.0 区间完成率平台期，
     #                                  任取其中值均可；保留选择性压力（仍有淘汰）
     #   5.0~10.0 → 100% 但零淘汰（时间窗失效），代价 +16%、求解 +57%，不取
-    deadline_cycles_min: 4.5
-    deadline_cycles_max: 9.0
+    # 【城关区口径重标定（2026-10-26）】旧 4.5~9.0 按旧大区域最大直飞 2274 s
+    # 标定，在城关区（最大单程 ~12.4 km ≈ 870 s @15 m/s）明显过松、时间窗失效。
+    # 新下界 = (最大直飞航时 870 s + 服务 300 s) × 1.05 ≈ 1230 s ≈ 2.0 周期；
+    # 上界保持 2:1 比例 → 4.0 周期。扫描留档见 scan_wc*.log / results_scan_wc/。
+    deadline_cycles_min: 2.0
+    deadline_cycles_max: 4.0
     anchor_to_nests: true # 遗留别名，仅 domain=nest_anchored 时生效
 
 # 算法开关（对齐 Chapter3_README §8 技术路线）
@@ -107,10 +114,9 @@ selection:
     wait_scale: 3600.0 # 等待补偿的时间尺度（s）
     feasibility:
         # 往返口径的航程裕度：2×单程 ≤ margin×剩余航程。1.0 = 物理上限，
-        # 与完成闸门 check_range_constraint(margin=1.0) 同口径——T105/T119
-        # 往返 78.5/77.0km 的单任务航次实证可服（est_cost 79765m ≤ 80km）。
-        # 旧单程口径的 0.95 等效 76km 单程，直接迁到往返口径会把可达半径
-        # 腰斩到 38km 误杀远站任务，故置 1.0；<1 仅消融。
+        # 与完成闸门 check_range_constraint(margin=1.0) 同口径（历史例子：
+        # 80 km 时代 T105/T119 往返 78.5/77.0 km 单任务航次可服；城关区
+        # 20 km 口径下已无此量级航次，1.0 仍取物理上限，语义不变）。
         range_margin: 1.0
         # 时间窗预筛：默认关闭（2026-10-15 用户原则「任务不被完成只有
         # 物理约束被违反」）。迟到是奖励定价问题（适应度按 L/W 折减），
@@ -451,8 +457,8 @@ rolling:
     # 真实目标 = 持续到达下「尽可能多且正确地完成任务」。3 周期窗口的完成率
     # 只是窗口长度产物，无区分度；多周期 + Poisson 到达流下，吞吐 / 正确
     # 执行率 / 违约交付（废飞）/ 淘汰（须为 0）才有统计意义。
-    # 【2026-10-22 用户裁定：本实验保持 fixed-60 冒烟口径】即初始 30 + 周期
-    # 2/3 各 10/20（共 60 个任务），周期 4 起无新到达，靠 stop_when_stable
+    # 【2026-10-22 用户裁定：本实验保持 fixed 冒烟口径】初始 20 + 周期 2/3 各
+    # 5/5（共 30 个任务，2026-10-26 用户调整为 20/5/5），周期 4 起无新到达，靠 stop_when_stable
     # 早停（实测约 7 周期收敛）。长程 Poisson 流由 exp06_joint_regime 承担；
     # 这里是「链路正确 + 口径标定 + 回归基线」台，不是吞吐实验台。
     n_cycles: 60 # 安全上限（周期数本身不定）；真实停止由 stop_when_stable 收敛早停决定
@@ -473,8 +479,8 @@ rolling:
     #   冒烟口径的既定设定，配合早停即可，不是配置遗漏）。
     #   长程「持续到达」口径请用 poisson/uniform（exp06 在用）。
     arrivals:
-        mode: fixed # 确定性到达：周期2到达10、周期3到达20（周期1初始=30，共60）；周期4起补0无新到达
-        counts: [10, 20]
+        mode: fixed # 确定性到达：周期1到达20（初始）、周期2到达5、周期3到达5，共 30；周期4起补0无新到达
+        counts: [5, 5]
         # poisson 口径参考（长程吞吐实验用，非本实验默认）：
         # mode: poisson
         # lambda: 5.0

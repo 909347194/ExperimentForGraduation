@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """dem_geotiff.py — 轻量 GeoTIFF DEM 读取、地理参考与高程查询。
 
-针对 ``task_allocation/data/ASTGTMV003_N29E091_dem.tif``（ASTER GDEM v3：
-1 角秒、3601x3601、int16、LZW、EPSG:4326）设计，对一般的单波段
+针对 ``task_allocation/data/Chengguan_DEM.tif``（城关区 DEM 瓦片）设计，
+对一般的单波段
 GeoTIFF 同样适用。**不依赖 rasterio / GDAL / pyproj**：
 
     - 栅格解码：PIL（支持 LZW / Deflate / PackBits / 未压缩）

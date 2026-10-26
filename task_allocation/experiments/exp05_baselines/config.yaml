@@ -56,16 +56,17 @@ methods:
 data:
     source: file
     path: nest_location_data.csv # 相对 task_allocation/data/
-    dem: ASTGTMV003_N29E091_dem.tif # 同上；不需要高程时置 null
+    dem: Chengguan_DEM.tif # 城关区 DEM；不需要高程时置 null
+    region_geojson: Chengguan_district.geojson # 任务撒点区域门禁（城关区多边形）
     coordinate_column: Coordinate
 
 # 本实验的问题规模设定（改这里做规模/容量灵敏度，不动数据文件）
 problem:
-    n_nests: 8 # 用前 8 个机巢（CSV 共 8 条）
+    n_nests: 6 # 用前 6 个机巢（城关区 CSV 共 6 条）
     nest_capacity: 4 # 单机巢容量（架）
-    n_uavs: 10 # 机队规模（<= n_nests × nest_capacity 才不初始超容；8×4=32）
+    n_uavs: 10 # 机队规模（<= n_nests × nest_capacity 才不初始超容；6×4=24）
     uav_speed: 15.0 # m/s
-    uav_max_range: 80000.0 # 满电航程（m）；机巢跨度约 90 km，80km 为正式口径（兼顾可达性与避免单 tour 过度填充）
+    uav_max_range: 20000.0 # 满电航程（m）；20 km（城关区口径，与 exp01 一致）
 
 # 合成任务点（暂无实测任务数据；后续换 data/task_location_data.csv 时
 # 只需替换生成函数，本节参数可平移）

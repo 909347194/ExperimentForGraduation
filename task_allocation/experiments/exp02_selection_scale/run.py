@@ -310,6 +310,10 @@ def main(argv: list[str] | None = None) -> int:
             deadline_min=float(cfg["tasks"].get("deadline_min", 3600.0)),
             deadline_max=float(cfg["tasks"].get("deadline_max", 28800.0)),
             anchor_to_nests=bool(cfg["tasks"].get("anchor_to_nests", True)),
+            # 区域门禁（城关区 geojson）：相对 task_allocation/data/
+            region_geojson=str(DATA_DIR / data_cfg["region_geojson"])
+            if data_cfg.get("region_geojson")
+            else None,
         )
         tasks = build_synthetic_tasks(scenario.nests, scenario.frame, scenario.dem, tcfg)
 

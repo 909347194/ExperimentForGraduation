@@ -255,17 +255,21 @@ def polish_assignment(
                     # 覆盖守护（2026-10-23）：门禁/覆盖优先口径下，候选若
                     # 卸掉了已装任务（修复链删任务 → F1 不在适应度里看不
                     # 见），只降成本也拒绝——「不减少已装集合」。
-                    if coverage_blind:
-                        cand_exec = set(
-                            getattr(res.solution, "executed_task_ids", []) or []
-                        )
-                        if not (cand_exec >= best_exec):
-                            continue
+                    # 修复（2026-10-26）：接受候选后把 best_exec 同步为当前
+                    # 最优解的 executed 集，使守护升级为「⊇ 当前最优解集」而非
+                    # 「⊇ 初始解集」。否则修复链在 polish 期间新增的任务会在
+                    # 后续候选中因成本-only 适应度被静默丢弃，违反完成铁律。
+                    cand_exec = set(
+                        getattr(res.solution, "executed_task_ids", []) or []
+                    )
+                    if coverage_blind and not (cand_exec >= best_exec):
+                        continue
                     # first-improvement：接受即重启邻域扫描（确定性，无随机）
                     routes = new_routes
                     result.best_assignment = cand
                     result.best_fitness = float(res.fitness)
                     result.best_solution = res.solution
+                    best_exec = cand_exec  # 守护锚点随最优解前移（单调）
                     result.n_accepted[move] = result.n_accepted.get(move, 0) + 1
                     improved = True
                     break

@@ -11,17 +11,18 @@ experiment:
 data:
   source: file
   path: nest_location_data.csv
-  dem: ASTGTMV003_N29E091_dem.tif
+  dem: Chengguan_DEM.tif
+  region_geojson: Chengguan_district.geojson
   coordinate_column: Coordinate
 
 problem:
-  n_nests: 8
+  n_nests: 6
   nest_capacity: 4
   # 关键变量：可用机数固定为 8，任务规模远大于它 → |T_t| >> K_avail
   n_uavs: 8
-  # 满电航程（m）：与 exp01 生产口径一致（80 km）。航程必须是真实瓶颈，
-  # 「按机队能力标定规模」的机制才可被真正检验。
-  uav_max_range: 80000.0
+  # 满电航程（m）：与 exp01 生产口径一致（城关区 20 km，2026-10-26 起）。
+  # 航程必须是真实瓶颈，「按机队能力标定规模」的机制才可被真正检验。
+  uav_max_range: 20000.0
   # 与 exp01 / exp05 生产口径保持一致的模型权重（单位：收益当量 / 米）
   allow_unassigned: true
   allow_idle_uav: true

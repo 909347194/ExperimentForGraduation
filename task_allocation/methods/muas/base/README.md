@@ -2,10 +2,10 @@
 
 本目录只定义**统一接口**，不包含具体优化算法。
 
-| 符号 | 含义 |
-|------|------|
+| 符号            | 含义                            |
+| --------------- | ------------------------------- |
 | `BaseOptimizer` | 抽象基类：`name` + `solve(...)` |
-| `SolverResult` | 统一返回结构 |
+| `SolverResult`  | 统一返回结构                    |
 
 ## 谁必须遵守
 
@@ -25,4 +25,4 @@ experiments  ──uses────►  SolverResult 字段写 metrics
 ## 与参考实现的关系
 
 接口形状对齐学位论文仓库中的 `algorithm_dmde/base/base_optimizer.py`，
-保证主算法与文献对比方法（PMX-DE、Sort-DE 等）可共用同一套实验脚本。
+保证主算法与对比方法可共用同一套实验脚本。
