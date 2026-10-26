@@ -78,7 +78,18 @@ _CJK_CANDIDATES = (
 #: Microsoft YaHei，等宽面板中文会整段缺字（按字形回退只在本列表内逐字体找，
 #: 不会跨到 font.sans-serif 链）；从系统 NotoSansCJK-Regular.ttc 提出 SC 面
 #: 装到 ~/.fonts 后该名可被 matplotlib 解析（ttc 集合默认只注册 JP 面）。
-MONO_ZH = ["DejaVu Sans Mono", "Microsoft YaHei", "Noto Sans Mono CJK SC", "PingFang SC", "SimHei"]
+#: 【2026-10-26】改为按本机可用字体过滤后再定链：matplotlib 对 family 列表中
+#: 不存在的字体会逐个报 findfont 警告（Windows 无 Noto Sans Mono CJK SC /
+#: PingFang SC 时每次出图刷屏），过滤后链上每个名字都真实可用，跨平台无警告。
+_MONO_ZH_CANDIDATES = (
+    "DejaVu Sans Mono",
+    "Microsoft YaHei",
+    "Noto Sans Mono CJK SC",
+    "PingFang SC",
+    "SimHei",
+)
+_MONO_ZH_AVAILABLE = {f.name for f in fm.fontManager.ttflist}
+MONO_ZH = [n for n in _MONO_ZH_CANDIDATES if n in _MONO_ZH_AVAILABLE] or ["DejaVu Sans Mono"]
 
 #: 三档图幅（英寸）。论文版心 15 cm ≈ 5.9 in；通栏用于横向大面板。
 FIG_SINGLE = 5.9
