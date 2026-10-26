@@ -82,7 +82,14 @@ class TestTaskPoolSourceInvariants(unittest.TestCase):
         self.assertNotIn(0, [t.id for t in s2.tasks], "I4: 完成任务不再出现在 T_t")
         self.assertEqual(pool.find(0).status, TaskStatus.DONE)
 
-    def test_i7_expired_leaves_pool_executing_unaffected(self):
+    def test_i7_overdue_stays_in_pool_executing_unaffected(self):
+        """I7（2026-10-24 口径改写）：无超期淘汰。
+
+        超过 latest 未被执行的任务**不出池**（唯一出池途径 = 完成 DONE /
+        静态物理不可达 UNREACHABLE），只在快照 ``overdue_ids`` 里作诊断标记，
+        且仍可被迟到交付。执行中任务不受超期影响。
+        旧语义 I7「判过期出池」= 超期淘汰，已废止。
+        """
         pool = TaskPool([
             Task(id=0, x=0, y=0, latest=100.0),
             Task(id=1, x=0, y=0, latest=100.0),
@@ -99,8 +106,16 @@ class TestTaskPoolSourceInvariants(unittest.TestCase):
             )
         )
         s2 = pool.begin_cycle(current_time=500.0)
-        self.assertIn(0, s2.expired_ids, "I7: 超时未执行的任务判过期")
-        self.assertIn(1, [t.id for t in pool.executing_tasks()], "I7: 执行中任务不受过期影响")
+        self.assertIn(0, s2.overdue_ids, "I7: 超期未执行的任务计入 overdue 诊断集")
+        self.assertIn(
+            0, s2.planning_ids,
+            "I7: 无超期淘汰——超期任务仍留在池中，可迟到交付",
+        )
+        self.assertNotIn(0, s2.executing_ids, "I7: 超期任务未被分配，执行集不含它")
+        self.assertIn(
+            1, [t.id for t in pool.executing_tasks()],
+            "I7: 执行中任务不受超期影响",
+        )
 
     def test_release_precedence_over_new(self):
         """同周期既新到又被释放 → 按 release 计（三集保持互斥）。"""

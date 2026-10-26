@@ -9,7 +9,10 @@
     * 机巢与地形为静态底图（只画一次），UAV 航迹随周期逐段「生长」；
     * 任务一旦被航迹扫过即点亮（按其承运 UAV 着色，标号 T#·Ck，Ck=到达周期）；
     * 已到达但未执行者显红；地图上方的实时状态行给出「当前周期 / 已到达 / 已执行 /
-      累计里程」（本图为纯地图版，不含进度条与收敛曲线）。
+      累计里程」（本图为纯地图版，不含进度条与收敛曲线）；
+    * 每座机巢三角形**正下方**实时标注「n 架」= 当前驻巢无人机数（航次执行期间
+      在空不计巢、归巢后计入返航巢，与无人机图标同步；奇偶巢 badge 左右错开，
+      避免相邻巢 5/6 标号相压；零驻巢置灰）。
 
 实现要点（见 2026-10-13 绘图审查）：
 
@@ -88,13 +91,18 @@ from ..theme import (
 )
 from .allocation import _arrival_cycle_map
 from .allocation_anim import (
+    _C_NEST_CNT,
+    _C_NEST_CNT0,
     _build_tours,
     _cumulative_cost,
+    _draw_nest_counts,
     _draw_one_tour,
+    _frame_nest_counts,
     _nest_by_id,
     _owner_map,
     _task_by_id,
 )
+from .allocation_status import _stationed_by_cycle
 
 __all__ = ["plot_allocation_anim_map"]
 
@@ -119,6 +127,7 @@ _F_LEGEND = 12.0       # 图例
 _F_SUPTITLE = 16.0     # 总标题
 _F_STATUS = 14.0       # 左上角实时状态文字
 _F_TASK = 11.0         # 任务标签 T0..T19
+_F_NEST_CNT = 11.0     # 机巢驻巢数 badge（与任务标签同档）
 _F_NOTE = 10.0         # 脚注
 
 
@@ -148,6 +157,8 @@ def plot_allocation_anim_map(
     owner = _owner_map(tours_by_cycle)
     cum_km = _cumulative_cost(tours_by_cycle)
     arrival_cycle = _arrival_cycle_map(solution)
+    # 逐周期起始驻巢快照（帧态「当前驻巢无人机数」标注，口径同 allocation_anim）
+    snapshots, nest_ids, _capacities = _stationed_by_cycle(solution)
     n_tasks = len(tasks)
     n_cyc = len(cycles)
 
@@ -220,7 +231,7 @@ def plot_allocation_anim_map(
         _IconPatch(_G_DRONE, fc=uav_color(next(iter(owner.values()))), ec="white",
                    lw=1.0, label="UAV 航迹"),
         _IconPatch(_G_HOUSE, fc=PALETTE["nest"], ec="white", lw=1.0,
-                   label="机巢（○=返航巢）"),
+                   label="机巢（○=返航巢；下方「n 架」=当前驻巢数）"),
         _IconPatch(_G_DOT, fc=_C_PENDING, ec="white", lw=0.9, label="待执行任务（红）"),
     ]
     fig.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.5, 0.05),
@@ -302,6 +313,14 @@ def plot_allocation_anim_map(
                 for tour in tours_by_cycle[ci]:
                     _draw_one_tour(ax_anim, tour, p, alpha=0.95, lw=1.9, drone=True)
 
+        # 机巢驻巢数（当前帧）：巢形三角形下方「n 架」，逐帧随航迹更新
+        counts = _frame_nest_counts(
+            snapshots,
+            tours_by_cycle[c] if c is not None else [],
+            nest_ids, c, p,
+        )
+        _draw_nest_counts(ax_anim, nests, counts, fontsize=_F_NEST_CNT)
+
         # 左上角实时状态文字
         arrived = sum(1 for a in arrival_cycle.values() if a <= cur_cycle)
         if c is None:
@@ -333,6 +352,8 @@ def plot_allocation_anim_map(
                   "地图上方的实时状态行给出当前周期 / 已到达 / 已执行 / 累计里程（置于图外，避免压住贴顶任务标号）；里程 = 各航迹 est_cost 之和（km）；"
                   "底图地形与机巢为静态层。本图为 allocation_anim 左栏地图的单独高清版，"
                   "DMDE 收敛见原图右侧栏、滚动进度见原图地图底部进度条。\n"
+                  "各机巢三角形下方的「n 架」= 当前驻巢无人机数（逐帧随航迹更新）：航次执行期间该 UAV 在空、不计入任何巢，"
+                  "完成航次回到返航巢后计入，与画面上的无人机图标、归巢空心环严格同步；零驻巢置灰。\n"
                   "Ck 标出到达周期，晚到任务（如 T19·C3）无法并入早周期航次。")
 
     try:
@@ -375,7 +396,8 @@ def plot_allocation_anim_map(
             # 把小面积的红点/珊瑚点吞成棕橙（2026-10-13 实测 (165,93,48)）。
             pal_img = build_gif_palette(
                 frames_rgb,
-                extra_colors=[*UAV_PALETTE, _C_PENDING, "#c3cbd4", "#e6e9ed"],
+                extra_colors=[*UAV_PALETTE, _C_PENDING, "#c3cbd4", "#e6e9ed",
+                              _C_NEST_CNT, _C_NEST_CNT0],
             )
             frames_p = [im.quantize(palette=pal_img) for im in frames_rgb]
             robust_pil_save(

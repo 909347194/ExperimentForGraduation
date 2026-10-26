@@ -156,12 +156,12 @@
       "std": 0.4
     },
     "solve_time_ms": {
-      "mean": 11.42,
-      "std": 0.305941
+      "mean": 20.2,
+      "std": 3.611648
     },
     "wall_seconds": {
-      "mean": 0.9892,
-      "std": 0.05752
+      "mean": 2.3148,
+      "std": 0.28914
     }
   },
   "per_seed": [
@@ -206,8 +206,8 @@
       "n_zero_reward_delivery": 0,
       "avg_wait_s": 750.0,
       "n_remaining_pool": 4,
-      "solve_time_ms": 11.5,
-      "wall_seconds": 0.996,
+      "solve_time_ms": 26.0,
+      "wall_seconds": 2.346,
       "arm": "B3",
       "solver": "vrptw",
       "cost_model": "dem",
@@ -254,8 +254,8 @@
       "n_zero_reward_delivery": 0,
       "avg_wait_s": 817.241,
       "n_remaining_pool": 2,
-      "solve_time_ms": 11.6,
-      "wall_seconds": 1.038,
+      "solve_time_ms": 22.9,
+      "wall_seconds": 2.833,
       "arm": "B3",
       "solver": "vrptw",
       "cost_model": "dem",
@@ -302,8 +302,8 @@
       "n_zero_reward_delivery": 0,
       "avg_wait_s": 780.0,
       "n_remaining_pool": 0,
-      "solve_time_ms": 10.9,
-      "wall_seconds": 0.879,
+      "solve_time_ms": 17.6,
+      "wall_seconds": 1.964,
       "arm": "B3",
       "solver": "vrptw",
       "cost_model": "dem",
@@ -350,8 +350,8 @@
       "n_zero_reward_delivery": 0,
       "avg_wait_s": 810.526,
       "n_remaining_pool": 2,
-      "solve_time_ms": 11.8,
-      "wall_seconds": 1.032,
+      "solve_time_ms": 17.0,
+      "wall_seconds": 2.269,
       "arm": "B3",
       "solver": "vrptw",
       "cost_model": "dem",
@@ -398,8 +398,8 @@
       "n_zero_reward_delivery": 0,
       "avg_wait_s": 774.545,
       "n_remaining_pool": 5,
-      "solve_time_ms": 11.3,
-      "wall_seconds": 1.001,
+      "solve_time_ms": 17.5,
+      "wall_seconds": 2.162,
       "arm": "B3",
       "solver": "vrptw",
       "cost_model": "dem",

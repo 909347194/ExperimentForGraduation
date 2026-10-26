@@ -14,6 +14,11 @@
 贴合，按「哪侧顶部要素少」自动贴左或贴右）；(b) 右栏当前周期 DMDE 收敛曲线，
 游标随动画推进。
 
+地图上每座机巢三角形**正下方**实时标注「n 架」= **当前驻巢无人机数**（逐帧
+随航迹更新：航次执行期间该 UAV 在空、不计入任何巢，完成航次回到返航巢后计入，
+与画面上的无人机图标、归巢空心环严格同步；奇偶巢 badge 左右错开，避免相距
+约 3.4 km 的相邻巢 5/6 标号相压；零驻巢置灰）。
+
 「滚动进度」的四次定位调整（都是用户反馈驱动，记录以免重蹈）：右下独立子图 →
 地图底部卡片（压 DEM）→ 地图角上的卡片 + 进度条（状态行文字宽 3.9in 放不进
 2.4in 的卡片，溢出压住任务标号 = 视觉「文字堆叠」）→ **最终：不做进度条，
@@ -87,6 +92,7 @@ from ..theme import (
     audit_frame,
 )
 from .allocation import _arrival_cycle_map
+from .allocation_status import _stationed_by_cycle
 
 __all__ = ["plot_allocation_anim"]
 
@@ -100,12 +106,15 @@ _OUTRO_FRAMES = 4      # 收尾定格（全部完成 + 总里程）
 _FPS = 6              # 播放稍慢，便于看清航迹生长与任务点亮过程
 _TARGET_W = 2400       # GIF 输出目标宽度（px）：超采样(13.5in×200dpi≈2700px) → LANCZOS 缩到 2400，左栏地图 DEM 子区≈1400px 近 1:1 铺底、清晰锐利（体积非瓶颈，画质优先）。此前 1500px 时地图仅≈870px 被 LANCZOS 压糊，提至 2400 后 DEM 与 allocation_anim_map 同口径清晰
 _C_PENDING = "#ff2d2d"   # 待执行任务：亮红实心（白边），醒目区分于承运 UAV 着色
+_C_NEST_CNT = "#0b2545"   # 机巢驻巢数 badge（非零）：与巢标号同色、加粗以示区别
+_C_NEST_CNT0 = "#9aa5b1"  # 机巢驻巢数 badge（零）：置灰，弱化但保留巢位信息
 # 大画布专用字号（论文 5.9in 口径的 FS 在 12.5in 宽画布上偏小，按画布比例放大）
 _F_TITLE = 12.0        # 面板标题
 _F_LEGEND = 10.5       # 图例
 _F_SUPTITLE = 13.0     # 总标题
 _F_STATUS = 10.5       # 顶部状态文字
 _F_TASK = 8.0          # 任务标签 T0..T19
+_F_NEST_CNT = 8.0       # 机巢驻巢数 badge（与任务标签同档）
 _F_NOTE = 8.0          # 收敛/进度面板注释
 
 
@@ -179,6 +188,74 @@ def _cumulative_cost(tours_by_cycle: list[list[dict[str, Any]]]) -> list[float]:
     return out
 
 
+def _frame_nest_counts(
+    snapshots: list[dict[int, int]],
+    tours_cyc: list[dict[str, Any]],
+    nest_ids: Sequence[int],
+    c: int | None,
+    p: float,
+) -> dict[int, int]:
+    """帧 (c, p) 的各机巢驻巢无人机数（当前该机巢内停着几架）。
+
+    口径与画面**严格一致**——无人机图标在巢上才计入该巢：
+
+    * 周期开始 / p=0（到达揭示帧）：UAV 尚未起飞，头点图标还在起点巢
+      → 计在起点巢；
+    * 0<p<1（航迹生长）：UAV 在空 → 不计入任何巢；
+    * p≥1（定格帧）：航次完成，终点巢处画归巢空心环 → 计在返航巢
+      ``end_nest``；
+    * 未参飞 UAV 保持上一周期位置不动（空转周期同理）。
+
+    ``snapshots`` 取自 ``allocation_status._stationed_by_cycle``：
+    ``snapshots[c]`` 为第 c 周期**开始时**的驻巢分布（``snapshots[0]``=初始
+    态），其正确性依赖巢归属链连续（``end_nest(c)=start_nest(c+1)``，
+    实测恒成立）。
+    """
+    loc = dict(snapshots[0]) if c is None else dict(snapshots[c])
+    if c is not None:
+        for tour in tours_cyc:
+            u = int(tour["uav_id"])
+            if p >= 1.0 - 1e-9:
+                eid = tour.get("end_nest_id")
+                if eid is not None:
+                    loc[u] = int(eid)
+            elif p > 0.0:
+                loc.pop(u, None)   # 在空：不计入任何巢
+            # p == 0：尚未起飞，仍计在起点巢
+    counts = {int(n): 0 for n in nest_ids}
+    for _u, nn in loc.items():
+        if nn in counts:
+            counts[nn] += 1
+    return counts
+
+
+def _draw_nest_counts(ax, nests, counts: dict[int, int], *,
+                      fontsize: float) -> None:
+    """在每座机巢三角形**正下方**标注「n 架」= 当前驻巢无人机数。
+
+    画在动画叠加层（逐帧重绘）：静态底图的「巢#」标号在上方（奇巢偏左、
+    偶巢偏右），本 badge 在下方同样奇偶交替，为相距约 3.4 km 的相邻巢
+    5/6 错开位置；零驻巢置灰，保留巢位信息同时降低视觉噪音。
+    """
+    for n in nests:
+        nid = int(n["id"])
+        cnt = int(counts.get(nid, 0))
+        to_left = nid % 2 == 1
+        ax.annotate(
+            f"{cnt} 架",
+            (float(n["x"]), float(n["y"])),
+            textcoords="offset points",
+            xytext=(-14 if to_left else 14, -10),
+            ha="right" if to_left else "left",
+            va="top",
+            fontsize=fontsize,
+            fontweight="bold",
+            color=_C_NEST_CNT0 if cnt == 0 else _C_NEST_CNT,
+            zorder=9,
+            bbox=_HALO,
+        )
+
+
 def _draw_one_tour(ax, tour: dict[str, Any], p: float, *,
                    alpha: float, lw: float, drone: bool) -> None:
     """按进度 p∈[0,1] 画一条航迹：揭示到弧长比例 p 处，头点放无人机图标。"""
@@ -242,6 +319,9 @@ def plot_allocation_anim(
     cum_km = _cumulative_cost(tours_by_cycle)
     task_by_id = _task_by_id(solution)
     arrival_cycle = _arrival_cycle_map(solution)
+    # 逐周期起始驻巢快照（供帧态「当前驻巢无人机数」标注，口径见
+    # _frame_nest_counts；与 allocation_status 同源，保证两图数字一致）
+    snapshots, nest_ids, _capacities = _stationed_by_cycle(solution)
     n_tasks = len(tasks)
     n_cyc = len(cycles)
 
@@ -345,7 +425,7 @@ def plot_allocation_anim(
         _IconPatch(_G_DRONE, fc=uav_color(next(iter(owner.values()))), ec="white",
                    lw=1.0, label="UAV 航迹"),
         _IconPatch(_G_HOUSE, fc=PALETTE["nest"], ec="white", lw=1.0,
-                   label="机巢（○=返航巢）"),
+                   label="机巢（○=返航巢；下方「n 架」=当前驻巢数）"),
         _IconPatch(_G_DOT, fc=_C_PENDING, ec="white", lw=0.9, label="待执行任务（红）"),
     ]
     fig.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.72, 0.052),
@@ -419,6 +499,15 @@ def plot_allocation_anim(
                 for tour in tours_by_cycle[ci]:
                     _draw_one_tour(ax_anim, tour, p, alpha=0.95, lw=1.9, drone=True)
 
+        # 机巢驻巢数（当前帧）：巢形三角形下方「n 架」，随周期与航迹进度
+        # 动态更新（在空不计巢、归巢计入返航巢，与上面的图标严格同步）
+        counts = _frame_nest_counts(
+            snapshots,
+            tours_by_cycle[c] if c is not None else [],
+            nest_ids, c, p,
+        )
+        _draw_nest_counts(ax_anim, nests, counts, fontsize=_F_NEST_CNT)
+
         # 状态行（单行：周期 / 已到达 / 已完成百分比 / 里程），白底随文字自动贴合
         arrived = sum(1 for a in arrival_cycle.values() if a <= cur_cycle)
         rate = (len(done) / n_tasks * 100.0) if n_tasks else 0.0
@@ -458,6 +547,9 @@ def plot_allocation_anim(
                   "右栏 (b) 为「当前周期」DMDE 最优适应度收敛曲线，游标随动画推进。"
                   "任务池耗尽的空转周期无求解数据，右栏显式标注「无 DMDE 求解」，"
                   "不再错接其它周期的曲线。"
+                  "各机巢三角形下方的「n 架」= 当前驻巢无人机数（逐帧随航迹更新）："
+                  "航次执行期间该 UAV 在空、不计入任何巢，完成航次回到返航巢后计入，"
+                  "与画面上的无人机图标、归巢空心环严格同步；零驻巢置灰。"
                   "各机巢驻巢无人机数的逐周期演化已独立成图 allocation_status.gif。"
                   "里程 = 各航迹 est_cost 之和（km）。"
                   "底图地形与机巢为静态层。Ck 标出到达周期，晚到任务（如 T19·C3）"
@@ -501,7 +593,8 @@ def plot_allocation_anim(
             # 把小面积的红点/珊瑚点吞成棕橙（2026-10-13 实测 (165,93,48)）。
             pal_img = build_gif_palette(
                 frames_rgb,
-                extra_colors=[*UAV_PALETTE, _C_PENDING, "#c3cbd4", "#e6e9ed"],
+                extra_colors=[*UAV_PALETTE, _C_PENDING, "#c3cbd4", "#e6e9ed",
+                              _C_NEST_CNT, _C_NEST_CNT0],
             )
             frames_p = [im.quantize(palette=pal_img) for im in frames_rgb]
             robust_pil_save(

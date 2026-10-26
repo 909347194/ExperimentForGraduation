@@ -1,0 +1,1606 @@
+{
+  "arm": "B1",
+  "seed": 42,
+  "tasks": [
+    {
+      "id": 0,
+      "x": 28714.954,
+      "y": 24787.184,
+      "z": 4457.102,
+      "reward": 7.0156,
+      "arrival_time": 0.0,
+      "earliest": 0.0,
+      "latest": 3111.2426773255547,
+      "status": "pending"
+    },
+    {
+      "id": 1,
+      "x": -3943.338,
+      "y": 49487.588,
+      "z": 4825.501,
+      "reward": 5.2399,
+      "arrival_time": 0.0,
+      "earliest": 0.0,
+      "latest": 4580.065012709887,
+      "status": "pending"
+    },
+    {
+      "id": 2,
+      "x": 36964.563,
+      "y": -21668.575,
+      "z": 4292.881,
+      "reward": 6.0871,
+      "arrival_time": 0.0,
+      "earliest": 0.0,
+      "latest": 3904.621944049883,
+      "status": "pending"
+    },
+    {
+      "id": 3,
+      "x": 21250.314,
+      "y": -16719.088,
+      "z": 4156.161,
+      "reward": 7.885,
+      "arrival_time": 0.0,
+      "earliest": 0.0,
+      "latest": 3728.7573104605026,
+      "status": "pending"
+    },
+    {
+      "id": 4,
+      "x": -37539.582,
+      "y": -5730.354,
+      "z": 5151.86,
+      "reward": 6.7125,
+      "arrival_time": 0.0,
+      "earliest": 0.0,
+      "latest": 3514.0826406992664,
+      "status": "pending"
+    },
+    {
+      "id": 5,
+      "x": 48370.333,
+      "y": -36788.824,
+      "z": 4411.931,
+      "reward": 5.9822,
+      "arrival_time": 0.0,
+      "earliest": 0.0,
+      "latest": 4401.763001420999,
+      "status": "pending"
+    },
+    {
+      "id": 6,
+      "x": 27465.811,
+      "y": -43392.287,
+      "z": 4037.52,
+      "reward": 6.0329,
+      "arrival_time": 0.0,
+      "earliest": 0.0,
+      "latest": 3676.894048494154,
+      "status": "pending"
+    },
+    {
+      "id": 7,
+      "x": 29895.084,
+      "y": -5048.481,
+      "z": 4376.771,
+      "reward": 3.7356,
+      "arrival_time": 0.0,
+      "earliest": 0.0,
+      "latest": 2936.6547821534728,
+      "status": "pending"
+    },
+    {
+      "id": 8,
+      "x": -34231.987,
+      "y": -32637.338,
+      "z": 3907.865,
+      "reward": 1.2774,
+      "arrival_time": 0.0,
+      "earliest": 0.0,
+      "latest": 3018.6159357253914,
+      "status": "pending"
+    },
+    {
+      "id": 9,
+      "x": -2821.761,
+      "y": 16476.208,
+      "z": 4433.017,
+      "reward": 4.9305,
+      "arrival_time": 0.0,
+      "earliest": 0.0,
+      "latest": 5297.1236942836895,
+      "status": "pending"
+    },
+    {
+      "id": 10,
+      "x": -10578.786,
+      "y": -9323.611,
+      "z": 5010.01,
+      "reward": 2.9313,
+      "arrival_time": 0.0,
+      "earliest": 0.0,
+      "latest": 5153.167864910539,
+      "status": "pending"
+    },
+    {
+      "id": 11,
+      "x": 43608.457,
+      "y": 34536.164,
+      "z": 5110.895,
+      "reward": 4.6768,
+      "arrival_time": 0.0,
+      "earliest": 0.0,
+      "latest": 4589.209261289024,
+      "status": "pending"
+    },
+    {
+      "id": 12,
+      "x": 16035.66,
+      "y": 19852.921,
+      "z": 4158.472,
+      "reward": 8.6806,
+      "arrival_time": 0.0,
+      "earliest": 0.0,
+      "latest": 3417.8488959407027,
+      "status": "pending"
+    },
+    {
+      "id": 13,
+      "x": 33471.782,
+      "y": -23161.008,
+      "z": 3579.293,
+      "reward": 3.1055,
+      "arrival_time": 0.0,
+      "earliest": 0.0,
+      "latest": 5316.776218838855,
+      "status": "pending"
+    },
+    {
+      "id": 14,
+      "x": -3501.261,
+      "y": 34489.769,
+      "z": 4111.699,
+      "reward": 1.5247,
+      "arrival_time": 0.0,
+      "earliest": 0.0,
+      "latest": 4802.627440707645,
+      "status": "pending"
+    },
+    {
+      "id": 15,
+      "x": -24570.774,
+      "y": 31440.808,
+      "z": 4313.099,
+      "reward": 3.5325,
+      "arrival_time": 0.0,
+      "earliest": 0.0,
+      "latest": 4635.603510729288,
+      "status": "pending"
+    },
+    {
+      "id": 16,
+      "x": 7333.965,
+      "y": -14831.893,
+      "z": 4858.815,
+      "reward": 3.6423,
+      "arrival_time": 0.0,
+      "earliest": 0.0,
+      "latest": 3913.2760557882298,
+      "status": "pending"
+    },
+    {
+      "id": 17,
+      "x": -40498.624,
+      "y": -25826.633,
+      "z": 3702.524,
+      "reward": 6.9572,
+      "arrival_time": 0.0,
+      "earliest": 0.0,
+      "latest": 3435.0522169819296,
+      "status": "pending"
+    },
+    {
+      "id": 18,
+      "x": 33946.393,
+      "y": 17882.456,
+      "z": 4212.817,
+      "reward": 6.0133,
+      "arrival_time": 0.0,
+      "earliest": 0.0,
+      "latest": 2960.2555978144483,
+      "status": "pending"
+    },
+    {
+      "id": 19,
+      "x": 14846.519,
+      "y": -42302.133,
+      "z": 3963.585,
+      "reward": 8.0551,
+      "arrival_time": 0.0,
+      "earliest": 0.0,
+      "latest": 5137.026470668372,
+      "status": "pending"
+    },
+    {
+      "id": 20,
+      "x": 27168.352,
+      "y": -35631.486,
+      "z": 3576.477,
+      "reward": 6.9788,
+      "arrival_time": 0.0,
+      "earliest": 0.0,
+      "latest": 3930.59598255075,
+      "status": "pending"
+    },
+    {
+      "id": 21,
+      "x": -12164.74,
+      "y": -56982.839,
+      "z": 4836.651,
+      "reward": 4.6575,
+      "arrival_time": 0.0,
+      "earliest": 0.0,
+      "latest": 3246.381084947122,
+      "status": "pending"
+    },
+    {
+      "id": 22,
+      "x": 47890.384,
+      "y": 29462.539,
+      "z": 4671.927,
+      "reward": 8.3262,
+      "arrival_time": 0.0,
+      "earliest": 0.0,
+      "latest": 3526.0828852067616,
+      "status": "pending"
+    },
+    {
+      "id": 23,
+      "x": 40329.362,
+      "y": 15925.847,
+      "z": 4750.354,
+      "reward": 2.5028,
+      "arrival_time": 0.0,
+      "earliest": 0.0,
+      "latest": 4263.892836143119,
+      "status": "pending"
+    },
+    {
+      "id": 24,
+      "x": 29146.475,
+      "y": 20396.311,
+      "z": 5113.101,
+      "reward": 1.2044,
+      "arrival_time": 0.0,
+      "earliest": 0.0,
+      "latest": 3177.286513935926,
+      "status": "pending"
+    },
+    {
+      "id": 25,
+      "x": -27748.129,
+      "y": 28775.539,
+      "z": 5292.244,
+      "reward": 1.8104,
+      "arrival_time": 0.0,
+      "earliest": 0.0,
+      "latest": 5012.858567049414,
+      "status": "pending"
+    },
+    {
+      "id": 26,
+      "x": -1229.666,
+      "y": -6910.224,
+      "z": 4536.114,
+      "reward": 7.5012,
+      "arrival_time": 0.0,
+      "earliest": 0.0,
+      "latest": 4748.0027305550675,
+      "status": "pending"
+    },
+    {
+      "id": 27,
+      "x": -42449.236,
+      "y": 5268.28,
+      "z": 3643.481,
+      "reward": 5.1569,
+      "arrival_time": 0.0,
+      "earliest": 0.0,
+      "latest": 4642.549981067529,
+      "status": "pending"
+    },
+    {
+      "id": 28,
+      "x": -31680.76,
+      "y": -42297.197,
+      "z": 4448.247,
+      "reward": 2.4514,
+      "arrival_time": 0.0,
+      "earliest": 0.0,
+      "latest": 3866.65120739278,
+      "status": "pending"
+    },
+    {
+      "id": 29,
+      "x": 19854.707,
+      "y": -45099.038,
+      "z": 4024.909,
+      "reward": 5.5094,
+      "arrival_time": 0.0,
+      "earliest": 0.0,
+      "latest": 4393.733869896596,
+      "status": "pending"
+    },
+    {
+      "id": 30,
+      "x": 16857.693,
+      "y": 48135.271,
+      "z": 4824.243,
+      "reward": 5.3694,
+      "arrival_time": 600.0,
+      "earliest": 0.0,
+      "latest": 4110.052082450475,
+      "status": "pending"
+    },
+    {
+      "id": 31,
+      "x": -42452.008,
+      "y": 41103.435,
+      "z": 4026.14,
+      "reward": 9.5061,
+      "arrival_time": 600.0,
+      "earliest": 0.0,
+      "latest": 4787.821744592252,
+      "status": "pending"
+    },
+    {
+      "id": 32,
+      "x": -44766.383,
+      "y": -26901.717,
+      "z": 3587.103,
+      "reward": 6.3386,
+      "arrival_time": 600.0,
+      "earliest": 0.0,
+      "latest": 3436.6733582057796,
+      "status": "pending"
+    },
+    {
+      "id": 33,
+      "x": 35075.173,
+      "y": -26912.665,
+      "z": 3539.222,
+      "reward": 9.4858,
+      "arrival_time": 600.0,
+      "earliest": 0.0,
+      "latest": 4517.620024184351,
+      "status": "pending"
+    },
+    {
+      "id": 34,
+      "x": 10507.251,
+      "y": -11003.849,
+      "z": 4561.209,
+      "reward": 9.9809,
+      "arrival_time": 600.0,
+      "earliest": 0.0,
+      "latest": 4799.62471783557,
+      "status": "pending"
+    },
+    {
+      "id": 35,
+      "x": -24817.7,
+      "y": -57347.061,
+      "z": 4677.818,
+      "reward": 1.3039,
+      "arrival_time": 600.0,
+      "earliest": 0.0,
+      "latest": 3621.7604156690186,
+      "status": "pending"
+    },
+    {
+      "id": 36,
+      "x": 26554.765,
+      "y": -23542.787,
+      "z": 4636.932,
+      "reward": 2.067,
+      "arrival_time": 600.0,
+      "earliest": 0.0,
+      "latest": 4221.847732260583,
+      "status": "pending"
+    },
+    {
+      "id": 37,
+      "x": -21017.841,
+      "y": 47740.442,
+      "z": 3988.199,
+      "reward": 7.8508,
+      "arrival_time": 600.0,
+      "earliest": 0.0,
+      "latest": 4662.289722713498,
+      "status": "pending"
+    },
+    {
+      "id": 38,
+      "x": -5785.476,
+      "y": 35149.005,
+      "z": 3745.307,
+      "reward": 2.1352,
+      "arrival_time": 600.0,
+      "earliest": 0.0,
+      "latest": 4120.7057985454485,
+      "status": "pending"
+    },
+    {
+      "id": 39,
+      "x": -2758.853,
+      "y": 1540.952,
+      "z": 5047.722,
+      "reward": 4.0766,
+      "arrival_time": 600.0,
+      "earliest": 0.0,
+      "latest": 4428.158104913446,
+      "status": "pending"
+    },
+    {
+      "id": 40,
+      "x": -34772.734,
+      "y": -37751.139,
+      "z": 4055.357,
+      "reward": 9.212,
+      "arrival_time": 1200.0,
+      "earliest": 0.0,
+      "latest": 5044.123177908047,
+      "status": "pending"
+    },
+    {
+      "id": 41,
+      "x": -21561.609,
+      "y": 35946.342,
+      "z": 3914.116,
+      "reward": 3.9951,
+      "arrival_time": 1200.0,
+      "earliest": 0.0,
+      "latest": 5866.744257082556,
+      "status": "pending"
+    },
+    {
+      "id": 42,
+      "x": -7170.177,
+      "y": -48125.104,
+      "z": 4449.401,
+      "reward": 8.1167,
+      "arrival_time": 1200.0,
+      "earliest": 0.0,
+      "latest": 5081.20727282458,
+      "status": "pending"
+    },
+    {
+      "id": 43,
+      "x": 47742.815,
+      "y": 2769.407,
+      "z": 5051.799,
+      "reward": 9.148,
+      "arrival_time": 1200.0,
+      "earliest": 0.0,
+      "latest": 5772.361698872562,
+      "status": "pending"
+    },
+    {
+      "id": 44,
+      "x": -30898.348,
+      "y": -35241.633,
+      "z": 3936.003,
+      "reward": 2.8526,
+      "arrival_time": 1200.0,
+      "earliest": 0.0,
+      "latest": 6587.541352768116,
+      "status": "pending"
+    },
+    {
+      "id": 45,
+      "x": 36837.445,
+      "y": -24390.364,
+      "z": 4021.114,
+      "reward": 9.8015,
+      "arrival_time": 1200.0,
+      "earliest": 0.0,
+      "latest": 4531.027160379917,
+      "status": "pending"
+    },
+    {
+      "id": 46,
+      "x": -30827.379,
+      "y": 50557.09,
+      "z": 3908.326,
+      "reward": 9.0478,
+      "arrival_time": 1200.0,
+      "earliest": 0.0,
+      "latest": 5947.750731169566,
+      "status": "pending"
+    },
+    {
+      "id": 47,
+      "x": -13779.15,
+      "y": -27124.374,
+      "z": 3555.297,
+      "reward": 6.0951,
+      "arrival_time": 1200.0,
+      "earliest": 0.0,
+      "latest": 5187.325915256999,
+      "status": "pending"
+    },
+    {
+      "id": 48,
+      "x": 19335.596,
+      "y": 17994.967,
+      "z": 4427.531,
+      "reward": 7.5188,
+      "arrival_time": 1200.0,
+      "earliest": 0.0,
+      "latest": 5029.050266112782,
+      "status": "pending"
+    },
+    {
+      "id": 49,
+      "x": 13371.853,
+      "y": 27295.843,
+      "z": 4508.184,
+      "reward": 3.4965,
+      "arrival_time": 1200.0,
+      "earliest": 0.0,
+      "latest": 5524.479832171285,
+      "status": "pending"
+    },
+    {
+      "id": 50,
+      "x": 46354.156,
+      "y": -25837.26,
+      "z": 4109.109,
+      "reward": 7.5133,
+      "arrival_time": 1200.0,
+      "earliest": 0.0,
+      "latest": 4219.030292677335,
+      "status": "pending"
+    },
+    {
+      "id": 51,
+      "x": -6621.444,
+      "y": -41547.3,
+      "z": 4049.573,
+      "reward": 4.8802,
+      "arrival_time": 1200.0,
+      "earliest": 0.0,
+      "latest": 4751.488173675594,
+      "status": "pending"
+    },
+    {
+      "id": 52,
+      "x": 44863.494,
+      "y": 27825.388,
+      "z": 4169.109,
+      "reward": 3.9294,
+      "arrival_time": 1200.0,
+      "earliest": 0.0,
+      "latest": 4639.668550999011,
+      "status": "pending"
+    },
+    {
+      "id": 53,
+      "x": 43606.868,
+      "y": -7497.539,
+      "z": 4396.039,
+      "reward": 7.2718,
+      "arrival_time": 1200.0,
+      "earliest": 0.0,
+      "latest": 5548.162263503996,
+      "status": "pending"
+    },
+    {
+      "id": 54,
+      "x": 23024.536,
+      "y": -25876.367,
+      "z": 3976.965,
+      "reward": 4.4482,
+      "arrival_time": 1200.0,
+      "earliest": 0.0,
+      "latest": 4507.475411185451,
+      "status": "pending"
+    },
+    {
+      "id": 55,
+      "x": -44821.692,
+      "y": -34332.456,
+      "z": 4470.691,
+      "reward": 7.3406,
+      "arrival_time": 1200.0,
+      "earliest": 0.0,
+      "latest": 4027.955232996318,
+      "status": "pending"
+    },
+    {
+      "id": 56,
+      "x": 30999.848,
+      "y": 51274.226,
+      "z": 4723.187,
+      "reward": 8.6638,
+      "arrival_time": 1200.0,
+      "earliest": 0.0,
+      "latest": 4009.747825563849,
+      "status": "pending"
+    },
+    {
+      "id": 57,
+      "x": 41073.415,
+      "y": 13869.516,
+      "z": 4733.986,
+      "reward": 3.4374,
+      "arrival_time": 1200.0,
+      "earliest": 0.0,
+      "latest": 5991.259462743078,
+      "status": "pending"
+    },
+    {
+      "id": 58,
+      "x": 4339.653,
+      "y": 203.139,
+      "z": 5359.863,
+      "reward": 2.8585,
+      "arrival_time": 1200.0,
+      "earliest": 0.0,
+      "latest": 5746.316200006666,
+      "status": "pending"
+    },
+    {
+      "id": 59,
+      "x": -27502.13,
+      "y": -45136.138,
+      "z": 4718.654,
+      "reward": 3.8833,
+      "arrival_time": 1200.0,
+      "earliest": 0.0,
+      "latest": 6193.818064647014,
+      "status": "pending"
+    }
+  ],
+  "uavs_initial": [
+    {
+      "id": 0,
+      "x": -33191.59208670014,
+      "y": 13904.323554662831,
+      "z": 3650.7915520001256,
+      "nest_id": 0,
+      "remaining_range": 80000.0
+    },
+    {
+      "id": 1,
+      "x": -41347.9623204091,
+      "y": 8052.905068864544,
+      "z": 3664.0759705598957,
+      "nest_id": 1,
+      "remaining_range": 80000.0
+    },
+    {
+      "id": 2,
+      "x": 27684.776200709926,
+      "y": -29893.536972808168,
+      "z": 3546.549144799833,
+      "nest_id": 2,
+      "remaining_range": 80000.0
+    },
+    {
+      "id": 3,
+      "x": 22020.695628679663,
+      "y": -49149.42783480509,
+      "z": 3685.872362880088,
+      "nest_id": 3,
+      "remaining_range": 80000.0
+    },
+    {
+      "id": 4,
+      "x": -14345.183079585137,
+      "y": -31147.541281617505,
+      "z": 3584.0004000000313,
+      "nest_id": 4,
+      "remaining_range": 80000.0
+    },
+    {
+      "id": 5,
+      "x": 25534.371585715413,
+      "y": 37533.914638656475,
+      "z": 3815.000235520001,
+      "nest_id": 5,
+      "remaining_range": 80000.0
+    },
+    {
+      "id": 6,
+      "x": 23606.39306737764,
+      "y": 34763.36689577644,
+      "z": 3815.0626585599985,
+      "nest_id": 6,
+      "remaining_range": 80000.0
+    },
+    {
+      "id": 7,
+      "x": -9907.106448223254,
+      "y": 16188.749350740236,
+      "z": 3711.8723558399415,
+      "nest_id": 7,
+      "remaining_range": 80000.0
+    },
+    {
+      "id": 8,
+      "x": -33191.59208670014,
+      "y": 13904.323554662831,
+      "z": 3650.7915520001256,
+      "nest_id": 0,
+      "remaining_range": 80000.0
+    },
+    {
+      "id": 9,
+      "x": -41347.9623204091,
+      "y": 8052.905068864544,
+      "z": 3664.0759705598957,
+      "nest_id": 1,
+      "remaining_range": 80000.0
+    }
+  ],
+  "cycles": [
+    {
+      "cycle": 1,
+      "executed_ids": [
+        16,
+        9,
+        12,
+        13,
+        29,
+        6,
+        20,
+        19,
+        3,
+        2,
+        26,
+        22,
+        11,
+        18,
+        0,
+        17,
+        24,
+        27,
+        4
+      ],
+      "deferred_ids": [
+        1,
+        5,
+        7,
+        8,
+        10,
+        14,
+        15,
+        21,
+        23,
+        25,
+        28
+      ],
+      "completed_ids": [
+        16,
+        9,
+        12,
+        13,
+        29,
+        6,
+        20,
+        19,
+        3,
+        2,
+        26,
+        22,
+        11,
+        18,
+        0,
+        17,
+        24,
+        27,
+        4
+      ],
+      "infeasible_ids": [],
+      "late_ids": [
+        16,
+        12,
+        3,
+        2,
+        18,
+        0,
+        17,
+        24
+      ],
+      "tours": [
+        {
+          "uav_id": 0,
+          "task_ids": [
+            16
+          ],
+          "start_nest_id": 0,
+          "end_nest_id": 2,
+          "start": [
+            -33191.592,
+            13904.324,
+            3650.792
+          ],
+          "est_cost": 76197.405,
+          "est_reward": 3.6423,
+          "feasible": true
+        },
+        {
+          "uav_id": 1,
+          "task_ids": [
+            9,
+            12
+          ],
+          "start_nest_id": 1,
+          "end_nest_id": 6,
+          "start": [
+            -41347.962,
+            8052.905,
+            3664.076
+          ],
+          "est_cost": 77425.668,
+          "est_reward": 13.6111,
+          "feasible": true
+        },
+        {
+          "uav_id": 2,
+          "task_ids": [
+            13,
+            29,
+            6
+          ],
+          "start_nest_id": 2,
+          "end_nest_id": 3,
+          "start": [
+            27684.776,
+            -29893.537,
+            3546.549
+          ],
+          "est_cost": 52077.235,
+          "est_reward": 14.6477,
+          "feasible": true
+        },
+        {
+          "uav_id": 3,
+          "task_ids": [
+            20,
+            19,
+            3
+          ],
+          "start_nest_id": 3,
+          "end_nest_id": 2,
+          "start": [
+            22020.696,
+            -49149.428,
+            3685.872
+          ],
+          "est_cost": 71269.277,
+          "est_reward": 22.9189,
+          "feasible": true
+        },
+        {
+          "uav_id": 4,
+          "task_ids": [
+            2
+          ],
+          "start_nest_id": 4,
+          "end_nest_id": 2,
+          "start": [
+            -14345.183,
+            -31147.541,
+            3584.0
+          ],
+          "est_cost": 65396.887,
+          "est_reward": 6.0871,
+          "feasible": true
+        },
+        {
+          "uav_id": 5,
+          "task_ids": [
+            26
+          ],
+          "start_nest_id": 5,
+          "end_nest_id": 7,
+          "start": [
+            25534.372,
+            37533.915,
+            3815.0
+          ],
+          "est_cost": 78090.108,
+          "est_reward": 7.5012,
+          "feasible": true
+        },
+        {
+          "uav_id": 6,
+          "task_ids": [
+            22,
+            11,
+            18,
+            0
+          ],
+          "start_nest_id": 6,
+          "end_nest_id": 6,
+          "start": [
+            23606.393,
+            34763.367,
+            3815.063
+          ],
+          "est_cost": 73060.983,
+          "est_reward": 26.0319,
+          "feasible": true
+        },
+        {
+          "uav_id": 7,
+          "task_ids": [
+            17
+          ],
+          "start_nest_id": 7,
+          "end_nest_id": 4,
+          "start": [
+            -9907.106,
+            16188.749,
+            3711.872
+          ],
+          "est_cost": 79623.074,
+          "est_reward": 6.9572,
+          "feasible": true
+        },
+        {
+          "uav_id": 8,
+          "task_ids": [
+            24
+          ],
+          "start_nest_id": 0,
+          "end_nest_id": 6,
+          "start": [
+            -33191.592,
+            13904.324,
+            3650.792
+          ],
+          "est_cost": 79469.537,
+          "est_reward": 1.2044,
+          "feasible": true
+        },
+        {
+          "uav_id": 9,
+          "task_ids": [
+            27,
+            4
+          ],
+          "start_nest_id": 1,
+          "end_nest_id": 1,
+          "start": [
+            -41347.962,
+            8052.905,
+            3664.076
+          ],
+          "est_cost": 30423.685,
+          "est_reward": 11.8694,
+          "feasible": true
+        }
+      ],
+      "cost_history": []
+    },
+    {
+      "cycle": 2,
+      "executed_ids": [
+        21,
+        30,
+        36,
+        33,
+        5,
+        34,
+        7,
+        1,
+        38,
+        23,
+        28,
+        32,
+        14,
+        25,
+        15,
+        8
+      ],
+      "deferred_ids": [
+        10,
+        31,
+        35,
+        37,
+        39
+      ],
+      "completed_ids": [
+        21,
+        30,
+        36,
+        33,
+        5,
+        34,
+        7,
+        1,
+        38,
+        23,
+        28,
+        32,
+        14,
+        25,
+        15,
+        8
+      ],
+      "infeasible_ids": [],
+      "late_ids": [
+        21,
+        7,
+        38,
+        32,
+        15,
+        8
+      ],
+      "tours": [
+        {
+          "uav_id": 0,
+          "task_ids": [
+            21
+          ],
+          "start_nest_id": 2,
+          "end_nest_id": 4,
+          "start": [
+            27684.776,
+            -29893.537,
+            3546.549
+          ],
+          "est_cost": 75484.157,
+          "est_reward": 4.6575,
+          "feasible": true
+        },
+        {
+          "uav_id": 1,
+          "task_ids": [
+            30
+          ],
+          "start_nest_id": 6,
+          "end_nest_id": 5,
+          "start": [
+            23606.393,
+            34763.367,
+            3815.063
+          ],
+          "est_cost": 29674.731,
+          "est_reward": 5.3694,
+          "feasible": true
+        },
+        {
+          "uav_id": 2,
+          "task_ids": [
+            36
+          ],
+          "start_nest_id": 3,
+          "end_nest_id": 2,
+          "start": [
+            22020.696,
+            -49149.428,
+            3685.872
+          ],
+          "est_cost": 33253.638,
+          "est_reward": 2.067,
+          "feasible": true
+        },
+        {
+          "uav_id": 3,
+          "task_ids": [
+            33,
+            5
+          ],
+          "start_nest_id": 2,
+          "end_nest_id": 2,
+          "start": [
+            27684.776,
+            -29893.537,
+            3546.549
+          ],
+          "est_cost": 47250.953,
+          "est_reward": 15.468,
+          "feasible": true
+        },
+        {
+          "uav_id": 4,
+          "task_ids": [
+            34,
+            7
+          ],
+          "start_nest_id": 2,
+          "end_nest_id": 2,
+          "start": [
+            27684.776,
+            -29893.537,
+            3546.549
+          ],
+          "est_cost": 72743.963,
+          "est_reward": 13.7165,
+          "feasible": true
+        },
+        {
+          "uav_id": 5,
+          "task_ids": [
+            1,
+            38
+          ],
+          "start_nest_id": 7,
+          "end_nest_id": 7,
+          "start": [
+            -9907.106,
+            16188.749,
+            3711.872
+          ],
+          "est_cost": 69343.66,
+          "est_reward": 7.3751,
+          "feasible": true
+        },
+        {
+          "uav_id": 6,
+          "task_ids": [
+            23
+          ],
+          "start_nest_id": 6,
+          "end_nest_id": 6,
+          "start": [
+            23606.393,
+            34763.367,
+            3815.063
+          ],
+          "est_cost": 51663.426,
+          "est_reward": 2.5028,
+          "feasible": true
+        },
+        {
+          "uav_id": 7,
+          "task_ids": [
+            28,
+            32
+          ],
+          "start_nest_id": 4,
+          "end_nest_id": 4,
+          "start": [
+            -14345.183,
+            -31147.541,
+            3584.0
+          ],
+          "est_cost": 72943.391,
+          "est_reward": 8.79,
+          "feasible": true
+        },
+        {
+          "uav_id": 8,
+          "task_ids": [
+            14,
+            25,
+            15
+          ],
+          "start_nest_id": 6,
+          "end_nest_id": 0,
+          "start": [
+            23606.393,
+            34763.367,
+            3815.063
+          ],
+          "est_cost": 77438.708,
+          "est_reward": 6.8676,
+          "feasible": true
+        },
+        {
+          "uav_id": 9,
+          "task_ids": [
+            8
+          ],
+          "start_nest_id": 1,
+          "end_nest_id": 4,
+          "start": [
+            -41347.962,
+            8052.905,
+            3664.076
+          ],
+          "est_cost": 62239.914,
+          "est_reward": 1.2774,
+          "feasible": true
+        }
+      ],
+      "cost_history": []
+    },
+    {
+      "cycle": 3,
+      "executed_ids": [
+        10,
+        44,
+        48,
+        56,
+        54,
+        49,
+        43,
+        53,
+        39,
+        47,
+        58,
+        42,
+        51,
+        35,
+        46,
+        41,
+        45
+      ],
+      "deferred_ids": [
+        31,
+        37,
+        40,
+        50,
+        52,
+        55,
+        57,
+        59
+      ],
+      "completed_ids": [
+        10,
+        44,
+        48,
+        56,
+        54,
+        49,
+        43,
+        53,
+        39,
+        47,
+        58,
+        42,
+        51,
+        35,
+        46,
+        41,
+        45
+      ],
+      "infeasible_ids": [],
+      "late_ids": [
+        56,
+        49,
+        35,
+        45
+      ],
+      "tours": [
+        {
+          "uav_id": 0,
+          "task_ids": [
+            10,
+            44
+          ],
+          "start_nest_id": 4,
+          "end_nest_id": 4,
+          "start": [
+            -14345.183,
+            -31147.541,
+            3584.0
+          ],
+          "est_cost": 73514.853,
+          "est_reward": 5.7839,
+          "feasible": true
+        },
+        {
+          "uav_id": 1,
+          "task_ids": [
+            48,
+            56
+          ],
+          "start_nest_id": 5,
+          "end_nest_id": 5,
+          "start": [
+            25534.372,
+            37533.915,
+            3815.0
+          ],
+          "est_cost": 72113.896,
+          "est_reward": 16.1826,
+          "feasible": true
+        },
+        {
+          "uav_id": 2,
+          "task_ids": [
+            54,
+            49
+          ],
+          "start_nest_id": 2,
+          "end_nest_id": 6,
+          "start": [
+            27684.776,
+            -29893.537,
+            3546.549
+          ],
+          "est_cost": 74411.368,
+          "est_reward": 7.9447,
+          "feasible": true
+        },
+        {
+          "uav_id": 3,
+          "task_ids": [
+            43,
+            53
+          ],
+          "start_nest_id": 2,
+          "end_nest_id": 2,
+          "start": [
+            27684.776,
+            -29893.537,
+            3546.549
+          ],
+          "est_cost": 78797.801,
+          "est_reward": 16.4199,
+          "feasible": true
+        },
+        {
+          "uav_id": 5,
+          "task_ids": [
+            39,
+            47
+          ],
+          "start_nest_id": 7,
+          "end_nest_id": 4,
+          "start": [
+            -9907.106,
+            16188.749,
+            3711.872
+          ],
+          "est_cost": 51852.21,
+          "est_reward": 10.1717,
+          "feasible": true
+        },
+        {
+          "uav_id": 6,
+          "task_ids": [
+            58
+          ],
+          "start_nest_id": 6,
+          "end_nest_id": 7,
+          "start": [
+            23606.393,
+            34763.367,
+            3815.063
+          ],
+          "est_cost": 61987.977,
+          "est_reward": 2.8585,
+          "feasible": true
+        },
+        {
+          "uav_id": 7,
+          "task_ids": [
+            42,
+            51,
+            35
+          ],
+          "start_nest_id": 4,
+          "end_nest_id": 4,
+          "start": [
+            -14345.183,
+            -31147.541,
+            3584.0
+          ],
+          "est_cost": 78909.97,
+          "est_reward": 14.3008,
+          "feasible": true
+        },
+        {
+          "uav_id": 8,
+          "task_ids": [
+            46,
+            41
+          ],
+          "start_nest_id": 0,
+          "end_nest_id": 7,
+          "start": [
+            -33191.592,
+            13904.324,
+            3650.792
+          ],
+          "est_cost": 77993.429,
+          "est_reward": 13.0429,
+          "feasible": true
+        },
+        {
+          "uav_id": 9,
+          "task_ids": [
+            45
+          ],
+          "start_nest_id": 4,
+          "end_nest_id": 2,
+          "start": [
+            -14345.183,
+            -31147.541,
+            3584.0
+          ],
+          "est_cost": 62856.81,
+          "est_reward": 9.8015,
+          "feasible": true
+        }
+      ],
+      "cost_history": []
+    },
+    {
+      "cycle": 4,
+      "executed_ids": [
+        52,
+        50,
+        57,
+        40,
+        55,
+        37,
+        59
+      ],
+      "deferred_ids": [
+        31
+      ],
+      "completed_ids": [
+        52,
+        50,
+        57,
+        40,
+        55,
+        37,
+        59
+      ],
+      "infeasible_ids": [],
+      "late_ids": [
+        55,
+        37,
+        59
+      ],
+      "tours": [
+        {
+          "uav_id": 2,
+          "task_ids": [
+            52
+          ],
+          "start_nest_id": 6,
+          "end_nest_id": 5,
+          "start": [
+            23606.393,
+            34763.367,
+            3815.063
+          ],
+          "est_cost": 44760.805,
+          "est_reward": 3.9294,
+          "feasible": true
+        },
+        {
+          "uav_id": 3,
+          "task_ids": [
+            50
+          ],
+          "start_nest_id": 2,
+          "end_nest_id": 2,
+          "start": [
+            27684.776,
+            -29893.537,
+            3546.549
+          ],
+          "est_cost": 38529.518,
+          "est_reward": 7.5133,
+          "feasible": true
+        },
+        {
+          "uav_id": 4,
+          "task_ids": [
+            57
+          ],
+          "start_nest_id": 2,
+          "end_nest_id": 6,
+          "start": [
+            27684.776,
+            -29893.537,
+            3546.549
+          ],
+          "est_cost": 74683.999,
+          "est_reward": 3.4374,
+          "feasible": true
+        },
+        {
+          "uav_id": 5,
+          "task_ids": [
+            40,
+            55
+          ],
+          "start_nest_id": 4,
+          "end_nest_id": 4,
+          "start": [
+            -14345.183,
+            -31147.541,
+            3584.0
+          ],
+          "est_cost": 63895.395,
+          "est_reward": 16.5526,
+          "feasible": true
+        },
+        {
+          "uav_id": 8,
+          "task_ids": [
+            37
+          ],
+          "start_nest_id": 7,
+          "end_nest_id": 7,
+          "start": [
+            -9907.106,
+            16188.749,
+            3711.872
+          ],
+          "est_cost": 67968.479,
+          "est_reward": 7.8508,
+          "feasible": true
+        },
+        {
+          "uav_id": 9,
+          "task_ids": [
+            59
+          ],
+          "start_nest_id": 2,
+          "end_nest_id": 4,
+          "start": [
+            27684.776,
+            -29893.537,
+            3546.549
+          ],
+          "est_cost": 77493.816,
+          "est_reward": 3.8833,
+          "feasible": true
+        }
+      ],
+      "cost_history": []
+    },
+    {
+      "cycle": 5,
+      "executed_ids": [],
+      "deferred_ids": [
+        31
+      ],
+      "completed_ids": [],
+      "infeasible_ids": [],
+      "late_ids": [],
+      "tours": [],
+      "cost_history": []
+    },
+    {
+      "cycle": 6,
+      "executed_ids": [],
+      "deferred_ids": [
+        31
+      ],
+      "completed_ids": [],
+      "infeasible_ids": [],
+      "late_ids": [],
+      "tours": [],
+      "cost_history": []
+    },
+    {
+      "cycle": 7,
+      "executed_ids": [],
+      "deferred_ids": [
+        31
+      ],
+      "completed_ids": [],
+      "infeasible_ids": [],
+      "late_ids": [],
+      "tours": [],
+      "cost_history": []
+    },
+    {
+      "cycle": 8,
+      "executed_ids": [],
+      "deferred_ids": [
+        31
+      ],
+      "completed_ids": [],
+      "infeasible_ids": [],
+      "late_ids": [],
+      "tours": [],
+      "cost_history": []
+    }
+  ]
+}

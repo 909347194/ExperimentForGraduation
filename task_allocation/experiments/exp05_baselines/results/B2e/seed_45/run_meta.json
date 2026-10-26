@@ -5,8 +5,8 @@
   "cost_model": "euclidean",
   "distance_definition": "euclidean_3d",
   "seed": 45,
-  "timestamp_utc": "2026-10-25T12:44:47.129632+00:00",
-  "config_path": "task_allocation/experiments/exp05_baselines/config.yaml",
-  "repo_root": "/workspace/ExperimentForGraduation",
-  "config_fingerprint": "8d5d9f7e5d6c407b"
+  "timestamp_utc": "2026-10-25T15:32:28.168566+00:00",
+  "config_path": "task_allocation\\experiments\\exp05_baselines\\config.yaml",
+  "repo_root": "D:\\SchoolAffairs\\groupmeeting\\thesis\\dissertation\\ExperimentForGraduation",
+  "config_fingerprint": "0d2c1f85ed62dad8"
 }
