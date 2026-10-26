@@ -5,8 +5,8 @@
   "cost_model": "dem",
   "distance_definition": "dem_vertical_section_3d",
   "seed": 43,
-  "timestamp_utc": "2026-10-25T11:34:26.760879+00:00",
-  "config_path": "task_allocation/experiments/exp05_baselines/config.yaml",
-  "repo_root": "/workspace/ExperimentForGraduation",
-  "config_fingerprint": "2b3ed070b1dc3c97"
+  "timestamp_utc": "2026-10-25T14:32:15.993066+00:00",
+  "config_path": "task_allocation\\experiments\\exp05_baselines\\config.yaml",
+  "repo_root": "D:\\SchoolAffairs\\groupmeeting\\thesis\\dissertation\\ExperimentForGraduation",
+  "config_fingerprint": "ef3a07ed8d40dc57"
 }

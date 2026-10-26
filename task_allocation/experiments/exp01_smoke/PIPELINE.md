@@ -82,9 +82,9 @@ fleet / robustness / comparison / config）用于再归类，但**不建目录**
 | process | `allocation` | 单周期分配结构：航迹条（线长 ∝ 航程）/ 逐周期空间演化（总览） | `solution.json 的 cycles[].tours + tasks[] / nests[] / dem` |
 | process | `allocation_gantt` | 分配航迹条（从 allocation 拆出）：线长 ∝ 真实航程 · 方块=任务 · 两端起降巢 | `solution.json 的 cycles[].tours（est_cost）+ tasks[] / nests[]` |
 | process | `allocation_map` | 逐周期空间演化（从 allocation 拆出）：DEM + 航次回放 1×N | `solution.json 的 cycles[].tours + tasks[] / nests[] / dem` |
-| process | `allocation_anim` | 分配过程动画演变：滚动闭环航迹生长 / 任务点亮 + 当前周期 DMDE 收敛（GIF） | `solution.json 的 cycles[].tours + cost_history + tasks[] / nests[] / dem` |
+| process | `allocation_anim` | 分配过程动画演变：滚动闭环航迹生长 / 任务点亮 + 当前周期 DMDE 收敛 + 机巢驻巢数实时标注（GIF） | `solution.json 的 cycles[].tours + cost_history + tasks[] / nests[] / dem` |
 | process | `allocation_status` | 机队再平衡：各机巢驻巢无人机数随周期演化 + 返航巢迁移弧线（GIF） | `solution.json 的 cycles[].tours（uav_id / start_nest_id / end_nest_id）+ nests` |
-| process | `allocation_anim_map` | 分配过程动画（仅地图 · 高清大图）：DEM + 航迹回放 / 任务点亮（GIF） | `solution.json 的 cycles[].tours + tasks[] / nests[] / dem` |
+| process | `allocation_anim_map` | 分配过程动画（仅地图 · 高清大图）：DEM + 航迹回放 / 任务点亮 + 机巢驻巢数实时标注（GIF） | `solution.json 的 cycles[].tours + tasks[] / nests[] / dem` |
 | process | `task_dynamics` | 任务命运：池水位 / 流量 / 状态矩阵 / 等待与滞留 / 地理生命周期 | `metrics.json 的 cycles[].pool_counts / completed_ids / deferred_ids + solution.json 的 tasks[]` |
 | process | `fleet_state` | 机队与机巢：三口径出动 / 占用热力图 / 选巢归因 / 机队迁移 | `metrics.json 的 cycles[].muas / nest_occupancy + solution.json 的 tours / nests` |
 | process | `constraint_state` | 约束与时限：预筛归因 / 约束状态 / 罚项量纲 / 时间窗满足度 | `metrics.json 的 cycles[].selection.filter_reasons / muas.{violations,penalty,infeasible_tags} + tasks[].{earliest,latest,completed_at}` |

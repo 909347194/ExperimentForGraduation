@@ -25,7 +25,9 @@ problem:
   # 与 exp01 / exp05 生产口径保持一致的模型权重（单位：收益当量 / 米）
   allow_unassigned: true
   allow_idle_uav: true
-  lambda_cost: 1.0e-2
+  # 【2026-10-24 晚】按用户裁定统一为 1e-1，与 exp01 现行值一致；
+  # 改前为 1e-2（原生产默认）。本轮全实验同口径，结果可进同一张主表。
+  lambda_cost: 1.0e-1
   w_penalty: 1.0
   # 惩罚量纲解耦：秒级惩罚不再随 F2 一起乘 λ 被压没
   # （迟到 300 s ≈ 3 点奖励，足以抵消单任务收益）
