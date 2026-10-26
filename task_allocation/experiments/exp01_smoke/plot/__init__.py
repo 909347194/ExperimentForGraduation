@@ -13,13 +13,12 @@
 目录按「**看图目的**」分四层（论文叙事线），而不是按实现技术::
 
     plot/
-    ├── registry.py     图清单：唯一事实来源（11 张图，新增图 = 加一行）
+    ├── registry.py     图清单：唯一事实来源（3 张图，新增图 = 加一行）
     ├── theme.py        学术绘图样式与保存约定（唯一 import pyplot 的地方）
     ├── base/           被图依赖、但自己不是图的共享绘制件（地理要素）
-    ├── setup/          ① 实验设置：问题规模 / 算法超参 / 约束开关（参数即图）
-    ├── initial/        ② 初始状态：地形 / 机巢 / 初始机队 / 首批任务（与算法无关）
-    ├── process/        ③ 运行过程观测：滚动闭环怎么跑（逐周期演化与诊断）
-    └── report/         ④ 结果分析：可以直接引用的成图（稳健性 / 对照）
+    ├── initial/        ① 初始状态：地形 / 机巢 / 初始机队 / 首批任务（与算法无关）
+    ├── process/        ② 运行过程观测：滚动闭环怎么跑（逐周期演化）
+    └── report/         ③ 结果分析：可以直接引用的成图
 
 命名约定（**四者同名 + 分类编号前缀**，见 ``registry.py`` 顶部说明）::
 
@@ -29,15 +28,15 @@
 常用方式::
 
     from plot import render_from_results
-    render_from_results("results")                      # 全部图
+    render_from_results("results")                      # 全部图（3 张）
     render_from_results("results", groups=["report"])   # 只出结论层（进论文）
-    render_from_results("results", names=["geo_overview", "allocation"])
+    render_from_results("results", names=["geo_overview", "allocation_anim"])
 
     # 单图独立调试（不重跑实验，直接读 results/*.json）：
-    python plot/process/allocation.py                   # 直接脚本方式（自举转 -m）
-    python -m plot.process.allocation                   # 等价的模块方式
+    python plot/process/allocation_anim.py              # 直接脚本方式（自举转 -m）
+    python -m plot.process.allocation_anim              # 等价的模块方式
     python plot/process/allocation_anim.py --pdf        # 动画图默认带 gif；--pdf 加矢量
-    python plot/process/allocation.py --out /tmp/fig --dpi 80   # 自定义输出目录 / dpi
+    python plot/process/allocation_anim.py --out /tmp/fig --dpi 80   # 自定义输出目录 / dpi
     # 以上等价于各模块末尾 `run_script(__file__.stem, sys.argv[1:])`
 """
 
@@ -79,8 +78,8 @@ setup_style = _theme.setup_style
 def load_results(results_dir: Path | str) -> tuple[dict[str, Any], dict[str, Any]]:
     """读取 ``results/metrics.json`` 与 ``results/solution.json``。
 
-    ``solution.json`` 缺失时返回空 dict——只读 metrics 的图（如
-    ``task_selection`` / ``dmde_search``）仍然可画。
+    ``solution.json`` 缺失时返回空 dict——只读 metrics 的图仍然可画
+    （当前 3 张图均声明需要 solution）。
     """
     results_dir = Path(results_dir)
     metrics = json.loads((results_dir / "metrics.json").read_text(encoding="utf-8"))
@@ -96,7 +95,7 @@ def discover_variants(results_dir: Path | str) -> dict[str, dict[str, Any]]:
     """发现同目录下的**归档对照** ``metrics_<tag>.json``，用于跨配置对比图。
 
     例如 ``results/metrics_tw_off.json`` / ``metrics_tw_on.json`` 是同一实验
-    两组配置的对照运行，``report/ab_compare`` 靠这张对照表绘图。返回
+    两组配置的对照运行，跨配置对照图（已裁剪，历史见 git）靠这张对照表绘图。返回
     ``{tag: metrics}``；没有任何对照时返回空 dict（对应图会自动跳过）。
     """
     results_dir = Path(results_dir)
@@ -127,7 +126,7 @@ def make_plots(
 
     ``names`` / ``groups`` 用于只出一部分图（例如只出 ``report`` 层进论文）；
     两者都省略则出全部。绘制函数返回值可能为空列表——某张图的数据不满足
-    前置条件时（如单 seed 无 ``seed_summary``、无 DEM 时跳过地图）由各图自行
+    前置条件时（如单 seed 无跨 seed 统计、无 DEM 时跳过地图）由各图自行
     跳过，这里不报错。
 
     ``extras`` 是给**跨配置对照图**的附加数据（如 ``{"variants": {...}}``，
