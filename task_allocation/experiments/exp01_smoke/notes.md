@@ -22,7 +22,7 @@ exp01_smoke/
 ├── config.yaml   # 全部可调参数
 ├── plot/         # 可视化模块(代码)——按"看图目的"分三层(论文叙事线)
 │   ├── __init__.py    # make_plots() 调度 + 从 results/ 直接重画
-│   ├── registry.py    # ★ 图清单(唯一事实来源):3 张图,新增 = 加一行
+│   ├── registry.py    # ★ 图清单(唯一事实来源):4 张图,新增 = 加一行
 │   ├── theme.py       # 学术绘图样式、中文字体、保存约定(唯一 import pyplot 处)
 │   ├── base/          # 被图依赖但自己不是图的绘制件
 │   │   ├── dem.py     #   DEM 取数/晕渲/分层设色
@@ -34,7 +34,7 @@ exp01_smoke/
     ├── metrics.json    # 数值指标(不含分配结构)
     ├── run_meta.json   # seed / 时间戳 / 配置路径 / DEM 网格
     ├── solution.json   # 任务表 + 机巢表 + 各周期航次与收敛轨迹 + dem + uavs
-    └── figures/        # 图产物:3 张(2026-10-26 图件裁剪后)
+    └── figures/        # 图产物:4 张(2026-10-26 图件裁剪后)
 ```
 
 **拆分原则**：`run.py` 只做编排，不堆细节。产物按「数值 vs 结构」分流：
@@ -155,13 +155,13 @@ exp01 的定位是**正确性验证台 + 口径标定台**（冒烟 + 审计 + �
 3. 每个周期的 `check_feasible` 无 violation。
 4. `T_t^exec ⊆ T_t^sel ⊆ T_t`、`U_t^exec ⊆ U_t^avail` 恒成立。
 5. 恒等式 `arrived = done + unreach + elim + remain` 每周期成立（审计自动核对）。
-6. `make_plots: true` 时产出 3 张图（I01 / P06 / R01），无缺字告警。
+6. `make_plots: true` 时产出 4 张图（I01 / P04 / P06 / R01），无缺字告警。
 7. 运行末尾 `audit_correctness.py` 全 PASS（N1 搜索期自洽 / N2 交付解可复算 / F 池水位守恒）。
 8. `run_meta.json` 的 `config_fingerprint` 与本次生效配置一致（换 λ / 代数 /
    门禁开关后指纹必变，产物可按指纹回溯口径）。
 
 > 出图约定：`plot.formats` 默认 `[png]`（矢量图需 `--pdf`；GIF 在图集含动画图时
-> 自动补）。3 张图中 `allocation_anim`（P06）为动画图（需多周期 tours），条件不满足时
+> 自动补）。4 张图中 `allocation_anim`（P06）为动画图（需多周期 tours），条件不满足时
 > 打印「跳过（数据不满足前置条件）」，属预期行为，不是失败。
 
 ## 图产物（results/figures/）
@@ -169,10 +169,11 @@ exp01 的定位是**正确性验证台 + 口径标定台**（冒烟 + 审计 + �
 | 层 | 图 id | 内容 | 数据来源 |
 |---|---|---|---|
 | initial | `geo_overview` | 初始态势：地形 · 机巢 · 初始机队 · 任务散布 | `solution.json` 的 dem / nests / tasks / uavs |
+| process | `allocation_gantt` | 分配航迹条：线长 ∝ 真实航程 · 方块=任务 · 两端起降巢 | `solution.json` 的 cycles[].tours + tasks[] / nests[] |
 | process | `allocation_anim` | 分配过程动画演变：滚动闭环航迹生长 / 任务点亮 + 当前周期收敛 + 机巢驻巢数实时标注（GIF） | `solution.json` 的 cycles[].tours + cost_history + tasks[] / nests[] / dem |
 | report | `outcome_summary` | 结果总览：完成率 CR 轨迹 / 未完成任务终局构成 / 双目标 / 关键指标 | `metrics.json` 的 cycles[] / summary + per_seed |
 
-（2026-10-26 图件裁剪：16 张 → 3 张，gif 只保留 P06；被裁图件见 git 历史。）
+（2026-10-26 图件裁剪：16 张 → 4 张，gif 只保留 P06，P04 甘特图追加保留；被裁图件见 git 历史。）
 
 每张图同时出 `png`（预览）与 `pdf`（矢量，直接进 LaTeX）；中文字体 Noto Sans CJK SC。
 

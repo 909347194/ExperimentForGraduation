@@ -24,8 +24,8 @@
 
 `metrics.json` 的 `cycles` 只装**代表 seed（首个）**；多 seed 运行时才附
 `seed_summary`（mean±std）与 `per_seed`（每 seed 全量 cycles），单 seed 运行
-`seed_summary=None`。因此默认单 seed 运行产 2 张静态图（I01/R01）+ 1 张动图（P06）。
-2026-10-26 图件裁剪后注册表共 **3 张**。引用过程图时须注明"代表 seed"。
+`seed_summary=None`。因此默认单 seed 运行产 3 张静态图（I01/P04/R01）+ 1 张动图（P06）。
+2026-10-26 图件裁剪后注册表共 **4 张**（P04 甘特图追加保留）。引用过程图时须注明"代表 seed"。
 
 周期数不固定：`rolling.n_cycles` 只是安全上限，真实停止由
 `stop_when_stable`（enabled，patience=4）收敛早停决定——稳态剩余即物理不可达/
@@ -67,12 +67,13 @@ plot/initial/geo_overview.py  →  plot_geo_overview  →  geo_overview.png
 
 层内另有 `topic` 二级标签（config / allocation / outcome）用于再归类，但**不建目录**——避免层级深过头。
 
-当前 3 张图（此表由 `python -c "from plot import registry; print(registry.describe())"`
+当前 4 张图（此表由 `python -c "from plot import registry; print(registry.describe())"`
 生成，改动后请重跑覆盖）：
 
 | 层 | 图 id | 说明 | 数据来源 |
 |---|---|---|---|
 | initial | `geo_overview` | 初始态势：地形 · 机巢 · 初始机队 · 任务散布 | `solution.json 的 dem / nests / tasks / uavs` |
+| process | `allocation_gantt` | 分配航迹条：线长 ∝ 真实航程 · 方块=任务 · 两端起降巢 | `solution.json 的 cycles[].tours（est_cost）+ tasks[] / nests[]` |
 | process | `allocation_anim` | 分配过程动画演变：滚动闭环航迹生长 / 任务点亮 + 当前周期 DMDE 收敛（GIF） | `solution.json 的 cycles[].tours + cost_history + tasks[] / nests[] / dem` |
 | report | `outcome_summary` | 结果总览：完成率 CR 轨迹 / 未完成任务终局构成 / 双目标 / 关键指标 | `metrics.json 的 cycles[].pool_counts / completed_ids / summary + per_seed` |
 
