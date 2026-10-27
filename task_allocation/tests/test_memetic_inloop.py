@@ -241,7 +241,10 @@ def test_memetic_inloop_failure_keeps_trajectory_aligned(monkeypatch):
     且回调停用后档案维护中断。修复后单次失败只计 memetic_n_failed，
     「每代必落一档」对齐不变量与 DMDE 曲线不变性均保持。
     """
-    import task_allocation.methods.muas.solvers.muas_stage as ms
+    # 2026-10-27 muas_stage 拆分后，polish_assignment 的**消费方**在
+    # stage_runner.run_selective_muas（门面只 re-export）；失败注入必须打在
+    # 消费方命名空间上才生效（测试意图不变：注入 in-loop 失败验计数与对齐）。
+    import task_allocation.methods.muas.solvers.stage_runner as ms
 
     real = ms.polish_assignment
     calls = {"n": 0}
