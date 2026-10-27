@@ -57,7 +57,7 @@ S=\mathcal{T}_t^{\mathrm{sel}}
 | 步骤 | 路径 |
 |------|------|
 | 选择管道 | `methods/selection/pipeline.py` |
-| 单周期 MUAS | `methods/muas/solvers/muas_stage.py` |
+| 单周期 MUAS | `methods/muas/solvers/`（门面 `muas_stage.py`，主入口 `stage_runner.py`） |
 | 滚动外壳 | `methods/rolling/horizon.py` |
 
 ---
@@ -113,7 +113,8 @@ n_{\mathrm{sel}}
 | 覆盖门禁 | `muas/coverage_gate.py` |
 | 统一编码 / 映射 / 逆映射 | `muas/representation/` |
 | DMDE 主循环 | `muas/solvers/dmde_solver.py` |
-| 解码、修复、polish 编排 | `muas/solvers/muas_stage.py` |
+| 解码、修复、polish 编排 | `muas/solvers/decode_repair.py` / `decode_constructive.py` / `route_polish.py` |
+| 参与机选择 | `muas/solvers/participating.py` |
 | 指派邻域（relocate/swap/position） | `muas/solvers/local_search.py` |
 | DEM 三维代价 | `muas/cost/` |
 
@@ -223,7 +224,10 @@ methods/
     constraints/      硬约束
     solvers/
       dmde_solver.py  DE 循环
-      muas_stage.py   单周期编排
+      muas_stage.py   门面（兼容导入；2026-10-27 拆分）
+      stage_config.py / participating.py / tour_cost.py
+      decode_repair.py / decode_constructive.py / route_polish.py
+      evaluator.py / stage_runner.py
       local_search.py 指派邻域
   rolling/            滚动与事件
   task_pool.py
