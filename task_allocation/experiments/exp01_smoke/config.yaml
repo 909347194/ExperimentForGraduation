@@ -38,8 +38,10 @@ problem:
 
 # 合成任务点（暂无实测任务数据；后续换 data/task_location_data.csv 时
 # 只需替换生成函数，本节参数可平移）
+# （2026-10-27 清理：原 tasks.source 键无代码消费，已删——任务是否合成由
+#   生成函数与 domain 决定；原 tasks.anchor_to_nests 为遗留别名，仅
+#   domain=nest_anchored 时生效，本实验 domain=dem_extent 下不参与，已删）
 tasks:
-    source: synthetic
     # 撒点域：dem_extent = 在 DEM 有效范围内全域均匀撒点（需求不确定的现实口径，默认）；
     # nest_anchored = 绕机巢 spread_m 半径内撒点（人为缩小问题，仅作消融对照）。
     # 全域撒点后约束压力两源（城关区口径，uav_max_range=20 km）：
@@ -53,53 +55,21 @@ tasks:
     spread_m: 12000.0 # 相对锚点机巢的散布半径（m）；仅 domain=nest_anchored 生效
     reward_min: 1.0
     reward_max: 10.0
-    # 时间窗改为「周期相关」：latest = 到达时刻 + U(deadline_cycles_min,
-    # deadline_cycles_max) × cycle_length，使紧迫度尺度与滚动时域对齐。
-    # 不使用周期相关时退回绝对秒数 deadline_min/deadline_max（见 task_scenario.py）。
-    #
-    # 【domain=dem_extent 后的重新标定】窗口尺度必须与「典型任务航时」同量级，
-    # 否则时间窗不是在筛选任务，而是在把大多数任务判成物理上不可能：
-    #   全域撒点后到最近机巢中位 17.8 km @ 15 m/s ≈ 1190 s ≈ 2 个周期，
-    #   p90 29.5 km ≈ 1970 s ≈ 3.3 周期。
-    # 实测 5 seed 扫描（见 results/scan_deadline_cycles/）：
-    #   1.5~4.0 周期 (900~2400 s) → 完成率 27.4%±6.3%，淘汰原因 100% miss_time_window
-    #   2.5~5.0 周期 (1500~3000)  → 43.2%±7.9%
-    #   3.5~7.0 周期 (2100~4200)  → 61.3%±6.2%   ← 当前默认：仍有选择性压力，
-    #                                              且不至于让多数任务先天不可达
-    #   5.0~10.0 周期(3000~6000)  → 66.7%±7.1%（接近锚定机巢基线的 68.2%，此时时间窗基本失效）
-    # 锚定机巢基线的 68.2% 是「人为缩小问题」的上限，不作为目标值。
-    #
-    # 【统一 DEM 三维航程口径后的重新标定（2026-10-13）】
-    # 距离口径统一后（评价端/ETA/时间窗全部走 DEM 垂直切面三维航程，见
-    # methods/muas/cost/vertical_section.py），旧窗口 3.5~7.0 完成率跌至 75%：
-    # 20 个任务直飞全部来得及（物理不可达=0），但 ETA 变长使多任务航次后段
-    # 任务迟到回池，下周期余量不足直飞时间即被预筛淘汰（链式死亡）。
-    # 按实测航时重算（seed=42，最近机巢直飞 DEM 航程 @15 m/s）：
-    #   中位 1377 s ≈ 2.29 周期；p90 ≈ 3.2 周期；最大 2274 s ≈ 3.79 周期（T10）
-    # 下界 = (最大直飞航时 + 服务 300 s) × 1.05 ≈ 2703 s ≈ 4.5 周期，
-    # 上界保持原 2:1 比例 → 9.0 周期。实测扫描（统一口径，seed=42）：
-    #   3.5~7.0 → 75%（15/20，未完成 0/7/10/15/19）
-    #   4.2~8.4 → 95%（19/20）
-    #   4.5~9.0 → 95%（19/20）  ← 当前默认：4.2~9.0 区间完成率平台期，
-    #                                  任取其中值均可；保留选择性压力（仍有淘汰）
-    #   5.0~10.0 → 100% 但零淘汰（时间窗失效），代价 +16%、求解 +57%，不取
-    # 【城关区口径重标定（2026-10-26）】旧 4.5~9.0 按旧大区域最大直飞 2274 s
-    # 标定，在城关区（最大单程 ~12.4 km ≈ 870 s @15 m/s）明显过松、时间窗失效。
-    # 新下界 = (最大直飞航时 870 s + 服务 300 s) × 1.05 ≈ 1230 s ≈ 2.0 周期；
-    # 上界保持 2:1 比例 → 4.0 周期。扫描留档见 scan_wc*.log / results_scan_wc/。
+    # 时间窗 = 到达时刻 + U(deadline_cycles_min, deadline_cycles_max) × cycle_length
+    # （不使用周期相关时退回绝对秒数 deadline_min/deadline_max，见 task_scenario.py）。
+    # 标定原则：窗口尺度与「典型任务航时」同量级——太紧则时间窗不是筛选而是在
+    # 把多数任务判成物理不可能，太松则时间窗失效、失去选择性压力。
+    # 【城关区口径（2026-10-26，当前值）】最大单程 ~12.4 km ≈ 870 s @15 m/s，
+    #   下界 = (870 s + 服务 300 s) × 1.05 ≈ 1230 s ≈ 2.0 周期；
+    #   上界保持 2:1 比例 → 4.0 周期。仍有淘汰 ⇒ 选择性压力保留。
+    # 历史多轮标定（大区域时代 + 统一 DEM 三维航程口径重标定）与扫描档位
+    # 见 notes.md「时间窗标定史」。
     deadline_cycles_min: 2.0
     deadline_cycles_max: 4.0
-    anchor_to_nests: true # 遗留别名，仅 domain=nest_anchored 时生效
 
-# 算法开关（对齐 Chapter3_README §8 技术路线）
-# ⚠️ 2026-10-23 审查：本段**当前不参与装配**——selection / muas / rolling 实际由
-# 下面的 selection: / muas: / rolling.enabled 决定，config.py 不读本段，仅作
-# 元信息留存（说明"本实验跑的是哪条技术路线"）。改这里不会改变任何行为；
-# 要换算法请改对应段（例如 muas.decode_mode、selection.alpha）。
-method:
-    selection: marginal_gain
-    muas: dmde
-    rolling: true
+# 技术路线（元信息；2026-10-27 清理：原 method: 段无任何代码消费，已删）：
+# 选择=边际增益、求解=DMDE、滚动=开启。真正的开关在下方 selection: /
+# muas: / rolling: 各段的对应键（如 muas.decode_mode、selection.marginal）。
 
 # ── 第一阶段：动态任务选择（论文 §3）──────────────────────────────
 selection:
@@ -161,14 +131,22 @@ selection:
 
 # ── 第二阶段：选择性多机巢 MUAS（论文 §4-§5）─────────────────────
 muas:
+    # 段内导航（2026-10-27）：①模型开关 ②适应度口径 ③选机/K 决策
+    #   ④剔除（当前关闭） ⑤Lamarckian / polish / decode_mode
+    #   ⑥覆盖门禁与两段式 ⑦重排期航程优化（默认关） ⑧交付后成本 polish
+    #   ⑨memetic（默认关）。消融开关集中在此段，改任何键前先看注释里的
+    #   「默认/消融」标注。
     allow_unassigned: true # 允许 y_j = 0（任务保留至下一周期）
     allow_idle_uav: true # 允许 n_u = 0（UAV 本周期空闲）
     # 适应度口径：覆盖门禁（唯一主口径，2026-10-24）。big_m 仅作为 W_hard/
     # W_skip 的推导基数（κ·m·R_pool），不再进 f 的 −m·F1 项；非门禁 big-M
     # 四层路径已从代码移除（见 docs/objective_caliber_two_approaches_archive_2026-10-24.md）。
     # big_m: null → 按问题数据自动推导支配性权重；给数值则显式固定。
-    # lexicographic 字段为历史遗留、已失效（保留仅为向后兼容 yaml），
-    # 设任何值均不改变行为。
+    # lexicographic 字段：非门禁 big-M 四层路径已从代码移除（见
+    # docs/objective_caliber_two_approaches_archive_2026-10-24.md）后，此键的
+    # 唯一残余作用 = 经济剔除的总闸之一（build_solution 的 economic_prune =
+    # prune_unprofitable ∧ ¬coverage_first ∧ ¬lexicographic）。本实验
+    # prune_unprofitable=false ⇒ 此键当前无行为影响；消融用。
     lexicographic: true
     big_m: null
     # 2026-10-24 用户裁定：1e-2 → 1e-1（本实验口径切换，非全局默认）。
@@ -184,8 +162,9 @@ muas:
     # 给数值则惩罚不再乘 λ，直接以「奖励当量 / 惩罚单位」计入适应度。
     # 时间窗违约以秒计，取 0.01~0.02 即「迟到 300 s ≈ 3~6 点奖励」。
     w_violation: 0.01
-    w_nest_capacity: 1.0 # 机巢容量违反的惩罚权重
-    # ── 门禁口径适应度（2026-10-24 起唯一主口径）────────────────────
+    # （2026-10-27 清理：原 muas.w_nest_capacity 键为死字段——巢容量惩罚的
+    #   唯一生效处是 constraints.w_nest_capacity，已删此冗余副本）
+    # ── ②适应度口径（覆盖门禁，唯一主口径，2026-10-24）──────────
     # f = W_hard·n_hard + w_exc·excess_m + W_skip·n_skip + w_late·L_tot + λ·path + w_time·F3
     #   （固定表述：搜索用 f 不含 −m·F1；F1 只作事后指标）
     #   T0 物理违约（硬）：range/endurance/时序/同步/巢容量/终点不可达/结构。
@@ -259,6 +238,7 @@ muas:
     # 剔除执行代价高于收益的任务（y_j = 0）。⚠️ 与「完成是约束」口径冲突：
     # 门禁 / coverage_first 开启时必须置 false（否则主动丢可完成任务换成本），
     # 见本段末「覆盖门禁」块说明。
+    # ── ④剔除（当前全部关闭；仅消融/压力场开启）────────────────
     prune_unprofitable: false  # 与「完成是约束」冲突，门禁口径下必须关
     prune_margin: 0.0 # 剔除判据裕度：λ·节省 > R·(1+margin) 才剔除
     prune_max_rounds: 8
@@ -384,6 +364,8 @@ muas:
 # 论文口径取舍（例如「本模型暂不纳入交付时间窗」只需把 time_window 改 false）。
 # 与 selection.feasibility.check_time_window 联动：关闭 time_window 时，
 # 第一阶段的时间窗预筛同步关闭，保证两阶段口径一致。
+# （2026-10-27 清理：巢容量惩罚权重的唯一生效处是下方 w_nest_capacity——
+#  原 muas.w_nest_capacity 冗余副本已删）
 constraints:
     # 结构类
     duplicate_task: true # 任务重复分配 / 未知任务 / sum_u x_uj = y_j
@@ -415,25 +397,20 @@ constraints:
 solver:
     population: 50 # pop_size（默认：论文实验配置）
     # max_generations：主口径 **100**（2026-10-21 定，500 代为敏感性对照）。
-    # 【为什么不是 500】早期注释写「由 100 上调至 500（依据 Ming 2017 标定）」，
-    #   依据是原文 pop50/gen1000、Fig.10 自述约 150 代收敛，本实现反映射温度
-    #   temperature = 1 − gen/Gen、随机匹配预算 0.9×Gen ⇒ 100 代时仅 90 代
-    #   （原文 900 代），探索预算差一个量级；实测 500 代确有余量（同实例同种子
-    #   path 485 → 381 km）。
-    #   **但 2026-10-21 的 T9 诊断推翻了「加代数即可治 miss」的推理**：miss 是
-    #   编码顺序的人为依赖（SRP 反映射锁归属 + Lamarckian 只回写起始基因 ⇒
-    #   归属逐代复现），与搜索预算无关；100/500 代对照中 100 代占优
-    #   （500 代多花的预算换不来稳定收益，且单周期耗时约 ×5，exp01 单 seed
-    #   全程 80 s → 约 7 min）。故主口径回到 100，500 代仅在敏感性分析里出现。
-    # ⚠️ 论文口径提示：CR 与温度的调度都以 S（总代数）为分母，S 从原文的 1000
-    #   压到 100 是**搜索预算的量级变化**，不是参数微调，须作为标定项显式声明
-    #   （详见 docs/method_audit_vs_refs_2026-10-23.md 的 F8/F9）。
+    #   为什么不是 500：T9 诊断证明 miss 是编码顺序的人为依赖（SRP 反映射锁
+    #   归属 + Lamarckian 只回写起始基因 ⇒ 归属逐代复现），与搜索预算无关；
+    #   100/500 代对照中 100 代占优（500 代收益不稳且单周期耗时约 ×5）。
+    # ⚠️ 论文口径提示：CR 与温度调度都以 S 为分母，S 从原文的 1000 压到 100
+    #   是**搜索预算的量级变化**，不是参数微调，须作为标定项显式声明
+    #   （详见 docs/method_audit_vs_refs_2026-10-23.md 的 F8/F9；早期标定史见
+    #   notes.md「求解预算标定史」）。
     max_iter: 100 # max_generations（论文主口径；500 代见敏感性分析）
     zeta: 3 # 动态交叉率曲率指数 ζ（论文式 3-9 取 3）
     # 灭绝门限 δ：留空 = 论文公式 3-12 原式 GMR = 1 - CR（不加门限）。
     # 填一个数值（如 0.3）则附加工程门限 CR>=δ 时不灭绝，把重置推迟到后期。
     delta: null
-    seed: 42
+    # （2026-10-27 清理：原 solver.seed 键为冗余——run.py 逐 seed 覆盖
+    #   solver.seed = experiment.seeds[i]；直接装配时也回退到 experiment.seed）
     verbose: false
     log_interval: 10
 
@@ -452,7 +429,8 @@ cost:
 
 # ── 动态滚动闭环（论文 §6）───────────────────────────────────────
 rolling:
-    enabled: true
+    # （2026-10-27 清理：原 enabled: 键无代码消费，已删——滚动闭环是本实验的
+    #   唯一运行形态；周期数由 n_cycles 安全上限 + stop_when_stable 早停控制）
     # 长程吞吐协议（2026-10-14 用户定）：完成率不是目标，周期可无限延长，
     # 真实目标 = 持续到达下「尽可能多且正确地完成任务」。3 周期窗口的完成率
     # 只是窗口长度产物，无区分度；多周期 + Poisson 到达流下，吞吐 / 正确

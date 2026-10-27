@@ -191,3 +191,71 @@ exp01 的定位是**正确性验证台 + 口径标定台**（冒烟 + 审计 + �
 - **exp04 消融**：`event_replan` / `w_time` 两个创新点各跑一组开关对照。
 - **exp05 基线对照**：对照方法(baselines)就位后，本实验可扩成 exp05 的对比入口。
 - 对照方法就位后，本实验只保留冒烟 + 正确性 + 回归基线职责。
+
+---
+
+## 配置清理与审计（2026-10-27）
+
+> 目的：config.yaml 只保留**参与装配且影响行为**的键；死键删除、历史标定史
+> 迁出到本文件归档。验证：清理后 exp01 --seeds 42 复跑 `solution.json`
+> 与清理前 bit-exact（行为逐位不变）；`config_fingerprint` 会因键字面变化
+> 而改变（语义正确：配置字面确实变了，但行为口径未变）。
+
+### 删除的死键 / 冗余键清单
+
+| 键 | 判定 | 依据 |
+|---|---|---|
+| `method:` 整段（selection/muas/rolling 3 键） | 死键（纯元信息） | config.py 与全部代码均不读该段；真正的开关在 selection/muas/rolling 各段 |
+| `rolling.enabled` | 死键 | 无任何代码消费；滚动闭环是唯一运行形态，周期数由 n_cycles + stop_when_stable 控制 |
+| `solver.seed` | 冗余键 | run.py 逐 seed 覆盖 `solver.seed = experiment.seeds[i]`（`seed_cfg.setdefault("solver",{})["seed"]=seed`）；直接装配时也回退到 experiment.seed |
+| `muas.w_nest_capacity` | 冗余键（死字段） | 巢容量惩罚的唯一生效处是 `constraints.w_nest_capacity`（feasibility.py 只读 cons.w_nest_capacity）；MUASProblemConfig.w_nest_capacity 仅作旧 yaml 的回退源 |
+| `tasks.source` | 死键 | 只有 data.source 被消费（build.py:78）；任务合成与否由生成函数与 domain 决定 |
+| `tasks.anchor_to_nests` | 冗余键（遗留别名） | 仅 domain=nest_anchored 时参与（task_scenario._resolve_domain/_anchors）；本实验 domain=dem_extent 下不生效 |
+
+### 保留但已失效/仅消融的键（勿误删）
+
+- `muas.lexicographic`：非门禁 big-M 路径移除后唯一残余作用 = 经济剔除总闸
+  之一（economic_prune = prune_unprofitable ∧ ¬coverage_first ∧ ¬lexicographic）；
+  当前 prune_unprofitable=false ⇒ 无行为影响。
+- `muas.prune_*`（margin/max_rounds/wait_bonus/wait_scale）：仅 prune 开启时
+  参与；wait_bonus/wait_scale 还参与 evaluator 的 _eff_reward（恒算）。
+- `selection.capability.max_expand_factor`：仅 mode=primary 生效。
+
+### 时间窗标定史（自 config.yaml 迁出）
+
+任务时间窗 = 到达时刻 + U(deadline_cycles_min, deadline_cycles_max) × cycle_length；
+标定原则：窗口尺度与「典型任务航时」同量级——太紧则时间窗不是筛选而是在把
+多数任务判成物理不可能，太松则时间窗失效、失去选择性压力。
+
+1. **domain=dem_extent 后标定（大区域时代）**：全域撒点后到最近机巢中位
+   17.8 km @15 m/s ≈ 1190 s ≈ 2 周期，p90 29.5 km ≈ 1970 s ≈ 3.3 周期。
+   5 seed 扫描（results/scan_deadline_cycles/）：
+   - 1.5~4.0 周期 → 完成率 27.4%±6.3%，淘汰 100% miss_time_window；
+   - 2.5~5.0 → 43.2%±7.9%；
+   - 3.5~7.0 → 61.3%±6.2%（当时默认：仍有选择性压力）；
+   - 5.0~10.0 → 66.7%±7.1%（接近锚定机巢基线 68.2%，时间窗基本失效；
+     68.2% 是「人为缩小问题」的上限，不作为目标值）。
+2. **统一 DEM 三维航程口径后重标定（2026-10-13）**：距离口径统一后旧窗口
+   3.5~7.0 完成率跌至 75%（20 任务直飞全部来得及、物理不可达=0，但 ETA 变长
+   使多任务航次后段任务迟到回池，下周期被预筛淘汰——链式死亡）。按实测航时
+   重算（seed=42，最近机巢直飞 DEM 航程 @15 m/s）：中位 1377 s ≈ 2.29 周期、
+   p90 ≈ 3.2、最大 2274 s ≈ 3.79（T10）；下界 = (最大直飞航时 + 服务 300 s) × 1.05
+   ≈ 2703 s ≈ 4.5 周期，上界保持 2:1 → 9.0。扫描：3.5~7.0 → 75%；
+   4.2~8.4 → 95%；4.5~9.0 → 95%（当时默认，平台期任取）；
+   5.0~10.0 → 100% 但零淘汰（时间窗失效），代价 +16%、求解 +57%，不取。
+3. **城关区口径重标定（2026-10-26，当前值）**：旧 4.5~9.0 按旧大区域最大直飞
+   2274 s 标定，在城关区（最大单程 ~12.4 km ≈ 870 s @15 m/s）明显过松。
+   新下界 = (870 s + 300 s) × 1.05 ≈ 1230 s ≈ 2.0 周期；上界保持 2:1 → 4.0。
+   扫描留档 scan_wc*.log / results_scan_wc/。
+
+### 求解预算标定史（自 config.yaml 迁出）
+
+max_generations 主口径 100（2026-10-21 定，500 代为敏感性对照）。早期注释
+曾写「由 100 上调至 500（依据 Ming 2017 标定）」：依据是原文 pop50/gen1000、
+Fig.10 自述约 150 代收敛，本实现 temperature = 1 − gen/Gen、随机匹配预算
+0.9×Gen ⇒ 100 代仅抵原文 900 代，探索预算差一个量级；实测 500 代确有余量
+（同实例同种子 path 485 → 381 km）。但 2026-10-21 T9 诊断推翻了「加代数即可
+治 miss」：miss 是编码顺序的人为依赖（SRP 反映射锁归属 + Lamarckian 只回写
+起始基因 ⇒ 归属逐代复现），与搜索预算无关；100/500 代对照中 100 代占优
+（500 代收益不稳，单周期耗时约 ×5，exp01 单 seed 全程 80 s → 约 7 min）。
+故主口径回到 100，500 代仅在敏感性分析里出现。
