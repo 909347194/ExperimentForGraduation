@@ -187,7 +187,6 @@ def build_config_bundle(cfg: Mapping[str, Any]) -> ConfigBundle:
             else float(m["w_range_excess"])
         ),
         hard_violation_kappa=float(m.get("hard_violation_kappa", 10.0)),
-        w_time=float(m.get("w_time", 0.0)),
         default_service_time=float(m.get("default_service_time", 0.0)),
         # 迟到奖励折减容忍 W（秒）：晚到 eff=R×max(0,1−L/W)；
         # None = 关闭（历史口径）。与 selection.feasibility.late_tolerance_seconds 同值。

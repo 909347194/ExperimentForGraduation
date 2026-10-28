@@ -28,7 +28,7 @@ class CostProvider:
     """节点间代价：pairwise 优先，否则欧氏；机巢键 = nest_offset + nest_id。
 
     另承载 **统一距离口径** ``distance_fn``（:func:`make_distance_fn` 生成的
-    DEM 三维航程）。凡要算「飞这一段的物理长度/时间」的地方（航迹时间 F3、
+    DEM 三维航程）。凡要算「飞这一段的物理长度/时间」的地方（    航迹时间、
     时间窗 ETA）一律走 :meth:`travel`，不得再直接 ``_euclid`` —— 后者是直线，
     会系统性低估飞行时间。
     """
@@ -58,7 +58,7 @@ class CostProvider:
 
         与 :meth:`cost` 的区别：``cost`` 查的是节点 id → id 的**代价**（可含
         收益加权等模型化口径），``travel`` 是纯粹的空间长度，用于把距离换算成
-        飞行时间（ETA / F3）。两者同源（都由同一个 DEM 估算器派生）。
+        飞行时间（ETA / 航迹时间）。两者同源（都由同一个 DEM 估算器派生）。
         """
         if self.distance_fn is not None:
             try:

@@ -35,9 +35,8 @@ problem:
   # （迟到 300 s ≈ 3 点奖励，足以抵消单任务收益）
   w_violation: 0.01
   w_nest_capacity: 1.0
-  w_time: 0.0
   # 门禁口径（唯一主口径，2026-10-24）：
-  #   f = W_hard·n_hard + w_exc·excess_m + W_skip·n_skip + w_late·L_tot + λ·path + w_time·F3
+  #   f = W_hard·n_hard + w_exc·excess_m + W_skip·n_skip + w_late·L_tot + λ·path
   #   （固定表述：搜索用 f 不含 −m·F1；F1 只作事后指标）
   #   T0 物理违约（硬）> T0.5 覆盖门禁 > T2 迟到（秒级软计价）> T3 航程
   lexicographic: true

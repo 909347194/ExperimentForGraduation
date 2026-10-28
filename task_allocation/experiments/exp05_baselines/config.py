@@ -171,7 +171,6 @@ def build_config_bundle(cfg: Mapping[str, Any]) -> ConfigBundle:
             None if m.get("w_range_excess") is None else float(m["w_range_excess"])
         ),
         hard_violation_kappa=float(m.get("hard_violation_kappa", 10.0)),
-        w_time=float(m.get("w_time", 0.0)),
         default_service_time=float(m.get("default_service_time", 0.0)),
         late_reward_decay_seconds=(
             None

@@ -13,7 +13,7 @@
 6. **完成是约束**：可达任务不得经济性剔除，暂缓只能源于可行性修复。
 
 背景：DMDE 单适应度框架不动，适应度仅含 硬违约 + W_skip·n_skip +
-迟到 + λ·path + w_time·F3；覆盖由门禁（构造修复 + W_skip 层）承担，
+迟到 + λ·path；覆盖由门禁（构造修复 + W_skip 层）承担，
 成本项（含惩罚/最坏机时间）只在完成等价的解间裁决。
 """
 
@@ -82,7 +82,7 @@ def _pairwise_entries(tasks, uavs, nests):
 def _prob(tasks, uavs, nests, pairwise, **kw):
     return SelectiveMUASProblem.from_entities(
         tasks, uavs, nests, pairwise_cost=pairwise,
-        config=MUASProblemConfig(w_time=0.0, **kw),
+        config=MUASProblemConfig(**kw),
     )
 
 
@@ -232,7 +232,7 @@ def test_solver_consolidates_few_tasks():
     stage = run_selective_muas(
         tasks, uavs, nests, cb,
         fleet_uavs=uavs,
-        problem_config=MUASProblemConfig(w_time=0.0),
+        problem_config=MUASProblemConfig(),
         stage_config=MUASStageConfig(),
         solver_config=DMDEConfig(pop_size=10, max_generations=5, seed=1),
         current_time=0.0,
@@ -253,7 +253,7 @@ def test_consolidation_does_not_drop_tasks():
     stage = run_selective_muas(
         tasks, uavs, nests, cb,
         fleet_uavs=uavs,
-        problem_config=MUASProblemConfig(w_time=0.0),
+        problem_config=MUASProblemConfig(),
         stage_config=MUASStageConfig(),
         solver_config=DMDEConfig(pop_size=10, max_generations=5, seed=1),
         current_time=0.0,
@@ -283,7 +283,7 @@ def test_gate_caliber_never_prunes_completable_task():
     stage = run_selective_muas(
         tasks, uavs, nests, cb,
         fleet_uavs=uavs,
-        problem_config=MUASProblemConfig(w_time=0.0),
+        problem_config=MUASProblemConfig(),
         stage_config=MUASStageConfig(),
         solver_config=DMDEConfig(pop_size=6, max_generations=3, seed=1),
         current_time=0.0,
@@ -309,7 +309,7 @@ def test_delivered_fitness_recompute_from_components():
     stage = run_selective_muas(
         tasks, uavs, nests, cb,
         fleet_uavs=uavs,
-        problem_config=MUASProblemConfig(w_time=0.0, w_violation=0.01),
+        problem_config=MUASProblemConfig(w_violation=0.01),
         stage_config=MUASStageConfig(),
         solver_config=DMDEConfig(pop_size=10, max_generations=5, seed=1),
         current_time=0.0,
@@ -326,7 +326,6 @@ def test_delivered_fitness_recompute_from_components():
         + (w["w_skip"] or 0.0) * int((gs or {}).get("n_skip", 0))
         + (w["w_late"] or 0.0) * d["final_late_s"]
         + w["lambda"] * d["final_path_m"]
-        + w["w_time"] * d["final_bottleneck_s"]
     )
     assert rec == pytest.approx(d["final_fitness"], rel=1e-9), (
         f"重算 {rec} != 记录 {d['final_fitness']}"

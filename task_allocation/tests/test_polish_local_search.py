@@ -86,7 +86,7 @@ def _mk(tasks, uavs, nests, *, stage_cfg=None, **prob_kw):
     prob = SelectiveMUASProblem.from_entities(
         tasks, uavs, nests,
         pairwise_cost=_pairwise(tasks, uavs, nests),
-        config=MUASProblemConfig(w_violation=0.01, w_time=0.0, **prob_kw),
+        config=MUASProblemConfig(w_violation=0.01, **prob_kw),
     )
     ev = MUASAssignmentEvaluator(
         prob, participating=list(uavs), tasks=list(tasks), nests=list(nests),

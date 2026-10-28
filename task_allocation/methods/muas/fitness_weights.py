@@ -115,7 +115,7 @@ class FitnessWeightsMixin:
         return 1.0 + self._secondary_upper_bound() / r_min
 
     def _secondary_upper_bound(self) -> float:
-        """任一解次目标值的保守上界（λ·路径 + 软惩罚 + w_time·最坏机时间）。
+        """任一解次目标值的保守上界（λ·路径 + 软惩罚）。
 
         覆盖门禁口径（唯一主口径，2026-10-24）下：硬违约已升入 T0 支配层
         （``W_hard = κ·m·R_pool``，与 m 的推导解耦），不再进次目标上界；
@@ -141,7 +141,6 @@ class FitnessWeightsMixin:
             total += lam * float(cfg.w_penalty) * v_bound
         else:
             total += float(cfg.w_violation) * v_bound
-        total += float(cfg.w_time) * (c_bound / speed_min)
         return float(total)
 
     def _max_edge_cost(self) -> float:

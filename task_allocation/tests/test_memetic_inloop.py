@@ -178,7 +178,7 @@ def _run(polish_in_loop: bool, memetic_K: int = 2):
     return run_selective_muas(
         tasks, uavs, nests, cb,
         fleet_uavs=uavs,
-        problem_config=MUASProblemConfig(w_time=0.0),
+        problem_config=MUASProblemConfig(),
         stage_config=MUASStageConfig(
             polish_in_loop=polish_in_loop, memetic_K=memetic_K
         ),

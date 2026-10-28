@@ -72,7 +72,7 @@ def _evaluator(tasks, uavs, nests) -> MUASAssignmentEvaluator:
     problem = SelectiveMUASProblem.from_entities(
         tasks, uavs, nests,
         pairwise_cost=_pairwise(tasks, uavs, nests),
-        config=MUASProblemConfig(w_time=0.0),
+        config=MUASProblemConfig(),
     )
     return MUASAssignmentEvaluator(
         problem=problem,
@@ -194,7 +194,7 @@ def test_injected_solver_prebuilt_channel():
     stage = run_selective_muas(
         tasks, uavs, nests, cb,
         solver=GreedySolver(),
-        problem_config=MUASProblemConfig(w_time=0.0),
+        problem_config=MUASProblemConfig(),
         stage_config=MUASStageConfig(),
     )
     sol = stage.solution
@@ -212,7 +212,7 @@ def test_default_solver_channel_unchanged():
     cb = _stage_inputs(tasks, uavs, nests)
     stage = run_selective_muas(
         tasks, uavs, nests, cb,
-        problem_config=MUASProblemConfig(w_time=0.0),
+        problem_config=MUASProblemConfig(),
         stage_config=MUASStageConfig(),
         solver_config=DMDEConfig(pop_size=8, max_generations=5, seed=0),
     )

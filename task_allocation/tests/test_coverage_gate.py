@@ -15,7 +15,7 @@
    gate_stats、W_skip 必入权重；迟到不折减 F1（F1 只作指标），
    _secondary_upper_bound 拆掉 1e6 虚构帽换推导帽；
 6. **搜索用 f 不含 −m·F1（F1 只作指标）**：门禁口径下 f 与 F1 无关，
-   仅 = 硬违约 + W_skip·n_skip + 迟到 + λ·path + w_time·F3。
+   仅 = 硬违约 + W_skip·n_skip + 迟到 + λ·path。
 """
 
 from __future__ import annotations
@@ -64,7 +64,7 @@ def _pairwise(tasks, uavs, nests):
 
 
 def _problem(tasks, uavs, nests, **cfg) -> SelectiveMUASProblem:
-    kw = dict(w_time=0.0, w_violation=0.01, lambda_cost=1.0e-4)
+    kw = dict(w_violation=0.01, lambda_cost=1.0e-4)
     kw.update(cfg)
     return SelectiveMUASProblem.from_entities(
         tasks, uavs, nests,
@@ -258,7 +258,7 @@ def test_stage_hook_gate_stats_and_default_off():
         problem = SelectiveMUASProblem.from_entities(
             tasks, uavs, nests, pairwise_cost=_pairwise(tasks, uavs, nests),
             config=MUASProblemConfig(
-                w_time=0.0, w_violation=0.01, lambda_cost=1.0e-4,
+                w_violation=0.01, lambda_cost=1.0e-4,
                 lexicographic_coverage=gate_fit,
             ),
         )
@@ -289,7 +289,7 @@ def test_search_fitness_excludes_f1_under_gate():
     """门禁口径固定表述：**搜索用 f 不含 −m·F1；F1 只作事后指标**。
 
     验证：scalar_fitness 的纯门禁形式（硬违约 + W_skip·n_skip + 迟到 +
-    λ·path + w_time·F3）与手工重算完全一致，且**不含** −m·F1 项——若把
+    λ·path）与手工重算完全一致，且**不含** −m·F1 项——若把
     −m·F1 加回去，结果会系统性偏离。覆盖由门禁（构造修复 + W_skip 层）承担，
     目标层只剩成本 + 迟到 + 硬违约。
     """
@@ -313,7 +313,6 @@ def test_search_fitness_excludes_f1_under_gate():
         + p.skip_weight() * gs["n_skip"]
         + (0.0 if wv is None else float(wv) * det["soft_violation"])
         + p.config.lambda_cost * p.path_cost(sol)
-        + p.config.w_time * sol.meta["bottleneck_time"]
     )
     assert manual == pytest.approx(f, rel=1e-12), (
         f"门禁口径 f 必须=手工重算（不含 −m·F1）：{manual} vs {f}"

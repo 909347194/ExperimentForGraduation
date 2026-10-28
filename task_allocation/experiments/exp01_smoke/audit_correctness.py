@@ -460,12 +460,12 @@ def _run_checks(
     check("I DMDE 收敛曲线非增（best fitness）", not mono_bad, str(mono_bad[:3]))
 
     # ── N 适应度可复算（治 auto big_m 漂移，2026-10-18 拆双口径）───────
-    # 四层适应度（生产口径，w_time=0 时 F3 缺席）：
+    # 四层适应度（生产口径；门禁下 f 不含 −m·F1，F1 只作事后指标）：
     #   f = W_hard·n_hard + w_exc·excess_m + W_skip·n_voluntary_skip
-    #       − m·F1 + w_late·L_tot + λ·path + w_time·F3
+    #       − m·F1 + w_late·L_tot + λ·path
     # （W_skip 层仅覆盖门禁模式存在，快照 w_skip 缺省时计 0）
     # 权重取落盘快照 fitness_weights（本周期实际使用的 m/W_hard/w_exc/
-    # w_late/λ/w_time/W_decay），成分从 solution.json 独立重取。
+    # w_late/λ/W_decay），成分从 solution.json 独立重取。
     #
     # N1 搜索期自洽：cost_history[-1] == muas.best_fitness。两者同为
     #    搜索期口径（Lamarckian 回写前 child 修复解的评价值）。
@@ -506,10 +506,6 @@ def _run_checks(
         n_skip = int((c.get("gate_stats") or {}).get("n_skip", 0) or 0)
         w_late = float(fw.get("w_late") or 0.0)
         lam = float(fw["lambda"])
-        w_time = float(fw.get("w_time") or 0.0)
-        if w_time != 0.0 and c.get("final_bottleneck_s") is None:
-            n2_skipped += 1
-            continue
         # 门禁口径下 **f 不含 −m·F1**（固定表述：搜索用 f 不含 −m·F1，
         # F1 只作指标）⇒ 重算时该项置零。判据与 problem.gate_mode 同构：
         # 快照带 w_skip（problem 开关开）或本周期落了 gate_stats
@@ -523,7 +519,6 @@ def _run_checks(
             + f1_term
             + w_late * float(c.get("final_late_s") or 0.0)
             + lam * float(c.get("final_path_m") or 0.0)
-            + w_time * float(c.get("final_bottleneck_s") or 0.0)
         )
         rel = abs(f_rec - f_final) / max(abs(f_final), 1e-9)
         if rel > 1e-3:

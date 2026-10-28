@@ -1,6 +1,6 @@
 # 第 3 章方法：动态滚动的选择性多机巢多无人机协同任务分配
 
-本文只描述**当前实现中的方法**（与 `task_allocation/methods/` 逐条对齐，代码口径 2026-10-27），
+本文只描述**当前实现中的方法**（与 `task_allocation/methods/` 逐条对齐，代码口径 2026-10-28；F3 已整体移除），
 不写文献综述与贡献口号。配置默认值以 `experiments/exp01_smoke/config.yaml` 为准。
 
 ---
@@ -46,16 +46,15 @@
   仅按迟到秒数线性折减计价（见 §4.5）。
 
 **目标（字典序语义）：** 先在硬约束下尽量交付"已选且可装"的任务（覆盖）；
-覆盖等价时再比总航程、软迟到与最坏机航迹时间。三个目标分量：
+覆盖等价时再比总航程与软迟到。**防漂移不构成独立优化目标**——它靠问题层设计体现：终点机巢选择约束、返航代价（\(\lambda C_{\mathrm{path}}\) 已含）、跨周期部署 reposition/轮转巢；模型不立 makespan/负载均衡项。目标分量（建模量）：
 
 \[
 F_1=\sum_j R_j y_j,\qquad
-F_2=C_{\mathrm{path}}(x,\pi,z,y),\qquad
-F_3=\max_k T_k
+F_2=C_{\mathrm{path}}(x,\pi,z,y)
 \]
 
 其中 \(C_{\mathrm{path}}\) 为含返航的三维航程总和，\(T_k\) 为第 \(k\) 架机的整航迹时长
-（飞行+等待+服务+返巢），\(F_3\) 是负载均衡/瓶颈项。标量适应度见 §4.5。
+（飞行+等待+服务+返巢）。标量适应度（覆盖门禁口径）见 §4.5；\(T_k\) 整航迹时长仅作诊断量保留，不立为目标。
 
 ### 1.3 为什么分层求解
 
@@ -217,7 +216,7 @@ f(s)=
 \underbrace{W_{\mathrm{hard}}\,n_{\mathrm{hard}}+w_{\mathrm{exc}}E_m}_{\mathrm{T0\ 物理硬违约}}
 +\underbrace{W_{\mathrm{skip}}\,n_{\mathrm{skip}}}_{\mathrm{T0.5\ 覆盖门禁}}
 +\underbrace{w_{\mathrm{late}}L_{\mathrm{tot}}}_{\mathrm{T2\ 迟到(软)}}
-+\underbrace{\lambda\,C_{\mathrm{path}}+w_{\mathrm{time}}F_3}_{\mathrm{T3\ 成本/均衡}}
++\underbrace{\lambda\,C_{\mathrm{path}}}_{\mathrm{T3\ 航程成本}}
 \quad(\text{最小化})
 \]
 
@@ -232,7 +231,7 @@ f(s)=
   `gate_stats` 落盘）。
 - **T2**：迟到秒数软计价（0.01/s）——迟到可接受，与路径同台竞争；
   迟到与任务数的权衡由门禁管（完成是约束）。
-- **T3**：\(\lambda C_{\mathrm{path}}+w_{\mathrm{time}}F_3\)，完成等价时的最小化目标。
+- **T3**：\(\lambda C_{\mathrm{path}}\)，完成等价时的最小化目标（航程含返巢代价，既承担防漂移又不立均衡项）。
 - **固定表述：搜索用 \(f\) 不含 \(-m F_1\)**。门禁下合法解的已选可装任务已全部
   交付 ⇒ \(F_1=\sum_j R_j y_j\) 对解无区分度，只作**事后指标**（奖励和口径，
   不掺迟到折减）。
@@ -314,7 +313,7 @@ DMDE 收敛后对**交付解**做局部搜索（不重开种群）；三层邻�
 | 剔除 | 全关（`prune_unprofitable=false`） | 与"完成是约束"冲突，仅消融开 |
 | polish | assignment + 交付后 2-opt/Or-opt + 跨机改派 均开 | `reorder_range_optimize` 关（A/B 证伪） |
 | memetic / coverage_first | 关 | gated 消融用 |
-| DMDE | pop50 × gen100，ζ=3，GMR 原式 | gen 数是预算标定项 |
+| DMDE | pop50 × gen200，ζ=3，GMR 原式 | gen 数是预算标定项 |
 
 ---
 

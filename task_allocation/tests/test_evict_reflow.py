@@ -66,7 +66,6 @@ def _evaluator(tasks, uavs, nests) -> MUASAssignmentEvaluator:
         tasks, uavs, nests,
         pairwise_cost=_pairwise(tasks, uavs, nests),
         config=MUASProblemConfig(
-            w_time=0.0,
             constraints=ConstraintConfig(time_window=True),
         ),
     )

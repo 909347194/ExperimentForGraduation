@@ -166,7 +166,7 @@ muas:
     # （2026-10-27 清理：原 muas.w_nest_capacity 键为死字段——巢容量惩罚的
     #   唯一生效处是 constraints.w_nest_capacity，已删此冗余副本）
     # ── ②适应度口径（覆盖门禁，唯一主口径，2026-10-24）──────────
-    # f = W_hard·n_hard + w_exc·excess_m + W_skip·n_skip + w_late·L_tot + λ·path + w_time·F3
+    # f = W_hard·n_hard + w_exc·excess_m + W_skip·n_skip + w_late·L_tot + λ·path
     #   （固定表述：搜索用 f 不含 −m·F1；F1 只作事后指标）
     #   T0 物理违约（硬）：range/endurance/时序/同步/巢容量/终点不可达/结构。
     #     任何一次违约压倒任意交付收益——「纸面可行、执行弹回」的幽灵 F1
@@ -188,7 +188,6 @@ muas:
     # 必须与 selection.feasibility.late_tolerance_seconds 同值；
     # null = 关闭折减（历史口径：F1 全额，迟到只经 w_violation 计价）。
     late_reward_decay_seconds: 1800.0
-    w_time: 0.0 # 最坏机航迹时间项权重（论文 §5(3) a·max(Σt) 负载均衡项）；0 = 关闭（默认双目标）
     default_service_time: 60.0 # 单任务作业时长（s）
     # 参与规划的 UAV 上限；null → 自动取 min(K, N-1) 以走 srp 巡游模型
     max_participating_uavs: null
@@ -292,7 +291,7 @@ muas:
     #   coverage_gate          = 终态构造性修复（能救必救，skip 构造归零）
     #   lexicographic_coverage = W_skip 罚层 + 审计分账（门禁口径的防御/对账层）
     # 门禁口径下 f 去掉 −m·F1（F1 退为事后指标，砍迟到折减），主适应度只剩
-    # f = W_hard·n_hard + w_exc·excess_m + W_skip·n_skip + w_late·L + λ·path + w_time·F3。
+    # f = W_hard·n_hard + w_exc·excess_m + W_skip·n_skip + w_late·L + λ·path。
     coverage_gate: true
     coverage_gate_max_rounds: 8
     lexicographic_coverage: true
@@ -397,15 +396,15 @@ constraints:
 # ── DMDE 求解器超参（论文 §5 算法 3.1）────────────────────────────
 solver:
     population: 50 # pop_size（默认：论文实验配置）
-    # max_generations：主口径 **100**（2026-10-21 定，500 代为敏感性对照）。
+    # max_generations：主口径 **200**（2026-10-28 由 100 上调；500 代仍作敏感性对照上限）。
     #   为什么不是 500：T9 诊断证明 miss 是编码顺序的人为依赖（SRP 反映射锁
     #   归属 + Lamarckian 只回写起始基因 ⇒ 归属逐代复现），与搜索预算无关；
-    #   100/500 代对照中 100 代占优（500 代收益不稳且单周期耗时约 ×5）。
-    # ⚠️ 论文口径提示：CR 与温度调度都以 S 为分母，S 从原文的 1000 压到 100
+    #   100/500 代对照中 100 代占优（500 代收益不稳且单周期耗时约 ×5）；2026-10-28 用户裁定主口径上调至 200（折中探索预算）。
+    # ⚠️ 论文口径提示：CR 与温度调度都以 S 为分母，S 从原文的 1000 压到 200
     #   是**搜索预算的量级变化**，不是参数微调，须作为标定项显式声明
     #   （详见 docs/method_audit_vs_refs_2026-10-23.md 的 F8/F9；早期标定史见
     #   notes.md「求解预算标定史」）。
-    max_iter: 100 # max_generations（论文主口径；500 代见敏感性分析）
+    max_iter: 200 # max_generations（论文主口径；500 代见敏感性分析）
     zeta: 3 # 动态交叉率曲率指数 ζ（论文式 3-9 取 3）
     # 灭绝门限 δ：留空 = 论文公式 3-12 原式 GMR = 1 - CR（不加门限）。
     # 填一个数值（如 0.3）则附加工程门限 CR>=δ 时不灭绝，把重置推迟到后期。
