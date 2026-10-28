@@ -18,6 +18,9 @@
     ODRequest              在线输入（起点、终点、出发时刻、机型参数引用）
     PlanResult             在线输出（route/path/trajectory、总飞行时间、
                            总 TPR 风险、可行性标记、InfeasibilityReason）
+    CostUpdate             代价增量回填消息：(i,j,k) → 真实综合代价或 ∞+原因，
+                           行/列粒度（Lu2026 Algorithm 2 增量语义）——下层→上层的
+                           闭环交换物，经 interface/ 再导出
 
 不负责：参数默认值（config.py）、事件词汇表（events.py）、文件读写（scenario.py / network_io.py）。
 映射：Lin2021 §2.1 三术语定义；README §4.3.5 离线-在线完整工作流程。
