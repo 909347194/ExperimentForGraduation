@@ -5,6 +5,12 @@
 **第 3 章方法说明（只写当前做法）：**  
 [`task_allocation/Chapter3_README.md`](task_allocation/Chapter3_README.md)
 
+**第 4 章方法说明：**  
+[`path_planning/README.md`](path_planning/README.md)（分层架构与职责定义：[`docs/architecture.md`](path_planning/docs/architecture.md)、[`docs/module_map.md`](path_planning/docs/module_map.md)）
+
+**闭环协议（上下层集成）：**  
+[`closed_loop/README.md`](closed_loop/README.md)
+
 ---
 
 ## 方法（极简）
@@ -20,16 +26,26 @@
 ## 仓库结构
 
 ```text
-task_allocation/
-  methods/            选择 + MUAS + 滚动
-  Chapter3_README.md  方法正文
-  experiments/        exp01_smoke / exp02 / exp05 / …
-  baselines/          构造式基线
-  common/             类型与场景
-  tests/              单测
-path_planning/        第 4 章
-paper/                论文稿
+task_allocation/          第 3 章：上层任务分配
+  methods/                选择 + MUAS + 滚动
+  Chapter3_README.md      方法正文
+  experiments/            exp01_smoke / exp02 / exp05 / …
+  baselines/              构造式基线
+  common/                 类型与场景
+  tests/                  单测
+path_planning/            第 4 章：下层轨迹规划
+  common/ utils/          L0 领域模型 + L1 通用工具
+  methods/                tpr/ 风险模型 + control_network_planning/（constraints|cost|offline|online）
+  interface/              对外契约：TrajectoryPlanner 门面 + 事件/反馈
+  baselines/              Lin 原始基线 / 欧氏距离对照（registry）
+  docs/                   分层架构与模块职责
+  experiments/            exp01_smoke … exp05_joint_sim
+closed_loop/              跨层集成：事件触发 update–reassign–replan 环驱动（不含算法）
+paper/                    论文稿
 ```
+
+依赖方向：`task_allocation/` 与 `path_planning/` **互不 import**，只经
+`closed_loop/`（调用各自公开接口）协作；详见 [`closed_loop/README.md`](closed_loop/README.md)。
 
 ---
 

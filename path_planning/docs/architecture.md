@@ -88,10 +88,24 @@ PlanResult ─► interface/feedback.detect_events
 |------|------|------|
 | `task_allocation/` | 第 3 章（上层） | 任务选择/指派/排序/终点机巢；其 `methods/rolling/event_trigger.py` 是上层侧事件处理。**不实现轨迹算法** |
 | `path_planning/` | 第 4 章（下层） | 单 OD 轨迹求解 + 下层侧事件/代价反馈。**不做任务重调度** |
-| 根 `closed_loop/` | 联合仿真编排 | 组装上层与下层跑闭环实验，不含任何算法 |
+| 根 `closed_loop/` | 跨层集成层 | 事件触发 update–reassign–replan 环驱动 + 联合仿真编排，不含任何算法（见根 `closed_loop/README.md`） |
 
 场景/坐标口径：两章共用同一场景数据时，坐标系（NED / 本地笛卡尔）与 DEM/建筑来源
 必须统一在 `common/scenario.py`，与 `task_allocation/common/scenario_data.py` 保持一致。
+
+### 4.1 闭环归属决策（2026-10-28）
+
+**闭环放根目录，不进 path_planning/**。理由：
+
+1. 环驱动需同时调用两侧；放进 path_planning/ 会造成 `path_planning → task_allocation`
+   反向依赖，违反 §2 规则 1/4；
+2. Lu 等 (2026) 框架口径：manager 层（分配）与 UAV 层（规划）解耦，闭环是两层之上的
+   第三构件（framework-level integration，event-triggered update–reassign–replan loop）；
+3. 章节归属 ≠ 代码归属：机制叙述在第 4 章 §4.4；下层侧实现（事件检测/代价回填）在
+   `path_planning/interface/`，环驱动在根 `closed_loop/`；
+4. exp04/exp05 联合仿真编排根 closed_loop/ 即可，两个方法包保持互相零 import。
+
+交换物（C(i,j,k) 增量回填等）与时序协议详见根 `closed_loop/README.md`。
 
 ## 5. 命名与工程惯例（对齐 task_allocation/）
 
