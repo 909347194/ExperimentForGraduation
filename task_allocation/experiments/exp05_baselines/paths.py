@@ -9,7 +9,8 @@
     EXP_DIR/                 本实验：config.yaml / run.py / 各拆分模块
     EXP_DIR/results/         数值产物（<ARM>/seed_<s>/{metrics,run_meta,solution}.json）
     EXP_DIR/results/summary.csv    论文主表数据源（arm × seed + 均值行）
-    DATA_DIR/                跨实验共享数据（机巢 CSV、DEM）
+    DATA_DIR/                场景数据注册表根（task_allocation/data/；
+                             场景目录取 data/<scenario>/，解析走 scenario_data）
 """
 
 from __future__ import annotations
@@ -21,7 +22,8 @@ from pathlib import Path
 EXP_DIR = Path(__file__).resolve().parent
 #: 仓库根目录
 ROOT = EXP_DIR.parents[2]
-#: 跨实验共享数据（task_allocation/data/）
+#: 场景数据注册表根（task_allocation/data/）；场景文件用
+#: task_allocation.common.scenario_data.resolve_file 解析
 DATA_DIR = ROOT / "task_allocation" / "data"
 
 if str(ROOT) not in sys.path:

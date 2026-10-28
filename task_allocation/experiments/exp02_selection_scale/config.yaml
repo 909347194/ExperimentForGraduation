@@ -9,6 +9,7 @@ experiment:
 # （exp01_smoke 跑在机多任务少一侧，Top-αK 从不触发，无法验证该机制）
 
 data:
+  scenario: lasa_chengguan # 场景数据目录 data/<scenario>/（见 data/README.md）
   source: file
   path: nest_location_data.csv
   dem: Chengguan_DEM.tif

@@ -45,8 +45,8 @@
 
 | 层 | 字段 | 来源 | 变不变 |
 |---|---|---|---|
-| **静态** | `id` | `data/nest_location_data.csv` 行序 | 永不变 |
-| **静态** | `x` / `y` / `z` | `data/nest_location_data.csv` + DEM 采样 | 永不变 |
+| **静态** | `id` | `data/lasa_chengguan/nest_location_data.csv` 行序 | 永不变 |
+| **静态** | `x` / `y` / `z` | `data/lasa_chengguan/nest_location_data.csv` + DEM 采样 | 永不变 |
 | **静态** | `capacity` | `config.yaml` → `problem.nest_capacity` | 一次实验内不变 |
 | **动态** | `available` | 运行事件（故障 / 维护 / 管控） | 随事件变 |
 | **派生** | `occupied` | `\|{u : u.nest_id == b}\|` | **不存，算出来** |
@@ -200,7 +200,7 @@ uav.nest_id = b        # 该 UAV 归属机巢 b，占用 b 的一个名额
 ### 9.1 数据流
 
 ```
-data/nest_location_data.csv ─┐
+data/lasa_chengguan/nest_location_data.csv ─┐
 config.yaml (nest_capacity) ─┴→ scenario.build_nest_scenario
                                     ↓
                               list[Nest]（静态属性）          [已有]

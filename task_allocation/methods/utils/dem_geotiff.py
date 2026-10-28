@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """dem_geotiff.py — 轻量 GeoTIFF DEM 读取、地理参考与高程查询。
 
-针对 ``task_allocation/data/Chengguan_DEM.tif``（城关区 DEM 瓦片）设计，
+针对 ``task_allocation/data/lasa_chengguan/Chengguan_DEM.tif``（城关区 DEM 瓦片）设计，
 对一般的单波段
 GeoTIFF 同样适用。**不依赖 rasterio / GDAL / pyproj**：
 

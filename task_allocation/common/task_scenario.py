@@ -23,7 +23,7 @@
 锚定机巢反而是人为缩小问题——盘内任务几乎一定可达，预筛与选择机制没有
 压力可测，因此保留它仅作为消融对照。
 
-实测（本仓 data/Chengguan_DEM.tif + 6 机巢，城关区）：DEM 约 28.0×32.2 km，
+实测（本仓 data/lasa_chengguan/Chengguan_DEM.tif + 6 机巢，城关区）：DEM 约 28.0×32.2 km，
 机巢跨度约 16.1×10.1 km，全域任一点到最近机巢最大约 17.7 km。任务点默认
 须落在 ``data.region_geojson``（城关区多边形）内——见
 ``SyntheticTaskConfig.region_geojson``。
@@ -105,7 +105,7 @@ class SyntheticTaskConfig:
     # 仅为向后兼容旧 yaml 保留，新配置请直接写 ``domain``。
     anchor_to_nests: bool = True
     # 任务区域门禁（城关区口径）：给出区域多边形 geojson（如
-    # ``Chengguan_district.geojson``，相对 task_allocation/data/ 或绝对路径），
+    # ``Chengguan_district.geojson``，相对 task_allocation/data/<scenario>/ 或绝对路径），
     # 任务点必须落在多边形内；落点出区则拒绝采样、在区域包络内重采，超时
     # 残留点回退到机巢位置（机巢恒在区域内）。None = 不做区域限制。
     # 该门禁与 ``domain`` 正交：无论 nest_anchored 还是 dem_extent，最终

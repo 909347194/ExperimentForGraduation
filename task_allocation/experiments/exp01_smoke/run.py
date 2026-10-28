@@ -68,7 +68,7 @@ import sys as _sys
 from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parent))
 
-from paths import DATA_DIR, EXP_DIR, ROOT
+from paths import EXP_DIR, ROOT
 
 from build import (
     build_arrivals,
@@ -444,7 +444,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[exp01] 多 seed 复现：{seeds}" if multi else f"[exp01] 单 seed：{seeds[0]}")
 
     # ── 场景（与种子无关，只构建一次）────────────────────────────
-    scenario = build_scenario(raw_cfg, DATA_DIR)
+    scenario = build_scenario(raw_cfg)
     nests = scenario.nests
     terrain = build_terrain(scenario, raw_cfg)
     estimator = build_cost_estimator(terrain, raw_cfg)

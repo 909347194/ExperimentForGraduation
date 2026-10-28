@@ -42,11 +42,12 @@ except ImportError:  # pragma: no cover
 
 EXP_DIR = Path(__file__).resolve().parent
 ROOT = EXP_DIR.parents[2]
-DATA_DIR = ROOT / "task_allocation" / "data"
+DATA_DIR = ROOT / "task_allocation" / "data"  # 场景注册表根；文件解析走 scenario_data
 
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from task_allocation.common import scenario_data  # noqa: E402
 from task_allocation.common.scenario import build_nest_scenario  # noqa: E402
 from task_allocation.common.task_scenario import (  # noqa: E402
     SyntheticTaskConfig,
@@ -190,11 +191,11 @@ def main(argv: list[str] | None = None) -> int:
     data_cfg = cfg["data"]
     problem_cfg = cfg["problem"]
     scenario = build_nest_scenario(
-        DATA_DIR / data_cfg["path"],
+        scenario_data.resolve_file(data_cfg["path"], data_cfg.get("scenario")),
         count=problem_cfg["n_nests"],
         capacity=problem_cfg["nest_capacity"],
         column=data_cfg.get("coordinate_column", "Coordinate"),
-        dem_path=DATA_DIR / data_cfg["dem"],
+        dem_path=scenario_data.resolve_file(data_cfg["dem"], data_cfg.get("scenario")),
     )
     terrain = scenario.dem.to_metric_terrain(scenario.frame, step_m=200.0)
     estimator = VerticalSectionCostEstimator(dem_terrain=terrain)
@@ -310,8 +311,10 @@ def main(argv: list[str] | None = None) -> int:
             deadline_min=float(cfg["tasks"].get("deadline_min", 3600.0)),
             deadline_max=float(cfg["tasks"].get("deadline_max", 28800.0)),
             anchor_to_nests=bool(cfg["tasks"].get("anchor_to_nests", True)),
-            # 区域门禁（城关区 geojson）：相对 task_allocation/data/
-            region_geojson=str(DATA_DIR / data_cfg["region_geojson"])
+            # 区域门禁（城关区 geojson）：相对场景数据目录（data/<scenario>/）
+            region_geojson=str(scenario_data.resolve_file(
+                data_cfg["region_geojson"], data_cfg.get("scenario")
+            ))
             if data_cfg.get("region_geojson")
             else None,
         )
