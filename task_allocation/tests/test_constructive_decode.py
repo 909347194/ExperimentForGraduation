@@ -76,7 +76,7 @@ def _evaluator(tasks, uavs, nests, *, participating=None,
     problem = SelectiveMUASProblem.from_entities(
         tasks, uavs, nests,
         pairwise_cost=_pairwise(tasks, uavs, nests),
-        config=MUASProblemConfig(w_time=0.0),
+        config=MUASProblemConfig(),
     )
     return MUASAssignmentEvaluator(
         problem=problem,

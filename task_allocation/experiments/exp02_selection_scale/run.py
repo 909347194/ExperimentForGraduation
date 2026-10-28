@@ -239,7 +239,6 @@ def main(argv: list[str] | None = None) -> int:
             None if m.get("w_violation") is None else float(m["w_violation"])
         ),
         w_nest_capacity=float(m.get("w_nest_capacity", 1.0)),
-        w_time=float(m.get("w_time", 0.0)),
         lexicographic=bool(m.get("lexicographic", True)),
         big_m=(None if m.get("big_m") is None else float(m["big_m"])),
         late_reward_decay_seconds=(

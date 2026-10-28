@@ -205,7 +205,7 @@ muas:
     w_violation: 0.01
     w_nest_capacity: 1.0 # 机巢容量违反的惩罚权重
     # ── 四层准字典序 T0 层（2026-10-18）────────────────────────────
-    # f = W_hard·n_hard + w_exc·excess_m − m·F1_eff + w_late·L_tot + λ·path + w_time·F3
+    # f = W_hard·n_hard + w_exc·excess_m − m·F1_eff + w_late·L_tot + λ·path
     #   T0 物理违约（硬）：range/endurance/时序/同步/巢容量/终点不可达/结构。
     #     任何一次违约压倒任意交付收益——「纸面可行、执行弹回」的幽灵 F1
     #     永不入选（旧口径 misc×1e3×wv 只折 10 单位，而单任务收益 m·R≈2.7e5）。
@@ -226,7 +226,6 @@ muas:
     # 必须与 selection.feasibility.late_tolerance_seconds 同值；
     # null = 关闭折减（历史口径：F1 全额，迟到只经 w_violation 计价）。
     late_reward_decay_seconds: 1800.0
-    w_time: 0.0 # 最坏机航迹时间项权重（论文 §5(3) a·max(Σt) 负载均衡项）；0 = 关闭（默认双目标）
     default_service_time: 60.0 # 单任务作业时长（s）
     # 参与规划的 UAV 上限；null → 自动取 min(K, N-1) 以走 srp 巡游模型
     max_participating_uavs: null

@@ -73,7 +73,7 @@ def _mk(tasks, uavs, nests, *, stage_cfg=None):
         tasks, uavs, nests,
         pairwise_cost=_pairwise(tasks, uavs, nests),
         config=MUASProblemConfig(
-            w_violation=0.01, w_time=0.0,
+            w_violation=0.01,
             constraints=ConstraintConfig(time_window=True),
         ),
     )
@@ -182,7 +182,7 @@ def test_range_improvement_below_eps_is_ignored():
 def test_reorder_range_optimize_defaults_to_false():
     """默认必须为 False —— 2026-10-24 实测该修复在正式配置下是负优化。
 
-    冒烟档（pop20/gen20）航程 −16.7%，但正式档（pop50/gen100、3 seed）
+    冒烟档（pop20/gen20）航程 −16.7%，但正式档（pop50/gen100→现默认 gen200、3 seed）
     主周期 km/任务持平（27.04 → 27.03），且多出 3 个尾巴周期 ⇒
     总航程 +4.0%、按时率 −2.4pp。故只作为对照开关保留，不进生产。
     """

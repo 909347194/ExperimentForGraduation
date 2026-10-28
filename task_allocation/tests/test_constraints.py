@@ -138,17 +138,17 @@ def test_check_feasible_empty_feasible():
     assert details["violations"] == []
 
 
-def _bottleneck_problem(w_time: float = 0.0):
+def _bottleneck_problem():
     """单 UAV：起点(0,0) → 任务(500,0) → 终点机巢(0,0)，speed=10。
 
-    航迹时间 = 500/10 + 500/10 = 100s；bottleneck_time = 100。
+    航迹时间 = 500/10 + 500/10 = 100s；tour_time 校验统一口径。
     pairwise 显式设段代价=500，使几何与代价一致。
     """
     tasks = [Task(id=0, x=500.0, y=0.0, z=0.0, reward=5.0)]
     uavs = [_uav(0, remaining=10000.0, speed=10.0, nest_id=0)]
     nests = [Nest(id=0, x=0.0, y=0.0, z=0.0, capacity=10)]
     pairwise = {(-1, 0): 500.0, (0, 1_000_000): 500.0}
-    cfg = MUASProblemConfig(w_time=w_time, big_m=1.0)  # 固定字典序权重=1，锁公式口径
+    cfg = MUASProblemConfig(big_m=1.0)  # 固定字典序权重=1，锁公式口径
     return SelectiveMUASProblem.from_entities(
         tasks, uavs, nests, pairwise_cost=pairwise, config=cfg
     )
@@ -162,28 +162,14 @@ def _one_task_solution() -> AllocationSolution:
     )
 
 
-def test_bottleneck_time_deterministic():
+def test_tour_time_deterministic():
     prob = _bottleneck_problem()
     sol = _one_task_solution()
     prob.evaluate(sol)
-    # 航迹时间 = 100s（往返各 500m / 10m/s），瓶颈 = max T_k = 100
-    assert abs(sol.meta["bottleneck_time"] - 100.0) < 1e-6
-    assert abs(prob.bottleneck_time(sol) - 100.0) < 1e-6
+    # 航迹时间 = 100s（往返各 500m / 10m/s），tour_time 走统一 DEM 口径
+    assert abs(prob.tour_time(sol.tours[0]) - 100.0) < 1e-6
     # 无窗/无容量违背
     assert sol.feasible
-
-
-def test_scalar_fitness_bottleneck_term():
-    # 锁定：w_time>0 时 scalar_fitness 增量恰为 w_time·max_k T_k（F3 项）
-    # （门禁口径：f = 硬违约 + W_skip·n_skip + 迟到 + λ·path + w_time·F3；
-    #  F1 不进 f，但 F3 项的系数行为与此断言无关）
-    prob0 = _bottleneck_problem(w_time=0.0)
-    prob1 = _bottleneck_problem(w_time=2.0)
-    f0 = prob0.scalar_fitness(_one_task_solution())
-    f1 = prob1.scalar_fitness(_one_task_solution())
-    bt = prob1.bottleneck_time(_one_task_solution())
-    assert abs(bt - 100.0) < 1e-6
-    assert abs((f1 - f0) - 2.0 * bt) < 1e-6  # 增量 = w_time·F3
 
 
 def main() -> None:
@@ -195,7 +181,7 @@ def main() -> None:
     test_evaluator_report()
     test_check_feasible_window_violation()
     test_check_feasible_empty_feasible()
-    test_bottleneck_time_deterministic()
+    test_tour_time_deterministic()
     test_scalar_fitness_bottleneck_term()
     print("OK: constraints package tests passed")
 

@@ -446,7 +446,7 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
             # 两者同开 = 完整门禁口径（当前生产值）。
             "scalarization": (
                 "覆盖门禁口径（f = W_hard·n_hard + w_exc·excess_m + W_skip·n_skip"
-                " + w_late·L + λ·path + w_time·F3；F1 退为事后指标）"
+                " + w_late·L + λ·path；F1 退为事后指标）"
                 if _gate_cov and _gate_lex
                 else "门禁部分开启（coverage_gate="
                      f"{_gate_cov}, lexicographic_coverage={_gate_lex}）"
@@ -460,11 +460,10 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
                 getattr(f.bundle.problem_model, "lambda_cost", 0.0) or 0.0
             ),
             "w_violation": getattr(f.bundle.problem_model, "w_violation", None),
-            "w_penalty": float(
-                getattr(f.bundle.problem_model, "w_penalty", 1.0) or 0.0
-            ),
-            "w_time": float(getattr(f.bundle.problem_model, "w_time", 0.0) or 0.0),
-            # 覆盖门禁口径自描述（2026-10-22）：审计/跨配置对比直读
+              "w_penalty": float(
+                  getattr(f.bundle.problem_model, "w_penalty", 1.0) or 0.0
+              ),
+              # 覆盖门禁口径自描述（2026-10-22）：审计/跨配置对比直读
             "lexicographic_coverage": _gate_lex,
             "coverage_gate": _gate_cov,
             # 交付后成本 polish 开关自描述（2026-10-24）：消融对比直读，
@@ -847,7 +846,6 @@ def build_solution(f: RunFacts) -> dict[str, Any]:
                 "final_f1": (r.muas or {}).get("final_f1"),
                 "final_path_m": (r.muas or {}).get("final_path_m"),
                 "final_late_s": (r.muas or {}).get("final_late_s"),
-                "final_bottleneck_s": (r.muas or {}).get("final_bottleneck_s"),
                 "final_n_hard": (r.muas or {}).get("final_n_hard"),
                 "final_excess_m": (r.muas or {}).get("final_excess_m"),
                 # 解码后局部搜索 polish 诊断（2026-10-19）：

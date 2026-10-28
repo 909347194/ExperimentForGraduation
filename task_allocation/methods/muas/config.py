@@ -77,9 +77,6 @@ class MUASProblemConfig:
 
     allow_unassigned: bool = True
     allow_idle_uav: bool = True
-    # 最坏机航迹时间项权重（论文 §5(3) a·max(Σt)）：最小化瓶颈机任务时间，
-    # 实现负载均衡/公平性。默认 0（仅双目标）；>0 时接入 F3=max_k T_k。
-    w_time: float = 0.0
     w_penalty: float = 1.0
     # 约束惩罚直接进入适应度的权重（单位：奖励当量 / 惩罚单位）。
     # 历史口径下惩罚与路径代价混进同一个 F2 再乘 λ（λ≈1e-4 是为把「米」级

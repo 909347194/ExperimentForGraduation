@@ -47,7 +47,7 @@ class CostMatrixBuildResult:
     n_nests: int = 0
     details: dict[tuple[int, int], CostEstimationResult] = field(default_factory=dict)
     # 统一距离口径：由同一个估算器派生的 DEM 三维航程（带记忆化）。
-    # 评价端航迹时间 F3、时间窗 ETA、第一阶段 travel/插入代价都从它取长度，
+    # 评价端航迹时间、时间窗 ETA、第一阶段 travel/插入代价都从它取长度，
     # 杜绝「代价矩阵走地形、ETA 走直线」的口径分裂。
     distance_fn: Callable[[Sequence[float], Sequence[float]], float] | None = None
 
@@ -68,7 +68,7 @@ def build_pairwise_costs(
 
     Args:
         distance_fn: 统一距离口径。缺省时由 ``estimator`` 派生（带记忆化），
-            保证 pairwise 代价与 ETA / F3 同源；无 DEM 时退化为三维直线。
+            保证 pairwise 代价与 ETA / 航迹时间同源；无 DEM 时退化为三维直线。
         pairwise_source: 惰性 pairwise 表（:func:`make_lazy_pairwise` 产物）。
             非 None 时 pairwise 值从该表按需读/算并共享缓存（一阶段已算过
             的边直接命中），返回的 ``provider.pairwise`` **就是**该活视图；

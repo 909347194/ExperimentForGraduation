@@ -255,7 +255,7 @@ def test_return_cost_participates_in_fitness():
     pairwise = {(-1, 0): 100.0, (0, 1_000_000): 100.0, (0, 1_000_001): 400.0}
     prob = SelectiveMUASProblem.from_entities(
         tasks, uavs, nests, pairwise_cost=pairwise,
-        config=MUASProblemConfig(w_time=0.0),
+        config=MUASProblemConfig(),
     )
 
     def sol(end):
@@ -285,7 +285,7 @@ def test_missing_end_nest_is_penalized():
     pairwise = {(-1, 0): 100.0}
     prob = SelectiveMUASProblem.from_entities(
         tasks, uavs, nests, pairwise_cost=pairwise,
-        config=MUASProblemConfig(w_time=0.0),
+        config=MUASProblemConfig(),
     )
     sol = AllocationSolution(
         tours=[UAVTour(uav_id=0, task_ids=[0], end_nest_id=None)],

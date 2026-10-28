@@ -8,7 +8,7 @@
 
 本测试锁定统一后的契约：
 
-    1. 凡是把距离换算成**时间**的地方（航迹时间 F3、时间窗 ETA、补全判定的
+    1. 凡是把距离换算成**时间**的地方（航迹时间、时间窗 ETA、补全判定的
        到达时刻）都必须走 ``CostProvider.travel``，不得再用直线；
     2. 第一阶段（最近可用机、插入代价、邻近增益）与第二阶段共用同一把尺子；
     3. 距离函数带记忆化：同一条边不重复估算（否则 DMDE 上万次评价会拖垮）；
@@ -228,7 +228,7 @@ def test_time_window_default_is_euclid_backward_compatible():
 
 
 def test_tour_time_uses_travel_not_euclid():
-    """F3 航迹时间必须由统一距离口径换算（不能再用直线）。"""
+    """航迹时间必须由统一距离口径换算（不能再用直线）。"""
     uav = _uav(0, speed=10.0)
     task = _task(0, x=1000.0)
     nests = [Nest(id=0, x=0.0, y=0.0, z=0.0, capacity=4)]

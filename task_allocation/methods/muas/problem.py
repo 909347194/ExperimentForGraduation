@@ -20,14 +20,13 @@
                        纯完成计数、只作事后指标，不进搜索适应度，见
                        :meth:`gate_mode` 与 :meth:`scalar_fitness`）
     F2 = C(x, π, z, y)   （路径代价 + 惩罚）
-    F3 = max_k T_k        （最坏机航迹时间，论文 §4.3 时效与负载均衡项）
 
 适应度（DMDE 最小化标量）—— **覆盖门禁口径为唯一主口径（2026-10-24 裁定）**：
 
         f(s) = W_hard·n_hard + w_exc·excess_m          # T0 物理违约（硬）
               + W_skip·n_voluntary_skip                # T0.5 覆盖门禁
               + w_late·L_tot                           # T2 迟到（软，秒级）
-              + λ·path + w_time·F3                     # T3 航程/负载均衡
+              + λ·path                                 # T3 航程（含返巢）
 
   固定表述：**搜索用 f 不含 −m·F1；F1 只作事后指标**。
   完整推导、与非门禁 big-M 四层口径的对比与移除理由见
@@ -42,13 +41,14 @@
     （构造修复 + W_skip 层）承担，故 F1 对解无区分度、不进 f。
   - **T2**：迟到秒数软计价（``w_violation``，0.01/s）——迟到可接受，
     只与路径同台竞争；迟到与任务数的权衡由门禁（完成是约束）管。
-  - **T3**：``λ·path + w_time·F3``（完成等价时的最小化目标）。
+  - **T3**：``λ·path``（完成等价时最小化航程，含返巢代价）。
 
-其中 F3 = max_k T_k 为各 UAV 航迹时间的最大值（瓶颈机），对应 Ming et al. 2017
-Eq.1 中的 a·max(Σ_i Σ_j t(i,j)·x(i,j)) 最坏机飞行时间项（该文式号已经原文
-核对；本模型将其扩展为含等待、服务与返航的整航迹时间）。w_time=0 时不激活
-负载均衡项。m 仍落 fitness_weights 快照，仅供 W_hard/W_skip 推导与事后分析，
-不直接进 f。
+注：本模型**不设**最坏机航迹时间 / 负载均衡项（即 Ming et al. 2017 Eq.1 的
+``a·max(Σt)`` 瓶颈机项）。在「机巢按覆盖选址 + 滚动多巢作业」设定下，单周期最小化
+最坏机时间对总目标（覆盖完成 + 成本）贡献有限，且均衡 ≠ 防漂移。防漂移是问题层
+设计关注点，由终点巢选择约束、返航代价（λ·path 已含）与跨周期部署行为（滚动时域
+reposition / 轮转巢）承担，而非目标项。m 仍落 fitness_weights 快照，仅供
+W_hard/W_skip 推导与事后分析，不直接进 f。
 
 模块地图（包内分工；各模块符号仍可从本模块导入，既有路径不变）：
     config.py            约束开关与评价权重（ConstraintConfig / MUASProblemConfig）
@@ -300,7 +300,7 @@ class SelectiveMUASProblem(FitnessWeightsMixin):
         return float(feas.get("penalty", 0.0))
 
     def tour_time(self, tour: UAVTour) -> float:
-        """单架 UAV 航迹时间（含飞行 + 等待 + 服务 + 返巢），用于最坏机瓶颈项 F3。
+        """单架 UAV 航迹时间（含飞行 + 等待 + 服务 + 返巢）；作诊断量（非目标项）。
 
         逐航次模拟到达游标（与 ``coop_constraints.check_time_window_constraint``
         的游标语义一致，但不对迟到计惩罚）：从 UAV 起点出发，按访问顺序累加段飞行
@@ -308,12 +308,9 @@ class SelectiveMUASProblem(FitnessWeightsMixin):
         离开时累加上 ``default_service_time``，末段返巢到终点机巢。
         返回相对 ``current_time`` 的航迹时长（秒）。
 
-        段长口径：**统一走 DEM 三维航程**（``costs.travel``），不用欧氏直线——
-        此前 F3 用直线而代价矩阵用地形代价，同一航次两套长度，F3 与 ETA 系统性
-        低估。
-
-        对应 Ming et al. 2017 Eq.1 的 Σ_i Σ_j t(i,j)·x(i,j) 单 UAV 飞行时间；
-        F3 = max_k T_k 即其中的 a·max(·) 最坏机项。
+        段长口径：**统一走 DEM 三维航程**（``costs.travel``），不用欧氏直线。
+        该量用于防漂移 / 负载诊断（如各机航迹时间分布）与基线时间窗游标，不进入
+        搜索适应度——本模型不设最坏机航迹时间（均衡）目标项。
         """
         if not tour.task_ids and tour.end_nest_id is None:
             return 0.0
@@ -340,16 +337,6 @@ class SelectiveMUASProblem(FitnessWeightsMixin):
                 t_cursor += dist / speed
         return float(t_cursor - self.config.current_time)
 
-    def bottleneck_time(self, solution: AllocationSolution) -> float:
-        """最坏机航迹时间 F3 = max_k T_k（论文 §4.3 时效与负载均衡项）。
-
-        空解（无航次）返回 0；若存在非空航次则取各航次 ``tour_time`` 的最大值。
-        最小化该项使任务在 UAV 间更均衡，避免单架机成为执行瓶颈。
-        """
-        if not solution.tours:
-            return 0.0
-        return max(self.tour_time(t) for t in solution.tours)
-
     def evaluate(
         self,
         solution: AllocationSolution,
@@ -364,7 +351,6 @@ class SelectiveMUASProblem(FitnessWeightsMixin):
         solution.f2_cost = self.f2_cost(solution, penalty=pen)
         # 实际计入 F2 的惩罚量（供 w_violation 解耦口径读取，避免重复解析报告）
         solution.meta["penalty"] = pen
-        solution.meta["bottleneck_time"] = self.bottleneck_time(solution)
         # 2026-10-18：本次评价实际使用的四层权重快照。记录/重算/绘图共用
         # 同一组权重，消灭 auto big_m 逐周期漂移导致的「记录 best_fitness
         # 与重算目标差 6.5~13.6」。
@@ -387,7 +373,6 @@ class SelectiveMUASProblem(FitnessWeightsMixin):
             "w_late": (None if self.config.w_violation is None
                        else float(self.config.w_violation)),
             "lambda": float(self.config.lambda_cost),
-            "w_time": float(self.config.w_time),
             "W_decay": (None if not decay else float(decay)),
         }
         for tour in solution.tours:
@@ -407,7 +392,7 @@ class SelectiveMUASProblem(FitnessWeightsMixin):
             f = W_hard·n_hard + w_exc·excess_m          # T0 物理违约（硬）
               + W_skip·n_voluntary_skip                # T0.5 覆盖门禁
               + w_late·L_tot                           # T2 迟到（软，秒级）
-              + λ·path + w_time·F3                     # T3 航程/负载均衡
+              + λ·path                                 # T3 航程（含返巢）
 
         **固定表述：搜索用 f 不含 −m·F1；F1 只作事后指标。**
 
@@ -418,17 +403,17 @@ class SelectiveMUASProblem(FitnessWeightsMixin):
           覆盖由门禁（构造修复 + W_skip 层）承担，F1 对解无区分度 ⇒ 不进 f。
         - **T2**：迟到秒数软计价（``w_violation``，0.01/s）——迟到可接受，
           只与路径同台竞争。
-        - **T3**：``λ·path + w_time·F3``（完成等价时的最小化目标）。
+        - **T3**：``λ·path``（完成等价时最小化航程，含返巢代价）。
 
-        非门禁 big-M 四层口径（``−m·F1_eff`` 主导、F1 进搜索适应度）已于
-        2026-10-24 从代码移除；其讨论与设计理由见
-        ``docs/objective_caliber_two_approaches_archive_2026-10-24.md``。
-        ``m`` 仍落 ``fitness_weights`` 快照，仅供 ``W_hard``/``W_skip`` 推导
-        与事后分析，不直接进 f。
+        本模型**不设**最坏机航迹时间 / 负载均衡项（即 Ming et al. 2017 Eq.1 的
+        ``a·max(Σt)`` 瓶颈机项）：在「机巢按覆盖选址 + 滚动多巢作业」下，单周期最小化
+        最坏机时间对总目标贡献有限，且均衡 ≠ 防漂移。防漂移由终点巢选择约束、返航代价
+        （λ·path 已含）与跨周期部署行为（滚动时域 reposition / 轮转巢）承担，而非目标项。
+        ``m`` 仍落 ``fitness_weights`` 快照，仅供 ``W_hard``/``W_skip`` 推导与事后分析，
+        不直接进 f。
         """
         if not solution.meta.get("feasibility"):
             self.evaluate(solution)
-        bt = solution.meta.get("bottleneck_time", self.bottleneck_time(solution))
         wv = self.config.w_violation
         # 覆盖门禁口径（2026-10-24 起唯一主口径）：**f 不含 −m·F1，F1 只作事后指标**。
         # 合法解中 S 内可装载任务已全部交付 ⇒ F1 恒为常数、对解无区分度；覆盖由门禁
@@ -443,7 +428,6 @@ class SelectiveMUASProblem(FitnessWeightsMixin):
             + skip_pen
             + late_pen
             + self.config.lambda_cost * self.path_cost(solution)
-            + self.config.w_time * bt
         )
 
     # ── 层权重推导与分层统计（big-M / T0 / W_skip）────────

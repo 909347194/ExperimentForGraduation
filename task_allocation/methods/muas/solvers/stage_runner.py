@@ -490,12 +490,11 @@ def run_selective_muas(
             "final_f1": float(final.f1_reward),
             "final_path_m": float(problem.path_cost(final)),
             "final_late_s": float(problem.soft_violation(final)),
-            "final_bottleneck_s": float(final.meta.get("bottleneck_time", 0.0) or 0.0),
             "final_n_hard": int(final_n_hard),
             "final_excess_m": float(final_excess_m),
             "best_fitness": float(result.best_fitness),
             # 适应度权重快照（problem.evaluate 写入 final.meta）：
-            # m / W_hard / w_exc / w_late / λ / w_time / W_decay。
+            # m / W_hard / w_exc / w_late / λ / W_decay。
             # 落盘后 final_fitness 及其成分可用同一组权重独立重算，
             # 消「记录 best_fitness 与重算目标差 6.5~13.6」（auto big_m
             # 漂移）——审计脚本 N 项据此交叉验证。

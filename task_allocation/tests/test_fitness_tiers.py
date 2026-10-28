@@ -8,7 +8,7 @@ is_feasible 被迟到污染（实测 22423 次评估 penalty=0 仅 4 次）。
 
 新口径（用户裁定：违反物理航程=严重违规；迟到可接受但最好不迟到）::
 
-    f = W_hard·n_hard + w_exc·excess_m − m·F1_eff + w_late·L_tot + λ·path + w_time·F3
+    f = W_hard·n_hard + w_exc·excess_m − m·F1_eff + w_late·L_tot + λ·path
 
 锁定的契约：
 
@@ -67,7 +67,7 @@ def _pairwise(tasks, uavs, nests):
 
 def _problem(tasks, uavs, nests, **cfg) -> SelectiveMUASProblem:
     # 默认取 exp01 生产口径：λ=1e-4、w_violation=0.01
-    kw = dict(w_time=0.0, w_violation=0.01, lambda_cost=1.0e-4)
+    kw = dict(w_violation=0.01, lambda_cost=1.0e-4)
     kw.update(cfg)
     return SelectiveMUASProblem.from_entities(
         tasks, uavs, nests,
@@ -143,7 +143,7 @@ def test_t0_excess_tiebreak():
 
 def test_gate_caliber_excludes_f1_from_fitness():
     """门禁口径（2026-10-24 唯一主口径）：scalar_fitness 的纯门禁形式
-    （硬违约 + W_skip·n_skip + 迟到 + λ·path + w_time·F3）与手工重算完全一致，
+    （硬违约 + W_skip·n_skip + 迟到 + λ·path）与手工重算完全一致，
     **且不含** −m·F1 项——若把 −m·F1 加回会与真实 f 系统性偏离。
 
     覆盖由门禁（构造修复 + W_skip 层）承载，F1 只作事后指标。注意：本门禁对
@@ -172,7 +172,6 @@ def test_gate_caliber_excludes_f1_from_fitness():
         + p.skip_weight() * gs["n_skip"]
         + (0.0 if wv is None else float(wv) * det["soft_violation"])
         + p.config.lambda_cost * p.path_cost(sol)
-        + p.config.w_time * sol.meta["bottleneck_time"]
     )
     # f 必须 = 纯门禁重算（不含 −m·F1）
     assert manual == pytest.approx(f, rel=1e-12), (
@@ -255,7 +254,6 @@ def test_fitness_weights_meta_snapshot():
         + (w["w_skip"] or 0.0) * gs.get("n_skip", 0)
         + w["w_late"] * det["soft_violation"]
         + w["lambda"] * p.path_cost(sol)
-        + w["w_time"] * sol.meta["bottleneck_time"]
     )
     assert manual == pytest.approx(p.scalar_fitness(sol), rel=1e-12)
 
