@@ -75,3 +75,26 @@ Lin 等人提出的两阶段控制网络轨迹规划框架，将复杂三维轨�
 4.4 本章小结
 
 ```
+
+---
+
+## 代码结构导航（path_planning/）
+
+> 本目录为第 4 章方法的实现容器，当前为**实现前的目录骨架与职责定义**（不含算法实现）。
+> 分层架构与依赖规则见 [docs/architecture.md](docs/architecture.md)；逐模块职责、接口契约与实验映射见 [docs/module_map.md](docs/module_map.md)。
+
+| 目录 | 层 | 职责 |
+|------|----|------|
+| `common/` | L0 领域模型 | 类型（route/path/trajectory）、参数配置、事件枚举、场景数据解析 |
+| `utils/` | L1 通用工具 | 纯几何/三维数学（线面求交、3D→2D 投影、曲率估计） |
+| `methods/tpr/` | L2 算法 | 第三方地面 TPR 风险：坠毁概率 × 地面暴露 × 昼/夜时变风险场 |
+| `methods/control_network_planning/` | L2 算法 | `constraints/` 约束查询、`cost/` 代价模型、`offline/` 离线构建、`online/` 在线求解 |
+| `interface/` | L3 对外契约 | `TrajectoryPlanner` 门面 + 事件/反馈协议；上层只经此交互 |
+| `baselines/` | 对照 | Lin 原始基线、欧氏距离代价（registry 注册） |
+| `experiments/` | L4 实验 | exp01_smoke … exp05_joint_sim（README §4.5），run.py 只做编排 |
+| `tests/` | 测试 | 测试规划见 [tests/README.md](tests/README.md) |
+| `data/` | 数据资产 | `raw/` 原始输入、`processed/` 离线产物（含参数指纹） |
+
+三条主数据流：**离线预处理**（场景→布点→链路剪枝→虚拟网络→预计算→落盘）、
+**在线规划**（OD→动态禁飞剪枝→Dijkstra→Dubins 平滑→二次校验→时间最优轨迹）、
+**闭环反馈**（PlanResult→事件检测→C(i,j,k) 代价回填→上层重调度）。
