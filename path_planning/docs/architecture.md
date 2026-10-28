@@ -47,6 +47,10 @@
 5. **common/ 不依赖本包任何模块**；utils/ 只依赖 common（能不依赖就不依赖）。
 6. **禁止循环依赖**；experiments/ 与 tests/ 不被任何层依赖。
 7. 每个模块 docstring 必须写明：职责 / 输入→输出 / **不负责什么** / 论文映射（防职责蔓延）。
+8. **跨包契约类型由产出方定义**：下层交换类型（PlanResult、CostMatrix、CostUpdate、事件枚举）
+   在 path_planning 侧定义并经 `interface/` 再导出，closed_loop 只引用不定义；上层同理。
+   交换类型不得定义在集成层（否则产出方被迫反向 import 集成层）；
+   closed_loop/protocol 只放环内消息（ReassignRequest / NewODSet）。
 
 ## 3. 三条数据流
 
