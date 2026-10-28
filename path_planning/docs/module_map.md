@@ -1,6 +1,7 @@
 # path_planning 模块地图：职责定义与拆分
 
 > 逐模块的职责、输入→输出、边界与论文章节映射。分层与依赖规则见 [architecture.md](architecture.md)。
+> 禁飞区时空扩展的算法设计（阶段一：可行性约束，TPR 权重 0）见 [design_nofly_zones.md](design_nofly_zones.md)。
 > 当前为**实现前口径**：文件均为职责占位（docstring 即契约），实现时若拆分有变，先改本文再动代码。
 
 ## 1. 拆分原则
@@ -71,6 +72,7 @@
 | 文件 | 职责 | 输入 → 输出 | 不负责 | 映射 |
 |------|------|-------------|--------|------|
 | `dynamic_prune.py` | 动态禁飞剪枝视图 + 连通性校验 | (网络, 禁飞) → 剪枝视图 | 禁飞数据模型 | README §4.3.1 |
+| `spacetime.py` | 时间层扩展与时空连接（含等待边，标签存连续时间） | 空间网络 → 时空图 | 判定/搜索 | design_nofly_zones §3 |
 | `route_search.py` | 综合代价 Dijkstra | (网络, OD) → Route | 代价定义 | Lin2021 §2.3 |
 | `dubins_smoother.py` | 3D Dubins 平滑 + 过近点偏差收缩 | Route → Path | 碰撞正确性 | Lin2021 §2.3 |
 | `post_check.py` | 二次碰撞校验 + 偏移修正迭代 | Path → 可行 Path / 不可行原因 | 弧段生成 | README §4.3.4 |
