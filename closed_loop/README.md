@@ -16,7 +16,24 @@
    `path_planning/interface/`，环驱动跨章，归本目录；
 4. `exp04_closed_loop` / `exp05_joint_sim` 联合仿真直接编排本模块，两个方法包保持互相零 import。
 
-## 2. 依赖规则
+## 2. 与 path_planning/interface/ 的关系（会不会冲突？）
+
+**不冲突：合同 vs 调度。** 本目录是 `path_planning/interface/` 的**客户**之一，
+依赖单向（closed_loop → interface），interface 不知道本目录存在。
+
+| 维度 | `path_planning/interface/` | 根 `closed_loop/` |
+|------|---------------------------|-------------------|
+| 归属 | 下层对外门面（属于 path_planning，L3） | 跨层集成层（独立第三构件，L4） |
+| 回答的问题 | 下层能提供什么服务（合同） | 环怎么转（调度） |
+| 事件职责 | detect_events / build_feedback：**判断与核算**（下层语义） | on_event / LoopDriver：**分发与驱动** |
+| 有状态吗 | 无状态门面（TrajectoryPlanner 持有网络） | 有（滚动时钟、事件队列、终止条件） |
+| 消费者 | closed_loop、exp02-05、tests | 仅实验/主程序 |
+
+分界线一句话：**判断在下层，调度在集成层**。谁也替代不了谁——没有 closed_loop，
+单机消融实验（exp02/03）直接调 interface 照跑；没有 interface，closed_loop 就得
+伸进 methods/ 破坏封装。
+
+## 3. 依赖规则
 
 ```text
 closed_loop/ ──► path_planning/interface/（下层唯一出口）
@@ -27,9 +44,9 @@ path_planning ✗ task_allocation      互不 import
 两方法包均不得 import closed_loop
 ```
 
-## 3. 闭环协议
+## 4. 闭环协议
 
-### 3.1 交换物（`protocol.py` 定义）
+### 4.1 交换物（`protocol.py` 定义）
 
 | 消息 | 方向 | 内容 |
 |------|------|------|
@@ -40,7 +57,7 @@ path_planning ✗ task_allocation      互不 import
 | ReassignRequest | 环内 | 重调度请求（换巢 / 改派 / 推迟） |
 | NewODSet | 上层 → 下层 | 重调度后的新 OD 集合 |
 
-### 3.2 三类触发事件（`path_planning/README.md` §4.4.2）→ 统一归约为"代价变化"
+### 4.2 三类触发事件（`path_planning/README.md` §4.4.2）→ 统一归约为"代价变化"
 
 | 事件 | 归约 |
 |------|------|
@@ -52,7 +69,7 @@ path_planning ✗ task_allocation      互不 import
 **行或列**变化 → Algorithm 2 **增量**重分配（非全量重算）。我们回填 C(i,j,k) 同样按
 组合粒度增量更新，上层做增量重调度。
 
-### 3.3 时序（update–reassign–replan）
+### 4.3 时序（update–reassign–replan）
 
 ```text
 滚动周期到 / 事件触发
@@ -64,7 +81,7 @@ path_planning ✗ task_allocation      互不 import
 终止：任务全部完成 / 推迟出视野 / 达到滚动上限
 ```
 
-## 4. 与 Lu 等 (2026) Fig.2 的对应
+## 5. 与 Lu 等 (2026) Fig.2 的对应
 
 | Lu 等 (2026) | 本仓库 |
 |--------------|--------|
@@ -74,7 +91,7 @@ path_planning ✗ task_allocation      互不 import
 | cost matrix c_ij 动态更新（Algorithm 2） | C(i,j,k) 代价矩阵 + CostUpdate 增量回填 |
 | 电池衰减 / 威胁变化触发 | 动态禁飞阻断 / TPR 超阈值 / 滚动周期 |
 
-## 5. 目录
+## 6. 目录
 
 | 文件 | 职责 |
 |------|------|
