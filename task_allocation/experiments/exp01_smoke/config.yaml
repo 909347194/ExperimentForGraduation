@@ -20,10 +20,11 @@ experiment:
     output_dir: results # 数值产物（metrics / run_meta / solution）
     figures_dir: results/figures # 图产物；绘图代码在 plot/ 包内，只负责绘制
 
-# data/ 下的实测与共享数据（跨实验复用，不随实验改）
+# data/<scenario>/ 下的实测与共享数据（跨实验复用，不随实验改）
 data:
+    scenario: lasa_chengguan # 场景数据目录 data/<scenario>/（新增场景 = 新目录 + 改此键，见 data/README.md）
     source: file
-    path: nest_location_data.csv # 相对 task_allocation/data/
+    path: nest_location_data.csv # 相对 data/<scenario>/
     dem: Chengguan_DEM.tif # 城关区 DEM；不需要高程时置 null
     region_geojson: Chengguan_district.geojson # 任务撒点区域门禁（城关区多边形）
     coordinate_column: Coordinate

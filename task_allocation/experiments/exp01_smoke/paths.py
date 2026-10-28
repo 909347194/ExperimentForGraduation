@@ -11,7 +11,8 @@
     EXP_DIR/results/   数值产物（metrics.json / run_meta.json / solution.json）
     EXP_DIR/plot/      可视化模块（代码）
     EXP_DIR/plot/figures/  图产物（png / pdf）
-    DATA_DIR/     跨实验共享数据（机巢 CSV、DEM）
+    DATA_DIR/     场景数据注册表根（task_allocation/data/；场景目录取
+                  data/<scenario>/，解析统一走 common/scenario_data.py）
 """
 
 from __future__ import annotations
@@ -23,7 +24,8 @@ from pathlib import Path
 EXP_DIR = Path(__file__).resolve().parent
 #: 仓库根目录
 ROOT = EXP_DIR.parents[2]
-#: 跨实验共享数据（task_allocation/data/）
+#: 场景数据注册表根（task_allocation/data/；场景目录取 data/<scenario>/，
+#: 文件解析用 task_allocation.common.scenario_data.resolve_file）
 DATA_DIR = ROOT / "task_allocation" / "data"
 
 if str(ROOT) not in sys.path:

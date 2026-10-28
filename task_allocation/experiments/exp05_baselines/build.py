@@ -18,6 +18,7 @@ from typing import Any, Mapping, Sequence
 import paths  # noqa: F401  # sys.path 引导
 
 from task_allocation.common.scenario import build_nest_scenario
+from task_allocation.common import scenario_data
 from task_allocation.common.task_scenario import (
     DOMAIN_DEM_EXTENT,
     DOMAIN_NEST_ANCHORED,
@@ -58,15 +59,26 @@ class TaskBatch:
         return {c: len(v) for c, v in sorted(self.arrivals.items())}
 
 
-def build_scenario(cfg: Mapping[str, Any], data_dir: Path = paths.DATA_DIR) -> Any:
-    """按 ``data`` 段构建机巢场景（含 DEM 与局部平面）。"""
+def _scenario_dir(cfg: Mapping[str, Any], data_dir: Path | None = None) -> Path:
+    """场景数据目录：显式传入优先，否则按 ``data.scenario`` 解析（data/<scenario>/）。"""
+    if data_dir is not None:
+        return Path(data_dir)
+    return scenario_data.scenario_dir((cfg.get("data") or {}).get("scenario"))
+
+
+def build_scenario(cfg: Mapping[str, Any], data_dir: Path | None = None) -> Any:
+    """按 ``data`` 段构建机巢场景（含 DEM 与局部平面）。
+
+    ``data_dir`` 为场景数据目录覆盖（缺省 = ``data/<data.scenario>/``）。
+    """
     data_cfg = cfg.get("data", {}) or {}
     if data_cfg.get("source", "synthetic") != "file":
         raise RuntimeError("data.source 必须为 file：本实验依赖真实机巢与 DEM")
     problem_cfg = cfg["problem"]
-    csv_path = Path(data_dir) / data_cfg["path"]
+    d = _scenario_dir(cfg, data_dir)
+    csv_path = d / data_cfg["path"]
     dem_name = data_cfg.get("dem")
-    dem_path = (Path(data_dir) / dem_name) if dem_name else None
+    dem_path = (d / dem_name) if dem_name else None
     return build_nest_scenario(
         csv_path,
         count=problem_cfg.get("n_nests"),
@@ -97,7 +109,7 @@ def build_terrain(scenario: Any, cfg: Mapping[str, Any]) -> DEMTerrain | None:
     # 区域多边形门禁：任务域把区域包络并进来（城关区口径）
     region_rel = (cfg.get("data", {}) or {}).get("region_geojson")
     if region_rel is not None:
-        renv = region_planar_envelope(Path(paths.DATA_DIR) / region_rel, scenario.frame)
+        renv = region_planar_envelope(_scenario_dir(cfg) / region_rel, scenario.frame)
         if renv is not None:
             x0, y0 = min(x0, renv[0]), min(y0, renv[1])
             x1, y1 = max(x1, renv[2]), max(y1, renv[3])
@@ -146,10 +158,10 @@ def build_task_config(cfg: Mapping[str, Any], seed: int) -> SyntheticTaskConfig:
     t = cfg.get("tasks", {}) or {}
     rolling = cfg.get("rolling", {}) or {}
     cycle_length = float(rolling.get("cycle_length", 600.0))
-    # 区域门禁 geojson（城关区）：相对 task_allocation/data/，解析为绝对路径传入
+    # 区域门禁 geojson（城关区）：相对场景数据目录（data/<scenario>/），解析为绝对路径传入
     data_cfg = cfg.get("data", {}) or {}
     region_rel = data_cfg.get("region_geojson")
-    region_path = str(Path(paths.DATA_DIR) / region_rel) if region_rel else None
+    region_path = str(_scenario_dir(cfg) / region_rel) if region_rel else None
     return SyntheticTaskConfig(
         n_tasks=int(t.get("n_tasks", 10)),
         seed=int(seed),

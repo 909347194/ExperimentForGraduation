@@ -130,7 +130,7 @@ exp01 的定位是**正确性验证台 + 口径标定台**（冒烟 + 审计 + �
 
 | 内容 | 位置 | 理由 |
 |---|---|---|
-| 机巢经纬度、DEM | `task_allocation/data/` | 实测事实,跨实验复用 |
+| 机巢经纬度、DEM | `task_allocation/data/<scenario>/` | 实测事实,跨实验复用 |
 | 机巢个数、容量、机队规模、航程、速度 | `config.yaml` 的 `problem:` | 实验设定 |
 | 任务规模、散布、收益、时间窗 | `config.yaml` 的 `tasks:` | 任务当前为合成,后续换 CSV 时参数可平移 |
 | 第一阶段权重与阈值 | `config.yaml` 的 `selection:` | 做 α / 五项权重灵敏度时只改这里 |

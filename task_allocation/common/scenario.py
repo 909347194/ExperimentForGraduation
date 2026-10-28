@@ -101,7 +101,7 @@ def build_nest_scenario(
     """构建机巢场景。
 
     参数：
-        csv_path: 机巢位置 CSV（``data/nest_location_data.csv``）
+        csv_path: 机巢位置 CSV（``data/lasa_chengguan/nest_location_data.csv``）
         count: 取前 ``count`` 个机巢；None 表示全部
         capacity: 单机巢容量（架）
         column: 坐标列名

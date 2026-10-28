@@ -10,7 +10,7 @@
 
     from task_allocation.methods.utils import GeoTIFFDEM, LocalFrame, parse_coordinate
 
-    dem = GeoTIFFDEM("task_allocation/data/Chengguan_DEM.tif")
+    dem = GeoTIFFDEM("task_allocation/data/lasa_chengguan/Chengguan_DEM.tif")
     frame = LocalFrame.from_geodetic_points(lats, lons)   # 取机巢群中心为原点
     lat, lon = parse_coordinate("29.6472N 91.136532E")
     x, y = frame.to_enu(lat, lon)[:2]

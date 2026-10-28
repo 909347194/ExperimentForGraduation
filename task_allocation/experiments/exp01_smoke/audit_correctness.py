@@ -86,7 +86,7 @@ from config import load_config
 from task_allocation.methods.muas.cost.vertical_section import make_distance_fn
 
 EXP_DIR = Path(__file__).resolve().parent
-DATA_DIR = paths.ROOT / "task_allocation" / "data"
+DATA_DIR = paths.ROOT / "task_allocation" / "data"  # 场景注册表根（场景目录取 data/<scenario>/）
 
 # 场景（DEM 地形 + 代价估算器）重建代价高，逐 seed 审计时复用一次
 _SCENE_CACHE: dict[str, Any] = {}
@@ -95,7 +95,7 @@ _SCENE_CACHE: dict[str, Any] = {}
 def _ensure_scene(cfg: dict) -> tuple[Any, Any]:
     """构建（并缓存）审计重算所需的地形估算器与检查端距离函数。"""
     if "dist" not in _SCENE_CACHE:
-        scenario = build_scenario(cfg, DATA_DIR)
+        scenario = build_scenario(cfg)
         terrain = build_terrain(scenario, cfg)
         estimator = build_cost_estimator(terrain, cfg)
         _SCENE_CACHE["dist"] = make_distance_fn(estimator)

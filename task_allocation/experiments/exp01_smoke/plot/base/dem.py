@@ -100,13 +100,26 @@ def _ensure_project_root() -> bool:
 
 
 def _find_dem_tif() -> "Path | None":
-    """向上查找 DEM 瓦片（task_allocation/data/Chengguan_DEM.tif 或任意 *_dem.tif）。"""
+    """向上查找 DEM 瓦片（data/<scenario>/Chengguan_DEM.tif 或任意 *_dem.tif）。
+
+    2026-10-27 起 data/ 按场景分目录：优先在**场景子目录**里找
+    （data/<scenario>/…），兼容旧平铺 data/*.tif。
+    """
     base = Path(__file__).resolve()
     for p in [base, *base.parents]:
         data_dir = p / "data"
         if not data_dir.is_dir():
             continue
-        # 优先精确文件名（城关区 DEM），其次任意 *_dem.tif 兜底
+        # 场景子目录优先：每个场景目录先查精确文件名
+        subdirs = sorted(d for d in data_dir.iterdir() if d.is_dir())
+        for sub in subdirs:
+            direct = sub / "Chengguan_DEM.tif"
+            if direct.is_file():
+                return direct
+        hits = sorted(data_dir.glob("*/*_dem.tif"))
+        if hits:
+            return hits[0]
+        # 兼容旧平铺布局（data/*.tif）
         direct = data_dir / "Chengguan_DEM.tif"
         if direct.is_file():
             return direct

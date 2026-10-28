@@ -2,7 +2,7 @@
 """coordinates.py — WGS84 经纬度与米制平面坐标互转工具。
 
 背景：
-    DEM（``task_allocation/data/Chengguan_DEM.tif``）的空间参考为
+    DEM（``task_allocation/data/lasa_chengguan/Chengguan_DEM.tif``）的空间参考为
     地理坐标系 WGS 1984（EPSG:4326，角度单位：度，长半轴 6378137.0，
     反扁率 298.257223563）；
     而 task_allocation 内部模型（``common/types.py`` 的 Task / UAV / Nest）与
