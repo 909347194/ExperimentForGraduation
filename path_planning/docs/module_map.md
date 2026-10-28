@@ -113,6 +113,8 @@ class TrajectoryPlanner:
 # interface/feedback.py
 def detect_events(result: PlanResult, cfg: Config) -> list[TriggerEvent]: ...
 def build_feedback(results: list[PlanResult], events: list[TriggerEvent]) -> CostUpdate: ...
+# ↑ CostUpdate 定义于 common/types.py（产出方定义，经 interface 再导出）；
+#   closed_loop/protocol 只引用，不重复定义（architecture.md 依赖规则 8）
 
 # constraints/query.py
 class CollisionQuery:

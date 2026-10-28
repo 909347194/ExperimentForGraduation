@@ -11,6 +11,7 @@
         滚动窗口下发新的临时禁飞区（委托 online/dynamic_prune 的剪枝视图）
     .build_cost_matrix(pairs) -> CostMatrix
         按 (无人机, 任务, 机巢) 组合批量规划并构建 C(i,j,k)（README §4.4.1）
+        （CostMatrix 定义于 methods/cost/cost_matrix.py，经本门面导出）
     .update_cost_matrix(matrix, results) -> CostMatrix
         事件触发后回填真实代价 / 不可行置 ∞
 
