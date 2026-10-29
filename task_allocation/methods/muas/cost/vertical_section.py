@@ -5,7 +5,7 @@
 论文思路（赵明等）：
     Step1  取 S、T 连线 L(S,T)
     Step2  过 L 作垂直于 XOY 的切面
-    Step3  切面与地形交线映射为二维剖面（水平距–高程）
+    Step3  切面与障碍包络（地形+建筑屋顶）交线映射为二维剖面（水平距–高程）
     Step4  地形跟随 + 飞行高度保持生成估计航迹（忽略复杂飞行动力学限制）
     Step5  航迹长度 L 作为航程；代价 D = L * weight
 
@@ -25,6 +25,13 @@
     时间窗 ETA、预筛 travel、边际收益插入代价都必须由它派生，不得再用
     ``math.dist`` / 欧氏直线（旧代码里 ETA 用直线 ⇒ 系统性低估飞行时间）。
     由 :func:`make_distance_fn` 生成带记忆化的注入函数。
+
+【建筑包络】(2026-10-29 城市场景)
+    城市环境中三维航程的主导竖向结构是建筑。垂直切面剖面高程由「地形」
+    扩展为「障碍包络」= 地面高程 + 该点建筑屋顶高度（Height 属性 = 屋顶
+    相对当地地面；不在建筑内 = 0），飞行路径仍在包络上做地形跟随 ⇒
+    自动「爬楼」。无 DEM 但有建筑时地面按 0 平面；无建筑场景
+    （如 lasa_chengguan）行为与既有口径逐位一致。
 """
 
 from __future__ import annotations
@@ -36,6 +43,7 @@ import numpy as np
 
 if TYPE_CHECKING:
     from task_allocation.methods.muas.cost.dem_terrain import DEMTerrain
+    from task_allocation.methods.utils.building_layer import BuildingLayer
 
 DEFAULT_MIN_CLEARANCE = 50.0
 DEFAULT_MAX_CLEARANCE = 300.0
@@ -63,12 +71,14 @@ class VerticalSectionCostEstimator:
         max_clearance: float = DEFAULT_MAX_CLEARANCE,
         climb_rate: float = DEFAULT_CLIMB_RATE,
         num_samples: int = 200,
+        buildings: BuildingLayer | None = None,
     ) -> None:
         self._dem = dem_terrain
         self._mx = min_clearance
         self._my = max_clearance
         self._climb_rate = climb_rate
         self._num_samples = num_samples
+        self._buildings = buildings
 
     def estimate(
         self,
@@ -79,8 +89,8 @@ class VerticalSectionCostEstimator:
         sx, sy, sz = start
         ex, ey, ez = end
 
-        if self._dem is None:
-            # 无 DEM：空间直线长度
+        if self._dem is None and self._buildings is None:
+            # 无 DEM 无建筑：空间直线长度（历史口径逐位不变）
             dist = float(np.sqrt((ex - sx) ** 2 + (ey - sy) ** 2 + (ez - sz) ** 2))
             xs = np.array([0.0, dist])
             zs = np.array([sz, ez])
@@ -94,21 +104,39 @@ class VerticalSectionCostEstimator:
                 flight_altitude=self._mx,
             )
 
-        profile = self._dem.extract_profile(
-            start=(sx, sy), end=(ex, ey), num_samples=self._num_samples
-        )
-        xs_2d = profile.distances
-        zs_terrain = self._fill_nan(profile.elevations)
+        if self._dem is not None:
+            profile = self._dem.extract_profile(
+                start=(sx, sy), end=(ex, ey), num_samples=self._num_samples
+            )
+            xs_2d = profile.distances
+            zs_ground = self._fill_nan(profile.elevations)
+            coords_xy = profile.coords_xy
+        else:
+            # 无 DEM 但有建筑：地面按 0 平面，建筑构成全部障碍包络
+            ts = np.linspace(0.0, 1.0, self._num_samples)
+            pxs = sx + (ex - sx) * ts
+            pys = sy + (ey - sy) * ts
+            dxy = np.sqrt(np.diff(pxs) ** 2 + np.diff(pys) ** 2)
+            xs_2d = np.concatenate([[0.0], np.cumsum(dxy)])
+            zs_ground = np.zeros(self._num_samples, dtype=np.float64)
+            coords_xy = np.column_stack([pxs, pys])
+
+        # 障碍包络 = 地面高程 + 建筑屋顶高度（无建筑处 +0，逐位退化为地形口径）
+        zs_obstacle = zs_ground
+        if self._buildings is not None:
+            zs_obstacle = zs_obstacle + self._buildings.heights_at(
+                coords_xy[:, 0], coords_xy[:, 1]
+            )
 
         path_xs, path_zs = self._generate_flight_path(
-            xs_2d, zs_terrain, start_z=sz, end_z=ez
+            xs_2d, zs_obstacle, start_z=sz, end_z=ez
         )
         distance = self._compute_path_length(path_xs, path_zs)
         return CostEstimationResult(
             distance=distance,
             cost=float(distance * weight),
             profile_xs=xs_2d,
-            profile_zs=zs_terrain,
+            profile_zs=zs_obstacle,
             path_xs=path_xs,
             path_zs=path_zs,
             flight_altitude=self._mx,
@@ -121,7 +149,7 @@ class VerticalSectionCostEstimator:
         start_z: float,
         end_z: float,
     ) -> tuple[np.ndarray, np.ndarray]:
-        """地形跟随：过近爬升、适中平飞、过高下降；并保证 ≥ 地形+mx。"""
+        """障碍包络跟随（地形 + 建筑屋顶）：过近爬升、适中平飞、过高下降；并保证 ≥ 包络+mx。"""
         n = len(xs)
         path_zs = np.zeros(n)
         path_zs[0] = start_z

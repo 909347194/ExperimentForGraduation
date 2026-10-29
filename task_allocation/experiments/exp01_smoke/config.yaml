@@ -22,16 +22,17 @@ experiment:
 
 # data/<scenario>/ 下的实测与共享数据（跨实验复用，不随实验改）
 data:
-    scenario: lasa_chengguan # 场景数据目录 data/<scenario>/（新增场景 = 新目录 + 改此键，见 data/README.md）
+    scenario: guangzhou # 场景数据目录 data/<scenario>/（2026-10-29 城市场景：广州；lasa_chengguan 仍在库中可切回）
     source: file
-    path: nest_location_data.csv # 相对 data/<scenario>/
-    dem: Chengguan_DEM.tif # 城关区 DEM；不需要高程时置 null
-    region_geojson: Chengguan_district.geojson # 任务撒点区域门禁（城关区多边形）
+    path: nest_location_data.csv # 相对 data/<scenario>/（3 机巢经纬度）
+    dem: dem.tif # 地面基底高程。建筑 Height 相对地面，绝对包络 = 地面 + 建筑高；平地贡献小但保留以统一两场景口径（置 null 则地面按 0 平面）
+    buildings: building # 建筑 shapefile 目录（5 类 20670 栋）；垂直切面障碍包络 = max(地面, 地面+建筑高)。无建筑场景（lasa）置 null
+    region_geojson: region.geojson # 任务撒点区域门禁（广州研究区多边形）
     coordinate_column: Coordinate
 
 # 本实验的问题规模设定（改这里做规模/容量灵敏度，不动数据文件）
 problem:
-    n_nests: 6 # 用前 6 个机巢（城关区 CSV 共 6 条）
+    n_nests: 3 # 用前 3 个机巢（广州 CSV 共 3 条，2026-10-29 城市场景）
     nest_capacity: 4 # 单机巢容量（架）
     n_uavs: 10 # 机队规模（<= n_nests × nest_capacity 才不初始超容；6×4=24）
     uav_speed: 15.0 # m/s
