@@ -1,3 +1,9 @@
+# path_planning 原始建筑数据：大二进制，不入库
+# 本机数据源：D:\SchoolAffairs\Risk-Path\methods\spatiotemporal_heterogeneity\data\01_raw\building\
+# （场景目录 data/raw/<scenario_id>/ 下的 nofly_*.geojson / region.geojson 为小文本，照常入库）
+path_planning/data/raw/**/building/
+path_planning/data/processed/
+
 # 实验运行日志
 logs/
 *.log
