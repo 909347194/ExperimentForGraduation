@@ -26,6 +26,7 @@ from task_allocation.common.scenario import build_nest_scenario  # noqa: E402
 from task_allocation.common.task_scenario import (  # noqa: E402
     DOMAIN_DEM_EXTENT,
     DOMAIN_NEST_ANCHORED,
+    DOMAIN_REGION,
     RegionPolygon,
     SyntheticTaskConfig,
     _load_region,
@@ -123,6 +124,36 @@ def test_nest_anchored_tasks_inside_region():
     tasks = build_synthetic_tasks(sc.nests, sc.frame, sc.dem, cfg)
     assert len(tasks) == 80
     assert _all_inside(tasks, region), "nest_anchored 下存在逸出城关区的任务点"
+
+
+def test_region_domain_tasks_inside_region():
+    """domain=region：任务直接在多边形内均匀撒点，全部落在多边形内。"""
+    sc = _scenario()
+    region = _load_region(REGION, sc.frame)
+    cfg = SyntheticTaskConfig(
+        n_tasks=200,
+        seed=123,
+        domain=DOMAIN_REGION,
+        max_reject_trials=8,
+        region_geojson=str(REGION),
+    )
+    tasks = build_synthetic_tasks(sc.nests, sc.frame, sc.dem, cfg)
+    assert len(tasks) == 200
+    assert _all_inside(tasks, region), "domain=region 下存在逸出多边形的任务点"
+
+
+def test_region_domain_requires_geojson():
+    """domain=region 但未给 region_geojson 时应抛错（不静默退化）。"""
+    sc = _scenario()
+    cfg = SyntheticTaskConfig(
+        n_tasks=5, seed=1, domain=DOMAIN_REGION, region_geojson=None,
+    )
+    try:
+        build_synthetic_tasks(sc.nests, sc.frame, sc.dem, cfg)
+        raised = False
+    except ValueError:
+        raised = True
+    assert raised, "domain=region 缺少 region_geojson 应抛 ValueError"
 
 
 def test_no_region_unchanged_behavior():

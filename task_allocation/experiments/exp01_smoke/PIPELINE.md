@@ -72,10 +72,34 @@ plot/initial/geo_overview.py  →  plot_geo_overview  →  geo_overview.png
 
 | 层 | 图 id | 说明 | 数据来源 |
 |---|---|---|---|
-| initial | `geo_overview` | 初始态势：地形 · 机巢 · 初始机队 · 任务散布 | `solution.json 的 dem / nests / tasks / uavs` |
-| process | `allocation_gantt` | 分配航迹条：线长 ∝ 真实航程 · 方块=任务 · 两端起降巢 | `solution.json 的 cycles[].tours（est_cost）+ tasks[] / nests[]` |
-| process | `allocation_anim` | 分配过程动画演变：滚动闭环航迹生长 / 任务点亮 + 当前周期 DMDE 收敛（GIF） | `solution.json 的 cycles[].tours + cost_history + tasks[] / nests[] / dem` |
+| initial | `geo_overview` | 初始态势：背景（建筑 / 地形）· 机巢 · 初始机队 · 任务散布 | `solution.json 的 dem / nests / tasks / uavs + data/<scenario>/building/*.shp（背景层规则：有建筑优先画建筑，只有地形才画 DEM）` |
+| process | `allocation_gantt` | 分配航迹条：线长 ∝ 真实航程 · 方块=任务 · 两端起降巢 | `solution.json 的 cycles[].tours（est_cost）+ tasks[] / nests[]（线长按 est_cost 标定，段间距按三维几何）` |
+| process | `allocation_anim` | 分配过程动画演变：滚动闭环航迹生长 / 任务点亮 + 当前周期 DMDE 收敛（GIF） | `solution.json 的 cycles[].tours + cost_history + tasks[] / nests[] / dem（地图背景：有建筑画建筑、只有地形画 DEM）；左右两栏——地图下方的画布级状态行（周期/已到达/已完成百分比/里程，白底随文字自动贴合；置于图外因图内任何角落都会压住贴顶任务标号），右栏当前周期收敛曲线；完成进度只用百分比数字表达，不画进度条` |
 | report | `outcome_summary` | 结果总览：完成率 CR 轨迹 / 未完成任务终局构成 / 双目标 / 关键指标 | `metrics.json 的 cycles[].pool_counts / completed_ids / summary + per_seed` |
+
+### 2.2 地图背景层：建筑优先，地形兜底
+
+所有带地图的图（当前 `geo_overview` / `allocation_anim`）都不自己 import
+`dem` 或 `buildings`，一律走 `plot/base/backdrop.py`（**判断只做一次**）：
+
+```python
+from ..base.backdrop import _backdrop_extent, _draw_backdrop
+
+bd = _draw_backdrop(ax, solution, nests=nests, tasks=tasks)   # 返回 Backdrop
+cb.set_label(bd.label)                                        # "建筑高度 (m)" / "高程 (m)"
+_set_scene_lim(ax, nests, tasks, uavs, dem, extent=_backdrop_extent(solution, nests, tasks, uavs))
+```
+
+| 场景 | 背景 | 色条 | 取景 |
+|---|---|---|---|
+| 有建筑（广州，`data.buildings` 指向 shp 目录） | 建筑轮廓按屋顶高度着色（色深 ∝ 高度） | 建筑高度 (m)，0 → 98 分位 | 建筑包络 ∪ 要素包络 + 3% |
+| 只有地形（拉萨城关，`data.buildings: null`） | ASTER 瓦片 + 山体阴影晕渲 | 高程 (m) | DEM 视图范围（瓦片包络） |
+| 两者都没有 | 纯底（不画背景） | 无色条 | 要素并集 + 留白 |
+
+兼容回退（任一命中即退回 DEM，**不抛异常**）：`data.buildings` 未声明 / 目录无
+`.shp`（合法，静默）；solution 无 `local_frame`、项目根不在 `sys.path`、shapefile
+解析失败（各报警一次）；建筑包围盒与场景要素不同域（判为拿错场景数据）。
+需要「建筑 + 地形」同框时用 `_draw_backdrop(..., dem_under_buildings=True)`。
 
 **改图不必重跑**：`plot.render_from_results(results_dir)` 直接读已落盘的
 `metrics.json` + `solution.json` 重绘。只想出一部分图（例如凑论文插图）：

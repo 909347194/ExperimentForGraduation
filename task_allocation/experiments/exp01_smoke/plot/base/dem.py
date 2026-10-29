@@ -30,6 +30,11 @@ from matplotlib.colors import LightSource, LinearSegmentedColormap, Normalize
 
 from ..theme import plt
 
+# 路径/导入兜底与场景数据定位统一由 base/scene.py 承担（2026-10-29 拆分）：
+# 建筑底图同样需要它们，各底图层共用一个判定入口才不会各判各的。
+from .scene import ensure_project_root as _ensure_project_root  # noqa: F401
+from .scene import scene_dirs as _scene_dirs
+
 __all__ = [
     "_HYPSO",
     "_draw_dem",
@@ -62,44 +67,24 @@ _HYPSO = LinearSegmentedColormap.from_list(
 # 真实 DEM 瓦片（ASTER GDEM v3）采样：优先用原始 tif 作底图
 # ---------------------------------------------------------------------------
 
-def _ensure_project_root() -> bool:
-    """把**项目根**（含 ``task_allocation`` 包的目录）加入 ``sys.path``。
-
-    这是「DEM 突然变糊」的根因防线。``_sample_real_dem`` 里
-    ``from task_allocation.methods.utils import GeoTIFFDEM`` 依赖项目根在
-    ``sys.path`` 上；而这一条件**只在从项目根启动时才成立**（``python run.py``、
-    ``python -m pytest``）。一旦换成
-
-        python -c "from plot import render_from_results; ..."   # cwd=实验目录
-        cd 实验目录 && python 其它脚本
-
-    之类入口，``sys.path[0]`` 是实验目录而非项目根，import 抛
-    ``ModuleNotFoundError``，被 ``except Exception: return None`` 静默吞掉 ——>
-    底图回退到 ``solution.json`` 里 115x101 的降采样栅格（约 880 m/格），
-    在 1200~2800 px 的画布上被放大 10~24 倍，观感就是「DEM 又变模糊了」。
-
-    与其要求每个入口都记得加路径，**在真正需要 import 的这里兜底**：向上找
-    含 ``task_allocation/__init__.py`` 的目录并插入。返回是否成功。
-    """
-    import sys as _sys
-
-    try:
-        import task_allocation  # noqa: F401  已可导入就不动 sys.path
-        return True
-    except Exception:
-        pass
-    here = Path(__file__).resolve()
-    proj = here
-    while proj.parent != proj:
-        if (proj / "task_allocation" / "__init__.py").is_file():
-            if str(proj) not in _sys.path:
-                _sys.path.insert(0, str(proj))
-            return True
-        proj = proj.parent
-    return False
-
-
 def _find_dem_tif() -> "Path | None":
+    """定位 DEM 瓦片：先看 ``base/scene.py`` 的解析结果，再用旧启发式兜底。
+
+    场景声明优先（``config.yaml`` 的 ``data.scenario`` + ``data.dem``）——旧逻辑只
+    认 ``Chengguan_DEM.tif`` / ``*_dem.tif``，切到城市场景（广州，文件叫
+    ``dem.tif``）会找不到瓦片而静默退回 45x45 降采样栅格。解析不到时完整保留
+    旧启发式，老场景行为不变。
+    """
+    try:
+        tif = _scene_dirs().get("dem_tif")
+        if tif is not None:
+            return Path(tif)
+    except Exception:                                       # pragma: no cover
+        pass
+    return _legacy_find_dem_tif()
+
+
+def _legacy_find_dem_tif() -> "Path | None":
     """向上查找 DEM 瓦片（data/<scenario>/Chengguan_DEM.tif 或任意 *_dem.tif）。
 
     2026-10-27 起 data/ 按场景分目录：优先在**场景子目录**里找

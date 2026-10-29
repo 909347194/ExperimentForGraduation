@@ -141,7 +141,10 @@ def build_terrain(scenario: Any, cfg: Mapping[str, Any]) -> DEMTerrain | None:
 
     # 区域多边形门禁：任务域把区域包络并进来（城关区口径），保证代价
     # 网格覆盖区域内任务，三维代价不退化到边界值。
-    region_rel = (cfg.get("data", {}) or {}).get("region_geojson")
+    region_rel = (
+        (cfg.get("tasks", {}) or {}).get("region_geojson")
+        or (cfg.get("data", {}) or {}).get("region_geojson")
+    )
     if region_rel is not None:
         renv = region_planar_envelope(_scenario_dir(cfg) / region_rel, scenario.frame)
         if renv is not None:
@@ -227,9 +230,11 @@ def build_task_config(cfg: Mapping[str, Any], seed: int) -> SyntheticTaskConfig:
     t = cfg.get("tasks", {}) or {}
     rolling = cfg.get("rolling", {}) or {}
     cycle_length = float(rolling.get("cycle_length", 600.0))
-    # 区域门禁 geojson（城关区）：相对场景数据目录（data/<scenario>/），解析为绝对路径传入
+    # 区域门禁 geojson：优先取 tasks.region_geojson（每个实验各自给出的撒点多边形），
+    # 退回 data.region_geojson（旧位置，兼容其它实验）；相对场景数据目录（data/<scenario>/）。
     data_cfg = cfg.get("data", {}) or {}
-    region_rel = data_cfg.get("region_geojson")
+    tasks_cfg_rg = cfg.get("tasks", {}) or {}
+    region_rel = tasks_cfg_rg.get("region_geojson") or data_cfg.get("region_geojson")
     region_path = str(_scenario_dir(cfg) / region_rel) if region_rel else None
     return SyntheticTaskConfig(
         n_tasks=int(t.get("n_tasks", 10)),

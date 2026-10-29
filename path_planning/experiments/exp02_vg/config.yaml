@@ -1,0 +1,42 @@
+# exp02_vg —— 可见性图 / 稀疏路图规划器 验证（建筑简化 + 轮廓采样 + LOS 边 + 机动保护区）
+# 目标：验证思路——节点 < 2000、边数可控、路径避障避禁飞、机动保护区「删近距边、路径仅略增」
+
+scenario:
+  id: guangzhou
+  dir: data/raw/guangzhou
+  classes: [Residential, Commercial, TechnologyIndustry, PublicServices, EducationalCultural]
+  # 手动裁剪：177 栋高楼 + 11.5% 禁飞区重叠窗口，同时检验建筑避让 + 禁飞避让 + 机动保护区
+  crop: [1766.6, 2575.7, 2366.6, 3175.7]
+  max_buildings: 900
+
+visibility_graph:
+  simplify_mode: simplify      # simplify | convex_hull | oriented_bbox | axis_align
+  simplify_tol: 3.0            # DP 简化容差 m
+  d_build: 5.0                # 建筑外扩安全距离 m
+  node_step: 40.0             # 轮廓采样步长 m
+  node_buffer: 5.0            # 节点相对建筑轮廓的安全距离 m
+  altitude_layers: [20.0, 50.0]   # 离散飞行高度层 m
+  grid_step: 100.0            # 自由空间粗网格步长 m
+  grid_layers: [20.0, 50.0]   # 粗网格铺设高度层 m
+  max_nodes_per_building: 8   # 单栋建筑最多采样节点（按层）
+  max_nodes: 2000             # 节点总数硬上限
+  max_edge_len: 200.0         # 最大连线距离 m
+  edge_margin: 2.0            # LOS 判定额外余量 m
+  connect_layers: true        # 同 (x,y) 不同层加竖向边（允许变高）
+  protection_clearance: 8.0   # 机动保护区最小净空 m（相对已外扩障碍）
+  attach_radius: 80.0         # OD 接入半径 m
+  include_dynamic_as_static: false  # 选项A：动态禁飞不在建图期并入，仅在 A* 查询时按时间窗检查
+
+nofly:
+  source: file                # 读 <dir>/nofly_static.geojson + <dir>/nofly_dynamic.geojson
+  dir: data/raw
+
+od:
+  n_pairs: 8
+  z: 20.0
+  seed: 7
+  min_dist: 150.0      # 候选 OD 端点间最小直线距离 m
+  max_dist: 550.0      # 候选 OD 端点间最大直线距离 m
+
+checks:
+  audit_step_m: 2.0

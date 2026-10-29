@@ -1,0 +1,62 @@
+[
+  {
+    "ratio": 2,
+    "n_sel_c1": 12,
+    "sel_c1": 12,
+    "defer_c1": 8,
+    "tot_defer": 9,
+    "active_cyc": 3,
+    "solve_c1_s": 91.0,
+    "solve_tot_s": 214.9,
+    "arrived": 30,
+    "completed": 30,
+    "n_late": 3,
+    "corr_exec": 0.9167,
+    "unreach": 0
+  },
+  {
+    "ratio": 3,
+    "n_sel_c1": 18,
+    "sel_c1": 18,
+    "defer_c1": 2,
+    "tot_defer": 2,
+    "active_cyc": 3,
+    "solve_c1_s": 219.9,
+    "solve_tot_s": 247.5,
+    "arrived": 30,
+    "completed": 30,
+    "n_late": 0,
+    "corr_exec": 1.0,
+    "unreach": 0
+  },
+  {
+    "ratio": 4,
+    "n_sel_c1": 24,
+    "sel_c1": 20,
+    "defer_c1": 0,
+    "tot_defer": 0,
+    "active_cyc": 3,
+    "solve_c1_s": 284.8,
+    "solve_tot_s": 295.1,
+    "arrived": 30,
+    "completed": 30,
+    "n_late": 0,
+    "corr_exec": 1.0,
+    "unreach": 0
+  },
+  {
+    "ratio": 5,
+    "n_sel_c1": 30,
+    "sel_c1": 20,
+    "defer_c1": 0,
+    "tot_defer": 0,
+    "active_cyc": 3,
+    "solve_c1_s": 280.4,
+    "solve_tot_s": 290.8,
+    "arrived": 30,
+    "completed": 30,
+    "n_late": 0,
+    "corr_exec": 1.0,
+    "unreach": 0
+  }
+]

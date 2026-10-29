@@ -53,7 +53,8 @@ from typing import Any, Sequence
 import numpy as np
 from matplotlib.lines import Line2D
 
-from ..base.dem import _dem_view_extent, _draw_dem
+from ..base.backdrop import _backdrop_extent, _draw_backdrop
+from ..base.buildings import _building_legend_patch
 from ..base.geo import (
     _G_DOT,
     _G_DRONE,
@@ -239,7 +240,16 @@ def _draw_cycle_tours(ax, cyc: dict[str, Any],
         for tid in tour.get("task_ids") or []:
             owner[int(tid)] = u
 
-    others = [t for t in task_by_id.values() if int(t["id"]) not in owner]
+    # 未执行任务只标「已到达」者：尚未到达（arrival_time 落在本周期之后）的
+    # 任务本周期根本不存在，画成空心点会与动画「未到达不绘制」口径冲突、误导
+    # 读者以为它们是本地待执行任务；与 allocation_anim 保持同一语义。
+    cur_cycle = int(cyc.get("cycle", 1))
+    others = [
+        t for t in task_by_id.values()
+        if int(t["id"]) not in owner
+        and (arrival_cycle is None
+             or arrival_cycle.get(int(t["id"]), 0) <= cur_cycle)
+    ]
     if others:
         ax.scatter(
             [float(t["x"]) for t in others],
@@ -320,19 +330,30 @@ def plot_allocation(
     ax_gantt = fig.add_subplot(gs[0])
     _draw_gantt(ax_gantt, rows, task_by_id, nest_by_id, arrival_cycle=arrival_cycle)
 
-    # ── (b) 逐周期 DEM 演化：横排 1×N，共享范围 ───────────────────
-    n_cyc = len(cycles)
+    # ── (b) 逐周期空间演化（背景层：有建筑画建筑，只有地形画 DEM）────
+    # 只画「有真实航次」的活跃周期：solution.json 会存下任务池耗尽后的空转
+    # 周期（exp01 为 cycle 4-7），若一并在 (b) 画出，空周期子图会把全部任务
+    # 渲染成「未执行」空心点——但那些任务早在早周期已完成，属错误标绘。
+    # 与动画的 idle_set 逻辑保持一致，仅取 active 周期；子图数随之收敛到真实
+    # 活跃数（exp01 为 3，与 docstring「1×3」吻合）。
+    active_cycles = [
+        c for c in cycles
+        if any(t.get("task_ids") for t in (c.get("tours") or []))
+    ]
+    if not active_cycles:
+        active_cycles = cycles[:1] or []
+    n_cyc = len(active_cycles)
     inner = gs[1].subgridspec(1, n_cyc, wspace=0.06)
-    sm0 = None
+    bd0 = None
     all_uavs_used: set[int] = set()
     evo_axes = []
-    extent = _dem_view_extent(solution.get("dem"), solution)
-    for idx, cyc in enumerate(cycles):
+    extent = _backdrop_extent(solution, nests, tasks, [])
+    for idx, cyc in enumerate(active_cycles):
         ax = fig.add_subplot(inner[idx])
         evo_axes.append(ax)
-        smx = _draw_dem(ax, solution.get("dem"), solution)
+        bdx = _draw_backdrop(ax, solution, nests=nests, tasks=tasks)
         if idx == 0:
-            sm0 = smx
+            bd0 = bdx
         uavs_used = _draw_cycle_tours(ax, cyc, task_by_id, nest_by_id,
                                        arrival_cycle=arrival_cycle)
         all_uavs_used |= uavs_used
@@ -349,12 +370,13 @@ def plot_allocation(
                    extent=extent)
     for ax in evo_axes:
         ax.set_aspect("equal", adjustable="box")
-    evo_axes[0].set_title("(b) 逐周期空间演化（DEM + 航次回放）",
+    evo_axes[0].set_title("(b) 逐周期空间演化（背景底图 + 航次回放）",
                           fontsize=FS["title"], loc="left")
 
-    if sm0 is not None:
-        fig.colorbar(sm0, ax=evo_axes, location="right", shrink=0.75,
-                     pad=0.015).set_label("高程 (m)", fontsize=FS["tick"])
+    # 色条标签随背景切换（建筑高度 / 高程），与 geo_overview 同一口径
+    if bd0 is not None and bd0.sm is not None:
+        fig.colorbar(bd0.sm, ax=evo_axes, location="right", shrink=0.75,
+                     pad=0.015).set_label(bd0.label, fontsize=FS["tick"])
 
     handles = [
         _IconPatch(_G_DRONE, fc=uav_color(u), ec="white", lw=1.0,
@@ -365,6 +387,8 @@ def plot_allocation(
                    label="机巢（○=返航巢）"),
         _IconPatch(_G_DOT, fc="none", ec="#aab4bf", lw=1.1, label="未执行任务"),
     ]
+    if bd0 is not None and bd0.has_buildings:
+        handles.append(_building_legend_patch(bd0.buildings))
     fig.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.475, 0.030),
                handler_map={_IconPatch: _IconHandler()},
                ncol=min(6, len(handles)), fontsize=FS["legend"],
