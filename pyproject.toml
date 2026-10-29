@@ -15,4 +15,5 @@ dependencies = [
     "pillow>=10.0",
     # 实验可视化（experiments/expXX_*/plot/）
     "matplotlib>=3.8",
+    "plotly>=7.1.0",
 ]

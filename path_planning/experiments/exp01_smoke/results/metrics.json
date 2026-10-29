@@ -149,7 +149,7 @@
     }
   ],
   "scenario": {
-    "dir": "/home/work/.openclaw/workspace/ExperimentForGraduation/path_planning/data/raw/guangzhou",
+    "dir": "D:\\SchoolAffairs\\groupmeeting\\thesis\\dissertation\\ExperimentForGraduation\\path_planning\\data/raw/guangzhou",
     "crop": [
       3686.6,
       704.19,
@@ -251,10 +251,10 @@
       "n_virtual_links": 304760
     },
     "timing_s": {
-      "control_points": 0.33,
-      "link_builder": 14.56,
-      "expand": 1.559,
-      "total": 16.449
+      "control_points": 0.629,
+      "link_builder": 25.959,
+      "expand": 2.183,
+      "total": 28.772
     }
   },
   "unit_checks": {
@@ -309,7 +309,7 @@
       "path_xy": null,
       "trajectory": null,
       "smooth_failed": false,
-      "plan_time_s": 5.8065,
+      "plan_time_s": 10.1225,
       "n_dijkstra": 8,
       "n_l2_iters": 6,
       "blocked_pairs": 0,
@@ -340,7 +340,7 @@
       "path_xy": null,
       "trajectory": null,
       "smooth_failed": false,
-      "plan_time_s": 5.6185,
+      "plan_time_s": 9.8245,
       "n_dijkstra": 8,
       "n_l2_iters": 6,
       "blocked_pairs": 0,
@@ -371,7 +371,7 @@
       "path_xy": null,
       "trajectory": null,
       "smooth_failed": false,
-      "plan_time_s": 5.5855,
+      "plan_time_s": 10.0201,
       "n_dijkstra": 8,
       "n_l2_iters": 6,
       "blocked_pairs": 0,
@@ -402,7 +402,7 @@
       "path_xy": null,
       "trajectory": null,
       "smooth_failed": false,
-      "plan_time_s": 5.7979,
+      "plan_time_s": 9.2617,
       "n_dijkstra": 8,
       "n_l2_iters": 6,
       "blocked_pairs": 0,
@@ -728,7 +728,7 @@
         ]
       },
       "smooth_failed": false,
-      "plan_time_s": 5.6284,
+      "plan_time_s": 9.732,
       "n_dijkstra": 8,
       "n_l2_iters": 6,
       "blocked_pairs": 0,
@@ -1005,7 +1005,7 @@
         ]
       },
       "smooth_failed": false,
-      "plan_time_s": 0.3902,
+      "plan_time_s": 0.6333,
       "n_dijkstra": 1,
       "n_l2_iters": 0,
       "blocked_pairs": 0,
@@ -1041,7 +1041,7 @@
       "path_xy": null,
       "trajectory": null,
       "smooth_failed": false,
-      "plan_time_s": 0.1601,
+      "plan_time_s": 0.323,
       "n_dijkstra": 0,
       "n_l2_iters": 0,
       "blocked_pairs": 0,
@@ -1113,7 +1113,7 @@
         ]
       },
       "smooth_failed": false,
-      "plan_time_s": 0.2596,
+      "plan_time_s": 0.456,
       "n_dijkstra": 1,
       "n_l2_iters": 0,
       "blocked_pairs": 0,
@@ -1149,7 +1149,7 @@
       "path_xy": null,
       "trajectory": null,
       "smooth_failed": false,
-      "plan_time_s": 0.3447,
+      "plan_time_s": 0.7257,
       "n_dijkstra": 0,
       "n_l2_iters": 0,
       "blocked_pairs": 0,
@@ -1275,7 +1275,7 @@
         ]
       },
       "smooth_failed": false,
-      "plan_time_s": 0.5341,
+      "plan_time_s": 0.8404,
       "n_dijkstra": 1,
       "n_l2_iters": 0,
       "blocked_pairs": 0,
@@ -1298,7 +1298,7 @@
       "L4": 6
     },
     "n_audit_ok": 4,
-    "wall_time_s": 51.325,
+    "wall_time_s": 88.3,
     "by_group": {
       "auto": {
         "n": 4,
