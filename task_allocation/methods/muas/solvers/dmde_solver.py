@@ -34,7 +34,6 @@ from ..base.base_optimizer import BaseOptimizer, SolverResult
 from ..representation.encoder import PopulationEncoder, Individual, Gene
 from ..representation.inverse_mapper import inverse_phi
 from ..operators.crossover import dynamic_crossover_rate
-from ..operators.scale_factor import dynamic_scale_factor
 from ..operators.mutation import mutate_population
 from ..operators.extinction import should_extinct, apply_extinction
 
