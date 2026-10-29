@@ -340,7 +340,7 @@ def main() -> int:
         size = float(sc.get("crop_size", 700.0))
         crop = _auto_crop(env_full, size)
     env = _apply_crop(env_full, crop, sc.get("max_buildings"))
-    print(f"[exp01] 裁剪窗口 {[round(c,1) for c in crop]} → 建筑 {len(env.buildings)} 栋")
+    print(f"[exp01] 裁剪窗口 {[round(float(c), 1) for c in crop]} → 建筑 {len(env.buildings)} 栋")
 
     # 禁飞区
     nofly_cfg = cfg.section("nofly")
