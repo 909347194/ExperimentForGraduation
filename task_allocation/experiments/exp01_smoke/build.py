@@ -29,11 +29,13 @@ from task_allocation.methods.muas.cost.dem_terrain import DEMTerrain
 from task_allocation.methods.muas.cost.vertical_section import (
     VerticalSectionCostEstimator,
 )
+from task_allocation.methods.utils.building_layer import BuildingLayer
 
 __all__ = [
     "TaskBatch",
     "build_scenario",
     "build_terrain",
+    "build_building_layer",
     "build_cost_estimator",
     "build_uavs",
     "build_task_config",
@@ -150,10 +152,38 @@ def build_terrain(scenario: Any, cfg: Mapping[str, Any]) -> DEMTerrain | None:
     return scenario.dem.to_metric_terrain(scenario.frame, step_m=step_m, extent=extent)
 
 
+def build_building_layer(
+    cfg: Mapping[str, Any], scenario: Any, data_dir: Path | None = None
+) -> BuildingLayer | None:
+    """按 ``data.buildings`` 构建建筑图层（局部米制平面，与机巢/任务同框）。
+
+    ``data.buildings`` 声明场景目录下的建筑 shapefile **目录**（或单个 .shp）；
+    未配置 / 置 null → ``None``（无建筑场景，如 lasa_chengguan，行为不变）。
+    城市场景（guangzhou）下建筑进入垂直切面障碍包络，见
+    :mod:`task_allocation.methods.utils.building_layer`。
+    """
+    data_cfg = cfg.get("data", {}) or {}
+    name = data_cfg.get("buildings")
+    if not name or scenario is None:
+        return None
+    base = _scenario_dir(cfg, data_dir) / str(name)
+    if base.is_dir():
+        paths: list[Path] = sorted(base.glob("*.shp"))
+    elif base.suffix.lower() == ".shp":
+        paths = [base]
+    else:
+        raise FileNotFoundError(f"建筑数据不存在：{base}")
+    if not paths:
+        raise FileNotFoundError(f"建筑目录没有 .shp 文件：{base}")
+    return BuildingLayer.from_shapefiles(paths, scenario.frame)
+
+
 def build_cost_estimator(
-    terrain: DEMTerrain | None, cfg: Mapping[str, Any]
+    terrain: DEMTerrain | None,
+    cfg: Mapping[str, Any],
+    buildings: BuildingLayer | None = None,
 ) -> VerticalSectionCostEstimator:
-    """按 ``cost`` 段构建三维地理代价估算器。"""
+    """按 ``cost`` 段构建三维地理代价估算器（地形 + 建筑障碍包络）。"""
     c = cfg.get("cost", {}) or {}
     return VerticalSectionCostEstimator(
         dem_terrain=terrain,
@@ -161,6 +191,7 @@ def build_cost_estimator(
         max_clearance=float(c.get("max_clearance", 300.0)),
         climb_rate=float(c.get("climb_rate", 0.15)),
         num_samples=int(c.get("num_samples", 200)),
+        buildings=buildings,
     )
 
 

@@ -72,6 +72,7 @@ from paths import EXP_DIR, ROOT
 
 from build import (
     build_arrivals,
+    build_building_layer,
     build_cost_estimator,
     build_scenario,
     build_task_config,
@@ -447,11 +448,13 @@ def main(argv: list[str] | None = None) -> int:
     scenario = build_scenario(raw_cfg)
     nests = scenario.nests
     terrain = build_terrain(scenario, raw_cfg)
-    estimator = build_cost_estimator(terrain, raw_cfg)
+    buildings = build_building_layer(raw_cfg, scenario)
+    estimator = build_cost_estimator(terrain, raw_cfg, buildings=buildings)
     if verbose:
         print(
             f"[exp01] 场景：{scenario.count} 机巢，容量={nests[0].capacity}，"
             f"DEM={'已接入' if terrain is not None else '未接入'}，"
+            f"建筑={buildings.count if buildings is not None else 0} 栋，"
             f"frame=({scenario.frame.lat0:.6f}, {scenario.frame.lon0:.6f})"
         )
 

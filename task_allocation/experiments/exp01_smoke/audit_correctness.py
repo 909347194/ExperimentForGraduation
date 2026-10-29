@@ -81,7 +81,12 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parent))
 
 import paths  # noqa: F401  # sys.path 引导：挂载仓库根
 
-from build import build_cost_estimator, build_scenario, build_terrain
+from build import (
+    build_cost_estimator,
+    build_building_layer,
+    build_scenario,
+    build_terrain,
+)
 from config import load_config
 from task_allocation.methods.muas.cost.vertical_section import make_distance_fn
 
@@ -97,7 +102,8 @@ def _ensure_scene(cfg: dict) -> tuple[Any, Any]:
     if "dist" not in _SCENE_CACHE:
         scenario = build_scenario(cfg)
         terrain = build_terrain(scenario, cfg)
-        estimator = build_cost_estimator(terrain, cfg)
+        buildings = build_building_layer(cfg, scenario)
+        estimator = build_cost_estimator(terrain, cfg, buildings=buildings)
         _SCENE_CACHE["dist"] = make_distance_fn(estimator)
         _SCENE_CACHE["estimator"] = estimator
     return _SCENE_CACHE["estimator"], _SCENE_CACHE["dist"]

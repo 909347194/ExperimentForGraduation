@@ -38,6 +38,7 @@ from .coordinates import (
     utm_to_latlon,
     utm_zone,
 )
+from .building_layer import BuildingLayer
 from .dem_geotiff import GeoTIFFDEM, GeoTransform
 
 __all__ = [
@@ -50,6 +51,7 @@ __all__ = [
     "LocalFrame",
     "GeoTIFFDEM",
     "GeoTransform",
+    "BuildingLayer",
     "ecef_to_geodetic",
     "format_coordinate",
     "geodesic_distance",
