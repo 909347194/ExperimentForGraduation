@@ -142,19 +142,25 @@ class RouteSearcher:
         origin = np.asarray(od.origin, dtype=float)
         dest = np.asarray(od.dest, dtype=float)
 
-        starts_all = self._attach(origin, outgoing=True)
-        goals_all = self._attach(dest, outgoing=False)
+        starts_geo = self._attach(origin, outgoing=True)
+        goals_geo = self._attach(dest, outgoing=False)
+        # 先分几何/动态两种不可达：几何上吸附不到控制点才是 ORIGIN/DEST_UNREACHABLE，
+        # 几何可达但接入段在起飞时刻全撞动态禁飞 → DYNAMIC_BLOCKED（时窗问题，
+        # 换起飞时刻可解，报 ORIGIN 会误导闭环重调度）
+        if not starts_geo:
+            return None, "L4", {**stats, "reason": InfeasibilityReason.ORIGIN_UNREACHABLE}
+        if not goals_geo:
+            return None, "L4", {**stats, "reason": InfeasibilityReason.DEST_UNREACHABLE}
         # 预先剔除"接入段本身撞禁飞"的起点候选（该段时间确定，可一次性判定），
         # 否则 L2 轮次会被接入段冲突白白消耗
         starts_all = [
             (n, c)
-            for n, c in starts_all
+            for n, c in starts_geo
             if self.query.edge_occupancy_free(origin, self.net.point_of(n), od.t_dep, od.t_dep + c)
         ]
         if not starts_all:
-            return None, "L4", {**stats, "reason": InfeasibilityReason.ORIGIN_UNREACHABLE}
-        if not goals_all:
-            return None, "L4", {**stats, "reason": InfeasibilityReason.DEST_UNREACHABLE}
+            return None, "L4", {**stats, "reason": InfeasibilityReason.DYNAMIC_BLOCKED}
+        goals_all = goals_geo
         s_cost = {n: c for n, c in starts_all}
         g_cost = {n: c for n, c in goals_all}
 
