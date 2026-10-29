@@ -2,7 +2,9 @@
 
 > 逐模块的职责、输入→输出、边界与论文章节映射。分层与依赖规则见 [architecture.md](architecture.md)。
 > 禁飞区时空扩展的算法设计（阶段一：可行性约束，TPR 权重 0）见 [design_nofly_zones.md](design_nofly_zones.md)。
-> 当前为**实现前口径**：文件均为职责占位（docstring 即契约），实现时若拆分有变，先改本文再动代码。
+> 本模块地图覆盖两类已着手实现的方法：`control_network_planning/`（第 4 章正文方法，含 TPR 与闭环）
+> 与 `visibility_graph/`（放弃 TPR、仅几何约束的替代性预研，由 exp02_vg 验证）。文件 docstring 以代码为准；
+> 若拆分有变，先改本文再动代码。
 
 ## 1. 拆分原则
 
@@ -96,6 +98,20 @@
 | `lin_original.py` | Lin2021 原始基线（仅建筑+仅时间） | OD → PlanResult | 本章改进项 | README §4.2 |
 | `euclidean_cost.py` | 欧氏距离代价预估（开环对照口径） | OD → 估价 | 真实规划 | README §4.5.4 |
 
+### 2.10 methods/visibility_graph/（L2 可见性图/稀疏路图规划器，替代方案）
+
+> 与控制网络方法**相互独立、不共享代码**：仅依赖 common/scenario 与 utils/geometry。放弃 TPR，
+> 仅用几何约束（建筑 + 禁飞区）；动态禁飞按**选项 A** 在查询期按时间窗检查（图只建一次、长期复用）。由 exp02_vg 验证。
+
+| 文件 | 职责 | 输入 → 输出 | 不负责 | 映射 |
+|------|------|-------------|--------|------|
+| `params.py` | VisibilityGraphParams（简化模式/节点密度/边长/机动保护区净空/巡航速度） | dict → 参数 | 算法 | exp02_vg |
+| `obstacles.py` | `SimplifiedObstacles`（建筑外扩+简化+STRtree）+ `NoFlyField`（静态并入/动态时间窗门） | CityEnvironment → 查询对象 | 节点/边生成 | exp02_vg |
+| `nodes.py` | 节点生成（轮廓采样 + 离散高度层 + 网格骨干 + 预算填充，剔除障碍/禁飞内落点） | env/params/障碍 → (nodes, meta, stats) | 边/搜索 | exp02_vg |
+| `edges.py` | 边连接（网格哈希邻域 + LOS + 离线碰撞 + 机动保护区 prune + 竖向边） | nodes/障碍/参数 → 邻接表 | 搜索 | exp02_vg |
+| `search.py` | 堆优化 Dijkstra/A*（三维欧氏代价，支持动态时间窗门） | 邻接表/节点/起终点 → 路径/代价 | 图构建 | exp02_vg |
+| `pipeline.py` | `VisibilityGraph` 门面：`build_visibility_graph` / `plan(origin, dest, depart_time)` | env/params → 图；OD → poly/cost | 场景解析 | exp02_vg |
+
 ## 3. 关键接口契约（实现时按此签名，改动先改本文）
 
 ```python
@@ -139,3 +155,4 @@ class CollisionQuery:
 | `exp03_sensitivity` | §4.5.2 灵敏度 | offline 全链 | d3 / d* / d1 / λ / 阈值扫描 |
 | `exp04_closed_loop` | §4.5.3 闭环验证 | interface + task_allocation/rolling + 根 closed_loop | 闭环 vs 开环 |
 | `exp05_joint_sim` | §4.5.4 联合仿真 | 全部 | 闭环真实代价 vs 欧氏预估开环 |
+| `exp02_vg` | （可见性图替代方案验证，非 §4.5.2 消融） | methods/visibility_graph + common/scenario | 固定节点集 保护区开/关 + 直线基线 + 独立碰撞审计 + 动态时间窗演示 |

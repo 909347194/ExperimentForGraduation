@@ -1,0 +1,187 @@
+{
+  "params_method": {
+    "simplify_mode": "simplify",
+    "simplify_tol": 3.0,
+    "d_build": 5.0,
+    "node_step": 40.0,
+    "node_buffer": 5.0,
+    "altitude_layers": [
+      20.0,
+      50.0
+    ],
+    "grid_step": 100.0,
+    "grid_layers": [
+      20.0,
+      50.0
+    ],
+    "max_nodes_per_building": 8,
+    "max_nodes": 2000,
+    "max_edge_len": 200.0,
+    "edge_margin": 2.0,
+    "max_degree": 40,
+    "connect_layers": true,
+    "protection_clearance": 8.0,
+    "attach_radius": 80.0,
+    "include_dynamic_as_static": true
+  },
+  "max_nodes_cap_natural": 50000000,
+  "max_nodes_cap_literal": 2000,
+  "full_map": {
+    "bounds": [
+      0.0,
+      0.0,
+      4845.9,
+      4793.6
+    ],
+    "area_km2": 23.2295,
+    "n_buildings_total": 20655,
+    "center": [
+      2423.0,
+      2396.8
+    ]
+  },
+  "sizes_scanned": [
+    300,
+    500,
+    750,
+    1000,
+    1300
+  ],
+  "results": [
+    {
+      "half_width_m": 300,
+      "window": [
+        2123.0,
+        2096.8,
+        2723.0,
+        2696.8
+      ],
+      "area_km2": 0.36,
+      "n_buildings": 689,
+      "nat_nodes": 897,
+      "nat_grid": 41,
+      "nat_building": 856,
+      "nat_edges_on": 13670,
+      "nat_edges_off": null,
+      "nat_edge_reduction_pct": null,
+      "cap2000_nodes": 576,
+      "cap2000_grid": 41,
+      "cap2000_building": 535,
+      "cap2000_edges_on": 9391,
+      "build_time_s": 20.556,
+      "query_time_per_od_s": 0.06518,
+      "nodes_per_km2": 2491.7,
+      "edges_per_km2": 37972.2
+    },
+    {
+      "half_width_m": 500,
+      "window": [
+        1923.0,
+        1896.8,
+        2923.0,
+        2896.8
+      ],
+      "area_km2": 1.0,
+      "n_buildings": 1422,
+      "nat_nodes": 3974,
+      "nat_grid": 197,
+      "nat_building": 3777,
+      "nat_edges_on": 63058,
+      "nat_edges_off": null,
+      "nat_edge_reduction_pct": null,
+      "cap2000_nodes": 1293,
+      "cap2000_grid": 197,
+      "cap2000_building": 1096,
+      "cap2000_edges_on": 15087,
+      "build_time_s": 87.351,
+      "query_time_per_od_s": 0.079,
+      "nodes_per_km2": 3974.0,
+      "edges_per_km2": 63058.0
+    },
+    {
+      "half_width_m": 750,
+      "window": [
+        1673.0,
+        1646.8,
+        3173.0,
+        3146.8
+      ],
+      "area_km2": 2.25,
+      "n_buildings": 3453,
+      "nat_nodes": 14796,
+      "nat_grid": 424,
+      "nat_building": 14372,
+      "nat_edges_on": 269908,
+      "nat_edges_off": null,
+      "nat_edge_reduction_pct": null,
+      "cap2000_nodes": 1589,
+      "cap2000_grid": 424,
+      "cap2000_building": 1165,
+      "cap2000_edges_on": 12614,
+      "build_time_s": 249.991,
+      "query_time_per_od_s": 0.23783,
+      "nodes_per_km2": 6576.0,
+      "edges_per_km2": 119959.1
+    },
+    {
+      "half_width_m": 1000,
+      "window": [
+        1423.0,
+        1396.8,
+        3423.0,
+        3396.8
+      ],
+      "area_km2": 4.0,
+      "n_buildings": 5887,
+      "nat_nodes": 28061,
+      "nat_grid": 731,
+      "nat_building": 27330,
+      "nat_edges_on": 533790,
+      "nat_edges_off": null,
+      "nat_edge_reduction_pct": null,
+      "cap2000_nodes": 1664,
+      "cap2000_grid": 731,
+      "cap2000_building": 933,
+      "cap2000_edges_on": 10100,
+      "build_time_s": 418.79,
+      "query_time_per_od_s": 0.28801,
+      "nodes_per_km2": 7015.2,
+      "edges_per_km2": 133447.5
+    },
+    {
+      "half_width_m": 1300,
+      "window": [
+        1123.0,
+        1096.8,
+        3723.0,
+        3696.8
+      ],
+      "area_km2": 6.76,
+      "n_buildings": 9517,
+      "nat_nodes": 46373,
+      "nat_grid": 1195,
+      "nat_building": 45178,
+      "nat_edges_on": 947661,
+      "nat_edges_off": null,
+      "nat_edge_reduction_pct": null,
+      "cap2000_nodes": 1572,
+      "cap2000_grid": 1195,
+      "cap2000_building": 377,
+      "cap2000_edges_on": 10684,
+      "build_time_s": 647.919,
+      "query_time_per_od_s": 0.51843,
+      "nodes_per_km2": 6859.9,
+      "edges_per_km2": 140186.5
+    }
+  ],
+  "partition_suggestion": {
+    "max_half_width_m": 1300,
+    "max_area_km2": 6.76,
+    "max_nat_nodes": 46373,
+    "max_build_time_s": 647.919,
+    "suggested_tile_nodes_target": 2000,
+    "suggested_n_tiles": 24,
+    "note": "若全图规模超出可承受上限，则按 ~target_per_tile 节点/片划分网格瓦片。"
+  },
+  "wall_time_s": 1448.585
+}

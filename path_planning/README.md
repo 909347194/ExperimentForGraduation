@@ -80,21 +80,45 @@ Lin 等人提出的两阶段控制网络轨迹规划框架，将复杂三维轨�
 
 ## 代码结构导航（path_planning/）
 
-> 本目录为第 4 章方法的实现容器，当前为**实现前的目录骨架与职责定义**（不含算法实现）。
-> 分层架构与依赖规则见 [docs/architecture.md](docs/architecture.md)；逐模块职责、接口契约与实验映射见 [docs/module_map.md](docs/module_map.md)。
+> 本目录为第 4 章方法的实现容器，现已部分落地。除第 4 章正文方法  
+> `control_network_planning/`（含 `tpr/`、`interface/`、`baselines/`）外，还包含  
+> **`visibility_graph/`**——放弃 TPR、仅用几何约束的**另一种**离线建图 + 在线搜索思路，  
+> 由 `experiments/exp02_vg/` 验证（见该目录 README 与 `results/VALIDATION_REPORT.md`）。  
+> 两者相互独立、不共享代码。  
+> 分层架构与依赖规则见 [docs/architecture.md](docs/architecture.md)；逐模块职责、接口契约与实验映射见 [docs/module\_map.md](docs/module_map.md)。
 
-| 目录 | 层 | 职责 |
-|------|----|------|
-| `common/` | L0 领域模型 | 类型（route/path/trajectory）、参数配置、事件枚举、场景数据解析 |
-| `utils/` | L1 通用工具 | 纯几何/三维数学（线面求交、3D→2D 投影、曲率估计） |
-| `methods/tpr/` | L2 算法 | 第三方地面 TPR 风险：坠毁概率 × 地面暴露 × 昼/夜时变风险场 |
-| `methods/control_network_planning/` | L2 算法 | `constraints/` 约束查询、`cost/` 代价模型、`offline/` 离线构建、`online/` 在线求解 |
-| `interface/` | L3 对外契约 | `TrajectoryPlanner` 门面 + 事件/反馈协议；上层只经此交互 |
-| `baselines/` | 对照 | Lin 原始基线、欧氏距离代价（registry 注册） |
-| `experiments/` | L4 实验 | exp01_smoke … exp05_joint_sim（README §4.5），run.py 只做编排 |
-| `tests/` | 测试 | 测试规划见 [tests/README.md](tests/README.md) |
-| `data/` | 数据资产 | `raw/` 原始输入、`processed/` 离线产物（含参数指纹） |
+| 目录                                  | 层       | 职责                                                                             |
+| ----------------------------------- | ------- | ------------------------------------------------------------------------------ |
+| `common/`                           | L0 领域模型 | 类型（route/path/trajectory）、参数配置、事件枚举、场景数据解析                                     |
+| `utils/`                            | L1 通用工具 | 纯几何/三维数学（线面求交、3D→2D 投影、曲率估计）                                                   |
+| `methods/tpr/`                      | L2 算法   | 第三方地面 TPR 风险：坠毁概率 × 地面暴露 × 昼/夜时变风险场                                            |
+| `methods/control_network_planning/` | L2 算法   | `constraints/` 约束查询、`cost/` 代价模型、`offline/` 离线构建、`online/` 在线求解                |
+| `methods/visibility_graph/`         | L2 算法   | 可见性图/稀疏路图规划器（替代控制网络的另一种思路：建筑简化+轮廓采样节点+视线可达边+机动保护区；放弃 TPR、仅几何约束；动态禁飞在查询期按时间窗检查） |
+| `interface/`                        | L3 对外契约 | `TrajectoryPlanner` 门面 + 事件/反馈协议；上层只经此交互                                       |
+| `baselines/`                        | 对照      | Lin 原始基线、欧氏距离代价（registry 注册）                                                   |
+| `experiments/`                      | L4 实验   | exp01_smoke … exp05_joint_sim（README §4.5），run.py 只做编排                         |
+| `tests/`                            | 测试      | 测试规划见 [tests/README.md](tests/README.md)                                       |
+| `data/`                             | 数据资产    | `raw/` 原始输入、`processed/` 离线产物（含参数指纹）                                           |
 
-三条主数据流：**离线预处理**（场景→布点→链路剪枝→虚拟网络→预计算→落盘）、
-**在线规划**（OD→动态禁飞剪枝→Dijkstra→Dubins 平滑→二次校验→时间最优轨迹）、
+三条主数据流：**离线预处理**（场景→布点→链路剪枝→虚拟网络→预计算→落盘）、  
+**在线规划**（OD→动态禁飞剪枝→Dijkstra→Dubins 平滑→二次校验→时间最优轨迹）、  
 **闭环反馈**（PlanResult→事件检测→C(i,j,k) 代价回填→上层重调度）。
+
+---
+
+## 另：可见性图替代方案（experiments/exp02_vg 验证）
+
+`methods/visibility_graph/` 是与控制网络（`control_network_planning/`）**并列的另一种**离线建图 + 在线搜索思路，  
+由用户提出的「建筑简化 + 轮廓采样节点 + 视线可达边 + 机动保护区」设想验证而来，与第 4 章正文方法互不依赖：
+
+- 建筑外扩安全距离后简化，STRtree 加速候选筛选；节点在简化轮廓按大步长采样 + 离散高度层 + 网格骨干；
+- 边只连「视线可达且距离不太远」的节点对，离线一次碰撞检测；机动保护区删高风险近距边  
+  （实测删边 57–66%，与文献量级一致）；
+- 堆优化 Dijkstra/A*（自实现邻接表，不引入 NetworkX）；
+- **放弃 TPR**，仅用几何约束（建筑 + 禁飞区）；动态禁飞按**选项 A** 在 A* 查询期按时间窗检查，图只建一次、长期复用；
+- 验证报告、分区 profiling 与文献可比口径见  
+  [`experiments/exp02_vg/results/VALIDATION_REPORT.md`](experiments/exp02_vg/results/VALIDATION_REPORT.md)  
+  与 `experiments/exp02_vg/README.md`。
+
+> 该方案是论文第 4 章改进基线的**替代性预研**，不是正文方法；正文轨迹规划仍为  
+> `control_network_planning/ + tpr/ + interface/` 闭环框架。

@@ -14,14 +14,19 @@
 
 撒点域（``SyntheticTaskConfig.domain``）：
 
-    ``nest_anchored``  绕机巢极坐标撒点，半径 ``spread_m``（历史行为，消融对照用）
-    ``dem_extent``     在 DEM 有效范围内全域均匀撒点（默认，需求不确定的现实口径）
+    ``region``         在 ``region_geojson`` 多边形**内**均匀撒点（每个实验各自给出
+                       的撒点区域多边形；面积均匀，非凸/带洞也正确）。推荐口径：
+                       任务撒点范围由实验者用多边形显式界定。
+    ``dem_extent``     在 DEM 有效范围内全域均匀撒点（需求不确定的现实口径）；若设了
+                       ``region_geojson`` 则退化为「DEM 包络 ∩ 区域包络内均匀、再裁到多边形」。
+    ``nest_anchored``  绕机巢极坐标撒点，半径 ``spread_m``（历史行为，消融对照用）。
 
-之所以默认改成全域：任务需求**不是**由机巢位置决定的，全域撒点才对应
+之所以默认改全域：任务需求**不是**由机巢位置决定的，全域撒点才对应
 "需求在空间上不确定"的真实设定；落在能力约束（航程 / 时间窗）之外的任务
 本就应该被可行性预筛判掉，这是约束的真实选择性压力，不是脏数据。
 锚定机巢反而是人为缩小问题——盘内任务几乎一定可达，预筛与选择机制没有
-压力可测，因此保留它仅作为消融对照。
+压力可测，因此保留它仅作为消融对照。``region`` 域在 ``dem_extent`` 基础上
+进一步把撒点范围**显式收紧到实验者给定的多边形**，是口径最清晰的一档。
 
 实测（本仓 data/lasa_chengguan/Chengguan_DEM.tif + 6 机巢，城关区）：DEM 约 28.0×32.2 km，
 机巢跨度约 16.1×10.1 km，全域任一点到最近机巢最大约 17.7 km。任务点默认
@@ -64,7 +69,8 @@ __all__ = [
 # 撒点域取值
 DOMAIN_NEST_ANCHORED = "nest_anchored"
 DOMAIN_DEM_EXTENT = "dem_extent"
-TASK_DOMAINS = (DOMAIN_NEST_ANCHORED, DOMAIN_DEM_EXTENT)
+DOMAIN_REGION = "region"
+TASK_DOMAINS = (DOMAIN_NEST_ANCHORED, DOMAIN_DEM_EXTENT, DOMAIN_REGION)
 
 
 @dataclass
@@ -74,11 +80,13 @@ class SyntheticTaskConfig:
     n_tasks: int = 10
     seed: int = 42
     # 撒点域：见模块文档。``nest_anchored`` 时 spread_m 生效；
-    # ``dem_extent`` 时 spread_m 不参与（全域覆盖由 DEM 范围决定）。
+    # ``dem_extent`` 时 spread_m 不参与（全域覆盖由 DEM 范围决定）；
+    # ``region`` 时任务在 ``region_geojson`` 多边形内均匀撒点。
     #
     # 【默认值保持历史行为 nest_anchored】未显式写 ``domain`` 的实验
     # （如 exp02，仅写 anchor_to_nests）不得被静默切成全域撒点；
-    # 需要全域时必须显式声明 ``tasks.domain: dem_extent``。
+    # 需要全域时必须显式声明 ``tasks.domain: dem_extent``；
+    # 需要「多边形内撒点」显式声明 ``tasks.domain: region``。
     domain: str = DOMAIN_NEST_ANCHORED
     # DEM 全域撒点时的内缩量（米）。>0 可避开 DEM 边缘的半像素/插值外推区，
     # 等价于旧方案里的 "dem_buffered"，故不再单列一个域。
@@ -152,12 +160,18 @@ def task_domain_extent(
 
     供下游（如 DEM 代价网格的 extent）在**不生成任务**的前提下把任务域包进去，
     避免任务落到网格外导致三维代价退化到边界值。
-    ``domain=nest_anchored`` 时返回机巢包围盒外扩 ``spread_m``。
+    ``domain=nest_anchored`` 时返回机巢包围盒外扩 ``spread_m``；
+    ``domain=region`` 时直接返回区域多边形包络（不论 DEM/机巢，撒点范围就是多边形）。
     """
     if not nests:
         raise ValueError("至少需要一个机巢作为任务锚点")
     xs = np.array([n.x for n in nests], dtype=float)
     ys = np.array([n.y for n in nests], dtype=float)
+    if _resolve_domain(config) == DOMAIN_REGION:
+        renv = region_planar_envelope(config.region_geojson, frame)
+        if renv is None:
+            raise ValueError("domain=region 需要 region_geojson，但为 None")
+        return renv
     if _resolve_domain(config) == DOMAIN_DEM_EXTENT:
         if dem is None:
             raise ValueError("domain=dem_extent 需要 DEM，但 dem 为 None")
@@ -495,6 +509,20 @@ def build_synthetic_tasks(
         xy, n_rejected = _reject_outside_dem(
             rng, xy, dem, frame, extent, config.max_reject_trials
         )
+    elif domain == DOMAIN_REGION:
+        if region is None:
+            raise ValueError("domain=region 需要 region_geojson，但为 None")
+        renv = region.envelope()
+        # 多边形外接矩形内均匀采样，再裁到多边形内（面积均匀，非凸/带洞正确）
+        xy = np.column_stack(
+            [
+                rng.uniform(renv[0], renv[2], size=n),
+                rng.uniform(renv[1], renv[3], size=n),
+            ]
+        )
+        xy, region_rejected = _reject_outside_region(
+            rng, xy, region, renv, config.max_reject_trials, fallback_xy=nest_arr
+        )
     else:
         # 极坐标撒点：r = U(0, spread) 的平方根分布 → 面内近似均匀
         angles = rng.uniform(0.0, 2.0 * math.pi, size=n)
@@ -513,7 +541,8 @@ def build_synthetic_tasks(
 
     # 区域多边形门禁（城关区 geojson）：落点出区则重采；超时残留点回退
     # 机巢位置（机巢恒在区域内），保证任务最终只产生于区内。
-    if region is not None:
+    # domain=region 已在分支内完成裁剪，这里只对 dem_extent / nest_anchored 生效。
+    if region is not None and domain != DOMAIN_REGION:
         xy, region_rejected = _reject_outside_region(
             rng,
             xy,

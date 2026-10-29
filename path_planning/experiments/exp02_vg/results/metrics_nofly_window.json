@@ -1,0 +1,400 @@
+{
+  "summary": {
+    "scenario": {
+      "crop": [
+        3686.6,
+        704.2,
+        4286.6,
+        1304.2
+      ],
+      "n_buildings": 350,
+      "n_static_nofly": 3,
+      "n_dynamic_nofly": 3
+    },
+    "params": {
+      "simplify_mode": "simplify",
+      "simplify_tol": 3.0,
+      "d_build": 5.0,
+      "node_step": 40.0,
+      "node_buffer": 5.0,
+      "altitude_layers": [
+        20.0,
+        50.0
+      ],
+      "grid_step": 100.0,
+      "grid_layers": [
+        20.0,
+        50.0
+      ],
+      "max_nodes_per_building": 8,
+      "max_nodes": 2000,
+      "max_edge_len": 200.0,
+      "edge_margin": 2.0,
+      "max_degree": 40,
+      "connect_layers": true,
+      "protection_clearance": 8.0,
+      "attach_radius": 80.0,
+      "include_dynamic_as_static": true
+    },
+    "obstacles": {
+      "n_obstacles": 3,
+      "simplify_mode": "simplify",
+      "d_build": 5.0,
+      "height_max": 20.149892,
+      "build_time_s": 0.018
+    },
+    "nodes": {
+      "n_nodes": 661,
+      "n_grid": 22,
+      "n_building": 620,
+      "n_extra": 19,
+      "n_drop_obstacle": 0,
+      "n_drop_nofly": 635,
+      "gen_time_s": 0.208
+    },
+    "edges_with_protection": {
+      "n_nodes": 661,
+      "n_candidates": 24432,
+      "n_edges": 22512,
+      "n_horizontal_edges": 22191,
+      "n_vertical_edges": 321,
+      "n_blocked_building": 0,
+      "n_blocked_nofly": 1423,
+      "n_blocked_protection": 818,
+      "with_protection": true,
+      "build_time_s": 2.713
+    },
+    "edges_without_protection": {
+      "n_nodes": 661,
+      "n_candidates": 24432,
+      "n_edges": 23330,
+      "n_horizontal_edges": 23009,
+      "n_vertical_edges": 321,
+      "n_blocked_building": 0,
+      "n_blocked_nofly": 1423,
+      "n_blocked_protection": 0,
+      "with_protection": false,
+      "build_time_s": 1.905
+    },
+    "edge_reduction_by_protection": 0.0351,
+    "planning": {
+      "n_od": 11,
+      "n_feasible_on": 8,
+      "n_feasible_off": 8,
+      "mean_cost_on_m": 291.32,
+      "mean_cost_off_m": 267.76,
+      "mean_path_length_increase_on_vs_off": 0.088,
+      "mean_detour_ratio_vs_straight": 1.0256,
+      "audit_all_clear": true,
+      "n_audited": 8
+    },
+    "wall_time_s": 12.213
+  },
+  "ods": [
+    {
+      "od": 0,
+      "origin": [
+        4049.6490851569856,
+        1204.3816260733818,
+        20.0
+      ],
+      "dest": [
+        4125.546557871811,
+        865.690294139974,
+        20.0
+      ],
+      "straight_len_m": 347.09,
+      "straight_blocked": true,
+      "on": {
+        "feasible": false,
+        "reason": "dest_unreachable",
+        "cost_m": null,
+        "n_nodes_path": null,
+        "audit_ok": null
+      },
+      "off": {
+        "feasible": false,
+        "reason": "dest_unreachable",
+        "cost_m": null
+      }
+    },
+    {
+      "od": 1,
+      "origin": [
+        3885.884777583491,
+        1192.4568068644317,
+        20.0
+      ],
+      "dest": [
+        3737.2546834892833,
+        1166.0849932496299,
+        20.0
+      ],
+      "straight_len_m": 150.95,
+      "straight_blocked": true,
+      "on": {
+        "feasible": false,
+        "reason": "dest_unreachable",
+        "cost_m": null,
+        "n_nodes_path": null,
+        "audit_ok": null
+      },
+      "off": {
+        "feasible": false,
+        "reason": "dest_unreachable",
+        "cost_m": null
+      }
+    },
+    {
+      "od": 2,
+      "origin": [
+        4136.323962079265,
+        988.0250866179509,
+        20.0
+      ],
+      "dest": [
+        3887.3293131051673,
+        892.5123788835054,
+        20.0
+      ],
+      "straight_len_m": 266.69,
+      "straight_blocked": true,
+      "on": {
+        "feasible": true,
+        "reason": "ok",
+        "cost_m": 721.24,
+        "n_nodes_path": 10,
+        "audit_ok": true
+      },
+      "off": {
+        "feasible": true,
+        "reason": "ok",
+        "cost_m": 532.73
+      },
+      "detour_ratio": 2.7045
+    },
+    {
+      "od": 3,
+      "origin": [
+        4236.333112839167,
+        1151.6874776684472,
+        20.0
+      ],
+      "dest": [
+        4048.179301626579,
+        1250.6217848163856,
+        20.0
+      ],
+      "straight_len_m": 212.58,
+      "straight_blocked": false,
+      "on": {
+        "feasible": true,
+        "reason": "ok",
+        "cost_m": 240.24,
+        "n_nodes_path": 4,
+        "audit_ok": true
+      },
+      "off": {
+        "feasible": true,
+        "reason": "ok",
+        "cost_m": 240.24
+      },
+      "detour_ratio": 1.1301
+    },
+    {
+      "od": 4,
+      "origin": [
+        3843.1165538989753,
+        832.9327354490694,
+        20.0
+      ],
+      "dest": [
+        4043.320930541841,
+        774.3326423972529,
+        20.0
+      ],
+      "straight_len_m": 208.6,
+      "straight_blocked": false,
+      "on": {
+        "feasible": true,
+        "reason": "ok",
+        "cost_m": 74.19,
+        "n_nodes_path": 3,
+        "audit_ok": true
+      },
+      "off": {
+        "feasible": true,
+        "reason": "ok",
+        "cost_m": 74.19
+      },
+      "detour_ratio": 0.3557
+    },
+    {
+      "od": 5,
+      "origin": [
+        3752.583830490126,
+        1011.6898358014863,
+        20.0
+      ],
+      "dest": [
+        3969.568806752179,
+        1214.4384280739132,
+        20.0
+      ],
+      "straight_len_m": 296.97,
+      "straight_blocked": true,
+      "on": {
+        "feasible": true,
+        "reason": "ok",
+        "cost_m": 317.97,
+        "n_nodes_path": 4,
+        "audit_ok": true
+      },
+      "off": {
+        "feasible": true,
+        "reason": "ok",
+        "cost_m": 317.97
+      },
+      "detour_ratio": 1.0707
+    },
+    {
+      "od": 6,
+      "origin": [
+        4051.7310022517026,
+        1011.3011642708707,
+        20.0
+      ],
+      "dest": [
+        3985.0251814265594,
+        876.9333910864905,
+        20.0
+      ],
+      "straight_len_m": 150.01,
+      "straight_blocked": true,
+      "on": {
+        "feasible": false,
+        "reason": "origin_unreachable",
+        "cost_m": null,
+        "n_nodes_path": null,
+        "audit_ok": null
+      },
+      "off": {
+        "feasible": false,
+        "reason": "origin_unreachable",
+        "cost_m": null
+      }
+    },
+    {
+      "od": 7,
+      "origin": [
+        3740.5451588616565,
+        849.1565509533123,
+        20.0
+      ],
+      "dest": [
+        4083.3851589126803,
+        853.2916592741612,
+        20.0
+      ],
+      "straight_len_m": 342.86,
+      "straight_blocked": false,
+      "on": {
+        "feasible": true,
+        "reason": "ok",
+        "cost_m": 213.48,
+        "n_nodes_path": 4,
+        "audit_ok": true
+      },
+      "off": {
+        "feasible": true,
+        "reason": "ok",
+        "cost_m": 213.48
+      },
+      "detour_ratio": 0.6226
+    },
+    {
+      "od": 8,
+      "origin": [
+        3782.845310869479,
+        1004.1544084324879,
+        20.0
+      ],
+      "dest": [
+        4190.853234339615,
+        1004.1544084324879,
+        20.0
+      ],
+      "straight_len_m": 408.01,
+      "straight_blocked": true,
+      "on": {
+        "feasible": true,
+        "reason": "ok",
+        "cost_m": 193.62,
+        "n_nodes_path": 5,
+        "audit_ok": true
+      },
+      "off": {
+        "feasible": true,
+        "reason": "ok",
+        "cost_m": 193.62
+      },
+      "detour_ratio": 0.4745
+    },
+    {
+      "od": 9,
+      "origin": [
+        4187.254058225009,
+        736.1731888519118,
+        20.0
+      ],
+      "dest": [
+        4187.254058225009,
+        1074.154119432747,
+        20.0
+      ],
+      "straight_len_m": 337.98,
+      "straight_blocked": true,
+      "on": {
+        "feasible": true,
+        "reason": "ok",
+        "cost_m": 148.91,
+        "n_nodes_path": 4,
+        "audit_ok": true
+      },
+      "off": {
+        "feasible": true,
+        "reason": "ok",
+        "cost_m": 148.91
+      },
+      "detour_ratio": 0.4406
+    },
+    {
+      "od": 10,
+      "origin": [
+        3712.834199605336,
+        1124.1542890625446,
+        20.0
+      ],
+      "dest": [
+        4012.202031292657,
+        1124.1542890625446,
+        20.0
+      ],
+      "straight_len_m": 299.37,
+      "straight_blocked": true,
+      "on": {
+        "feasible": true,
+        "reason": "ok",
+        "cost_m": 420.91,
+        "n_nodes_path": 7,
+        "audit_ok": true
+      },
+      "off": {
+        "feasible": true,
+        "reason": "ok",
+        "cost_m": 420.91
+      },
+      "detour_ratio": 1.406
+    }
+  ]
+}

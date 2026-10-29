@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""图 ``geo_overview``——初始态势：地形 · 机巢 · 初始机队 · 任务散布
+"""图 ``geo_overview``——初始态势：背景（建筑 / 地形）· 机巢 · 初始机队 · 任务散布
 
 【scene 层 · 环境初始配置】
 
@@ -7,12 +7,19 @@ scene 层回答「实验是怎么摆的」：**一次绘制、与算法无关**�
 同一次实验无论怎么求解，这张图都一模一样，它是后面所有过程图的
 坐标系与空间参照（看不懂过程图时，先回这张图认路）。
 
-    DEM 高程底图   真实 ASTER 瓦片裁剪采样 + 山体阴影晕渲
+背景层由 ``base/backdrop.py`` 统一裁决（本图不做场景判断）：
+
+    有建筑（城市场景）  建筑轮廓按屋顶高度着色铺底，色条 = 建筑高度 (m)
+    只有地形（高原场景）真实 ASTER 瓦片裁剪采样 + 山体阴影晕渲，色条 = 高程 (m)
+
+其余要素：
+
     机巢           房屋图标，面积 ∝ 容量，标注「巢 {id}」及初始停驻机数
     任务           圆点，面积 ∝ 收益（本次实验的**全部**任务）
     初始无人机     本就停在各自机巢，故按巢计数直接标在巢上，不另撒点
 
-数据来源：``results/solution.json 的 dem / nests / tasks / uavs``。
+数据来源：``results/solution.json`` 的 dem / nests / tasks / uavs；建筑几何来自
+``data/<scenario>/building/*.shp``（按 solution 的 local_frame 投到同一米制平面）。
 """
 
 from __future__ import annotations
@@ -44,10 +51,11 @@ if __name__ == "__main__" and __package__ in (None, ""):
 from pathlib import Path
 from typing import Any, Sequence
 
-from ..base.dem import (
-    _dem_view_extent,
-    _draw_dem,
+from ..base.backdrop import (
+    _backdrop_extent,
+    _draw_backdrop,
 )
+from ..base.buildings import _building_legend_patch
 from ..base.geo import (
     _G_DOT,
     _G_HOUSE,
@@ -73,13 +81,12 @@ def plot_geo_overview(
     *,
     dpi: int = 300,
 ) -> list[Path]:
-    """初始态势：DEM 底图 + 机巢（标注初始无人机数）+ 全部任务。"""
+    """初始态势：背景（有建筑画建筑，只有地形画 DEM）+ 机巢 + 全部任务。"""
     from collections import Counter
 
     nests = list(solution.get("nests") or [])
     tasks = list(solution.get("tasks") or [])
     uavs = list(solution.get("uavs") or [])
-    dem = solution.get("dem")
     if not nests:
         return []
 
@@ -89,7 +96,8 @@ def plot_geo_overview(
     n_tasks = len(tasks)                       # ← 任务总数
 
     fig, ax = plt.subplots(figsize=(10.5, 9.0), layout="constrained")
-    sm = _draw_dem(ax, dem, solution)
+    # 背景层：建筑优先（城市）/ 地形兜底（高原）——判断只在 base/backdrop 里做一次
+    bd = _draw_backdrop(ax, solution, nests=nests, tasks=tasks, uavs=uavs)
 
     # 全部任务（鲜红，作为背景）
     if tasks:
@@ -103,9 +111,9 @@ def plot_geo_overview(
 
     _draw_nests(ax, nests, counts=count_by_nest)
 
-    if sm is not None:
-        cb = fig.colorbar(sm, ax=ax, fraction=0.035, pad=0.02, shrink=0.75)
-        cb.set_label("高程 (m)", fontsize=9)
+    if bd.sm is not None:
+        cb = fig.colorbar(bd.sm, ax=ax, fraction=0.035, pad=0.02, shrink=0.75)
+        cb.set_label(bd.label, fontsize=9)      # "建筑高度 (m)" / "高程 (m)"
         cb.ax.tick_params(labelsize=8)
 
     handles = [
@@ -114,6 +122,9 @@ def plot_geo_overview(
         _IconPatch(_G_DOT, fc="#E53935", ec="white", lw=1.0,
                    label=f"任务（全部 {n_tasks} 个）"),
     ]
+    # 城市场景把建筑也进图例：否则灰底会被读成"空白"
+    if bd.has_buildings:
+        handles.insert(0, _building_legend_patch(bd.buildings))
     ax.legend(
         handles=handles, loc="upper right", fontsize=9.5,
         handler_map={_IconPatch: _IconHandler()},
@@ -121,7 +132,10 @@ def plot_geo_overview(
         edgecolor="#e3e7ec", facecolor="white", borderpad=0.7,
     )
 
-    _set_scene_lim(ax, nests, tasks, uavs, dem, extent=_dem_view_extent(dem, solution))
+    _set_scene_lim(
+        ax, nests, tasks, uavs, solution.get("dem"),
+        extent=_backdrop_extent(solution, nests, tasks, uavs),
+    )
     ax.set_aspect("equal", adjustable="box")
     _strip_axes(ax)
 

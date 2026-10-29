@@ -9,7 +9,8 @@
 数与里程实时跳动；右栏画出「当前周期」的 DMDE 收敛曲线，把**空间分配**与
 **优化搜索**两件事钉在同一时间轴上，最直观地看到「整个过程」。
 
-布局是**左右两栏**：(a) 左栏地图（DEM 满幅铺底 + 航迹回放 + 任务点亮），
+布局是**左右两栏**：(a) 左栏地图（背景满幅铺底——城市场景为建筑轮廓按高度着色、
+高原场景为 DEM 晕渲——+ 航迹回放 + 任务点亮），
 顶部一行**状态行**（周期 / 已到达 / **已完成百分比** / 里程，白底随文字自动
 贴合，按「哪侧顶部要素少」自动贴左或贴右）；(b) 右栏当前周期 DMDE 收敛曲线，
 游标随动画推进。
@@ -63,7 +64,10 @@ from typing import Any, Sequence
 
 import numpy as np
 
-from ..base.dem import _draw_dem, _dem_view_extent
+from ..base.backdrop import (
+    _backdrop_extent,
+    _draw_backdrop,
+)
 from ..base.geo import (
     UAV_PALETTE,
     _G_DRONE,
@@ -425,7 +429,7 @@ def plot_allocation_anim(
     n_frames = len(frames)
 
     # ── 画布 ─────────────────────────────────────────────────────
-    # 左右两栏：左栏地图（DEM 满幅、近 1:1 铺底、清晰）+ 右栏 DMDE 收敛。
+    # 左右两栏：左栏地图（背景满幅、近 1:1 铺底、清晰）+ 右栏 DMDE 收敛。
     # 进度信息（周期刻度 + 完成率）不再单独成面板，改为**内嵌到左栏地图底部**的
     # 一条扁进度条（见 _draw_progress_strip），随动画同步推进；故右栏只需一个
     # 全高子图，不再 subgridspec 拆分。
@@ -439,14 +443,15 @@ def plot_allocation_anim(
     ax_map = fig.add_subplot(gs[0])
     ax_conv = fig.add_subplot(gs[1])
 
-    # 静态底图：DEM + 机巢（只画一次）
-    _draw_dem(ax_map, solution.get("dem"), solution)
+    # 静态底图：背景层（有建筑画建筑，只有地形画 DEM）+ 机巢（只画一次）
+    bd = _draw_backdrop(ax_map, solution, nests=nests, tasks=tasks)
     _draw_nests(ax_map, nests)
     _strip_axes(ax_map)
-    # 底图范围 = DEM 视图范围：地形满幅铺底，避免轴比 DEM 大时在四周露出
-    # base/dem.py 的橄榄暗色（#77784b）边。DEM 视图已含场景 2.5 km 余量，
-    # 任务/机巢均在其内，无需对场景额外 pad。
-    extent = _dem_view_extent(solution.get("dem"), solution)
+    # 底图范围与背景同源：建筑包络 ∪ 要素包络（城市）/ DEM 视图（高原）。
+    # 用同一份结果取景，避免轴比底图大时在四周露白边。
+    extent = bd.extent if bd.extent is not None else _backdrop_extent(
+        solution, nests, tasks
+    )
     if extent is not None:
         ax_map.set_xlim(extent[0], extent[1])
         ax_map.set_ylim(extent[2], extent[3])
@@ -471,7 +476,8 @@ def plot_allocation_anim(
         zorder=10,
         bbox=dict(boxstyle="round,pad=0.34", fc="white", ec="none", alpha=0.9),
     )
-    ax_map.set_title("(a) 滚动闭环分配动画（DEM + 航迹回放）",
+    _bg = "建筑底图" if bd.kind == "buildings" else "地形底图"
+    ax_map.set_title(f"(a) 滚动闭环分配动画（{_bg} + 航迹回放）",
                      fontsize=_F_TITLE, loc="left", pad=8)
 
     # 动画叠加层：与 ax_map 严格重叠、透明

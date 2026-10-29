@@ -1,0 +1,358 @@
+{
+  "summary": {
+    "scenario": {
+      "crop": [
+        1766.6,
+        2575.7,
+        2366.6,
+        3175.7
+      ],
+      "n_buildings": 529,
+      "n_static_nofly": 3,
+      "n_dynamic_nofly": 3
+    },
+    "params": {
+      "simplify_mode": "simplify",
+      "simplify_tol": 3.0,
+      "d_build": 5.0,
+      "node_step": 40.0,
+      "node_buffer": 5.0,
+      "altitude_layers": [
+        20.0,
+        50.0
+      ],
+      "grid_step": 100.0,
+      "grid_layers": [
+        20.0,
+        50.0
+      ],
+      "max_nodes_per_building": 8,
+      "max_nodes": 2000,
+      "max_edge_len": 200.0,
+      "edge_margin": 2.0,
+      "max_degree": 40,
+      "connect_layers": true,
+      "protection_clearance": 8.0,
+      "attach_radius": 80.0,
+      "include_dynamic_as_static": false,
+      "cruise_speed_mps": 15.0
+    },
+    "obstacles": {
+      "n_obstacles": 216,
+      "simplify_mode": "simplify",
+      "d_build": 5.0,
+      "height_max": 74.34839200000009,
+      "build_time_s": 0.0265
+    },
+    "nodes": {
+      "n_nodes": 1397,
+      "n_grid": 72,
+      "n_building": 1325,
+      "n_extra": 0,
+      "n_drop_obstacle": 274,
+      "n_drop_nofly": 329,
+      "gen_time_s": 0.216
+    },
+    "edges_with_protection": {
+      "n_nodes": 1397,
+      "n_candidates": 52226,
+      "n_edges": 14116,
+      "n_horizontal_edges": 13535,
+      "n_vertical_edges": 581,
+      "n_blocked_building": 12174,
+      "n_blocked_nofly": 12,
+      "n_blocked_protection": 26505,
+      "with_protection": true,
+      "build_time_s": 30.88
+    },
+    "edges_without_protection": {
+      "n_nodes": 1397,
+      "n_candidates": 52226,
+      "n_edges": 40621,
+      "n_horizontal_edges": 40040,
+      "n_vertical_edges": 581,
+      "n_blocked_building": 12174,
+      "n_blocked_nofly": 12,
+      "n_blocked_protection": 0,
+      "with_protection": false,
+      "build_time_s": 27.759
+    },
+    "edge_reduction_by_protection": 0.6525,
+    "planning": {
+      "n_od": 8,
+      "n_feasible_on": 8,
+      "n_feasible_off": 8,
+      "mean_cost_on_m": 456.69,
+      "mean_cost_off_m": 413.98,
+      "path_length_inflation_on_vs_off": {
+        "definition": "mean over OD pairs of (L_on/L_off - 1); directly comparable to literature 'path length increases ~X%'",
+        "mean_pct": 10.35,
+        "std_pct": 9.353,
+        "median_pct": 7.549,
+        "n_pairs": 8,
+        "n_infeasible_only_under_protection": 0,
+        "feasibility_preserved_rate": 1.0
+      },
+      "path_length_inflation_pooled_pct": 10.317,
+      "mean_detour_ratio_vs_straight": 1.1129,
+      "audit_all_clear": true,
+      "n_audited": 8
+    },
+    "dynamic_nofly_option": "A_query_time_window",
+    "dynamic_demo": {
+      "zone_id": "SYN_DEMO",
+      "zone_center_local_m": [
+        2047.3,
+        2912.0
+      ],
+      "zone_size_m": [
+        120.0,
+        120.0
+      ],
+      "period_start": 0.0,
+      "period_end": 300.0,
+      "t_active": 50.0,
+      "t_idle": 500.0,
+      "straight_crosses_zone": true,
+      "active": {
+        "feasible": true,
+        "reason": "ok",
+        "cost_m": 301.76,
+        "audit_ok": true
+      },
+      "idle": {
+        "feasible": true,
+        "reason": "ok",
+        "cost_m": 238.98,
+        "audit_ok": true
+      }
+    },
+    "wall_time_s": 63.486
+  },
+  "ods": [
+    {
+      "od": 0,
+      "origin": [
+        2199.9349508391033,
+        2865.751082744682,
+        50.0
+      ],
+      "dest": [
+        1808.8096305147346,
+        2550.669596842183,
+        20.0
+      ],
+      "straight_len_m": 503.15,
+      "straight_blocked": true,
+      "on": {
+        "feasible": true,
+        "reason": "ok",
+        "cost_m": 581.36,
+        "n_nodes_path": 8,
+        "audit_ok": true
+      },
+      "off": {
+        "feasible": true,
+        "reason": "ok",
+        "cost_m": 510.31
+      },
+      "detour_ratio": 1.1554
+    },
+    {
+      "od": 1,
+      "origin": [
+        2029.2381141297453,
+        3158.901855500097,
+        50.0
+      ],
+      "dest": [
+        2227.7733068318953,
+        2799.3145683139937,
+        20.0
+      ],
+      "straight_len_m": 411.85,
+      "straight_blocked": true,
+      "on": {
+        "feasible": true,
+        "reason": "ok",
+        "cost_m": 452.98,
+        "n_nodes_path": 8,
+        "audit_ok": true
+      },
+      "off": {
+        "feasible": true,
+        "reason": "ok",
+        "cost_m": 417.6
+      },
+      "detour_ratio": 1.0999
+    },
+    {
+      "od": 2,
+      "origin": [
+        1867.4224153635218,
+        2639.021741467971,
+        50.0
+      ],
+      "dest": [
+        2245.5311790756664,
+        2933.89527147766,
+        50.0
+      ],
+      "straight_len_m": 479.5,
+      "straight_blocked": false,
+      "on": {
+        "feasible": true,
+        "reason": "ok",
+        "cost_m": 504.56,
+        "n_nodes_path": 9,
+        "audit_ok": true
+      },
+      "off": {
+        "feasible": true,
+        "reason": "ok",
+        "cost_m": 489.13
+      },
+      "detour_ratio": 1.0523
+    },
+    {
+      "od": 3,
+      "origin": [
+        1817.766428160237,
+        2675.2528611317057,
+        20.0
+      ],
+      "dest": [
+        2300.6936456333815,
+        2910.0489451357166,
+        50.0
+      ],
+      "straight_len_m": 537.82,
+      "straight_blocked": false,
+      "on": {
+        "feasible": true,
+        "reason": "ok",
+        "cost_m": 579.54,
+        "n_nodes_path": 11,
+        "audit_ok": true
+      },
+      "off": {
+        "feasible": true,
+        "reason": "ok",
+        "cost_m": 543.53
+      },
+      "detour_ratio": 1.0776
+    },
+    {
+      "od": 4,
+      "origin": [
+        1866.1947292327804,
+        2582.27187649036,
+        50.0
+      ],
+      "dest": [
+        1813.5344291131732,
+        3044.215820870709,
+        50.0
+      ],
+      "straight_len_m": 464.94,
+      "straight_blocked": false,
+      "on": {
+        "feasible": true,
+        "reason": "ok",
+        "cost_m": 573.05,
+        "n_nodes_path": 9,
+        "audit_ok": true
+      },
+      "off": {
+        "feasible": true,
+        "reason": "ok",
+        "cost_m": 465.16
+      },
+      "detour_ratio": 1.2325
+    },
+    {
+      "od": 5,
+      "origin": [
+        1851.1316113883752,
+        2711.7396672404166,
+        50.0
+      ],
+      "dest": [
+        1821.7638486000574,
+        2535.92685838601,
+        20.0
+      ],
+      "straight_len_m": 180.76,
+      "straight_blocked": false,
+      "on": {
+        "feasible": true,
+        "reason": "ok",
+        "cost_m": 180.76,
+        "n_nodes_path": 2,
+        "audit_ok": true
+      },
+      "off": {
+        "feasible": true,
+        "reason": "ok",
+        "cost_m": 180.76
+      },
+      "detour_ratio": 1.0
+    },
+    {
+      "od": 6,
+      "origin": [
+        2010.0264574264359,
+        2655.6293727524776,
+        50.0
+      ],
+      "dest": [
+        2001.0420420304374,
+        2926.2113800682723,
+        50.0
+      ],
+      "straight_len_m": 270.73,
+      "straight_blocked": false,
+      "on": {
+        "feasible": true,
+        "reason": "ok",
+        "cost_m": 342.4,
+        "n_nodes_path": 6,
+        "audit_ok": true
+      },
+      "off": {
+        "feasible": true,
+        "reason": "ok",
+        "cost_m": 270.83
+      },
+      "detour_ratio": 1.2647
+    },
+    {
+      "od": 7,
+      "origin": [
+        2023.9023129401896,
+        3200.2552269704192,
+        20.0
+      ],
+      "dest": [
+        2378.8374587532817,
+        2959.7104155436655,
+        50.0
+      ],
+      "straight_len_m": 429.81,
+      "straight_blocked": false,
+      "on": {
+        "feasible": true,
+        "reason": "ok",
+        "cost_m": 438.88,
+        "n_nodes_path": 9,
+        "audit_ok": true
+      },
+      "off": {
+        "feasible": true,
+        "reason": "ok",
+        "cost_m": 434.53
+      },
+      "detour_ratio": 1.0211
+    }
+  ]
+}

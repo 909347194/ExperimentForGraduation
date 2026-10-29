@@ -45,6 +45,7 @@ from dataclasses import dataclass
 from typing import Callable, Iterable, Sequence
 
 from .initial.geo_overview import plot_geo_overview
+from .process.allocation import plot_allocation
 from .process.allocation_gantt import plot_allocation_gantt
 from .process.allocation_anim import plot_allocation_anim
 from .report.outcome_summary import plot_outcome_summary
@@ -81,6 +82,7 @@ TOPICS: dict[str, str] = {
 #: / ``stem``），本字典只用于文档与排查，不参与出图。
 FIGURE_STEMS_PREFIX: dict[str, str] = {
     "geo_overview":     "I01",
+    "allocation":       "P03",
     "allocation_gantt": "P04",
     "allocation_anim":  "P06",
     "outcome_summary":  "R01",
@@ -120,12 +122,24 @@ FIGURES: tuple[Figure, ...] = (
         id="geo_overview",
         group="initial",
         topic="config",
-        title="初始态势：地形 · 机巢 · 初始机队 · 任务散布",
+        title="初始态势：背景（建筑 / 地形）· 机巢 · 初始机队 · 任务散布",
         needs=("metrics", "solution"),
-        source="solution.json 的 dem / nests / tasks / uavs",
+        source="solution.json 的 dem / nests / tasks / uavs + data/<scenario>/building/*.shp"
+               "（背景层规则：有建筑优先画建筑，只有地形才画 DEM）",
         func=plot_geo_overview,
     ),
     # ── ② process：求解过程 ────────────────────────────────────
+    Figure(
+        id="allocation",
+        group="process",
+        topic="allocation",
+        title="分配结构与逐周期空间演化：甘特航迹条 + 背景底图逐周期演化",
+        needs=("metrics", "solution"),
+        source="solution.json 的 cycles[].tours（est_cost）+ tasks[] / nests[] / dem"
+               "（背景层：有建筑画建筑、只有地形画 DEM；逐周期面板只画有真实航次的"
+               "活跃周期，未执行任务只标已到达者，与 allocation_anim 口径一致）",
+        func=plot_allocation,
+    ),
     Figure(
         id="allocation_gantt",
         group="process",
@@ -141,7 +155,8 @@ FIGURES: tuple[Figure, ...] = (
         topic="allocation",
         title="分配过程动画演变：滚动闭环航迹生长 / 任务点亮 + 当前周期 DMDE 收敛（GIF）",
         needs=("metrics", "solution"),
-        source="solution.json 的 cycles[].tours + cost_history + tasks[] / nests[] / dem；左右两栏——地图下方的画布级状态行（周期/已到达/已完成百分比/里程，白底随文字自动贴合；置于图外因图内任何角落都会压住贴顶任务标号），右栏当前周期收敛曲线；完成进度只用百分比数字表达，不画进度条",
+        source="solution.json 的 cycles[].tours + cost_history + tasks[] / nests[] / dem"
+               "（地图背景：有建筑画建筑、只有地形画 DEM）；左右两栏——地图下方的画布级状态行（周期/已到达/已完成百分比/里程，白底随文字自动贴合；置于图外因图内任何角落都会压住贴顶任务标号），右栏当前周期收敛曲线；完成进度只用百分比数字表达，不画进度条",
         func=plot_allocation_anim,
         animated=True,
     ),

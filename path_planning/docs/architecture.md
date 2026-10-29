@@ -13,10 +13,12 @@
 │   planner.py（TrajectoryPlanner 门面） · feedback.py（事件/反馈）    │
 ├───────────────────────────────┬────────────────────────────────────┤
 │ methods/        L2 算法层     │ baselines/    对照层（独立注册）     │
-│   tpr/                        │   registry / lin_original /         │
+│   tpr/（第三方风险）          │   registry / lin_original /         │
 │   control_network_planning/   │   euclidean_cost                    │
-│     constraints/ cost/        │   （只依赖 L0/L1，不碰 methods/）   │
-│     offline/    online/       │                                     │
+│     (constraints/cost/       │   （只依赖 L0/L1，不碰 methods/）   │
+│      offline/online/)         │                                     │
+│   visibility_graph/          │                                     │
+│     (仅几何约束·放弃TPR)      │                                     │
 ├───────────────────────────────┴────────────────────────────────────┤
 │ utils/         L1 通用工具层：geometry / math3d（纯函数）            │
 ├────────────────────────────────────────────────────────────────────┤
@@ -86,6 +88,22 @@ PlanResult ─► interface/feedback.detect_events
    ─► 新 OD 集合 ─► 回到 3.2
 ```
 
+### 3.4 可见性图流（visibility_graph，替代方案，仅几何约束）
+
+```text
+data/raw ─► common/scenario ─► obstacles.SimplifiedObstacles（建筑外扩+简化+STRtree）
+        （建筑/禁飞）                ─► generate_nodes（轮廓采样+高度层+网格骨干）
+                                       ─► build_edges（LOS+离线碰撞+机动保护区 prune）
+                                          ─► VisibilityGraph（邻接表，build 一次，长期复用）
+
+OD + depart_time ─► plan（端点吸附+增边）─► search.shortest_path（A*，动态时间窗门）
+   ─► polyline（world 坐标）+ 三维代价 + 可行性原因
+```
+
+> 与 3.1/3.2 的差别：本流**放弃 TPR**，动态禁飞不在建图时处理，而在 `plan` 的 A\* 松弛阶段按
+> `depart_time + 路长/巡航速度` 换算的时间窗逐边检查（选项 A）；图（建筑+静态禁飞）只建一次、长期复用。
+> 该流与控制网络流互不依赖，共用 common/scenario 与 utils/geometry。
+
 ## 4. 与兄弟模块的边界
 
 | 模块 | 归属 | 边界 |
@@ -138,3 +156,4 @@ PlanResult ─► interface/feedback.detect_events
 | README §4.3.5 离线-在线工作流程 | `offline/pipeline.py`、`online/pipeline.py` |
 | README §4.4 闭环机制 | `interface/`、`cost/cost_matrix.py` |
 | README §4.5 实验 | `experiments/` |
+| 可见性图/稀疏路图（仅几何约束、放弃 TPR、选项 A 动态门） | `methods/visibility_graph/` |

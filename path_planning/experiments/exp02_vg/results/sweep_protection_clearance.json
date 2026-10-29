@@ -1,0 +1,56 @@
+{
+  "nodes": 1397,
+  "n_od": 8,
+  "sweep": [
+    {
+      "clearance": 2.0,
+      "edge_reduction_pct": 57.01,
+      "n_edges_on": 17461,
+      "n_edges_off": 40621,
+      "feasible_on": 8,
+      "audited_clear": 8,
+      "mean_path_increase_pct": 5.63,
+      "max_path_increase_pct": 26.43
+    },
+    {
+      "clearance": 4.0,
+      "edge_reduction_pct": 60.68,
+      "n_edges_on": 15973,
+      "n_edges_off": 40621,
+      "feasible_on": 8,
+      "audited_clear": 8,
+      "mean_path_increase_pct": 7.34,
+      "max_path_increase_pct": 26.43
+    },
+    {
+      "clearance": 6.0,
+      "edge_reduction_pct": 64.38,
+      "n_edges_on": 14471,
+      "n_edges_off": 40621,
+      "feasible_on": 8,
+      "audited_clear": 8,
+      "mean_path_increase_pct": 10.35,
+      "max_path_increase_pct": 26.43
+    },
+    {
+      "clearance": 8.0,
+      "edge_reduction_pct": 65.25,
+      "n_edges_on": 14116,
+      "n_edges_off": 40621,
+      "feasible_on": 8,
+      "audited_clear": 8,
+      "mean_path_increase_pct": 10.35,
+      "max_path_increase_pct": 26.43
+    },
+    {
+      "clearance": 12.0,
+      "edge_reduction_pct": 66.43,
+      "n_edges_on": 13636,
+      "n_edges_off": 40621,
+      "feasible_on": 8,
+      "audited_clear": 8,
+      "mean_path_increase_pct": 10.79,
+      "max_path_increase_pct": 26.43
+    }
+  ]
+}

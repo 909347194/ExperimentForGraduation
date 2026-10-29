@@ -27,32 +27,38 @@ data:
     path: nest_location_data.csv # 相对 data/<scenario>/（3 机巢经纬度）
     dem: dem.tif # 地面基底高程。建筑 Height 相对地面，绝对包络 = 地面 + 建筑高；平地贡献小但保留以统一两场景口径（置 null 则地面按 0 平面）
     buildings: building # 建筑 shapefile 目录（5 类 20670 栋）；垂直切面障碍包络 = max(地面, 地面+建筑高)。无建筑场景（lasa）置 null
-    region_geojson: region.geojson # 任务撒点区域门禁（广州研究区多边形）
+    # （2026-10-29 重组：任务撒点区域多边形 region_geojson 从本段移到
+    #   tasks.region_geojson——它是每个实验各自的任务撒点门禁，不是共享实测
+    #   数据；build.py 仍兼容 data.region_geojson 旧位置）
     coordinate_column: Coordinate
 
 # 本实验的问题规模设定（改这里做规模/容量灵敏度，不动数据文件）
 problem:
-    n_nests: 3 # 用前 3 个机巢（广州 CSV 共 3 条，2026-10-29 城市场景）
-    nest_capacity: 4 # 单机巢容量（架）
-    n_uavs: 10 # 机队规模（<= n_nests × nest_capacity 才不初始超容；6×4=24）
+    n_nests: 3 # 用 3 个机巢
+    nest_capacity: 2 # 单机巢容量（架）
+    n_uavs: 6 # 机队规模（<= n_nests × nest_capacity 才不初始超容；6×4=24）
     uav_speed: 15.0 # m/s
-    uav_max_range: 20000.0 # 满电航程（m）；20 km（城关区口径，用户 2026-10-26 指定）。注意：区域到最近机巢最远约 17.7 km ⇒ 往返 35.4 km 超航程，远巢任务将出现真几何不可达（分母合法排除项）
+    uav_max_range: 10000.0 # 满电航程（m）；10 km。远巢任务将出现真几何不可达（分母合法排除项）
 
 # 合成任务点（暂无实测任务数据；后续换 data/task_location_data.csv 时
 # 只需替换生成函数，本节参数可平移）
 # （2026-10-27 清理：原 tasks.source 键无代码消费，已删——任务是否合成由
 #   生成函数与 domain 决定；原 tasks.anchor_to_nests 为遗留别名，仅
-#   domain=nest_anchored 时生效，本实验 domain=dem_extent 下不参与，已删）
+#   domain=nest_anchored 时生效，本实验下不参与，已删）
+# （2026-10-29 重组：撒点域三选一，region 为本实验主口径——任务在
+#   region_geojson 多边形内均匀撒点，撒点范围由实验者显式给定）
 tasks:
-    # 撒点域：dem_extent = 在 DEM 有效范围内全域均匀撒点（需求不确定的现实口径，默认）；
-    # nest_anchored = 绕机巢 spread_m 半径内撒点（人为缩小问题，仅作消融对照）。
-    # 全域撒点后约束压力两源（城关区口径，uav_max_range=20 km）：
-    # 航程——区域到最近机巢最远约 17.7 km，往返 35.4 km 超 20 km ⇒ 远巢任务
-    # 真几何不可达（分母合法排除项，selection.feasibility 按归因分账）；
-    # 时间窗——见 common/task_scenario.py 模块文档里的实测数据。
-    domain: dem_extent
-    dem_inset_m: 0.0 # DEM 包络内缩（m）；>0 可避开边缘半像素/插值外推区
-    max_reject_trials: 8 # 落点出 DEM 时的拒绝采样重试轮数
+    # 撒点域（domain）三选一：
+    #   region        = 在 region_geojson 多边形【内】均匀撒点（推荐；每个实验各自给多边形）
+    #   dem_extent    = 在 DEM 有效范围全域均匀撒点（需求不确定的现实口径；若再设 region_geojson
+    #                   则退化为「DEM 包络∩区域包络内均匀、再裁到多边形」）
+    #   nest_anchored = 绕机巢 spread_m 半径内撒点（人为缩小问题，仅作消融对照）
+    # region_geojson：任务撒点区域多边形（广州研究区）；相对 data/<scenario>/。
+    #   从 data 段移到此处——它是每个实验各自的撒点门禁，不是共享实测数据。
+    domain: region
+    region_geojson: region.geojson # 任务撒点区域多边形（广州研究区）
+    dem_inset_m: 0.0 # DEM 包络内缩（m）；>0 可避开边缘半像素/插值外推区（仅 domain=dem_extent 生效）
+    max_reject_trials: 8 # 落点出多边形时的拒绝采样重试轮数
     n_tasks: 20 # 第 1 周期到达的初始任务数；后两周期到达 5、5（见 rolling.arrivals），共 30（2026-10-26 用户指定口径）
     spread_m: 12000.0 # 相对锚点机巢的散布半径（m）；仅 domain=nest_anchored 生效
     reward_min: 1.0
@@ -103,7 +109,7 @@ selection:
     marginal:
         eps: 1.0 # 边际代价地板，与距离同量纲（m）
         max_selected: null # null → 由 max_ratio × K 决定（n_sel = ⌈max_ratio·K⌉）
-        max_ratio: 2.0
+        max_ratio: 4.0
         min_marginal_ratio: 0.0
         # Fix① 防饥饿：等待时长对终刀接受判据的乘性软加权（单位无关、有界）。
         # eff = ratio·(1 + age_gamma·age)，age∈[0,1] 由 waited/wait_scale 得。
@@ -240,7 +246,7 @@ muas:
     # 门禁 / coverage_first 开启时必须置 false（否则主动丢可完成任务换成本），
     # 见本段末「覆盖门禁」块说明。
     # ── ④剔除（当前全部关闭；仅消融/压力场开启）────────────────
-    prune_unprofitable: false  # 与「完成是约束」冲突，门禁口径下必须关
+    prune_unprofitable: false # 与「完成是约束」冲突，门禁口径下必须关
     prune_margin: 0.0 # 剔除判据裕度：λ·节省 > R·(1+margin) 才剔除
     prune_max_rounds: 8
     # 零奖励剔除（2026-10-18 四层适应度配套）：ETA ≥ latest+W 的任务 eff≈0，
@@ -273,9 +279,9 @@ muas:
     # 消融对照：polish_enabled: false（git 历史里的旧 results/ 即该口径）。
     polish_enabled: true
     polish_moves: [relocate, swap, position] # 扫描优先级：结构性收益最大的排首
-    polish_max_rounds: 30   # 无改进即停的轮数上限
-    polish_max_evals: 2000  # 真实评估数预算（缓存命中不计；防单周期耗时爆炸）
-    polish_eps: 1.0e-6      # 严格改进阈值（绝对；吸收浮点求和噪声）
+    polish_max_rounds: 30 # 无改进即停的轮数上限
+    polish_max_evals: 2000 # 真实评估数预算（缓存命中不计；防单周期耗时爆炸）
+    polish_eps: 1.0e-6 # 严格改进阈值（绝对；吸收浮点求和噪声）
     # 解码模式（exp04 B1 对照臂，2026-10-21）：
     #   repair_chain（默认，生产口径）= 现状反应式修复链（合并→删→救→重排→
     #     删→闸）；exp01/exp02 既有结果 bit-exact 不变。
@@ -339,7 +345,7 @@ muas:
     # false = 关闭（消融对照臂；results_lambda1e-1 即关闭态基线）。
     cost_polish_enabled: true
     cost_polish_max_rounds: 30 # 整轮无改进即停（first-improvement 重启扫描）
-    cost_polish_eps: 1.0       # 采纳阈值（米，绝对；吸收浮点求和噪声）
+    cost_polish_eps: 1.0 # 采纳阈值（米，绝对；吸收浮点求和噪声）
     # ── 跨机指派成本 polish（2026-10-24 用户裁定，组内维度钉死后的转向）──
     # 组内 2-opt/Or-opt 3 seed A/B 已钉死顺序维度穷尽（63 周期解 3 次接受、
     # 2262 m ≈ 0.014%）⇒ 转归属维度：单任务跨机改派（受体含可用但空闲的
@@ -356,9 +362,9 @@ muas:
     # （非 memetic 基线不动）；exp01 memetic 变体显式开此二项。
     # M2（Lamarckian 反射写回）见报告「讨论与展望」，暂不启用。
     polish_in_loop: false
-    memetic_K: 20           # 每 K 代触发一次精英 polish（>=1）
-    memetic_max_rounds: 6   # 搜索期内强化的从紧轮数预算（first-improvement 早停）
-    memetic_max_evals: 500  # 搜索期内强化的从紧评估预算（控单周期耗时）
+    memetic_K: 20 # 每 K 代触发一次精英 polish（>=1）
+    memetic_max_rounds: 6 # 搜索期内强化的从紧轮数预算（first-improvement 早停）
+    memetic_max_evals: 500 # 搜索期内强化的从紧评估预算（控单周期耗时）
 
 # ── 约束开关（实验可配置：每类约束独立开关 + 独立惩罚权重）─────────
 # 置 false → 该约束既不参与可行性判定、也不计入惩罚，用于消融对比与
@@ -425,8 +431,8 @@ solver:
 cost:
     dem_step_m: 200.0 # DEM 重采样网格间距（m），越小越精细越慢
     # 网格范围相对「机巢包围盒 ∪ 任务域包络」的外扩（m）。
-    # tasks.domain=dem_extent 时任务恒在 DEM 包络内，20 km 外扩已无必要，
-    # 只留 2 km 插值光环即可（网格从 108×127 km 降到 102×115 km，更快）。
+    # tasks.domain∈{region, dem_extent} 时任务恒在 DEM 包络（或区域多边形）内，
+    # 20 km 级外扩已无必要，只留 2 km 插值光环即可（更快）。
     dem_margin_m: 2000.0
     min_clearance: 50.0 # 最小离地余量（m）
     max_clearance: 300.0 # 巡航离地高度上限（m）

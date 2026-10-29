@@ -91,7 +91,7 @@ def plot_allocation_gantt(
                ncol=min(8, len(handles)), fontsize=FS["legend"],
                columnspacing=1.1, frameon=False)
 
-    fig.suptitle("exp01_smoke：单周期分配航迹条", fontsize=FS["suptitle"])
+    fig.suptitle("exp01_smoke：分配航迹条（按周期 × UAV 逐行）", fontsize=FS["suptitle"])
     footnote(fig, "口径：行 = 航次（周期×UAV）；横向 UAV 色航线长度 ∝ 真实飞行距离"
                   "（起飞巢→任务→返航巢；段间距按三维几何比例、总量按 DEM 航程"
                   "est_cost 标定，km）；方框=任务"
