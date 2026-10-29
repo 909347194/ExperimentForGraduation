@@ -68,6 +68,7 @@ from .overview import plot_overview  # noqa: E402
 from .route_vs_path import plot_route_vs_path  # noqa: E402
 from .trajectory import plot_trajectory  # noqa: E402
 from .side_view import plot_side_view  # noqa: E402
+from .scene_3d import plot_scene_3d  # noqa: E402
 
 FIGURES: tuple[Figure, ...] = (
     # ── ① overview：态势总览 ──────────────────────────────────
@@ -77,6 +78,13 @@ FIGURES: tuple[Figure, ...] = (
         title="整个区域总览：全城建筑密度 + 研究区边界 + 禁飞区 + 裁剪窗口",
         source="env_full 建筑质心 hexbin + region.geojson + 静/动态禁飞 + 规划路径",
         func=plot_region_overview,
+    ),
+    Figure(
+        id="scene_3d",
+        group="overview",
+        title="三维场景：建筑棱柱 + 禁飞区棱柱 + 3D 轨迹（plotly 交互式）",
+        source="env.buildings(棱柱) + 静/动态禁飞(0→120m 示意) + planned[].path.pts/route.points",
+        func=plot_scene_3d,
     ),
     Figure(
         id="overview",

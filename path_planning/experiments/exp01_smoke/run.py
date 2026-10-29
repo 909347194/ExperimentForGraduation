@@ -87,6 +87,12 @@ def _auto_crop(env, size: float):
 
 
 def _apply_crop(env, window, max_buildings=None):
+    # 先浅拷贝：调用方常以 env_full 传入并另存全量引用（供整区域图用），
+    # 绝不能原地修改污染全量建筑集。
+    import copy as _copy
+
+    env = _copy.copy(env)
+    env.meta = dict(env.meta)
     win = box(*window)
     env.buildings = [b for b in env.buildings if b.poly.intersects(win)]
     if max_buildings and len(env.buildings) > int(max_buildings):
