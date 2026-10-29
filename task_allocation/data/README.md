@@ -12,6 +12,40 @@
 | `guangzhou` | 广州市研究区（2026-10-29 城市场景，当前实验场景） | `nest_location_data.csv`（3 机巢经纬度，实测）<br>`dem.tif`（地面基底 DEM）<br>`building/`（5 类建筑 shapefile：Commercial / EducationalCultural / PublicServices / Residential / TechnologyIndustry，含 `Height` 属性，共 20670 栋）<br>`region.geojson`（任务撒点区域门禁多边形） |
 | `lasa_chengguan` | 拉萨市城关区（高原山地场景） | `nest_location_data.csv`（6 机巢经纬度，实测）<br>`Chengguan_DEM.tif`（ASTER GDEM 瓦片，约 28×32 km）<br>`Chengguan_district.geojson`（任务撒点区域门禁多边形） |
 
+## 场景切换（只改 config，不改代码）
+
+切换场景 = 改实验 config 的 `data:` 段 + `problem.n_nests`，其余代码零改动。
+两套预设：
+
+```yaml
+# ── guangzhou（城市场景，当前）──
+data:
+    scenario: guangzhou
+    source: file
+    path: nest_location_data.csv
+    dem: dem.tif
+    buildings: building          # 建筑目录；无建筑场景置 null
+    region_geojson: region.geojson
+    coordinate_column: Coordinate
+problem:
+    n_nests: 3                   # 广州 CSV 共 3 条
+
+# ── lasa_chengguan（高原山地场景）──
+data:
+    scenario: lasa_chengguan
+    source: file
+    path: nest_location_data.csv
+    dem: Chengguan_DEM.tif
+    buildings: null              # ⚠️ 必须清掉：该场景无建筑目录，留着会响亮报错（故意的，不静默回退）
+    region_geojson: Chengguan_district.geojson
+    coordinate_column: Coordinate
+problem:
+    n_nests: 6                   # 城关区 CSV 共 6 条
+```
+
+注意：`problem/solver/selection` 的标定值（航程/时间窗等）本来就是拉萨口径；
+切回即还原原标定，无需重标。
+
 ## 新增场景
 
 1. 建 `data/<新场景_id>/`，放入该场景数据；
