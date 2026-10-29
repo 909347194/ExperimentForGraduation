@@ -1,1 +1,79 @@
-# exp01_smoke
+# exp01_smoke —— 正确性调试（Lin2021 控制网络 + 禁飞区切段求交）
+# 目标：验证全流程正确性，不是性能/灵敏度实验（那是 exp02/exp03）
+
+scenario:
+  id: guangzhou
+  dir: data/raw/guangzhou
+  classes: [Residential, Commercial, TechnologyIndustry, PublicServices, EducationalCultural]
+  # 局部米制裁剪窗口 (x0, y0, x1, y1)；auto = 自动选建筑最密的窗口
+  crop: auto
+  crop_size: 600.0      # auto 模式的窗口边长（米）
+  max_buildings: 350    # 冒烟档上限：超出时保留离窗口中心最近的 N 栋（正确性调试用）
+  min_building_area: 1.0
+
+uav:                    # Lin2021 §3.1 参考值
+  mass: 1.0             # kg
+  f_max: 16.0           # N
+  f_min: 9.0            # N
+  v_max: 15.0           # m/s
+  v_up: 6.0             # m/s
+  v_down: 2.0           # m/s
+
+offline:                # Lin2021 §2.2.1 Fig.5
+  d1: 5.0               # 控制点距建筑表面水平安全距离 m
+  d2: 10.0              # 离地最小高度 m
+  d3: 10.0              # 垂直层距 m
+  d_star: 130.0         # 最大连线距离 m
+  d_s_stat: 5.0         # 静态禁飞安全膨胀 m
+  d_s_dyn: 2.0          # 动态禁飞安全膨胀 m
+  top_clearance: 5.0    # 顶部控制点高出屋顶 m
+  max_levels: 12
+  corner_min_dist: 6.0
+  free_grid_step: 120.0   # m，自由空间补点网格间距（0=不补）
+  free_levels: [45.0, 80.0]
+
+online:
+  smooth_deviation: 4.0 # Dubins 平滑偏差 d（Eq.6）
+  shrink_factor: 0.6
+  max_shrink_iters: 6
+  check_step_m: 2.0
+  enable_l1: true
+  enable_l2: true
+  max_l2_iters: 6
+  enable_l25: true
+  t_horizon: 600.0     # L2.5 保守判定的任务时段长度（取典型航时量级，勿用全天）
+
+risk:
+  lambda_r: 0.0         # TPR 本阶段不启用（论文保留章节）
+  enabled: false
+
+nofly:
+  # file      = 读 <dir>/nofly_static.geojson + <dir>/nofly_dynamic.geojson（真实数据）
+  # synthetic = 用敏感设施位置合成动态禁飞区（无真实数据时的过渡方案）
+  # none      = 不加载任何禁飞区（纯 Lin2021 原方法基线对照）
+  source: file
+  # 禁飞区文件目录（默认与 scenario.dir 同级；此处指向你放置 geojson 的 data/raw）
+  dir: data/raw
+  synthetic:
+    n: 1                # 冒烟档用 1 个即可；2 个会把 600m 窗口拦腰截断
+    radius: 40.0        # m（禁飞区半边长；太大会封死整个裁剪区）
+    t_start: 0.0        # s（与 OD 出发时刻一致，保证分层 L2/L2.5 被触发）
+    duration: 400.0     # s
+    z_top: 60.0         # m（禁飞高度上限；超过控制点高度则只能绕行、不能飞越）
+    gap: 120.0          # s
+    seed: 42
+    source_classes: [PublicServices, EducationalCultural]
+
+od:
+  # auto = 在裁剪窗口内自动取 OD；也可给固定列表 [[x,y,z], [x,y,z]]
+  mode: auto
+  n_pairs: 4
+  z: 20.0               # 起终点飞行高度 m
+  seed: 7
+  pairs: []
+
+checks:
+  enable_unit_checks: true      # 专项用例（整边判定 / 切段 / 保守判据）
+  enable_path_audit: true       # 平滑后路径独立复核（建筑 + 静态/动态禁飞）
+  audit_step_m: 2.0
+  edge_case_t_offset: -30.0     # "擦边"用例：相对禁飞生效时刻的起飞偏移 s

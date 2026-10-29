@@ -7,6 +7,10 @@ requires-python = ">=3.12"
 dependencies = [
     "pyyaml>=6.0",
     "numpy>=1.26",
+    # path_planning 几何内核：膨胀/求交/缓冲（constraints/query.py）
+    "shapely>=2.0",
+    # path_planning 场景解析：建筑 shapefile 读取（common/scenario.py，DBF 需 GBK 编码）
+    "pyshp>=2.3",
     # DEM GeoTIFF 栅格解码（methods/utils/dem_geotiff.py 惰性导入）
     "pillow>=10.0",
     # 实验可视化（experiments/expXX_*/plot/）

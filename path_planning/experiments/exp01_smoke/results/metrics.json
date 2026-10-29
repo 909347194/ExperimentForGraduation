@@ -1,0 +1,709 @@
+{
+  "experiment": "exp01_smoke",
+  "definitions": {
+    "route": "控制网络上的虚拟链路序列（走廊）：起点+控制点序列+终点，含各段时刻与距离。仅几何、无平滑。对应 Lin2021 Fig.1(a)。",
+    "path": "Dubins 平滑后的三维空间曲线（仅几何、无时间）：route → smooth_route。对应 Lin2021 Fig.1(b)。",
+    "trajectory": "path + 时间参数化（位置+速度/时刻）。当前时间为匀速占位（trajectory.timing='uniform_placeholder'），非 Lin2021 §2.4 时间最优轨迹（time_optimal.py 待实现）。对应 Lin2021 Fig.1(c)。"
+  },
+  "nofly_zones": [
+    {
+      "zid": "1",
+      "periods": [
+        {
+          "start": 0.0,
+          "end": 400.0,
+          "center": [
+            3987.2,
+            1004.2
+          ],
+          "bounds": [
+            3927.2,
+            944.2,
+            4047.2,
+            1064.2
+          ],
+          "z": [
+            0.0,
+            Infinity
+          ]
+        },
+        {
+          "start": 500.0,
+          "end": 900.0,
+          "center": [
+            4027.2,
+            1014.2
+          ],
+          "bounds": [
+            3937.2,
+            924.2,
+            4117.2,
+            1104.2
+          ],
+          "z": [
+            0.0,
+            Infinity
+          ]
+        }
+      ]
+    },
+    {
+      "zid": "2",
+      "periods": [
+        {
+          "start": 0.0,
+          "end": 600.0,
+          "center": [
+            4187.3,
+            854.2
+          ],
+          "bounds": [
+            4117.2,
+            784.2,
+            4257.3,
+            924.2
+          ],
+          "z": [
+            0.0,
+            Infinity
+          ]
+        },
+        {
+          "start": 700.0,
+          "end": 1300.0,
+          "center": [
+            4187.3,
+            884.2
+          ],
+          "bounds": [
+            4137.2,
+            834.2,
+            4237.3,
+            934.2
+          ],
+          "z": [
+            0.0,
+            Infinity
+          ]
+        }
+      ]
+    },
+    {
+      "zid": "3",
+      "periods": [
+        {
+          "start": 0.0,
+          "end": 300.0,
+          "center": [
+            3807.2,
+            1124.2
+          ],
+          "bounds": [
+            3752.2,
+            1069.2,
+            3862.2,
+            1179.2
+          ],
+          "z": [
+            0.0,
+            Infinity
+          ]
+        },
+        {
+          "start": 450.0,
+          "end": 750.0,
+          "center": [
+            3807.2,
+            1184.2
+          ],
+          "bounds": [
+            3752.2,
+            1129.2,
+            3862.2,
+            1239.2
+          ],
+          "z": [
+            0.0,
+            Infinity
+          ]
+        },
+        {
+          "start": 900.0,
+          "end": 1200.0,
+          "center": [
+            3767.2,
+            1154.2
+          ],
+          "bounds": [
+            3722.2,
+            1109.2,
+            3812.2,
+            1199.2
+          ],
+          "z": [
+            0.0,
+            Infinity
+          ]
+        }
+      ]
+    }
+  ],
+  "scenario": {
+    "dir": "D:\\SchoolAffairs\\groupmeeting\\thesis\\dissertation\\ExperimentForGraduation\\path_planning\\data/raw/guangzhou",
+    "crop": [
+      3686.6,
+      704.19,
+      4286.6,
+      1304.19
+    ]
+  },
+  "config": {
+    "uav": {
+      "mass": 1.0,
+      "f_max": 16.0,
+      "f_min": 9.0,
+      "v_max": 15.0,
+      "v_up": 6.0,
+      "v_down": 2.0,
+      "g": 9.8
+    },
+    "offline": {
+      "d1": 5.0,
+      "d2": 10.0,
+      "d3": 10.0,
+      "d_star": 130.0,
+      "max_degree": 24,
+      "d_s_stat": 5.0,
+      "d_s_dyn": 2.0,
+      "top_clearance": 5.0,
+      "max_levels": 12,
+      "corner_min_dist": 6.0,
+      "free_grid_step": 120.0,
+      "free_levels": [
+        45.0,
+        80.0
+      ]
+    },
+    "online": {
+      "smooth_deviation": 4.0,
+      "shrink_factor": 0.6,
+      "max_shrink_iters": 6,
+      "check_step_m": 2.0,
+      "enable_l1": true,
+      "enable_l2": true,
+      "max_l2_iters": 6,
+      "enable_l25": true,
+      "t_horizon": 600.0
+    },
+    "risk": {
+      "lambda_r": 0.0,
+      "enabled": false
+    },
+    "scenario": {
+      "id": "guangzhou",
+      "dir": "data/raw/guangzhou",
+      "classes": [
+        "Residential",
+        "Commercial",
+        "TechnologyIndustry",
+        "PublicServices",
+        "EducationalCultural"
+      ],
+      "crop": "auto",
+      "crop_size": 600.0,
+      "max_buildings": 350,
+      "min_building_area": 1.0
+    }
+  },
+  "env": {
+    "n_buildings": 350,
+    "n_static_nofly": 3,
+    "n_dynamic_nofly": 3,
+    "height_max": 20.149892,
+    "height_mean": 11.664505714285717
+  },
+  "network": {
+    "scenario": {
+      "n_buildings": 350,
+      "n_static_nofly": 3,
+      "n_dynamic_nofly": 3,
+      "height_max": 20.149892,
+      "height_mean": 11.664505714285717
+    },
+    "control_points": {
+      "n_points": 2393,
+      "n_per_building": 6.837142857142857,
+      "n_dropped_blocked": 1150,
+      "n_free_points": 32
+    },
+    "links": {
+      "n_points": 2393,
+      "n_candidates": 56200,
+      "n_links": 38095,
+      "n_blocked_by_building": 18105,
+      "n_blocked_by_static_nofly": 0,
+      "n_isolated": 1,
+      "degree_mean": 31.838696197241955
+    },
+    "network": {
+      "n_control_points": 2393,
+      "n_virtual_nodes": 16751,
+      "n_virtual_links": 304760
+    },
+    "timing_s": {
+      "control_points": 0.592,
+      "link_builder": 24.773,
+      "expand": 2.025,
+      "total": 27.39
+    }
+  },
+  "unit_checks": {
+    "U1_cost_order": true,
+    "U1_eq4_match": true,
+    "U1_sample": {
+      "D": 9.436,
+      "t00": 1.728,
+      "t0s": 1.222,
+      "tss": 0.629
+    },
+    "U2_building_block": true,
+    "U3_cross_activation": true,
+    "U3_detail": {
+      "t_dep": 83.33,
+      "t_arr": 116.67,
+      "traverse_in_zone": [
+        93.33,
+        106.67
+      ],
+      "activation": 100.0
+    },
+    "U3b_midflight_only": true,
+    "U4_before_window": true,
+    "U4_after_window": true,
+    "U5_conservative_covers": true,
+    "all_pass": true
+  },
+  "od_results": [
+    {
+      "od_id": 0,
+      "origin": [
+        3854.62,
+        924.45,
+        20.0
+      ],
+      "dest": [
+        4195.53,
+        1107.43,
+        20.0
+      ],
+      "feasible": false,
+      "level": "L4",
+      "total_time_s": null,
+      "route_dist_m": null,
+      "n_route_points": 0,
+      "route_control_points": null,
+      "path_arc_length_m": null,
+      "n_path_samples": 0,
+      "path_xy": null,
+      "trajectory": null,
+      "smooth_failed": false,
+      "plan_time_s": 9.6404,
+      "n_dijkstra": 8,
+      "n_l2_iters": 6,
+      "blocked_pairs": 0,
+      "reason": "DYNAMIC_BLOCKED"
+    },
+    {
+      "od_id": 1,
+      "origin": [
+        3792.23,
+        919.91,
+        20.0
+      ],
+      "dest": [
+        4047.61,
+        1221.86,
+        20.0
+      ],
+      "feasible": false,
+      "level": "L4",
+      "total_time_s": null,
+      "route_dist_m": null,
+      "n_route_points": 0,
+      "route_control_points": null,
+      "path_arc_length_m": null,
+      "n_path_samples": 0,
+      "path_xy": null,
+      "trajectory": null,
+      "smooth_failed": false,
+      "plan_time_s": 9.3401,
+      "n_dijkstra": 8,
+      "n_l2_iters": 6,
+      "blocked_pairs": 0,
+      "reason": "DYNAMIC_BLOCKED"
+    },
+    {
+      "od_id": 2,
+      "origin": [
+        3887.64,
+        842.03,
+        20.0
+      ],
+      "dest": [
+        4104.78,
+        1117.64,
+        20.0
+      ],
+      "feasible": false,
+      "level": "L4",
+      "total_time_s": null,
+      "route_dist_m": null,
+      "n_route_points": 0,
+      "route_control_points": null,
+      "path_arc_length_m": null,
+      "n_path_samples": 0,
+      "path_xy": null,
+      "trajectory": null,
+      "smooth_failed": false,
+      "plan_time_s": 10.0328,
+      "n_dijkstra": 8,
+      "n_l2_iters": 6,
+      "blocked_pairs": 0,
+      "reason": "DYNAMIC_BLOCKED"
+    },
+    {
+      "od_id": 3,
+      "origin": [
+        3783.54,
+        837.64,
+        20.0
+      ],
+      "dest": [
+        4143.47,
+        1170.46,
+        20.0
+      ],
+      "feasible": false,
+      "level": "L4",
+      "total_time_s": null,
+      "route_dist_m": null,
+      "n_route_points": 0,
+      "route_control_points": null,
+      "path_arc_length_m": null,
+      "n_path_samples": 0,
+      "path_xy": null,
+      "trajectory": null,
+      "smooth_failed": false,
+      "plan_time_s": 9.2793,
+      "n_dijkstra": 8,
+      "n_l2_iters": 6,
+      "blocked_pairs": 0,
+      "reason": "DYNAMIC_BLOCKED"
+    },
+    {
+      "od_id": 4,
+      "origin": [
+        3836.91,
+        1004.15,
+        20.0
+      ],
+      "dest": [
+        4137.53,
+        1004.15,
+        20.0
+      ],
+      "feasible": true,
+      "level": "L2.5",
+      "total_time_s": 30.299,
+      "route_dist_m": 407.79,
+      "n_route_points": 10,
+      "route_control_points": [
+        [
+          3836.91,
+          1004.15,
+          20.0
+        ],
+        [
+          3914.04,
+          923.57,
+          10.0
+        ],
+        [
+          3928.4,
+          908.2,
+          10.0
+        ],
+        [
+          3933.94,
+          900.8,
+          10.0
+        ],
+        [
+          3949.47,
+          881.52,
+          10.0
+        ],
+        [
+          3950.62,
+          878.88,
+          10.0
+        ],
+        [
+          3951.33,
+          879.14,
+          10.0
+        ],
+        [
+          3956.72,
+          877.3,
+          10.0
+        ],
+        [
+          3995.02,
+          885.5,
+          10.0
+        ],
+        [
+          4050.01,
+          906.33,
+          10.0
+        ],
+        [
+          4069.44,
+          916.28,
+          10.0
+        ],
+        [
+          4137.53,
+          1004.15,
+          20.0
+        ]
+      ],
+      "path_arc_length_m": 499.53,
+      "n_path_samples": 64,
+      "path_xy": [
+        [
+          3836.91,
+          1004.15
+        ],
+        [
+          3933.94,
+          900.8
+        ],
+        [
+          3950.37,
+          879.35
+        ],
+        [
+          3950.48,
+          879.11
+        ],
+        [
+          3950.7,
+          878.97
+        ],
+        [
+          3950.97,
+          878.96
+        ],
+        [
+          3951.11,
+          879.06
+        ],
+        [
+          3948.46,
+          876.9
+        ],
+        [
+          3950.09,
+          878.75
+        ],
+        [
+          3952.57,
+          878.78
+        ],
+        [
+          3954.25,
+          876.96
+        ],
+        [
+          3939.84,
+          883.07
+        ],
+        [
+          3952.74,
+          879.88
+        ],
+        [
+          3956.04,
+          877.5
+        ],
+        [
+          3960.0,
+          878.4
+        ],
+        [
+          3961.96,
+          881.97
+        ],
+        [
+          4050.01,
+          906.33
+        ],
+        [
+          4060.7,
+          915.79
+        ],
+        [
+          4066.64,
+          914.92
+        ],
+        [
+          4071.29,
+          918.78
+        ],
+        [
+          4071.47,
+          924.72
+        ],
+        [
+          4137.53,
+          1004.15
+        ]
+      ],
+      "trajectory": {
+        "timing": "uniform_placeholder",
+        "note": "trajectory = path + 匀速时间占位（非 Lin2021 §2.4 时间最优轨迹，time_optimal.py 待实现）",
+        "times_s": [
+          0.0,
+          8.63,
+          10.28,
+          10.29,
+          10.31,
+          10.33,
+          10.34,
+          11.2,
+          11.35,
+          11.51,
+          11.66,
+          13.27,
+          14.19,
+          14.44,
+          14.69,
+          14.95,
+          20.55,
+          22.77,
+          23.14,
+          23.52,
+          23.9,
+          30.3
+        ],
+        "speeds_mps": [
+          13.459,
+          13.459,
+          13.459,
+          13.459,
+          13.459,
+          13.459,
+          13.459,
+          13.459,
+          13.459,
+          13.459,
+          13.459,
+          13.459,
+          13.459,
+          13.459,
+          13.459,
+          13.459,
+          13.459,
+          13.459,
+          13.459,
+          13.459,
+          13.459,
+          13.459
+        ]
+      },
+      "smooth_failed": false,
+      "plan_time_s": 10.1713,
+      "n_dijkstra": 8,
+      "n_l2_iters": 6,
+      "blocked_pairs": 0,
+      "reason": null,
+      "audit": {
+        "collides_building_or_static": false,
+        "collides_dynamic": false,
+        "ok": true
+      }
+    },
+    {
+      "od_id": 5,
+      "origin": [
+        3936.93,
+        854.15,
+        20.0
+      ],
+      "dest": [
+        4437.58,
+        854.15,
+        20.0
+      ],
+      "feasible": false,
+      "level": "L4",
+      "total_time_s": null,
+      "route_dist_m": null,
+      "n_route_points": 0,
+      "route_control_points": null,
+      "path_arc_length_m": null,
+      "n_path_samples": 0,
+      "path_xy": null,
+      "trajectory": null,
+      "smooth_failed": false,
+      "plan_time_s": 0.3528,
+      "n_dijkstra": 0,
+      "n_l2_iters": 0,
+      "blocked_pairs": 0,
+      "reason": "DEST_UNREACHABLE"
+    },
+    {
+      "od_id": 6,
+      "origin": [
+        3567.49,
+        1124.15,
+        20.0
+      ],
+      "dest": [
+        4046.9,
+        1124.15,
+        20.0
+      ],
+      "feasible": false,
+      "level": "L4",
+      "total_time_s": null,
+      "route_dist_m": null,
+      "n_route_points": 0,
+      "route_control_points": null,
+      "path_arc_length_m": null,
+      "n_path_samples": 0,
+      "path_xy": null,
+      "trajectory": null,
+      "smooth_failed": false,
+      "plan_time_s": 0.6975,
+      "n_dijkstra": 0,
+      "n_l2_iters": 0,
+      "blocked_pairs": 0,
+      "reason": "ORIGIN_UNREACHABLE"
+    }
+  ],
+  "summary": {
+    "n_od": 7,
+    "n_feasible": 1,
+    "n_route_only": 0,
+    "n_path_trajectory": 1,
+    "level_counts": {
+      "L2.5": 1,
+      "L4": 6
+    },
+    "n_audit_ok": 1,
+    "wall_time_s": 84.061
+  }
+}

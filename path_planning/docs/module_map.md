@@ -9,7 +9,9 @@
 1. **一条编排线只做编排**：`offline/pipeline.py`、`online/pipeline.py` 不承载算法细节。
 2. **模型与算法分离**：`constraints/`、`cost/`、`tpr/` 回答"是什么、代价多少"；
    `offline/`、`online/` 回答"怎么算"。
-3. **一条链路一个判定口径**：碰撞/禁飞判定唯一入口 `constraints/query.py`，离线在线共用。
+3. **一个几何内核、两个入口**：碰撞/禁飞判定唯一收口在 `constraints/query.py`——
+   无时间入口 `link_feasible`（建筑/静态永久禁飞）、带时间入口 `edge_occupancy_free`
+   （动态禁飞，按时窗端点切段 + 每段静态求交），二者共用同一膨胀体与求交几何。
 4. **每个文件可独立测试**：见 [../tests/README.md](../tests/README.md) 的测试规划——
    若一个文件无法单测，说明拆分没到位。
 5. **docstring 三要素**：职责 / 输入→输出 / 不负责什么（+ 论文映射）。
@@ -71,9 +73,9 @@
 
 | 文件 | 职责 | 输入 → 输出 | 不负责 | 映射 |
 |------|------|-------------|--------|------|
-| `dynamic_prune.py` | 动态禁飞剪枝视图 + 连通性校验 | (网络, 禁飞) → 剪枝视图 | 禁飞数据模型 | README §4.3.1 |
-| `spacetime.py` | 时间层扩展与时空连接（含等待边，标签存连续时间） | 空间网络 → 时空图 | 判定/搜索 | design_nofly_zones §3 |
-| `route_search.py` | 综合代价 Dijkstra | (网络, OD) → Route | 代价定义 | Lin2021 §2.3 |
+| `dynamic_prune.py` | 动态禁飞剪枝视图（乐观/保守）+ 连通性校验，撤销即恢复 | (网络, 禁飞) → 剪枝视图 | 禁飞数据模型 | README §4.3.1 |
+| `spacetime.py` | 时空网络扩展（**本阶段暂不实现，占位保留**：事件驱动时间轴 + 多标签） | 空间网络 → 时空图 | 判定/搜索 | design_nofly_zones §10/§11 |
+| `route_search.py` | 综合代价 Dijkstra；网络视图迭代修正 L1/L2/L2.5 | (网络, OD) → Route | 代价定义、复核 | Lin2021 §2.3 |
 | `dubins_smoother.py` | 3D Dubins 平滑 + 过近点偏差收缩 | Route → Path | 碰撞正确性 | Lin2021 §2.3 |
 | `post_check.py` | 二次碰撞校验 + 偏移修正迭代 | Path → 可行 Path / 不可行原因 | 弧段生成 | README §4.3.4 |
 | `time_optimal.py` | 时间最优轨迹（前向推进+反向回溯） | Path → Trajectory | 几何、TPR | Lin2021 §2.4 |
