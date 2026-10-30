@@ -262,3 +262,29 @@ def test_relocate_switch_off_skips_dimension():
 def test_relocate_default_on():
     cfg = MUASStageConfig()
     assert cfg.cost_polish_relocate_enabled is True, "生产口径默认开启"
+
+
+# ---------------------------------------------------------------------------
+# 时序×polish 交叉（2026-10-30）：链成员禁跨机迁移
+# ---------------------------------------------------------------------------
+
+
+def test_relocate_blocked_for_chain_members():
+    """链成员禁止跨机迁移（保守时序门）：blocked_seq 计数、零改派、路由不动。
+
+    同一几何下无链对照见 ``test_relocate_shrinks_path_and_keeps_exec_set``
+    （应改派 1 次）——本测试证明差异只来自时序门。
+    """
+    nests = [Nest(id=0, x=0.0, y=0.0, z=0.0, capacity=10, available=True)]
+    uavs = [_uav(0, 0.0), _uav(1, 250.0)]
+    tasks = [
+        Task(id=0, x=0.0, y=0.0, z=0.0, reward=5.0, earliest=0.0, latest=1e6,
+             arrival_time=0.0, sequence_group=7, sequence_order=0),
+        Task(id=1, x=300.0, y=0.0, z=0.0, reward=5.0, earliest=0.0, latest=1e6,
+             arrival_time=0.0, sequence_group=7, sequence_order=1),
+    ]
+    prob, ev = _mk(tasks, uavs, nests)
+    routes, ends, stats = ev._cost_polish_relocate({0: [0, 1]}, {0: 0, 1: 0})
+    assert stats["n_relocate"] == 0, f"链成员被跨机改派：{stats}"
+    assert stats["blocked_seq"] == 2, f"应拦下 2 个链成员的迁移尝试：{stats}"
+    assert routes == {0: [0, 1]}, f"路由被改动：{routes}"

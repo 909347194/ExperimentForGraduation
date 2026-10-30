@@ -12,6 +12,13 @@
 接受纪律（四道门，各算子同构）：航程门（不超剩余航程）、迟到门
 （不制造新违约、不加深旧违约）、执行集门（覆盖只增不减）、
 成本门（严格下降 > eps）。全程无随机，同输入逐位可复现。
+
+时序交叉（2026-10-30）：``sequence_group`` 激活时另加两道保守门——
+顺序维度算子加**时序门**（候选同链逆序对不得多于基线，杜绝调序破坏
+``sequence_order`` 的硬违约）；跨机改派对**链成员整体禁迁**
+（``blocked_seq`` 计数）——跨机顺序比对口径尚未实现（constraints 只判
+同航次内），拆链会把顺序语义送进无人判的盲区。``post_cost_polish``
+下游链与 ``build_solution`` 终态同段对齐（``_repair_sequence`` + 逆序兜底）。
 """
 
 from __future__ import annotations
@@ -19,6 +26,9 @@ from __future__ import annotations
 from typing import Any, Mapping, Sequence
 
 from task_allocation.common.types import AllocationSolution
+from task_allocation.methods.muas.constraints.coop_constraints import (
+    sequence_violation_pairs,
+)
 from task_allocation.methods.muas.coverage_gate import audit_coverage, repair_coverage
 
 
@@ -169,7 +179,10 @@ class RoutePolishMixin:
         2. **迟到门**：候选迟到键 ``(数, 总量)`` 逐分量不差于基线——
            不制造新违约、不加深旧违约（⇒ ``soft_violation`` 不增）；
         3. **执行集门**：置换由构造保持任务集（采纳端再复核）；
-        4. **成本门**：航程严格下降 > ``cost_polish_eps`` 才采纳。
+        4. **成本门**：航程严格下降 > ``cost_polish_eps`` 才采纳；
+        5. **时序门**（2026-10-30）：候选同链逆序对不得多于基线——2-opt 反转/
+           Or-opt 迁移可能破坏 ``sequence_order``，此前缺门会把硬违约当
+           “改进”收进来（``sequence_group`` 全空时恒过 ⇒ 零行为变化）。
 
         策略：first-improvement + 接受即重启邻域扫描；整轮无改进即收敛。
         全程无随机，同输入逐位可复现。终点机巢在调用方重选（见
@@ -184,6 +197,10 @@ class RoutePolishMixin:
         def cost_of(uid: int, tids: Sequence[int]) -> float:
             return self._tour_cost(uid, tids, ends.get(uid))
 
+        def seq_pairs(tids: Sequence[int]) -> int:
+            # 时序门计数：同链逆序对（sequence_group 全空时恒 0）
+            return len(sequence_violation_pairs(list(tids), self._task_by_id))
+
         for round_idx in range(max_rounds):
             stats["n_rounds"] = round_idx + 1
             improved = False
@@ -197,6 +214,7 @@ class RoutePolishMixin:
                 limit = self._range_limit(uid)
                 base_cost = cost_of(uid, tids)
                 base_late = self._late_key(uid, tids)
+                base_seq = seq_pairs(tids)
 
                 # ── 2-opt：反转段 [i, j]（i<j）──────────────────────
                 for i in range(n - 1):
@@ -212,6 +230,8 @@ class RoutePolishMixin:
                         late_n, late_t = self._late_key(uid, cand)
                         if late_n > base_late[0] or late_t > base_late[1] + 1e-6:
                             continue
+                        if seq_pairs(cand) > base_seq:
+                            continue  # 时序门：不得制造新的同链逆序
                         work[uid] = cand
                         stats["n_2opt"] += 1
                         improved = True
@@ -239,6 +259,8 @@ class RoutePolishMixin:
                                 late_n, late_t = self._late_key(uid, cand)
                                 if late_n > base_late[0] or late_t > base_late[1] + 1e-6:
                                     continue
+                                if seq_pairs(cand) > base_seq:
+                                    continue  # 时序门：不得制造新的同链逆序
                                 work[uid] = cand
                                 stats["n_oropt"] += 1
                                 improved = True
@@ -272,7 +294,10 @@ class RoutePolishMixin:
         2. **迟到门**：两侧迟到键 ``(数, 总量)`` 逐分量不差于基线——
            不制造新违约、不加深旧违约（⇒ ``soft_violation`` 不增）；
         3. **执行集门**：改派保持任务集（采纳端再以 executed ⊇ 旧解复核）；
-        4. **成本门**：Δ < −``cost_polish_eps`` 才采纳。
+        4. **成本门**：Δ < −``cost_polish_eps`` 才采纳；
+        5. **时序门（保守）**（2026-10-30）：``sequence_group`` 非空的链成员
+           禁止跨机迁移（``blocked_seq`` 计数）——跨机顺序比对口径未实现，
+           拆链即进入无人判的盲区；待跨机口径落地后放开。
 
         策略：first-improvement + 接受即重启邻域扫描；无随机、按 id 升序，
         逐位可复现。诊断另计 ``blocked_range`` / ``blocked_late``：几何上
@@ -290,6 +315,7 @@ class RoutePolishMixin:
             "converged": 0,
             "blocked_range": 0,
             "blocked_late": 0,
+            "blocked_seq": 0,
         }
 
         for round_idx in range(max_rounds):
@@ -308,6 +334,15 @@ class RoutePolishMixin:
                     if improved:
                         break
                     tid = tids[pos]
+                    if (
+                        getattr(self._task_by_id.get(tid), "sequence_group", None)
+                        is not None
+                    ):
+                        # 时序门（保守）：链成员禁止跨机迁移——跨机顺序比对
+                        # 口径尚未实现（constraints 只判同航次内），拆链会把
+                        # 顺序语义送进无人判的盲区。
+                        stats["blocked_seq"] += 1
+                        continue
                     src_new = tids[:pos] + tids[pos + 1:]
                     src_cost_new = self._tour_cost(src, src_new, ends.get(src))
                     if src_cost_new > limit_src + 1e-6:
@@ -396,8 +431,10 @@ class RoutePolishMixin:
            改末任务会改插入代价，两维度有二阶交互）；
         4. 全零接受 ⇒ 原样返回（逐位不变，零开销）；
         5. 有改进 ⇒ 与 :meth:`build_solution` 终态同序的下游联合重解：
-           重排（时间窗）→ 航程闸 → 终点巢精确重解（改序/改派会改末任务
-           ⇒ 返航腿与巢容量竞争都变）→ 航程闸 → 重装配。
+           重排（时间窗）→ **时序修复**（2026-10-30 补齐：重排候选按迟到/
+           航程挑序，对链序是盲的，原缺此段）→ 航程闸 → 终点巢精确重解
+           （改序/改派会改末任务 ⇒ 返航腿与巢容量竞争都变）→ 航程闸 →
+           逆序兜底 → 重装配。
 
         调用方按「执行集 ⊇ 旧解 且 硬违约不增 且 交付航程严格下降」
         择优采纳（见 ``run_selective_muas``）；被拒则交付解保持原样。
@@ -417,7 +454,7 @@ class RoutePolishMixin:
             before = n_accepted
             if self.config.cost_polish_relocate_enabled:
                 routes, ends, rstats = self._cost_polish_relocate(routes, ends)
-                for k in ("n_relocate", "blocked_range", "blocked_late"):
+                for k in ("n_relocate", "blocked_range", "blocked_late", "blocked_seq"):
                     stats[k] = int(stats.get(k, 0)) + int(rstats.get(k, 0))
                 n_accepted += int(rstats.get("n_relocate", 0))
             routes, ends, ostats = self._cost_polish_routes(routes, ends)
@@ -433,10 +470,18 @@ class RoutePolishMixin:
         # ⇒ 返航腿/终点巢竞争变，必须重选终点巢再闸一次航程，否则交付解
         # 的 path_cost 口径与 polish 内的估价脱节。
         routes = self._reorder_for_deadlines(routes)
+        # 时序交叉（2026-10-30）：重排对链序是盲的，与 build_solution 终态
+        # 同段补时序修复；末尾再挂逆序兜底（同其终态 _sequence_fix 口径）。
+        routes = self._repair_sequence(routes)
         routes, ends = self._repair_range(routes, ends)
         if routes:
             ends = self._choose_end_nests(routes)
         routes, ends = self._repair_range(routes, ends)
+        if self._sequence_enabled():
+            routes = {
+                uid: (self._sequence_fix(tids) if self._seq_violation(tids) else list(tids))
+                for uid, tids in routes.items()
+            }
         sol = self._assemble(routes, ends)
         return sol, stats
 

@@ -42,11 +42,12 @@ class CoopConstraintViolation:
         return self.seq_violation + self.window_violation + self.sync_violation
 
 
-def _task_window(task: Task) -> tuple[float | None, float | None]:
+def task_window(task: Task) -> tuple[float | None, float | None]:
     """任务时间窗：(earliest, latest)。
 
     优先读参考项目约定的 ``time_window`` 元组，回退到本仓库的
     ``earliest`` / ``latest`` 单字段；二者皆无则视为无窗约束。
+    **全仓唯一窗口字段读取口径**（到达游标三处消费共用，禁止再各自直读）。
     """
     tw = getattr(task, "time_window", None)
     if isinstance(tw, (tuple, list)) and len(tw) == 2:
@@ -54,6 +55,58 @@ def _task_window(task: Task) -> tuple[float | None, float | None]:
             None if tw[1] is None else float(tw[1])
         )
     return task.earliest, task.latest
+
+
+def arrival_times(
+    start: Sequence[float],
+    tasks: Sequence[Task],
+    *,
+    speed: float,
+    current_time: float = 0.0,
+    service_time: float = 0.0,
+    distance_fn: Callable[[Sequence[float], Sequence[float]], float] | None = None,
+) -> list[float]:
+    """到达游标模拟的**唯一实现**：逐任务到达时刻（等待至 earliest 后、服务前）。
+
+    三处消费共用本函数，保证 ETA / 时间窗判定 / 航迹时间同口径（历史上曾
+    三处各写一遍、靠注释人肉同步，是口径漂移隐患；2026-10-30 收拢至此）：
+
+    * :func:`check_time_window_constraint`（时间窗惩罚与迟到量）
+    * ``problem.tour_time``（航迹时间诊断，末段自行加返巢）
+    * ``tour_cost._arrival_time_of``（补全插入的 ETA）
+
+    口径（2026-10-13 统一）：段长走 ``distance_fn``（生产口径 = 三维航程，
+    ``costs.travel``），到点早于 ``earliest`` 则等待至最早可服务时刻，
+    离开时累加 ``service_time``；时间窗字段统一经 :func:`task_window`。
+
+    Args:
+        start: 起点坐标（UAV 当前位置）。        tasks: 按访问顺序排好的任务序列。
+        speed: 飞行速度（m/s），内部夹到 ≥1e-6。
+        current_time: 规划起始时刻（滚动时域下随周期推进）。
+        service_time: 单任务作业时长（秒）。
+        distance_fn: 段长函数；None → 欧氏直线。
+
+    Returns:
+        与 ``tasks`` 等长的到达时刻列表（每任务的**服务开始**时刻）。
+    """
+    speed = max(float(speed), 1e-6)
+    svc = float(service_time)
+    t = float(current_time)
+    prev = start
+    out: list[float] = []
+    for task in tasks:
+        if distance_fn is not None:
+            dist = float(distance_fn(prev, task.position))
+        else:
+            dist = math.dist(tuple(prev), tuple(task.position))
+        t += dist / speed
+        est, _ = task_window(task)
+        if est is not None and t < est:
+            t = est
+        out.append(t)
+        t += svc
+        prev = task.position
+    return out
 
 
 def check_time_window_constraint(
@@ -102,27 +155,26 @@ def check_time_window_constraint(
         if uav is None:
             continue
         speed = max(float(getattr(uav, "speed", speed_default)), 1e-6)
-        t_cursor = float(current_time)
-        prev = tour.start_position
-        for tid in tour.task_ids:
-            task = tasks.get(tid)
-            if task is None:
-                continue
-            if distance_fn is not None:
-                dist = float(distance_fn(prev, task.position))
-            else:
-                dist = math.dist(prev, task.position)
-            t_cursor += dist / speed
-            est, lst = _task_window(task)
-            if est is not None and t_cursor < est:
-                t_cursor = est
-            if lst is not None and t_cursor > lst + 1e-6:
-                late = float(t_cursor - lst)
+        seq = [
+            (int(tid), tasks[tid]) for tid in tour.task_ids if tid in tasks
+        ]
+        if not seq:
+            continue
+        arrivals = arrival_times(
+            tour.start_position,
+            [t for _, t in seq],
+            speed=speed,
+            current_time=current_time,
+            service_time=service_time,
+            distance_fn=distance_fn,
+        )
+        for (tid, task), t_arr in zip(seq, arrivals):
+            _, lst = task_window(task)
+            if lst is not None and t_arr > lst + 1e-6:
+                late = float(t_arr - lst)
                 penalty += late
-                lateness[int(tid)] = late
+                lateness[tid] = late
                 tags.append(f"tw_task_{tid}")
-            t_cursor += float(service_time)
-            prev = task.position
     return penalty, tags, lateness
 
 

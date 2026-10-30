@@ -14,24 +14,21 @@ from typing import Sequence
 
 import numpy as np
 
+from task_allocation.methods.muas.constraints.coop_constraints import (
+    arrival_times,
+    task_window,
+)
+
 
 class TourCostMixin:
     """航次代价 / ETA / 时间窗原语（混入 :class:`MUASAssignmentEvaluator`）。"""
 
     def _task_latest(self, tid: int) -> float | None:
-        """任务的 deadline：优先 ``time_window`` 元组，回退 ``.latest``。
-
-        与判废口径（``coop_constraints._task_window`` /
-        ``check_time_window_constraint``）一致，避免两处读取不同的字段。
-        """
+        """任务的 deadline：经 ``coop_constraints.task_window`` 读取（唯一字段口径）。"""
         task = self._task_by_id.get(tid)
         if task is None:
             return None
-        tw = getattr(task, "time_window", None)
-        if isinstance(tw, (tuple, list)) and len(tw) == 2 and tw[1] is not None:
-            return float(tw[1])
-        lst = getattr(task, "latest", None)
-        return None if lst is None else float(lst)
+        return task_window(task)[1]
 
     def _nearest_nest_cost(self, node_id: int) -> float:
         """到最近可用机巢的代价；终点尚未定稿时用于保守估计返航段。"""
@@ -84,52 +81,47 @@ class TourCostMixin:
     ) -> float:
         """航次中第 ``pos`` 个任务的预计到达时刻。
 
-        与 :func:`coop_constraints.time_window_violation` 同口径：
-        **DEM 三维航程** / speed（``costs.travel``），早于 ``earliest`` 则等待，
-        离开时累加 ``default_service_time``。
+        到达游标委托 :func:`~task_allocation.methods.muas.constraints.coop_constraints.arrival_times`
+        （与时间窗惩罚 / 航迹时间 / :meth:`_eta_list` **同一实现**，口径不分叉）：
+        **三维航程** / speed（``costs.travel``），早于 ``earliest`` 则等待，
+        离开时累加 ``default_service_time``；等待后再判 latest（完成闸门正是
+        这样判的，用等待前时刻会比闸门宽松、补进实际会违约的任务）。
 
-        2026-10-13 统一口径：此前本函数用欧氏直线、代价矩阵用 DEM 地形代价，
-        于是「补全时判定来得及」用的长度短于「实际飞」的长度 ⇒ 放进来不及的
-        任务，白飞一趟还拉低 F1。现在三处（代价矩阵 / 时间窗惩罚 / 本 ETA）
-        共用同一个 DEM 距离函数，判定与实际同源。
+        ``pos`` 按 ``tids`` 原始下标计（含缺失任务的空位）；越界或落在缺失
+        位上时返回全航次结束时刻（历史语义）。
         """
         uav = self._uav_by_id.get(uav_id)
         speed = max(float(getattr(uav, "speed", 10.0) or 10.0), 1e-6)
         service = float(getattr(self.problem.config, "default_service_time", 0.0))
-        t_cursor = float(self.config.current_time)
-        if uav is not None:
-            prev = (float(uav.x), float(uav.y), float(uav.z))
-        else:
-            prev = (0.0, 0.0, 0.0)
-        for i, tid in enumerate(tids):
-            task = self._task_by_id.get(tid)
-            if task is None:
-                continue
-            t_cursor += (
-                self.problem.costs.travel(
-                    prev, (float(task.x), float(task.y), float(task.z))
-                )
-                / speed
-            )
-            # 与 check_time_window_constraint 严格同口径：先「等待至 earliest」，
-            # 再用**等待后**的时刻判 latest（完成闸门正是这样判的）。
-            # 若用等待前的原始到达时刻判定，会比闸门宽松 —— 补进实际会违约的
-            # 任务，白飞一趟还拉低 F1（与只查航程的过度补全同类，只是更隐蔽）。
-            est = getattr(task, "earliest", None)
-            if est is not None and t_cursor < est:
-                t_cursor = est
-            if i == pos:
-                return t_cursor
-            t_cursor += service
-            prev = (float(task.x), float(task.y), float(task.z))
-        return t_cursor
+        start = (
+            (float(uav.x), float(uav.y), float(uav.z))
+            if uav is not None else (0.0, 0.0, 0.0)
+        )
+        slots = [self._task_by_id.get(tid) for tid in tids]
+        arrivals = arrival_times(
+            start,
+            slots,
+            speed=speed,
+            current_time=float(self.config.current_time),
+            service_time=service,
+            distance_fn=self.problem.costs.travel,
+        )
+        if 0 <= pos < len(arrivals) and slots[pos] is not None:
+            return arrivals[pos]
+        last_real = next(
+            (i for i in range(len(slots) - 1, -1, -1) if slots[i] is not None),
+            None,
+        )
+        if last_real is None:
+            return float(self.config.current_time)
+        return arrivals[last_real] + service
 
     def _window_ok(self, uav_id: int, tids: Sequence[int], pos: int) -> bool:
         """第 ``pos`` 个任务能否在其时间窗内到达（True=不违反约束）。"""
         task = self._task_by_id.get(tids[pos]) if pos < len(tids) else None
         if task is None:
             return True
-        latest = getattr(task, "latest", None)
+        latest = task_window(task)[1]
         if latest is None:
             return True
         return self._arrival_time_of(uav_id, tids, pos) <= float(latest) + 1e-6
@@ -160,27 +152,18 @@ class TourCostMixin:
         uav = self._uav_by_id.get(uav_id)
         speed = max(float(getattr(uav, "speed", 10.0) or 10.0), 1e-6)
         service = float(getattr(self.problem.config, "default_service_time", 0.0) or 0.0)
-        t = float(self.config.current_time)
-        prev = (
+        start = (
             (float(uav.x), float(uav.y), float(uav.z))
             if uav is not None else (0.0, 0.0, 0.0)
         )
-        out: list[float] = []
-        for tid in tids:
-            task = self._task_by_id.get(tid)
-            if task is None:
-                out.append(t)
-                continue
-            t += self.problem.costs.travel(
-                prev, (float(task.x), float(task.y), float(task.z))
-            ) / speed
-            est = getattr(task, "earliest", None)
-            if est is not None and t < est:
-                t = est
-            out.append(t)
-            t += service
-            prev = (float(task.x), float(task.y), float(task.z))
-        return out
+        return arrival_times(
+            start,
+            [self._task_by_id.get(tid) for tid in tids],
+            speed=speed,
+            current_time=float(self.config.current_time),
+            service_time=service,
+            distance_fn=self.problem.costs.travel,
+        )
 
     def _late_key(self, uav_id: int, tids: Sequence[int]) -> tuple[int, float]:
         """航次迟到键 ``(迟到任务数, 迟到总量秒)``；无时间窗时恒 ``(0, 0)``。"""

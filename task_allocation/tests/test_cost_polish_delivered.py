@@ -246,3 +246,102 @@ def test_stage_config_validates_cost_polish_fields():
     assert cfg.cost_polish_enabled is True, "修复后默认必须开启（生产口径）"
     assert cfg.cost_polish_max_rounds == 30
     assert cfg.cost_polish_eps == 1.0
+
+
+# ---------------------------------------------------------------------------
+# 时序×polish 交叉（2026-10-30）：时序门
+# ---------------------------------------------------------------------------
+
+
+def _mk_custom_cost(tasks, uavs, nests, costs: dict):
+    prob = SelectiveMUASProblem.from_entities(
+        tasks, uavs, nests,
+        pairwise_cost=costs,
+        config=MUASProblemConfig(),
+    )
+    ev = MUASAssignmentEvaluator(
+        prob, participating=list(uavs), tasks=list(tasks), nests=list(nests),
+        fleet_uavs=list(uavs), config=MUASStageConfig(),
+    )
+    return prob, ev
+
+
+def test_two_opt_seq_gate_blocks_inverting_improvement():
+    """自定义代价使「逆序严格更优」（[A,B]=300 > [B,A]=210）：
+
+    链激活 ⇒ 时序门拒收（保持 [A,B]）；链标签移除 ⇒ 同一算子照常接受逆序。
+    两相对照证明门在干活，且 ``sequence_group`` 全空时零行为变化。
+    """
+    nests = [Nest(id=0, x=0.0, y=0.0, z=0.0, capacity=10, available=True)]
+    uavs = [_uav(0, 0.0)]
+    costs = {
+        (-(1 + 0), 0): 100.0,   # uav → A
+        (-(1 + 0), 1): 100.0,   # uav → B
+        (0, 1): 100.0,          # A → B
+        (1, 0): 10.0,           # B → A（逆序更便宜的诱饵）
+        (0, NEST_KEY): 100.0,   # A → nest
+        (1, NEST_KEY): 100.0,   # B → nest
+    }
+
+    def _run(group):
+        tasks = [
+            Task(id=0, x=0.0, y=0.0, z=0.0, reward=5.0, earliest=0.0,
+                 latest=1e6, arrival_time=0.0,
+                 sequence_group=group, sequence_order=0),
+            Task(id=1, x=10.0, y=0.0, z=0.0, reward=5.0, earliest=0.0,
+                 latest=1e6, arrival_time=0.0,
+                 sequence_group=group, sequence_order=1),
+        ]
+        _, ev = _mk_custom_cost(tasks, uavs, nests, costs)
+        return ev._cost_polish_routes({0: [0, 1]}, {0: 0})
+
+    routes_on, _, stats_on = _run(7)
+    assert routes_on[0] == [0, 1], f"时序门失效：链序被反转 {routes_on}"
+    assert stats_on["n_2opt"] == 0
+
+    routes_off, _, stats_off = _run(None)
+    assert routes_off[0] == [1, 0], "无链对照：算子应照常接受逆序改进"
+    assert stats_off["n_2opt"] == 1
+
+
+def test_post_cost_polish_repairs_sequence_downstream():
+    """交付后 polish 下游链含时序修复：改派获益触发下游重排后，链逆序被归位。
+
+    基线 U0=[T0(order1), T1(order0), T2] 本身链逆序（手造，越过解码修复链），
+    T2 迁往空闲 U1 有严格收益 ⇒ n_accepted>0 ⇒ 走下游重排/修复段；
+    交付解必须零链逆序（T1 归位到 T0 之前）。
+    """
+    from task_allocation.common.types import AllocationSolution, UAVTour
+    from task_allocation.methods.muas.constraints.coop_constraints import (
+        sequence_violation_pairs,
+    )
+
+    nests = [Nest(id=0, x=0.0, y=0.0, z=0.0, capacity=10, available=True)]
+    uavs = [_uav(0, 0.0), _uav(1, 500.0)]
+    tasks = [
+        Task(id=0, x=50.0, y=0.0, z=0.0, reward=5.0, earliest=0.0,
+             latest=1e6, arrival_time=0.0,
+             sequence_group=7, sequence_order=1),
+        Task(id=1, x=100.0, y=0.0, z=0.0, reward=5.0, earliest=0.0,
+             latest=1e6, arrival_time=0.0,
+             sequence_group=7, sequence_order=0),
+        Task(id=2, x=520.0, y=0.0, z=0.0, reward=5.0, earliest=0.0,
+             latest=1e6, arrival_time=0.0),
+    ]
+    prob, ev = _mk(tasks, uavs, nests)
+    tours = [
+        UAVTour.from_uav(uavs[0], task_ids=[0, 1, 2], end_nest_id=0),
+        UAVTour.from_uav(uavs[1], task_ids=[], end_nest_id=0),
+    ]
+    sol = AllocationSolution(
+        tours=tours, candidate_task_ids=[0, 1, 2], executed_task_ids=[0, 1, 2]
+    )
+    sol_after, stats = ev.post_cost_polish(sol)
+    assert stats["n_accepted"] > 0, f"应有至少一次改派获益：{stats}"
+    by_id = {t.id: t for t in tasks}
+    for tour in sol_after.tours:
+        pairs = sequence_violation_pairs(list(tour.task_ids), by_id)
+        assert pairs == [], f"交付解残留链逆序 {tour.task_ids}：{pairs}"
+    routes = _routes_of(sol_after)
+    assert 2 in routes.get(1, []), f"T2 应已迁往 U1：{routes}"
+    assert routes[0] == [1, 0], f"链序应被修复为 [T1, T0]：{routes}"
