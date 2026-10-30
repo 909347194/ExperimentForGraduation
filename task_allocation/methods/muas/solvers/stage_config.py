@@ -232,6 +232,16 @@ class MUASStageConfig:
     # 差分变异围绕**修复后的可行子空间**展开（默认开启）。
     # 关闭后退化为当前行为：进化搜索的是未修复空间。
     lamarckian: bool = True
+    # M2-1 段内巡游序回写（2026-10-30 设计稿）：在 lamarckian 基础上，把修复解
+    # 的**段内访问顺序**也写回巡游基因通道（起始通道回写由 lamarckian 承担），
+    # 把顺序自由度纳入可遗传空间，治 T9「基因型坍缩后无梯度可爬」。
+    #   · 只对集合匹配（无剔除/改派）的段做全量段内重排 + cost 逐链重算；
+    #   · 写回后强制 temperature=0 重解码一致性校验、I1/I2/I3 断言、表型复核
+    #     （n_hard/覆盖/迟到 逐分量不劣），任一不满足即回退到起始通道写法；
+    #   · 含硬违约的解永不写回；开关关闭时与历史行为逐位等价。
+    # 默认关闭（gated A/B，见 docs/m2_gene_writeback_design_2026-10-30.md 验收）；
+    # 仅 SRP 模型生效，balanced/overloaded 退化为起始通道写法。
+    lamarckian_patrol_writeback: bool = False
     # 事件驱动重规划：被标记不可用的机巢（论文 §6 的 NEST_UNAVAILABLE 事件）
     # 一律不可选为终点机巢 z_ub，其归属 UAV 强制改降其它巢（多机巢异巢终止的
     # 容错分支）。由滚动层每周期从事件上下文注入。
