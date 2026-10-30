@@ -24,8 +24,9 @@
 
 `metrics.json` 的 `cycles` 只装**代表 seed（首个）**；多 seed 运行时才附
 `seed_summary`（mean±std）与 `per_seed`（每 seed 全量 cycles），单 seed 运行
-`seed_summary=None`。因此默认单 seed 运行产 3 张静态图（I01/P04/R01）+ 1 张动图（P06）。
-2026-10-26 图件裁剪后注册表共 **4 张**（P04 甘特图追加保留）。引用过程图时须注明"代表 seed"。
+`seed_summary=None`。因此默认单 seed 运行产 4 张静态图（I01/P03/P04/R01）+ 1 张动图（P06）。
+2026-10-26 图件裁剪到 4 张（gif 只保留 P06、P04 甘特图追加保留）；2026-10-29 P03 `allocation`
+与 P04 并存接入注册表，现共 **5 张**。引用过程图时须注明"代表 seed"。
 
 周期数不固定：`rolling.n_cycles` 只是安全上限，真实停止由
 `stop_when_stable`（enabled，patience=4）收敛早停决定——稳态剩余即物理不可达/
@@ -67,12 +68,13 @@ plot/initial/geo_overview.py  →  plot_geo_overview  →  geo_overview.png
 
 层内另有 `topic` 二级标签（config / allocation / outcome）用于再归类，但**不建目录**——避免层级深过头。
 
-当前 4 张图（此表由 `python -c "from plot import registry; print(registry.describe())"`
+当前 5 张图（此表由 `python -c "from plot import registry; print(registry.describe())"`
 生成，改动后请重跑覆盖）：
 
 | 层 | 图 id | 说明 | 数据来源 |
 |---|---|---|---|
 | initial | `geo_overview` | 初始态势：背景（建筑 / 地形）· 机巢 · 初始机队 · 任务散布 | `solution.json 的 dem / nests / tasks / uavs + data/<scenario>/building/*.shp（背景层规则：有建筑优先画建筑，只有地形才画 DEM）` |
+| process | `allocation` | 分配结构与逐周期空间演化：甘特航迹条 + 背景底图逐周期演化 | `solution.json 的 cycles[].tours（est_cost）+ tasks[] / nests[] / dem（背景层：有建筑画建筑、只有地形画 DEM；逐周期面板只画有真实航次的活跃周期，未执行任务只标已到达者，与 allocation_anim 口径一致）` |
 | process | `allocation_gantt` | 分配航迹条：线长 ∝ 真实航程 · 方块=任务 · 两端起降巢 | `solution.json 的 cycles[].tours（est_cost）+ tasks[] / nests[]（线长按 est_cost 标定，段间距按三维几何）` |
 | process | `allocation_anim` | 分配过程动画演变：滚动闭环航迹生长 / 任务点亮 + 当前周期 DMDE 收敛（GIF） | `solution.json 的 cycles[].tours + cost_history + tasks[] / nests[] / dem（地图背景：有建筑画建筑、只有地形画 DEM）；左右两栏——地图下方的画布级状态行（周期/已到达/已完成百分比/里程，白底随文字自动贴合；置于图外因图内任何角落都会压住贴顶任务标号），右栏当前周期收敛曲线；完成进度只用百分比数字表达，不画进度条` |
 | report | `outcome_summary` | 结果总览：完成率 CR 轨迹 / 未完成任务终局构成 / 双目标 / 关键指标 | `metrics.json 的 cycles[].pool_counts / completed_ids / summary + per_seed` |

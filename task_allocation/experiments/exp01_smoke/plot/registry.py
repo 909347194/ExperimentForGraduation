@@ -42,7 +42,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Iterable, Sequence
+from typing import Callable, Iterable
 
 from .initial.geo_overview import plot_geo_overview
 from .process.allocation import plot_allocation
@@ -226,8 +226,3 @@ def describe() -> str:
             f"| {fig.group} | `{fig.id}` | {fig.title} | `{fig.source}` |"
         )
     return "\n".join(lines)
-
-
-def needs_solution(figures: Sequence[Figure]) -> bool:
-    """这批图是否需要 ``solution.json``（不需要时可跳过加载大文件）。"""
-    return any("solution" in f.needs for f in figures)

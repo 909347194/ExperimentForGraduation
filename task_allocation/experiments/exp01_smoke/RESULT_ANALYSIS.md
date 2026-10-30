@@ -1,5 +1,17 @@
 # exp01 冒烟/正确性验证台 — 结果分析报告
 
+> ⚠⚠ **本文数据已过时，禁止直接用于论文取数（2026-10-30 标注）**
+>
+> 本文生成于 2026-10-25，对应**当时的**配置：N=60 任务、`uav_max_range=80 km`、
+> K_mean=10。此后 exp01 配置已多次变更（现为 N=30、`uav_max_range=10 km`、
+> `tasks.domain=region`（geojson 撒点）、`selection.marginal.max_ratio=4`），
+> 且 2026-10-30 修正了航程记账口径（有向距离 / 落盘不再舍入），**航程类数值
+> 与本文不再可比**。旧的 `results/` 产物已归档至
+> `experiments/_archive/exp01_pre_directionfix_20261029/`。
+>
+> **论文取数请以当前 `results/` 为准**；本文保留作「口径演进史」与审计项
+> 解释（§2 的不变量判据、§3.1 的不可达归因仍然有效，与配置无关）。
+
 > 生成日期：2026-10-25（重跑，含「无超期淘汰 + 迟到软约束 + 门禁软窗 + **不可达归因拆分**」口径）
 > 口径基线：覆盖门禁双开（`coverage_gate=true` + `lexicographic_coverage=true`）、`prune_zero_reward=false`、`λ=0.1`、K_mean=10、3 seed（42/43/44）、`uav_max_range=80 km`
 > 数据源：`results/metrics.json` + `results/seed_{42,43,44}/`（新代码重跑）

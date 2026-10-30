@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""provider.py — 节点间代价访问层（pairwise 优先，否则欧氏）。
+"""provider.py — 节点间代价访问层（pairwise 优先，否则按同向垂直切面现算）。
 
 从 ``problem.py`` 拆出：``CostProvider`` 统一「id→id 代价」与「坐标→坐标
 物理航程」两种访问，``build_cost_provider`` 由实体列表装配。DEM 三维航程
@@ -25,7 +25,7 @@ def _euclid(
 
 @dataclass
 class CostProvider:
-    """节点间代价：pairwise 优先，否则欧氏；机巢键 = nest_offset + nest_id。
+    """节点间代价：pairwise 优先，否则按**同向**垂直切面现算；机巢键 = nest_offset + nest_id。
 
     另承载 **统一距离口径** ``distance_fn``（:func:`make_distance_fn` 生成的
     DEM 三维航程）。凡要算「飞这一段的物理长度/时间」的地方（    航迹时间、
@@ -43,13 +43,31 @@ class CostProvider:
         return self.nest_offset + nest_id
 
     def cost(self, id_a: int, id_b: int) -> float:
+        """``id_a → id_b`` 的**有向**代价。
+
+        【为什么不再回退到反向键 / 欧氏】2026-10-29 修正：
+
+        - 旧实现在正向键缺失时先查 ``(id_b, id_a)`` ——垂直切面航程**方向
+          相关**（爬升规则自起点扫描），反向值是**另一个飞行方向**的数，
+          拿它给 ``id_a → id_b`` 记账是口径错误，不是近似；
+        - 再缺失则退 ``_euclid`` ——直接丢掉 DEM 三维航程，爬升段凭空消失、
+          系统性低估，在山地/建筑场景可差一个量级。
+
+        两条回退都**静默**：不报错、不告警，直接给出一个错误量级的数，
+        既污染上报航程（论文指标），也污染 ``λ·path`` 目标项（搜索方向）。
+        现改为：缺键一律按 **id_a → id_b 的正向**现算，有 DEM 走垂直切面
+        航程（与 pairwise 同源同向），无 DEM 才退欧氏（直线口径本就对称）。
+        """
         if (id_a, id_b) in self.pairwise:
             return float(self.pairwise[(id_a, id_b)])
-        if (id_b, id_a) in self.pairwise:
-            return float(self.pairwise[(id_b, id_a)])
         pa = self.positions.get(id_a)
         pb = self.positions.get(id_b)
         if pa is not None and pb is not None:
+            if self.distance_fn is not None:
+                try:
+                    return float(self.distance_fn(pa, pb))
+                except Exception:  # 防御：估算器异常不得让求解崩，退回直线
+                    pass
             return _euclid(pa, pb)
         return 1e6
 

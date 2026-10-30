@@ -112,6 +112,22 @@ class SyntheticTaskConfig:
     # 【遗留别名】True → domain=nest_anchored；False → 绕机巢群中心撒点。
     # 仅为向后兼容旧 yaml 保留，新配置请直接写 ``domain``。
     anchor_to_nests: bool = True
+    # ── 时序链（任务执行顺序约束）────────────────────────────────
+    # 把一批任务组织成「必须按序执行」的链（业务对应：同一目标的 侦察 →
+    # 打击 → 评估，或同一片区域的连续作业必须按先后做）。链内成员**空间
+    # 相邻**取（种子 + 最近邻），不额外移动撒点，故撒点分布不变。
+    #
+    # ``sequence_chain_ratio``：参与链的任务占比（0 = 关闭，默认）。
+    # ``sequence_chain_len``：单链任务数（<2 视为关闭）。
+    #
+    # 判定口径（2026-10-29）：同一条航次内，链内序号小的必须先访问；违反
+    # = 硬违约。链被拆到不同无人机 / 不同周期时**不判违约**（跨机跨周期
+    # 按绝对完成时刻比对，尚未实现）。
+    #
+    # 默认 0.0 = 关闭：既有实验的 ``Task.sequence_group`` 恒为 None，
+    # 时序约束惰性退化为 0，既有基线逐位不变。
+    sequence_chain_ratio: float = 0.0
+    sequence_chain_len: int = 2
     # 任务区域门禁（城关区口径）：给出区域多边形 geojson（如
     # ``Chengguan_district.geojson``，相对 task_allocation/data/<scenario>/ 或绝对路径），
     # 任务点必须落在多边形内；落点出区则拒绝采样、在区域包络内重采，超时
@@ -600,7 +616,64 @@ def build_synthetic_tasks(
                 },
             )
         )
+
+    _assign_sequence_chains(tasks, xy, rng, config)
     return tasks
+
+
+def _assign_sequence_chains(
+    tasks: list[Task],
+    xy: np.ndarray,
+    rng: np.random.Generator,
+    config: SyntheticTaskConfig,
+) -> int:
+    """把一部分任务组织成时序链，返回链数（0 = 未启用）。
+
+    链内成员取「随机种子 + 其空间最近邻」，保证同一链在地理上成簇（同一
+    目标/同一片区域的先后作业），且**不移动任何撒点**——只貼标签，撒点
+    分布与关闭时完全一致。
+
+    ``sequence_group`` 取链内首个成员的 task id（任务 id 全局唯一 ⇒ 组 id
+    跨批次也不会撞）；``sequence_order`` 为链内序号 0..k-1。
+
+    关闭时（ratio<=0 或 len<2 **不消耗任何随机数**），保证既有实验基线
+    逐位不变。
+    """
+    ratio = float(getattr(config, "sequence_chain_ratio", 0.0) or 0.0)
+    k = int(getattr(config, "sequence_chain_len", 2) or 0)
+    if ratio <= 0.0 or k < 2:
+        return 0
+    n = len(tasks)
+    n_chains = int(n * ratio) // k
+    if n_chains <= 0:
+        return 0
+
+    remaining = list(range(n))
+    chains_built = 0
+    for _ in range(n_chains):
+        if len(remaining) < k:
+            break
+        seed_pos = int(rng.integers(0, len(remaining)))
+        seed = remaining.pop(seed_pos)
+        members = [seed]
+        if len(remaining) >= k - 1:
+            d = np.sum((xy[remaining] - xy[seed]) ** 2, axis=1)
+            near = np.argsort(d, kind="stable")[: k - 1]
+            for pos in sorted(near, reverse=True):
+                members.append(remaining.pop(int(pos)))
+        else:
+            break
+        gid = int(tasks[seed].id)
+        for order, idx in enumerate(members):
+            tasks[idx].sequence_group = gid
+            tasks[idx].sequence_order = order
+            tasks[idx].meta["sequence_chain"] = {
+                "group": gid,
+                "order": order,
+                "size": len(members),
+            }
+        chains_built += 1
+    return chains_built
 
 
 def build_task_batches(

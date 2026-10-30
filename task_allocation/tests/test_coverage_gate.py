@@ -16,6 +16,14 @@
    _secondary_upper_bound 拆掉 1e6 虚构帽换推导帽；
 6. **搜索用 f 不含 −m·F1（F1 只作指标）**：门禁口径下 f 与 F1 无关，
    仅 = 硬违约 + W_skip·n_skip + 迟到 + λ·path。
+
+夹具口径声明（2026-10-29）：本文件夹具里 UAV 剩余航程一律取 **80 km**，
+是历史「城关区 80 km」时代的残留自设值，**不是生产口径**（生产见
+``experiments/exp01_smoke/config.yaml`` 的 ``problem.uav_max_range``，现为
+10 km）。这里保留 80 km 是因为本文件锁的是**相对判据**（任务往返航程 vs
+剩余航程谁大），绝对量只要保持「t0 可行 / t1 不可行」的关系即可；若照抄
+生产的 10 km，夹具里 20 km 往返的 t0 会变成不可行，测试语义反而被改掉。
+**引用本文件时不要把 80 km 当成任何实验的真实航程。**
 """
 
 from __future__ import annotations

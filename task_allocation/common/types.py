@@ -45,7 +45,18 @@ class UAVStatus(str, Enum):
 
 @dataclass
 class Task:
-    """巡检任务。"""
+    """巡检任务。
+
+    时序约束字段（2026-10-29 落地，此前 ``sequence`` 开关是空壳——见
+    :mod:`task_allocation.methods.muas.constraints.coop_constraints`）：
+
+        ``sequence_group``  时序链标识；``None`` = 该任务无执行顺序约束
+        ``sequence_order``  链内序号；同一条航次内，序号小的必须先被访问
+
+    口径（用户 2026-10-29 裁定）：**只约束同一条航次内的访问顺序**，同一
+    链的任务若被拆到不同无人机 / 不同周期，本模型不判违约（跨机跨周期
+    判序须按绝对完成时刻比对，属后续扩展，此处如实声明未做）。
+    """
 
     id: int
     x: float
@@ -57,6 +68,10 @@ class Task:
     arrival_time: float = 0.0
     status: TaskStatus = TaskStatus.PENDING
     meta: dict[str, Any] = field(default_factory=dict)
+    # ── 时序（执行顺序）约束 ──────────────────────────────────────
+    # 放在最后并给默认值：既有构造与既有实验基线逐位不变。
+    sequence_group: int | None = None
+    sequence_order: int = 0
 
     @property
     def position(self) -> tuple[float, float, float]:

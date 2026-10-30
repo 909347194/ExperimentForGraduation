@@ -223,16 +223,32 @@ def make_distance_fn(
     )
 
     def _key(p) -> tuple[float, float, float]:
+        """缓存键 = **精确**坐标（2026-10-29 起不再量化）。
+
+        旧实现把 xyz 量化到 0.1 m，理由是"合并浮点噪声"。但量化后的坐标
+        与估算器直接调用所用的原始坐标**不是同一个点**，垂直切面的地形
+        剖面采样位置随之偏移 ⇒ 同一条边走「distance_fn」与走
+        「estimator.estimate」得到两个不同的航程（实测差 1~3 m，且**方向
+        不定**，取决于采样点偏移落在上坡还是下坡）。后果：审计 J 项
+        「有序重算 == 记录 est_cost」产生假 FAIL（容差仅 1 m），M 项也
+        因此残留"方向性差异"。
+
+        本项目的节点坐标在单个周期内是**固定**的（任务 / 机巢 / UAV 位置
+        不变），同一条边的重复查询必然给出逐位相同的 float，故量化并非
+        命中率所必需：取消后命中率不变，而距离值变得**唯一确定**——任何
+        调用路径都得到同一个数，审计可以放心用严格判据。
+        """
         arr = np.asarray(p, dtype=np.float64)
         return (
-            round(float(arr[0]), 1),
-            round(float(arr[1]), 1),
-            round(float(arr[2]) if arr.size > 2 else 0.0, 1),
+            float(arr[0]),
+            float(arr[1]),
+            float(arr[2]) if arr.size > 2 else 0.0,
         )
 
     if estimator is None:
 
         def distance_fn(a, b) -> float:  # 无 DEM：三维直线（与旧回退口径一致）
+            # 直线距离天然对称，(A,B)/(B,A) 共用一个键可省一半缓存。
             ka, kb = _key(a), _key(b)
             key = (ka, kb) if ka <= kb else (kb, ka)
             hit = memo.get(key)
@@ -246,8 +262,16 @@ def make_distance_fn(
     else:
 
         def distance_fn(a, b) -> float:
+            # 【缓存键必须有序】垂直切面航程**方向相关**：爬升规则从起点
+            # 向终点逐点扫描（``_generate_flight_path`` 的 ``path_zs[i-1]``
+            # 递推），反向飞行的地形剖面采样序列不同 ⇒ d(A,B) ≠ d(B,A)。
+            # 旧实现把键对称化成 ``(ka,kb) if ka<=kb else (kb,ka)``，于是
+            # 同一条腿第二次被反向查询时**直接命中第一次的正向值**——
+            # 用错误方向的航程去算 ETA/航迹时间（实测同腿可差 ~1%，
+            # 197 m ≈ 13 s）。这正是审计 M 项「方向不确定带」的真正来源：
+            # 它不是物理不确定性，是缓存键丢了方向。
             ka, kb = _key(a), _key(b)
-            key = (ka, kb) if ka <= kb else (kb, ka)
+            key = (ka, kb)
             hit = memo.get(key)
             if hit is not None:
                 return hit

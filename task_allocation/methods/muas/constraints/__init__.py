@@ -9,7 +9,8 @@
 并按本 MUAS 模型裁剪）：
 
     single_constraints  单机飞行性能约束：航程、飞行时间（可选）
-    coop_constraints    任务侧协同约束：时间窗、时序（可选）、同时到达（本模型 N/A）
+    coop_constraints    任务侧协同约束：时间窗、时序（2026-10-29 落地，
+                        只判同一航次内访问顺序）、同时到达（本模型 N/A）
     nest_capacity      机巢容量 / 可用性约束（终点机巢决策 z_ub 的硬约束）
     evaluator          以上三类违背量的统一聚合（ConstraintReport）
 
@@ -36,6 +37,7 @@ from .coop_constraints import (
     check_sequence_constraint,
     check_sync_constraint,
     check_time_window_constraint,
+    sequence_violation_pairs,
 )
 from .evaluator import ConstraintReport
 
@@ -57,6 +59,7 @@ __all__ = [
     "check_sequence_constraint",
     "check_sync_constraint",
     "check_time_window_constraint",
+    "sequence_violation_pairs",
     # evaluator
     "ConstraintReport",
 ]

@@ -61,6 +61,16 @@ tasks:
     max_reject_trials: 8 # 落点出多边形时的拒绝采样重试轮数
     n_tasks: 20 # 第 1 周期到达的初始任务数；后两周期到达 5、5（见 rolling.arrivals），共 30（2026-10-26 用户指定口径）
     spread_m: 12000.0 # 相对锚点机巢的散布半径（m）；仅 domain=nest_anchored 生效
+    # ── 时序链（任务执行顺序约束，2026-10-29 落地）──────────────────────
+    # 把一部分任务组织成「必须按序执行」的链（业务对应：同一目标的
+    # 侦察 → 打击 → 评估）。链内成员空间相邻（种子 + 最近邻），不移动撒点。
+    # 判定：同一条航次内，链内序号小的必须先访问，违反 = 硬违约（判废）。
+    # 同一链被拆到不同无人机 / 不同周期时**不判违约**（跨机跨周期须按绝对
+    # 完成时刻比对，尚未实现——论文引用时须如实声明该口径边界）。
+    # 默认 0.0 = 关闭：sequence_group 恒为 None，既有实验基线逐位不变。
+    # 验证时序机制时改 0.3 一类的值（配合 muas.constraints.sequence: true）。
+    sequence_chain_ratio: 0.0
+    sequence_chain_len: 2 # 单链任务数；<2 视为关闭
     reward_min: 1.0
     reward_max: 10.0
     # 时间窗 = 到达时刻 + U(deadline_cycles_min, deadline_cycles_max) × cycle_length

@@ -12,6 +12,7 @@
 - :func:`_complete_coverage`         覆盖补全（单趟，可达即执行）
 - :func:`_load_coverage_fixed_point` 覆盖优先装载（EDD 序、修到不动点）
 - :func:`_reorder_for_deadlines`     时间窗重排（纯调序、不改任务集）
+- :func:`_repair_sequence`           时序修复（同链按 ``sequence_order`` 升序归位）
 - :func:`_prune_zero_reward`         零奖励剔除（默认关）
 - :func:`_reflow_task`               改派救援（插入 / 开班 / 换机腾位）
 
@@ -115,6 +116,9 @@ class DecodeRepairMixin:
             routes, end_nests = self._complete_coverage(routes, end_nests)
         # 航次内访问顺序的时间窗修复（不改任务集，只调先后）
         routes = self._reorder_for_deadlines(routes)
+        # 时序修复：同链任务按 sequence_order 升序归位（硬约束，构造性满足）。
+        # 必须在航程闸之前 —— 调序会改变航程，后续 _repair_range 按新序再闸。
+        routes = self._repair_sequence(routes)
         # 零奖励剔除：ETA ≥ latest+W 的任务 eff≈0——带着飞只赔迟到惩罚
         # （T2），暂缓把机会留给下周期（2026-10-18 四层适应度配套）。
         # coverage_first 下强制跳过：零奖励是**经济**判据，卸任务与
@@ -159,6 +163,15 @@ class DecodeRepairMixin:
         elif bool(getattr(self.problem.config, "lexicographic_coverage", False)):
             gate_stats = audit_coverage(self.problem, routes, end_nests).to_dict()
 
+        # 终态兜底：门禁/装载救援往航次里插入任务时只按可达与成本挑位置，
+        # 不会顾及链内顺序。此处**仅在确实存在逆序时**归位（调序会改变航程，
+        # 无违规就不动，避免给已完成闸门放行的解引入新的航程风险）。
+        if self._sequence_enabled():
+            routes = {
+                uid: (self._sequence_fix(tids) if self._seq_violation(tids) else list(tids))
+                for uid, tids in routes.items()
+            }
+
         sol = self._assemble(routes, end_nests)
         if gate_stats is not None:
             sol.meta["gate_stats"] = gate_stats
@@ -167,6 +180,76 @@ class DecodeRepairMixin:
     def _window_enabled(self) -> bool:
         cons = getattr(self.problem.config, "constraints", None)
         return bool(getattr(cons, "time_window", True))
+
+    def _sequence_enabled(self) -> bool:
+        """时序（执行顺序）约束是否启用（``constraints.sequence``）。"""
+        cons = getattr(self.problem.config, "constraints", None)
+        return bool(getattr(cons, "sequence", True))
+
+    def _seq_order_of(self, tid: int) -> tuple[Any, float]:
+        """任务的 ``(sequence_group, sequence_order)``；无链时 ``(None, 0)``。"""
+        task = self._task_by_id.get(tid)
+        if task is None:
+            return (None, 0.0)
+        grp = getattr(task, "sequence_group", None)
+        if grp is None:
+            return (None, 0.0)
+        order = getattr(task, "sequence_order", None)
+        return (grp, float(order if order is not None else tid))
+
+    def _seq_violation(self, seq: Sequence[int]) -> bool:
+        """该访问序是否违反同链顺序（链内出现「序号下降」即为逆序）。"""
+        seen: dict[Any, float] = {}
+        for tid in seq:
+            grp, order = self._seq_order_of(tid)
+            if grp is None:
+                continue
+            prev = seen.get(grp)
+            if prev is not None and order < prev - 1e-9:
+                return True
+            seen[grp] = order if prev is None else max(prev, order)
+        return False
+
+    def _sequence_fix(self, seq: Sequence[int]) -> list[int]:
+        """把一条航次内同链任务按 ``sequence_order`` 升序归位（最小位移重排）。
+
+        做法：每个链占据的**位置槽位**保持不变，只把链内成员按序号升序
+        重新填回这些槽位 —— 链外任务的相对位置完全不动，改动量最小。
+
+        为什么不在最后靠惩罚压制：时序是**硬约束**（违反即判物理不可行），
+        交付解若不主动归位，硬违约会让整批解被判废，与「完成是约束」冲突。
+        归位只调序、不增删任务，不改变执行集。
+        """
+        out = list(seq)
+        if len(out) <= 1:
+            return out
+        groups: dict[Any, list[int]] = {}
+        for pos, tid in enumerate(out):
+            grp, _order = self._seq_order_of(tid)
+            if grp is not None:
+                groups.setdefault(grp, []).append(pos)
+        if not groups:
+            return out
+        for _grp, positions in groups.items():
+            if len(positions) <= 1:
+                continue
+            members = [out[p] for p in positions]
+            members.sort(key=lambda t: (self._seq_order_of(t)[1], t))
+            for slot, tid in zip(positions, members):
+                out[slot] = tid
+        return out
+
+    def _repair_sequence(
+        self, routes: Mapping[int, Sequence[int]]
+    ) -> dict[int, list[int]]:
+        """航次内时序修复（不改任务集，只调先后）。
+
+        挂点：``_reorder_for_deadlines`` 之后、航程闸之前 —— 顺序变化会改变
+        航程，必须让后续的 ``_repair_range`` 按新顺序再闸一次。
+        """
+        if not self._sequence_enabled():
+            return {uid: list(tids) for uid, tids in routes.items()}
+        return {uid: self._sequence_fix(tids) for uid, tids in routes.items()}
 
     def _reorder_for_deadlines(
         self, routes: Mapping[int, Sequence[int]]
@@ -242,6 +325,15 @@ class DecodeRepairMixin:
             cur = by_id[nxt].position
             remaining.remove(nxt)
         candidates.append(nn)
+
+        # 时序优先：候选序先剔掉违反同链顺序的（硬约束），让「最优」只在
+        # 合法序里挑——先挑后修会把迟到/航程指标算在非法序上，修完又变。
+        # 若所有候选都违反（罕见：链内任务被硬塞进同一航次），保留全部候选
+        # 交由下游 _repair_sequence 归位，不在此处丢任务。
+        if self._sequence_enabled():
+            legal = [c for c in candidates if not self._seq_violation(c)]
+            if legal:
+                candidates = legal
 
         def _evaluate(seq: Sequence[int]) -> tuple[int, float, float] | None:
             """返回 ``(迟到数, 迟到量, 航程)``；超剩余航程 → None（不可行）。"""

@@ -110,23 +110,67 @@ class _CountingEstimator:
         return type("R", (), {"distance": d, "cost": d * weight})()
 
 
+class _AsymEstimator:
+    """**方向相关**估算器替身：正向 1.0×欧氏、反向 1.2×欧氏。
+
+    模拟垂直切面航程的真实性质——爬升规则自起点扫描，反向飞行的地形
+    剖面采样序列不同 ⇒ d(A,B) ≠ d(B,A)。
+    """
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def estimate(self, start, end, weight: float = 1.0):
+        self.calls += 1
+        a = np.asarray(start, dtype=np.float64)
+        b = np.asarray(end, dtype=np.float64)
+        base = float(np.linalg.norm(b[:3] - a[:3]))
+        # 以起点 x 是否小于终点 x 区分"正向"：与被测代码的调用次序一致
+        d = base * (1.0 if a[0] <= b[0] else 1.2)
+        return type("R", (), {"distance": d, "cost": d * weight})()
+
+
 # ---------------------------------------------------------------------------
 # 1. 距离函数：记忆化 / 无 DEM 回退 / 对称
 # ---------------------------------------------------------------------------
 
 
 def test_distance_fn_memoizes_repeated_edges():
-    """同一条边只估算一次（DMDE 上万次评价的性能前提）。"""
+    """同一条边**同向**重复查询只估算一次（DMDE 上万次评价的性能前提）。
+
+    2026-10-29 修正：记忆化的性能保证只针对**同向**查询。反向是另一个
+    飞行方向、另一个数，必须独立估算（见
+    :func:`test_distance_fn_is_direction_aware`）。
+    """
     est = _CountingEstimator(scale=2.0)
     fn = make_distance_fn(est)  # type: ignore[arg-type]
     a, b = (0.0, 0.0, 0.0), (1000.0, 0.0, 0.0)
     d1 = fn(a, b)
-    d2 = fn(b, a)  # 反向查询应命中同一缓存
+    d2 = fn(a, b)  # 同向重复：命中缓存
     d3 = fn(a, b)
     assert d1 == pytest.approx(2000.0)
     assert d2 == pytest.approx(d1)
     assert d3 == pytest.approx(d1)
-    assert est.calls == 1, f"同一条边被重复估算 {est.calls} 次，记忆化失效"
+    assert est.calls == 1, f"同一条边同向被重复估算 {est.calls} 次，记忆化失效"
+
+
+def test_distance_fn_is_direction_aware():
+    """垂直切面航程方向相关 ⇒ 缓存键必须带方向，不得把 (A,B)/(B,A) 合一。
+
+    守的是 2026-10-29 修掉的缺陷：旧实现把键对称化成
+    ``(ka,kb) if ka<=kb else (kb,ka)``，反向查询直接命中正向值，于是 ETA /
+    航迹时间用的是**错误飞行方向**的航程（审计 M 项「方向不确定带」的真
+    正来源）。这里用方向相关估算器替身把该性质钉死。
+    """
+    est = _AsymEstimator()
+    fn = make_distance_fn(est)  # type: ignore[arg-type]
+    a, b = (0.0, 0.0, 0.0), (1000.0, 0.0, 0.0)
+    d_ab = fn(a, b)
+    d_ba = fn(b, a)
+    assert d_ab == pytest.approx(1000.0)      # 正向：1.0×欧氏
+    assert d_ba == pytest.approx(1200.0)      # 反向：1.2×欧氏
+    assert d_ab == pytest.approx(fn(a, b))    # 同向命中缓存
+    assert est.calls == 2, "反向必须独立估算，不得命中正向缓存"
 
 
 def test_distance_fn_without_dem_is_euclid():
@@ -303,3 +347,63 @@ def test_prefilter_range_uses_unified_travel():
     s2 = ScoredTask(task=_task(0, x=10000.0, latest=1e6), priority=1.0)
     passed2, _ = prefilter([s2], [uav], cfg, cost_hint={0: 50.0})
     assert len(passed2) == 1
+
+
+# ---------------------------------------------------------------------------
+# 5. CostProvider 回退口径（2026-10-29 修正）
+# ---------------------------------------------------------------------------
+
+
+def test_cost_fallback_does_not_reuse_reverse_value():
+    """缺正向键时**不得**拿反向键的值顶替。
+
+    守的是 2026-10-29 修掉的缺陷：旧 ``CostProvider.cost`` 在 ``(a,b)``
+    缺失时先查 ``(b,a)`` 直接返回。垂直切面航程方向相关 ⇒ 反向值是另一个
+    飞行方向的数，拿它给 ``a→b`` 记账是**口径错误**，且静默无告警，既污染
+    上报航程（论文指标）也污染 ``λ·path`` 目标项。
+    """
+    from task_allocation.methods.muas.cost.provider import CostProvider
+
+    est = _AsymEstimator()
+    p = CostProvider(
+        pairwise={(2, 1): 5000.0},          # 只有反向键，且值刻意离谱
+        positions={1: (0.0, 0.0, 0.0), 2: (3000.0, 0.0, 0.0)},
+        distance_fn=make_distance_fn(est),  # type: ignore[arg-type]
+    )
+    got = p.cost(1, 2)
+    assert got == pytest.approx(3000.0), "回退应按 1→2 正向现算"
+    assert got != pytest.approx(5000.0), "不得复用 (2,1) 反向键的值"
+
+
+def test_cost_fallback_uses_dem_not_euclid():
+    """缺键回退走 DEM 垂直切面航程，**不是**欧氏直线。
+
+    旧实现最后退 ``_euclid``：直接丢掉地形/建筑，爬升段凭空消失、系统性
+    低估航程。这里用方向相关估算器（正向 1.0×、反向 1.2×）把「走了 DEM」
+    与「走了直线」区分开。
+    """
+    from task_allocation.methods.muas.cost.provider import CostProvider
+
+    pos = {1: (300.0, 400.0, 0.0), 2: (0.0, 0.0, 0.0)}  # 直线 500
+    with_dem = CostProvider(
+        pairwise={}, positions=pos,
+        distance_fn=make_distance_fn(_AsymEstimator()),  # type: ignore[arg-type]
+    )
+    # 1→2：起点 x=300 > 终点 x=0 ⇒ 走 1.2× 分支 = 600
+    assert with_dem.cost(1, 2) == pytest.approx(600.0)
+
+    no_dem = CostProvider(pairwise={}, positions=pos, distance_fn=None)
+    assert no_dem.cost(1, 2) == pytest.approx(500.0), "无 DEM 时仍退欧氏"
+
+
+def test_cost_prefers_exact_pairwise_key():
+    """正向键存在时直接返回（回归守卫：回退改动不得影响命中路径）。"""
+    from task_allocation.methods.muas.cost.provider import CostProvider
+
+    p = CostProvider(
+        pairwise={(1, 2): 1234.0, (2, 1): 9999.0},
+        positions={1: (0.0, 0.0, 0.0), 2: (3000.0, 0.0, 0.0)},
+        distance_fn=make_distance_fn(_AsymEstimator()),  # type: ignore[arg-type]
+    )
+    assert p.cost(1, 2) == pytest.approx(1234.0)
+    assert p.cost(2, 1) == pytest.approx(9999.0)

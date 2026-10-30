@@ -34,7 +34,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Iterable, Sequence
+from typing import Callable, Iterable
 
 from .report.r01_tradeoff import plot_r01_tradeoff
 from .report.r02_compression import plot_r02_compression
@@ -220,8 +220,3 @@ def describe() -> str:
             f"| {fig.group} | `{fig.id}` | {fig.title} | `{fig.source}` |"
         )
     return "\n".join(lines)
-
-
-def needs_solution(figures: Sequence[Figure]) -> bool:
-    """这批图是否需要 ``solution.json``（本实验恒 False）。"""
-    return any("solution" in f.needs for f in figures)

@@ -22,19 +22,24 @@ exp01_smoke/
 ├── config.yaml   # 全部可调参数
 ├── plot/         # 可视化模块(代码)——按"看图目的"分三层(论文叙事线)
 │   ├── __init__.py    # make_plots() 调度 + 从 results/ 直接重画
-│   ├── registry.py    # ★ 图清单(唯一事实来源):4 张图,新增 = 加一行
+│   ├── registry.py    # ★ 图清单(唯一事实来源):5 张图,新增 = 加一行
 │   ├── theme.py       # 学术绘图样式、中文字体、保存约定(唯一 import pyplot 处)
-│   ├── base/          # 被图依赖但自己不是图的绘制件
-│   │   ├── dem.py     #   DEM 取数/晕渲/分层设色
-│   │   └── geo.py     #   图标图例、UAV 配色与航段、行式排版(_row_figsize)
-│   ├── initial/       # ① 初始状态:地形/机巢/初始机队/首批任务(与算法无关)
-│   ├── process/       # ② 求解过程:滚动闭环逐周期"发生了什么"(1 张)
-│   └── report/        # ③ 结果分析:总体结果(可直接进论文)
+│   ├── base/          # 被图依赖但自己不是图的绘制件(7 个)
+│   │   ├── scene.py      #   场景数据定位(config.yaml 的 data.*)唯一入口 + 本地坐标系/引导
+│   │   ├── buildings.py  #   建筑背景层(shapefile 载入/裁剪/按高度着色)
+│   │   ├── backdrop.py   #   背景判断只做一次:有建筑→建筑 / 仅地形→DEM / 皆无→纯底
+│   │   ├── dem.py        #   DEM 取数/晕渲/分层设色
+│   │   ├── geo.py        #   图标图例、UAV 配色与航段、行式排版(_row_figsize)
+│   │   ├── declutter.py  #   标签去重叠(save_figure 调用)
+│   │   └── audit.py      #   版面自检 bbox 溢出(check_bbox_overflow 调用)
+│   ├── initial/       # ① 初始状态:地形/机巢/初始机队/首批任务(1 张:geo_overview)
+│   ├── process/       # ② 求解过程:滚动闭环逐周期"发生了什么"(3 张:allocation / allocation_gantt / allocation_anim)
+│   └── report/        # ③ 结果分析:总体结果(1 张:outcome_summary,可直接进论文)
 └── results/      # 数值产物
     ├── metrics.json    # 数值指标(不含分配结构)
     ├── run_meta.json   # seed / 时间戳 / 配置路径 / DEM 网格
     ├── solution.json   # 任务表 + 机巢表 + 各周期航次与收敛轨迹 + dem + uavs
-    └── figures/        # 图产物:4 张(2026-10-26 图件裁剪后)
+    └── figures/        # 图产物:5 张(I01/P03/P04/P06/R01)
 ```
 
 **拆分原则**：`run.py` 只做编排，不堆细节。产物按「数值 vs 结构」分流：
@@ -155,25 +160,27 @@ exp01 的定位是**正确性验证台 + 口径标定台**（冒烟 + 审计 + �
 3. 每个周期的 `check_feasible` 无 violation。
 4. `T_t^exec ⊆ T_t^sel ⊆ T_t`、`U_t^exec ⊆ U_t^avail` 恒成立。
 5. 恒等式 `arrived = done + unreach + elim + remain` 每周期成立（审计自动核对）。
-6. `make_plots: true` 时产出 4 张图（I01 / P04 / P06 / R01），无缺字告警。
+6. `make_plots: true` 时产出 5 张图（I01 / P03 / P04 / P06 / R01），无缺字告警。
 7. 运行末尾 `audit_correctness.py` 全 PASS（N1 搜索期自洽 / N2 交付解可复算 / F 池水位守恒）。
 8. `run_meta.json` 的 `config_fingerprint` 与本次生效配置一致（换 λ / 代数 /
    门禁开关后指纹必变，产物可按指纹回溯口径）。
 
 > 出图约定：`plot.formats` 默认 `[png]`（矢量图需 `--pdf`；GIF 在图集含动画图时
-> 自动补）。4 张图中 `allocation_anim`（P06）为动画图（需多周期 tours），条件不满足时
+> 自动补）。5 张图中 `allocation_anim`（P06）为动画图（需多周期 tours），条件不满足时
 > 打印「跳过（数据不满足前置条件）」，属预期行为，不是失败。
 
 ## 图产物（results/figures/）
 
 | 层 | 图 id | 内容 | 数据来源 |
 |---|---|---|---|
-| initial | `geo_overview` | 初始态势：地形 · 机巢 · 初始机队 · 任务散布 | `solution.json` 的 dem / nests / tasks / uavs |
-| process | `allocation_gantt` | 分配航迹条：线长 ∝ 真实航程 · 方块=任务 · 两端起降巢 | `solution.json` 的 cycles[].tours + tasks[] / nests[] |
-| process | `allocation_anim` | 分配过程动画演变：滚动闭环航迹生长 / 任务点亮 + 当前周期收敛 + 机巢驻巢数实时标注（GIF） | `solution.json` 的 cycles[].tours + cost_history + tasks[] / nests[] / dem |
-| report | `outcome_summary` | 结果总览：完成率 CR 轨迹 / 未完成任务终局构成 / 双目标 / 关键指标 | `metrics.json` 的 cycles[] / summary + per_seed |
+| initial | `geo_overview`(I01) | 初始态势：背景(建筑/地形) · 机巢 · 初始机队 · 任务散布 | `solution.json` 的 dem / nests / tasks / uavs + `data/<scenario>/building/*.shp` |
+| process | `allocation`(P03) | 分配结构与逐周期空间演化：甘特航迹条 + 背景底图逐周期演化（只画有真实航次的活跃周期） | `solution.json` 的 cycles[].tours + tasks[] / nests[] / dem |
+| process | `allocation_gantt`(P04) | 分配航迹条：线长 ∝ 真实航程 · 方块=任务 · 两端起降巢 | `solution.json` 的 cycles[].tours + tasks[] / nests[] |
+| process | `allocation_anim`(P06) | 分配过程动画演变：滚动闭环航迹生长 / 任务点亮 + 当前周期收敛 + 机巢驻巢数实时标注（GIF） | `solution.json` 的 cycles[].tours + cost_history + tasks[] / nests[] / dem |
+| report | `outcome_summary`(R01) | 结果总览：完成率 CR 轨迹 / 未完成任务终局构成 / 双目标 / 关键指标 | `metrics.json` 的 cycles[] / summary + per_seed |
 
-（2026-10-26 图件裁剪：16 张 → 4 张，gif 只保留 P06，P04 甘特图追加保留；被裁图件见 git 历史。）
+（图件沿革：2026-10-26 裁剪 16 张 → 4 张，gif 只保留 P06、P04 甘特图追加保留；
+2026-10-29 P03 `allocation` 与 P04 并存接入注册表，共 5 张。被裁图件见 git 历史。）
 
 每张图同时出 `png`（预览）与 `pdf`（矢量，直接进 LaTeX）；中文字体 Noto Sans CJK SC。
 
@@ -283,3 +290,121 @@ DE vs 随机同预算裁决（seed 42，删除前从 trace 提取留档；两臂
 裁决：**搜索有效**——每周期 DE 均持续改进（首→末），同预算下不劣于随机（3/4 周期
 明显更优）；但优势幅度中等（周期 2 基本持平），与「λ 牵引小 ⇒ 增益有限」的担忧
 一致。论文叙事宜写「真实优化、增益稳健但不悬殊」，勿夸大。
+
+---
+
+## 时序（任务执行顺序）约束（2026-10-29 落地）
+
+**背景（为什么之前等于没有）**：`muas.constraints.sequence` 开关自 2026-10-18
+起就是 `true`，但 `Task` 数据类**从未提供** `sequence_group` 字段 ⇒
+`check_sequence_constraint` 恒返回 0。开关开着、判据跑着、约束从未生效。
+
+**现在补齐的三件事**
+
+1. **数据字段**：`Task.sequence_group`（链标识，`None` = 无顺序约束）+
+   `Task.sequence_order`（链内序号）。带默认值追加在字段表末尾 ⇒ 既有
+   构造与既有基线逐位不变。
+2. **判据**：`check_sequence_constraint` 改为按 `sequence_order` 判序（旧
+   实现拿**任务 id 大小**当顺序，与 id 分配方式耦合）。同一航次内同链任务
+   必须按序号升序，违背量 = 逆序对个数，经 `ConstraintReport.add_seq` 进
+   **硬违约桶**（与航程/续航同级判废，不是软惩罚）。
+   - 顺带修掉一个潜伏 bug：`feasibility.py` 传的是**标签列表**而 `add_seq`
+     按单字符串 `append` ⇒ `violations` 会出现嵌套列表 `[['seq_group_7']]`，
+     下游按标签前缀归因会解析不到。因时序恒 0 从未触发。
+3. **构造性修复**：`decode_repair._repair_sequence`（挂在
+   `_reorder_for_deadlines` 之后、航程闸之前）+ `_best_order` 的候选序过滤
+   + 门禁后终态兜底。只调序、不增删任务，链外任务相对位置不动（最小位移）。
+
+**口径边界（论文引用须如实声明）**：**只判同一条航次内**。同一链的任务若被
+拆给不同无人机或不同周期，本模型不判违约——跨机/跨周期须按绝对完成时刻比对，
+尚未实现。
+
+**开关与数据**：`muas.constraints.sequence`（默认 true）+ `tasks.sequence_chain_ratio`
+（默认 **0.0 = 关闭**，保证既有实验基线逐位不变）。开启后链内成员取「随机种子
++ 空间最近邻」，**不移动撒点**，只贴标签。
+
+**验证**：`tests/test_sequence_constraint.py` 18 项（判据 / 硬桶 / 开关 / 修复 /
+生成）全通过；端到端（`--set tasks.sequence_chain_ratio=0.3`，3 seed，小预算）
+30 任务中 6 个带链、3 条链，出现 2 个「同航次含同链 ≥2 成员」的真实检验场景，
+**交付解逆序 0**，完成 30/30。产物 `solution.json` 的 `tasks[]` 已补
+`sequence_group` / `sequence_order`（原 `_task_row` 手工挑字段会丢，事后无法审计）。
+
+**已知遗留**：小预算（pop20/gen30）下审计 J 项「有序 estimate 重算 = 记录
+est_cost（容差 1m）」FAIL，差 1.4~2.5 m（0.03%~0.07%）。**非本次改动引入**——
+同预算关闭时序链的对照组同样 FAIL，而改动前的主口径产物（gen200）J 项 PASS。
+根因是 M 项已记录的「对称缓存 vs 有序」方向性差异，只是 J 用绝对 1 m 容差
+比 M 的相对 0.1% 更严。**未擅自放宽判据**，待裁定。
+
+---
+
+## 航程记账口径修正（2026-10-29，审计 J 项由假 FAIL 转真 PASS）
+
+**J 项（逐腿有序重算 = 记录 est_cost，容差 1 m）长期 FAIL，差 1.4~2.5 m
+（0.03%~0.07%），且方向不定**（seed_42 记账偏大、seed_43 偏小）。此前被记为
+「低危口径差异 / 待裁定」。本轮定位为**三处独立实现缺陷**，全部修复；
+**判据一字未动**，现为严格 PASS（25/25）。
+
+### ① `CostProvider.cost` 的两条静默回退（最严重）
+`methods/muas/cost/provider.py`：正向键缺失时先查**反向键** `(b,a)` 直接返回，
+再缺失则退**欧氏直线** `_euclid`。
+- 垂直切面航程**方向相关**（`_generate_flight_path` 自起点逐点递推爬升），
+  反向值是**另一个飞行方向**的数 ⇒ 拿它给 `a→b` 记账是口径错误，不是近似；
+- 退欧氏则直接丢掉 DEM 三维航程，爬升段凭空消失、系统性低估。
+- 两者都**静默**：不报错不告警，既污染上报航程（论文指标）又污染 `λ·path`
+  目标项（搜索方向）。
+- 修复：缺键一律按 **a→b 正向**现算，有 DEM 走垂直切面，无 DEM 才退欧氏。
+
+### ② `make_distance_fn` 缓存键对称化
+`methods/muas/cost/vertical_section.py`：键被写成 `(ka,kb) if ka<=kb else (kb,ka)`，
+于是同一条腿反向查询**直接命中正向值** ⇒ ETA / 航迹时间用的是错误飞行方向的
+航程。修复：DEM 分支改**有序键**（欧氏分支天然对称，保留对称化省内存）。
+
+### ③ 落盘坐标 round 到 3 位（J 项差异的直接来源）
+`horizon._tour_row` / `metrics._nest_rows` / `metrics._task_row` 把 xyz round
+到 3 位，而运行端 pairwise 用**精确**坐标。两端仅差 0.0002~0.0004 m，但
+**建筑障碍包络是离散查询**（采样点是否落在某建筑多边形内）⇒ 微小偏移可让某
+采样点跨过建筑边界 ⇒ 障碍高度跳变几十米 ⇒ **单腿航程跳变 1.2 m**。
+- 这解释了差异「方向不定」（取决于采样点落在边界哪侧），也解释了旧 gen200
+  产物恰好 PASS——那条腿的采样点没落在边界上，**纯属运气**。
+- 实证：cycle2/uav0 两腿，运行端 1623.2329 / 1630.9426（合计 3254.1755 =
+  记录值），审计端用 round 坐标得 1622.003 / 1629.712（合计 3251.715）。
+- 修复：三处坐标落盘**不做 round**，保留完整精度。
+
+### 附带修复
+`make_distance_fn` 的坐标量化（0.1 m）取消：量化坐标与估算器直算的原始坐标
+不是同一个点，剖面采样位置偏移 ⇒ 同一条边两种调用路径给出不同值。取消后
+命中率不变（节点坐标在周期内固定），而**距离值唯一确定**。
+
+### 验证
+- 全量测试 **369 passed**（新增 4 项：方向感知缓存、回退不复用反向值、
+  回退走 DEM 不退欧氏、命中路径不受影响）。
+- 端到端（pop20/gen30，3 seed）审计 **25/25 全通过**：J / M / O / D / K / L 全 PASS，
+  M 项由「WARN 级已知差异」升格为**回归守卫**（ETA 与代价矩阵均有序，恒 0 差异）。
+- **主口径结果已重跑刷新**（pop50/gen200，3 seed）审计同样 **25/25 全通过**。
+  距离口径改变会改变数值，旧 `results/` 归档至
+  `experiments/_archive/exp01_pre_directionfix_20261029/`，**不得再用于论文取数**。
+
+### 对实验数字的实际影响（主口径重跑实测）
+
+| seed | 旧航程 total_path_m | 新航程 | 变化 | 旧按时率 | 新按时率 |
+|---|---|---|---|---|---|
+| 42 | 44909.0 | 46293.7 | +3.08% | 0.867 | **1.000** |
+| 43 | 39619.8 | 41725.8 | +5.32% | 0.933 | **1.000** |
+| 44 | 37781.4 | 42543.4 | **+12.60%** | 0.600 | **1.000** |
+
+- **航程系统性被低估 3%~13%**：退欧氏直线会凭空抹掉爬升段，拿反向值则用了
+  另一个方向的数——两者都让记账航程偏小。
+- **按时率由 0.867/0.933/0.600 升到全 1.000**。机理：ETA 此前用被低估的航程
+  ⇒ 时间窗把「其实来不及」的任务判成来得及（`test_distance_unification.py`
+  文档开头就写明这个失效模式）；修正后判据恢复真实，求解器不再做纸面可行的
+  承诺，迟到随之归零。**结论方向不变（方法依然全完成），但旧数字不可引用。**
+- 完成率恒 1.000（正确性不变量）不受影响。
+- **波及面**：exp02 / exp05 / exp06 共用同一套 `methods/` 代价口径，其既有
+  `results/` 同样是缺陷口径下的产物，**论文主表（exp05）须重跑**再取数。
+
+### 论文口径声明要点
+1. 地形跟随航程是**有向**距离：d(A,B) ≠ d(B,A)（爬升规则自起点扫描）。这是
+   模型固有性质，非缺陷；全链路（代价矩阵 / ETA / 记账 / 审计）均按**实际
+   飞行方向**取值。
+2. 建筑障碍包络为**离散**查询，路径微移（毫米级）若跨过建筑边界会使航程跳变
+   米级。属离散化固有性质；记账与复算必须用**同一精度**的坐标（故落盘不再舍入）。

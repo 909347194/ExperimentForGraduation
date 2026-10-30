@@ -101,10 +101,20 @@ class ConstraintReport:
         self.hard_tags.append(tag)
         self.hard_violation += amount
 
-    def add_seq(self, tag: str, amount: float) -> None:
-        self.violations.append(tag)
+    def add_seq(self, tags: str | list[str], amount: float) -> None:
+        """累加时序违约（进硬桶）。
+
+        2026-10-29 修复：调用方 ``feasibility.check_solution_feasibility``
+        传的是**标签列表**（与 add_window / add_sync 同风格），而旧实现按
+        单个字符串 ``append`` ⇒ ``violations`` 变成嵌套列表
+        ``[['seq_group_7']]``，下游（horizon 按标签前缀归因）解析不到。
+        时序此前恒为 0（缺 ``Task.sequence_group``），该缺陷从未被触发。
+        现兼容两种写法：字符串或列表都按标签展开。
+        """
+        tags = [tags] if isinstance(tags, str) else list(tags)
+        self.violations.extend(tags)
         self.seq_violation += amount
-        self.hard_tags.append(tag)
+        self.hard_tags.extend(tags)
         self.hard_violation += amount
 
     def add_window(
