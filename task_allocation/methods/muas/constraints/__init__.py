@@ -34,10 +34,12 @@ from .single_constraints import (
 )
 from .coop_constraints import (
     CoopConstraintViolation,
+    arrival_times,
     check_sequence_constraint,
     check_sync_constraint,
     check_time_window_constraint,
     sequence_violation_pairs,
+    task_window,
 )
 from .evaluator import ConstraintReport
 
@@ -56,10 +58,12 @@ __all__ = [
     "check_time_constraint",
     # coop_constraints
     "CoopConstraintViolation",
+    "arrival_times",
     "check_sequence_constraint",
     "check_sync_constraint",
     "check_time_window_constraint",
     "sequence_violation_pairs",
+    "task_window",
     # evaluator
     "ConstraintReport",
 ]

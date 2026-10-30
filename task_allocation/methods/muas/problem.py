@@ -75,6 +75,7 @@ from task_allocation.common.types import (
     UAVTour,
 )
 from task_allocation.methods.muas.config import ConstraintConfig, MUASProblemConfig
+from task_allocation.methods.muas.constraints.coop_constraints import arrival_times
 from task_allocation.methods.muas.cost.provider import CostProvider, build_cost_provider
 from task_allocation.methods.muas.coverage_gate import audit_coverage
 from task_allocation.methods.muas.feasibility import check_solution_feasibility
@@ -310,13 +311,12 @@ class SelectiveMUASProblem(FitnessWeightsMixin):
     def tour_time(self, tour: UAVTour) -> float:
         """单架 UAV 航迹时间（含飞行 + 等待 + 服务 + 返巢）；作诊断量（非目标项）。
 
-        逐航次模拟到达游标（与 ``coop_constraints.check_time_window_constraint``
-        的游标语义一致，但不对迟到计惩罚）：从 UAV 起点出发，按访问顺序累加段飞行
-        时间（= 段长 / speed），到点若早于 ``earliest`` 则等待至 ``earliest``，
-        离开时累加上 ``default_service_time``，末段返巢到终点机巢。
+        到达游标委托 :func:`constraints.coop_constraints.arrival_times`（与
+        时间窗惩罚 / 补全 ETA 同一实现，口径不分叉）：段长走 **三维航程**
+        （``costs.travel``），早于 ``earliest`` 则等待，离开时累加
+        ``default_service_time``，末段返巢到终点机巢。
         返回相对 ``current_time`` 的航迹时长（秒）。
 
-        段长口径：**统一走 DEM 三维航程**（``costs.travel``），不用欧氏直线。
         该量用于防漂移 / 负载诊断（如各机航迹时间分布）与基线时间窗游标，不进入
         搜索适应度——本模型不设最坏机航迹时间（均衡）目标项。
         """
@@ -325,25 +325,26 @@ class SelectiveMUASProblem(FitnessWeightsMixin):
         u = self.uav_by_id.get(tour.uav_id)
         if u is None:
             return 0.0
-        speed = max(float(getattr(u, "speed", 0.0) or 0.0), 1e-6)
-        t_cursor = float(self.config.current_time)
-        prev = tour.start_position
-        for tid in tour.task_ids:
-            task = self.task_by_id.get(tid)
-            if task is None:
-                continue
-            dist = self.costs.travel(prev, task.position)
-            t_cursor += dist / speed
-            if task.earliest is not None and t_cursor < task.earliest:
-                t_cursor = task.earliest
-            t_cursor += float(self.config.default_service_time)
-            prev = task.position
+        t0 = float(self.config.current_time)
+        service = float(self.config.default_service_time)
+        seq = [self.task_by_id[tid] for tid in tour.task_ids if tid in self.task_by_id]
+        arrivals = arrival_times(
+            tour.start_position,
+            seq,
+            speed=float(getattr(u, "speed", 0.0) or 0.0),
+            current_time=t0,
+            service_time=service,
+            distance_fn=self.costs.travel,
+        )
+        t_cursor = (arrivals[-1] + service) if arrivals else t0
+        prev = seq[-1].position if seq else tour.start_position
         if tour.end_nest_id is not None:
             nest = self.nest_by_id.get(tour.end_nest_id)
             if nest is not None:
-                dist = self.costs.travel(prev, nest.position)
-                t_cursor += dist / speed
-        return float(t_cursor - self.config.current_time)
+                t_cursor += self.costs.travel(prev, nest.position) / max(
+                    float(getattr(u, "speed", 0.0) or 0.0), 1e-6
+                )
+        return float(t_cursor - t0)
 
     def evaluate(
         self,
