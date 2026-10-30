@@ -5,8 +5,8 @@
 
     * 时间窗约束：任务须在 [earliest, latest] 内被访问（latest 为绝对时刻，
       由滚动周期 ``current_time`` 起的到达游标判定）
-    * 时序约束（可选能力）：同一 ``sequence_group`` 内、id 较小的任务须先于
-      id 较大的任务被访问
+    * 时序约束（2026-10-29 落地）：同一 ``sequence_group`` 内、``sequence_order``
+      小的任务须先于大的被访问（**当前只判同一航次内**）
     * 同时到达约束（本模型恒为 0）：一任务一机，无多机协作攻击，故不适用
 
 参考借鉴 Experiments-For-Dissertation 的 coop_constraints 设计
@@ -126,15 +126,38 @@ def check_time_window_constraint(
     return penalty, tags, lateness
 
 
+def _seq_order_of(task: Any) -> float:
+    """任务的链内序号；``sequence_order`` 缺失时回退任务 id（历史约定）。
+
+    历史实现直接拿 **任务 id 的大小** 当顺序，这与 id 的分配方式（到达
+    批次、偏移）耦合，id 一旦不是按链内先后分配就判不出真实顺序。改为
+    显式 ``sequence_order`` 后，id 只作兜底。
+    """
+    order = getattr(task, "sequence_order", None)
+    if order is None:
+        return float(getattr(task, "id", 0))
+    return float(order)
+
+
 def check_sequence_constraint(
     tours: Sequence[UAVTour],
     tasks: Mapping[int, Task],
 ) -> tuple[float, list[str]]:
-    """时序约束违背量（可选能力，依赖 ``Task.sequence_group``）。
+    """时序（执行顺序）约束违背量，依赖 ``Task.sequence_group``。
 
-    同一 ``sequence_group`` 内、id 较小的任务须先于 id 较大的任务被访问；
-    统计每个组内逆序对个数作为违背量。本仓库 ``Task`` 当前未提供
-    ``sequence_group``，自动退化为 0（不引入新行为）；数据提供该字段后自动生效。
+    同一 ``sequence_group`` 的任务落在**同一条航次**内时，必须按
+    ``sequence_order`` 升序被访问；违背量 = 组内逆序对个数。
+    违约经 :meth:`ConstraintReport.add_seq` 进 **硬违约桶**：时序是物理
+    执行顺序，违反即为「纸面可行、执行弹回」，与航程/续航同级判废
+    （2026-10-29 口径）。
+
+    **当前只判同一航次内**（用户 2026-10-29 裁定的范围）。同一链的任务
+    被分到不同 UAV 或不同周期时本函数不判违约——那是跨机/跨周期口径，
+    须按绝对完成时刻比对，尚未实现，勿误读为「已支持」。
+
+    ``Task`` 未提供 ``sequence_group``（默认 ``None``）时自动退化为 0，
+    **不引入任何新行为**——这正是 2026-10-29 之前 ``sequence: true``
+    开关恒开着却从未生效的原因：有开关、无数据字段。
 
     Args:
         tours: 各 UAV 航次。
@@ -146,21 +169,51 @@ def check_sequence_constraint(
     penalty = 0.0
     tags: list[str] = []
     for tour in tours:
-        groups: dict[Any, list[int]] = {}
+        groups: dict[Any, list[float]] = {}
         for tid in tour.task_ids:
-            grp = getattr(tasks.get(tid), "sequence_group", None)
+            task = tasks.get(tid)
+            if task is None:
+                continue
+            grp = getattr(task, "sequence_group", None)
             if grp is not None:
-                groups.setdefault(grp, []).append(tid)
-        for grp, ids in groups.items():
+                groups.setdefault(grp, []).append(_seq_order_of(task))
+        for grp, orders in groups.items():
             inv = 0
-            for i in range(len(ids)):
-                for j in range(i + 1, len(ids)):
-                    if ids[i] > ids[j]:
+            for i in range(len(orders)):
+                for j in range(i + 1, len(orders)):
+                    if orders[i] > orders[j]:
                         inv += 1
             if inv:
                 penalty += float(inv)
                 tags.append(f"seq_group_{grp}")
     return penalty, tags
+
+
+def sequence_violation_pairs(
+    tour_task_ids: Sequence[int],
+    tasks: Mapping[int, Task],
+) -> list[tuple[int, int]]:
+    """单条航次内的时序逆序对（供解码侧自审与测试用）。
+
+    返回 ``[(先出现的高序号任务, 后出现的低序号任务), ...]``，空列表 =
+    该航次满足时序。与 :func:`check_sequence_constraint` 同判据，只是
+    给出具体对子便于定位与修复。
+    """
+    groups: dict[Any, list[tuple[int, float]]] = {}
+    for tid in tour_task_ids:
+        task = tasks.get(tid)
+        if task is None:
+            continue
+        grp = getattr(task, "sequence_group", None)
+        if grp is not None:
+            groups.setdefault(grp, []).append((int(tid), _seq_order_of(task)))
+    pairs: list[tuple[int, int]] = []
+    for _grp, members in groups.items():
+        for i in range(len(members)):
+            for j in range(i + 1, len(members)):
+                if members[i][1] > members[j][1]:
+                    pairs.append((members[i][0], members[j][0]))
+    return pairs
 
 
 def check_sync_constraint(

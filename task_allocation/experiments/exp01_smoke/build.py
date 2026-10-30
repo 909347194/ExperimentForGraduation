@@ -255,6 +255,10 @@ def build_task_config(cfg: Mapping[str, Any], seed: int) -> SyntheticTaskConfig:
         cycle_length=cycle_length,
         anchor_to_nests=bool(t.get("anchor_to_nests", True)),
         region_geojson=region_path,
+        # 时序链（任务执行顺序约束）。默认 0 = 关闭 ⇒ Task.sequence_group
+        # 恒为 None，时序约束惰性退化为 0，既有基线逐位不变。
+        sequence_chain_ratio=float(t.get("sequence_chain_ratio", 0.0)),
+        sequence_chain_len=int(t.get("sequence_chain_len", 2)),
     )
 
 

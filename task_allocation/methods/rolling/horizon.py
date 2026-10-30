@@ -159,10 +159,18 @@ def tour_snapshot(tour: UAVTour) -> dict[str, Any]:
             None if tour.start_nest_id is None else int(tour.start_nest_id)
         ),
         "end_nest_id": None if tour.end_nest_id is None else int(tour.end_nest_id),
+        # 【坐标不做 round】2026-10-29 修正：旧实现把起点 round 到 3 位小数，
+        # 而运行端 pairwise 用的是**精确**坐标。两者之差只有 0.0002~0.0004 m，
+        # 但建筑障碍包络是**离散**查询（采样点是否落在某个建筑多边形内），
+        # 微小偏移可让某采样点跨过建筑边界 ⇒ 障碍高度跳变几十米 ⇒ 单腿航程
+        # 跳变 1.2 m 量级。审计端拿 round 过的坐标复算，与记账值差 2.5 m
+        # （0.076%），J 项因 1 m 绝对容差假 FAIL——且**方向不定**，取决于
+        # 采样点落在边界哪侧（gen200 那次 PASS 纯属运气）。
+        # 落盘的舍入收益（可读性 / 几字节）远小于「下游无法复算」的代价。
         "start": [
-            round(float(tour.start_x), 3),
-            round(float(tour.start_y), 3),
-            round(float(tour.start_z), 3),
+            float(tour.start_x),
+            float(tour.start_y),
+            float(tour.start_z),
         ],
         "est_cost": round(float(tour.est_cost), 3),
         "est_reward": round(float(tour.est_reward), 4),

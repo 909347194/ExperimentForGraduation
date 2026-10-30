@@ -39,10 +39,15 @@
                   6.5~13.6，即两类漂移/差异的混合）；无 final_fitness
                   字段的旧数据 N2 SKIP。
   J 航程物理   逐腿有序 estimate 独立重算航程 = 记录 est_cost，且 ≤ 满电航程
+               （2026-10-29：本项由「长期假 FAIL」转为真 PASS——此前差
+                1.4~2.5 m 不是物理不确定，而是三处实现缺陷，见 modules
+                docs / 本节末尾「J 项历史 FAIL 的根因」）
   K 起点链     无瞬移：下周期起点 = 上周期终点机巢位置
   L 容量/巢    逐周期机巢占用 ≤ capacity；终点机巢 id 合法
-  M 段长口径   ETA（对称缓存 make_distance_fn）与代价矩阵（有序 estimate）
-               段长一致（WARN 级：地形跟随航程方向相关，对称缓存是近似）
+  M 段长口径   ETA（make_distance_fn）与代价矩阵（有序 estimate）段长一致。
+               （2026-10-29 起 ETA 侧也改**有序**缓存，本项从「WARN 级已知
+                 口径差异」升格为**回归守卫**：任何把 ETA 退回对称化近似
+                 的改动都会在这里被抓住）
   O 无幻影腿   metrics final_path_m == Σ有任务航次 est_cost（空航次恒 0；
                2026-10-24 旧实现给闲置机计「机→巢」未飞行的腿，J 项只重算
                dump 内航次故看不见，本项补盲区）
@@ -304,12 +309,12 @@ def _run_checks(
         lb = {int(k): float(v) for k, v in (cmeta.get("lateness_by_task") or {}).items()}
         for tour in c["tours"]:
             # 方向不确定带（M 项口径分裂的定量化，2026-10-19）：
-            # 地形跟随航程方向相关（爬升规则从起点扫描），运行端 ETA 的
-            # 对称缓存对同一条腿可能取正向或反向值（代价矩阵有序查询先到
-            # 先得），检查端按正向全新查询——同腿可差 ~1%（实测 197m≈13s）。
-            # 每航次用两个全新缓存分别只查正/反向距离，张成 ETA 区间
-            # [eta_lo, eta_hi]；latest 落在带内的判定翻转由口径分裂解释
-            # （WARN），带外翻转仍零容差 FAIL。
+            # 地形跟随航程方向相关（爬升规则从起点扫描）。2026-10-29 起
+            # 运行端 ETA 与代价矩阵**都按飞行方向**取有序口径，记账侧已无
+            # 不确定；这里仍用两个全新缓存分别查正/反向距离，张成 ETA 区间
+            # [eta_lo, eta_hi]，是**保守**做法——latest 落在带内的判定翻转
+            # 由方向性解释（WARN），带外翻转仍零容差 FAIL。保留它是因为
+            # d(A,B) ≠ d(B,A) 是模型固有性质（不是缺陷），带本身有物理意义。
             legs: list[tuple[int, tuple, tuple]] = []
             prev = tuple(float(v) for v in tour["start"])
             for tid in tour["task_ids"]:
@@ -543,8 +548,25 @@ def _run_checks(
     # ── J/K 航程物理 + 起点链（独立重算）────────────────────────
     # 逐腿用**有序** estimator.estimate(a,b)（与代价矩阵 build_pairwise_costs
     # 同口径；地形跟随航程方向相关，不能用对称化距离），容差 1m。
+    #
+    # 【J 项历史 FAIL 的根因（2026-10-29 定位并修复，非放宽判据）】
+    # 此前 3 seed 恒差 1.4~2.5 m（0.03~0.07%），且**方向不定**（seed_42
+    # 记账偏大、seed_43 偏小），曾被记为「低危口径差异 / 待裁定」。实为三处
+    # 独立缺陷叠加，均已修复（本项现为严格 PASS，容差一字未动）：
+    #   ① provider.CostProvider.cost 缺正向键时**回退到反向键**
+    #      （地形航程有向 ⇒ 拿另一个飞行方向的数记账），再缺则**退欧氏
+    #      直线**（爬升段凭空消失）。两条都静默，污染上报航程与 λ·path。
+    #   ② vertical_section.make_distance_fn 缓存键**对称化**成
+    #      (ka,kb) if ka<=kb else (kb,ka) ⇒ 反向查询命中正向值（ETA 方向错）。
+    #   ③ 落盘坐标 round 到 3 位小数（nest/task/tour.start）。运行端用精确
+    #      坐标，两端仅差 0.0002~0.0004 m，但**建筑障碍包络是离散查询**
+    #      （采样点是否落在某建筑多边形内），微小偏移可让采样点跨过建筑
+    #      边界 ⇒ 障碍高度跳变几十米 ⇒ 单腿航程跳变 1.2 m。这是差异
+    #      「方向不定」的直接来源，也解释了为何旧 gen200 产物恰好 PASS
+    #      （那条腿的采样点没落在边界上，纯属运气）。
+    # 另：make_distance_fn 的坐标量化（0.1 m）也已取消，使距离值唯一确定。
     range_bad, match_bad, chain_bad = [], [], []
-    seg_sym_diff = []  # M 项：对称缓存 vs 有序段长的方向性差异
+    seg_sym_diff = []  # M 项：ETA 侧段长 vs 代价矩阵段长的差异（应恒为 0）
     prev_end: dict[int, tuple] = {}
     for c in sol["cycles"]:
         for tour in c["tours"]:
@@ -561,11 +583,11 @@ def _run_checks(
             cost = 0.0
             for a, b in zip(pts, pts[1:]):
                 d_ord = estimator.estimate(a, b).distance
-                d_sym = dist(a, b)
+                d_eta = dist(a, b)  # ETA 侧口径（make_distance_fn，现为有序）
                 cost += d_ord
-                if d_ord > 1.0 and abs(d_ord - d_sym) / d_ord > 0.001:
+                if d_ord > 1.0 and abs(d_ord - d_eta) / d_ord > 0.001:
                     seg_sym_diff.append((c["cycle"], uid, round(d_ord, 1),
-                                         round(d_sym, 1)))
+                                         round(d_eta, 1)))
             if abs(cost - float(tour["est_cost"])) > max(1.0, 0.0001 * cost):
                 match_bad.append((c["cycle"], uid, round(cost, 1),
                                   round(float(tour["est_cost"]), 1)))
@@ -604,11 +626,13 @@ def _run_checks(
     check("O 无幻影腿：final_path_m == Σ有任务航次 est_cost（容差 1m）",
           not phantom_bad, str(phantom_bad[:3]))
 
-    # ── M 段长口径（WARN 级）────────────────────────────────────
-    # make_distance_fn 记忆化把 (A,B)/(B,A) 当对称存取，而地形跟随航程方向
-    # 相关（爬升规则从起点扫描）→ ETA/时间模型（对称）与代价矩阵（有序）
-    # 段长可差 0.1~0.4%，属低危口径分裂；有序口径与物理一致。
-    check("M 段长口径：ETA（对称缓存）与代价矩阵（有序）一致（<0.1%）",
+    # ── M 段长口径（回归守卫）───────────────────────────────────
+    # 原为 WARN 级「已知低危口径差异」：make_distance_fn 记忆化把 (A,B)/(B,A)
+    # 当对称存取，而地形跟随航程方向相关 ⇒ ETA/时间模型（对称）与代价矩阵
+    # （有序）段长可差 0.1~0.4%。2026-10-29 把 ETA 侧也改成**有序**缓存后
+    # 两侧同源同向，本项恒为 0 段差异，升格为回归守卫：谁再把 ETA 退回
+    # 对称化近似，这里立刻红。
+    check("M 段长口径：ETA 与代价矩阵（均有序）一致（<0.1%）",
           not seg_sym_diff,
           (f"{len(seg_sym_diff)} 段有方向性差异，例：{seg_sym_diff[:3]}"
            if seg_sym_diff else ""),

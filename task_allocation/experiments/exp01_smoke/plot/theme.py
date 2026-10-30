@@ -334,47 +334,6 @@ def build_gif_palette(frames_rgb: list, extra_colors: Iterable[str] = ()):
     return pal_img
 
 
-def shrink_text_to_axes(ax, txt, *, pad_frac: float = 0.02,
-                        min_fs: float = 5.5, max_iter: int = 5) -> bool:
-    """把一个文本块**实测**缩到所属子图宽度以内，返回是否调整过。
-
-    为什么不用估宽：``MONO_ZH`` 混排（ASCII 走 DejaVu Sans Mono、中文回退
-    Microsoft YaHei）的实际行宽比「按 mono advance 的理论估算」宽最多 1.5×
-    （2026-10-13 在 P01 参数面板实测：估 2.9 in、渲染 4.4 in），任何估算都会
-    再踩「估宽偏松」的坑。这里直接 draw 后量包围盒，按比例缩字号，最多
-    ``max_iter`` 轮、不低于 ``min_fs``——**收敛由实测保证，不由估算保证**。
-
-    适用：参数表 / 公式面板这类「一整块等宽文本 + 底色框」。文本块位置用
-    ``transAxes`` 锚定，缩字号不会跑位。
-    """
-    if txt is None:
-        return False
-    changed = False
-    for _ in range(max_iter):
-        try:
-            fig = ax.get_figure()
-            fig.canvas.draw()
-            r = fig.canvas.get_renderer()
-            bb = txt.get_window_extent(r)
-            hb = ax.get_window_extent(r)
-        except Exception:
-            return changed
-        if bb is None or hb is None or hb.width <= 0:
-            return changed
-        avail = hb.width * (1.0 - 2.0 * pad_frac)
-        if bb.width <= avail:
-            return changed
-        fs = float(txt.get_fontsize())
-        if fs <= min_fs:
-            return changed
-        new_fs = max(min_fs, fs * (avail / bb.width))
-        if new_fs >= fs - 0.05:      # 无实质缩小（已到下限）则停
-            return changed
-        txt.set_fontsize(new_fs)
-        changed = True
-    return changed
-
-
 def style_axes(ax, *, title: str | None = None, xlabel: str | None = None,
                ylabel: str | None = None) -> None:
     """统一的坐标轴标注小工具（标题 / 轴标签一次设齐）。

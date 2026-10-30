@@ -136,6 +136,14 @@ class SelectiveMUASProblem(FitnessWeightsMixin):
 
     @property
     def model_mode(self) -> str:
+        """模型形态标签（**诊断用，当前无消费点**）。
+
+        返回值必须与 :mod:`representation.encoder` / ``inverse_mapper`` 的
+        词表一致（``balanced`` / ``overloaded`` / ``srp``）。2026-10-29 修：
+        原返回 ``"selective_srp"``，与词表里的 ``"srp"`` 不一致——本属性暂
+        无调用点故未暴露，但一旦接到 encoder 的 ``{...}[model_type]`` 查表
+        就会 KeyError。统一为词表名。
+        """
         # 符号口径：K = UAV 数（实例机数），N = 任务数。
         n_uavs, n_tasks = self.n_uavs, self.n_tasks
         if n_tasks == 0:
@@ -144,7 +152,7 @@ class SelectiveMUASProblem(FitnessWeightsMixin):
             return "balanced"
         if n_uavs > n_tasks:
             return "overloaded"
-        return "selective_srp"
+        return "srp"
 
     def relations_from_solution(
         self, solution: AllocationSolution

@@ -83,12 +83,15 @@ def write_json(path: Path, payload: Any) -> Path:
 
 
 def _nest_rows(nests: Sequence[Nest]) -> list[dict[str, Any]]:
+    # 坐标不做 round：见 horizon._tour_row 的同款说明（2026-10-29）。
+    # 建筑障碍包络是离散查询，落盘舍入 0.0004 m 就能让审计端复算的
+    # 单腿航程跳变 1.2 m，J 项（容差 1 m）因此假 FAIL。
     return [
         {
             "id": n.id,
-            "x": round(n.x, 3),
-            "y": round(n.y, 3),
-            "z": round(n.z, 3),
+            "x": float(n.x),
+            "y": float(n.y),
+            "z": float(n.z),
             "capacity": n.capacity,
             "lat": n.meta.get("lat"),
             "lon": n.meta.get("lon"),
@@ -100,15 +103,20 @@ def _nest_rows(nests: Sequence[Nest]) -> list[dict[str, Any]]:
 def _task_row(t: Task) -> dict[str, Any]:
     return {
         "id": int(t.id),
-        "x": round(float(t.x), 3),
-        "y": round(float(t.y), 3),
-        "z": round(float(t.z), 3),
+        # 坐标不做 round，同上（_nest_rows / horizon._tour_row）。
+        "x": float(t.x),
+        "y": float(t.y),
+        "z": float(t.z),
         "reward": round(float(t.reward), 4),
         "arrival_time": round(float(t.arrival_time), 3),
         "earliest": t.earliest,
         "latest": t.latest,
         "status": t.status.value,
         "completed_at": t.meta.get("completed_at"),
+        # 时序（执行顺序）约束：无链任务恒 null（默认关闭时序链），
+        # 2026-10-29 补——否则链信息不进产物，事后无法审计交付解是否满足时序。
+        "sequence_group": t.sequence_group,
+        "sequence_order": int(t.sequence_order),
     }
 
 
