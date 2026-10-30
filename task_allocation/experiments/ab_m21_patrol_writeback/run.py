@@ -1,7 +1,12 @@
 # -*- coding: utf-8 -*-
-"""M2-1 段内巡游序 Lamarckian 回写 · 3-seed A/B 跑批（设计稿 §4 验收）。
+"""M2-1 段内巡游序 Lamarckian 回写 · 多实例 3-seed A/B 跑批（设计稿 §4 验收）。
 
-对照：M2-1 关 (OFF) vs 开 (ON)，各 3 seed。记录设计稿要求的四类指标：
+对照：M2-1 关 (OFF) vs 开 (ON)。每个随机实例上，ON/OFF 共用同一组求解器
+随机种子（DE 初值一致），差异仅来自 M2-1——构成**配对比较**。跨 ``--n-instances``
+个独立几何实例 × ``--seeds`` 个求解器种子，做配对的 ON−OFF 差值统计与胜/平/负计数，
+给「是否转正默认开」一个统计置信度。
+
+记录设计稿要求的四类指标：
 
   1. 路径成本 (path cost, T3 = ``f2_cost/λ``，含返巢)
   2. 迟到     (late seconds, ``soft_violation``)
@@ -14,15 +19,17 @@
 A/B 否决指标」）。
 
 输出（结果落在 ``results/``）：
-  - ``ab_m21_raw.csv``         逐 run 原始指标
+  - ``ab_m21_raw.csv``         逐 run 原始指标（含 instance 列）
   - ``ab_m21_summary.csv``     聚合（mean/std，ON−OFF 差值/比例）
-  - ``ab_m21_curves.png``      2×2 图（路径成本 / 迟到 / 收敛曲线均值 / 种群方差均值）
-  - ``ab_m21_summary.json``    同上聚合的结构化快照
+  - ``ab_m21_paired.csv``      配对 ON−OFF 差值 + 胜/平/负计数
+  - ``ab_m21_curves.png``      2×2 图（路径成本 / 迟到 / 收敛曲线均值 / 种群方差均值，跨实例池化）
+  - ``ab_m21_summary.json``    汇总结构化快照
 
 用法：
-  python run.py                      # 默认 3 seed、关 polish/memetic
-  python run.py --seeds 11,22,33 --n-uavs 3 --n-targets 12 --gens 120
-  python run.py --no-isolate         # 走完整生产管线（含 polish/memetic）
+  python run.py                          # 默认 6 实例 × 3 seed、关 polish/memetic
+  python run.py --n-instances 10 --seeds 11,22,33
+  python run.py --deadline-s 150         # 注入时间窗，使排序产生迟到压力
+  python run.py --no-isolate             # 走完整生产管线（含 polish/memetic）
 """
 from __future__ import annotations
 
@@ -69,6 +76,8 @@ from task_allocation.methods.muas.solvers.stage_runner import (  # noqa: E402
 
 DEFAULTS = dict(
     seeds=[11, 22, 33],
+    n_instances=6,
+    inst_base=1000,     # 实例几何种子基准：第 i 个实例用 inst_base+i
     n_uavs=3,
     n_targets=12,
     area=1000.0,
@@ -141,7 +150,7 @@ class VarianceRecorder:
 # ---------------------------------------------------------------------------
 
 
-def run_trial(tasks, uavs, nests, *, on: bool, seed: int, params: dict) -> dict:
+def run_trial(tasks, uavs, nests, *, on: bool, solver_seed: int, instance: int, params: dict) -> dict:
     cb = build_pairwise_costs(tasks, uavs, nests=nests)
     isolate = params["isolate"]
     deadline_s = float(params.get("deadline_s", 0.0))
@@ -161,7 +170,7 @@ def run_trial(tasks, uavs, nests, *, on: bool, seed: int, params: dict) -> dict:
     solver_cfg = DMDEConfig(
         pop_size=params["pop_size"],
         max_generations=params["max_generations"],
-        seed=seed,
+        seed=solver_seed,
         verbose=False,
         population_callback=rec,
     )
@@ -198,7 +207,8 @@ def run_trial(tasks, uavs, nests, *, on: bool, seed: int, params: dict) -> dict:
 
     return dict(
         mode="ON" if on else "OFF",
-        seed=seed,
+        seed=solver_seed,
+        instance=instance,
         search_best_fitness=float(conv[-1]) if conv else float("nan"),
         delivered_fitness=delivered_fitness,
         path_cost=path_cost,
@@ -248,10 +258,53 @@ def summarize(rows: list[dict]) -> dict:
     return out
 
 
+# 配对比较：同一 (instance, solver_seed) 上 ON 相对 OFF 的差值。
+# 质量指标（delivered_fitness / path_cost / late）越低越好 ⇒ delta<0 记为 ON「胜」；
+# var_collapse_ratio 越低=越早坍缩（多样性损失，非质量收益）⇒ 单独给出 ON<OFF 计数。
+_PAIRED_METRICS = ["delivered_fitness", "path_cost", "late", "var_collapse_ratio"]
+
+
+def paired_summary(rows: list[dict]) -> dict:
+    pairs: dict[tuple, dict] = {}
+    for r in rows:
+        pairs.setdefault((r["instance"], r["seed"]), {})[r["mode"]] = r
+    deltas: list[dict] = []
+    for m in pairs.values():
+        if "OFF" in m and "ON" in m:
+            deltas.append({k: m["ON"][k] - m["OFF"][k] for k in _PAIRED_METRICS})
+    out: dict = {"n_pairs": len(deltas), "metrics": {}}
+    for k in _PAIRED_METRICS:
+        vals = [d[k] for d in deltas]
+        if k == "var_collapse_ratio":
+            # 多样性：ON<OFF=保留更多多样性（好）；ON>OFF=加速坍缩（坏）
+            wins = sum(1 for v in vals if v < -1e-9)    # 保留多样性
+            losses = sum(1 for v in vals if v > 1e-9)   # 加速坍缩
+        else:
+            wins = sum(1 for v in vals if v < -1e-9)    # ON 更优（更低）
+            losses = sum(1 for v in vals if v > 1e-9)   # ON 更差
+        ties = sum(1 for v in vals if abs(v) <= 1e-9)
+        out["metrics"][k] = dict(
+            mean=float(np.mean(vals)),
+            std=float(np.std(vals)),
+            wins=wins, losses=losses, ties=ties,
+        )
+    return out
+
+
+def write_paired_csv(path: Path, psumm: dict) -> None:
+    with open(path, "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["metric", "n_pairs", "mean_delta", "std_delta",
+                    "wins_ON_better", "losses_ON_worse", "ties"])
+        for k, d in psumm["metrics"].items():
+            w.writerow([k, psumm["n_pairs"], d["mean"], d["std"],
+                        d["wins"], d["losses"], d["ties"]])
+
+
 def write_csv(path: Path, rows: list[dict]) -> None:
-    scalar = ["mode", "seed", "search_best_fitness", "delivered_fitness", "path_cost", "late",
-              "n_hard", "excess_m", "coverage", "n_evals", "elapsed_s",
-              "var_initial", "var_final", "var_collapse_ratio"]
+    scalar = ["mode", "seed", "instance", "search_best_fitness", "delivered_fitness",
+              "path_cost", "late", "n_hard", "excess_m", "coverage", "n_evals",
+              "elapsed_s", "var_initial", "var_final", "var_collapse_ratio"]
     with open(path, "w", newline="") as f:
         w = csv.DictWriter(f, fieldnames=scalar)
         w.writeheader()
@@ -348,21 +401,36 @@ def plot_curves(out_png: Path, rows: list[dict], params: dict) -> None:
     plt.close(fig)
 
 
-def print_table(rows: list[dict], summ: dict) -> None:
-    print("\n=== 逐 run 指标 ===")
-    hdr = f"{'mode':<4}{'seed':>5}{'fit':>12}{'path':>12}{'late':>10}{'n_hard':>8}{'cov':>7}{'var_fin':>12}{'collapse':>10}"
+def print_table(rows: list[dict], summ: dict, psumm: dict) -> None:
+    print("\n=== 逐 run 指标（前 12 行）===")
+    hdr = f"{'mode':<4}{'inst':>6}{'seed':>5}{'fit':>12}{'path':>12}{'late':>10}{'n_hard':>8}{'cov':>7}{'collapse':>10}"
     print(hdr)
-    for r in rows:
-        print(f"{r['mode']:<4}{r['seed']:>5}{r['delivered_fitness']:>12.2f}"
+    for r in rows[:12]:
+        print(f"{r['mode']:<4}{r['instance']:>6}{r['seed']:>5}{r['delivered_fitness']:>12.2f}"
               f"{r['path_cost']:>12.2f}{r['late']:>10.2f}{r['n_hard']:>8}{r['coverage']:>7.2f}"
-              f"{r['var_final']:>12.4f}{r['var_collapse_ratio']:>10.3f}")
-    print("\n=== 聚合 (mean, std) + ON−OFF ===")
+              f"{r['var_collapse_ratio']:>10.3f}")
+    if len(rows) > 12:
+        print(f"  … 其余 {len(rows) - 12} 行见 ab_m21_raw.csv")
+
+    print("\n=== 聚合 (mean, std) + ON−OFF（池化）===")
     for m, d in summ["delta_ON_minus_OFF"].items():
         off_m, off_s = summ["OFF"][m]
         on_m, on_s = summ["ON"][m]
         print(f"  {m:<22} OFF={off_m:>10.4f}±{off_s:<8.4f} "
               f"ON={on_m:>10.4f}±{on_s:<8.4f}  Δ={d['diff']:>+.4f} "
               f"ratio={d['ratio']:.4f}")
+
+    print(f"\n=== 配对比较（同实例同种子 ON−OFF，{psumm['n_pairs']} 对）===")
+    label = {
+        "delivered_fitness": "交付目标(越低越好)",
+        "path_cost": "路径成本(越低越好)",
+        "late": "迟到秒(越低越好)",
+        "var_collapse_ratio": "方差坍缩比(低=更早同质化)",
+    }
+    for k, d in psumm["metrics"].items():
+        print(f"  {k:<20}({label[k]})\n"
+              f"      meanΔ={d['mean']:>+.4f}±{d['std']:<.4f}  "
+              f"ON胜={d['wins']}  ON负={d['losses']}  平={d['ties']}")
 
 
 # ---------------------------------------------------------------------------
@@ -371,9 +439,13 @@ def print_table(rows: list[dict], summ: dict) -> None:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="M2-1 段内巡游序回写 3-seed A/B 跑批")
+    ap = argparse.ArgumentParser(description="M2-1 段内巡游序回写 多实例 A/B 跑批")
     ap.add_argument("--seeds", default=",".join(map(str, DEFAULTS["seeds"])),
-                   help="逗号分隔的随机种子，如 11,22,33")
+                   help="逗号分隔的求解器随机种子，如 11,22,33")
+    ap.add_argument("--n-instances", type=int, default=DEFAULTS["n_instances"],
+                   help="独立几何实例数（每个实例上 ON/OFF 配对比较）")
+    ap.add_argument("--inst-base", type=int, default=DEFAULTS["inst_base"],
+                   help="实例几何种子基准：第 i 个实例用 inst_base+i")
     ap.add_argument("--n-uavs", type=int, default=DEFAULTS["n_uavs"])
     ap.add_argument("--n-targets", type=int, default=DEFAULTS["n_targets"])
     ap.add_argument("--area", type=float, default=DEFAULTS["area"])
@@ -388,6 +460,8 @@ def main() -> int:
 
     params = dict(
         seeds=[int(s) for s in args.seeds.split(",") if s.strip()],
+        n_instances=args.n_instances,
+        inst_base=args.inst_base,
         n_uavs=args.n_uavs,
         n_targets=args.n_targets,
         area=args.area,
@@ -400,25 +474,30 @@ def main() -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     rows: list[dict] = []
-    for seed in params["seeds"]:
+    instance_seeds = [params["inst_base"] + i for i in range(params["n_instances"])]
+    for inst_seed in instance_seeds:
         tasks, uavs, nests = make_instance(
-            seed, params["n_uavs"], params["n_targets"], params["area"],
+            inst_seed, params["n_uavs"], params["n_targets"], params["area"],
             deadline_s=params["deadline_s"],
         )
-        for on in (False, True):
-            tag = "ON " if on else "OFF"
-            print(f"[run] seed={seed} M2-1={tag} ...", flush=True)
-            rows.append(
-                run_trial(tasks, uavs, nests, on=on, seed=seed, params=params)
-            )
+        for solver_seed in params["seeds"]:
+            for on in (False, True):
+                tag = "ON " if on else "OFF"
+                print(f"[run] inst={inst_seed} seed={solver_seed} M2-1={tag} ...",
+                      flush=True)
+                rows.append(run_trial(
+                    tasks, uavs, nests, on=on, solver_seed=solver_seed,
+                    instance=inst_seed, params=params))
 
     summ = summarize(rows)
+    psumm = paired_summary(rows)
     write_csv(out_dir / "ab_m21_raw.csv", rows)
     write_summary_csv(out_dir / "ab_m21_summary.csv", summ)
+    write_paired_csv(out_dir / "ab_m21_paired.csv", psumm)
     with open(out_dir / "ab_m21_summary.json", "w") as f:
-        json.dump(summ, f, indent=2)
+        json.dump({"pooled": summ, "paired": psumm}, f, indent=2)
     plot_curves(out_dir / "ab_m21_curves.png", rows, params)
-    print_table(rows, summ)
+    print_table(rows, summ, psumm)
     print(f"\n输出目录：{out_dir}")
     return 0
 
