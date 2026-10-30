@@ -214,6 +214,9 @@ class MUASAssignmentEvaluator(
         start_of = {u: seq[0] for u, seq in route_of.items() if seq}
 
         # M2-1 主开关（默认关 ⇒ 行为与历史逐位等价；见测试第 5 条）。
+        # 组合语义（整理注记）：M2-1 借道 M1 的调用门（dmde_solver 中
+        # ``if cfg.lamarckian and ...``），故 **lamarckian=False 时 M2-1 永不触发**——
+        # 它不能脱离 M1 单独开启，是 M1 同一回写调用的扩展（同时改写起始+巡游通道）。
         patrol_on = bool(getattr(self.config, "lamarckian_patrol_writeback", False))
         if not patrol_on or child.model_type != "srp":
             # ── 历史行为（M1 起始通道回写，逐位不变）─────────────────
@@ -223,6 +226,8 @@ class MUASAssignmentEvaluator(
 
         # ── M2-1：段内巡游序回写 ─────────────────────────────────
         # Q3.1 硬违约过滤：含硬违约的解永不写回（无论 fitness 多好看）。
+        # （Q3.1 第二句「覆盖 ⊇ 回写前表型」：段内重排只改顺序、不改任务集合，
+        #  覆盖在结构上不变，故该子句被结构性满足；下方 Q3.2 仍显式复核覆盖不劣。）
         n_hard_src, _ = self._hard_stats_safe(solution)
         if n_hard_src > 0:
             return None
@@ -451,6 +456,9 @@ class MUASAssignmentEvaluator(
             return False
 
         # Q3.2 表型复核：重解码表型的 (n_hard, 覆盖, 迟到) 逐分量不劣于 child 解。
+        # （整理注记：Q2.1 解码一致性已保证 reb 路由 == 目标修复序，故 Q3.2 与 Q2.1
+        #  在路由层面重叠、几乎必过；此处保留为「解码一致性之上的二次保险」，防止
+        #  _assemble / evaluate 任何细微偏差把劣质表型放进来。）
         reb_routes_real = {
             self.participating[u].id: [self._task_ids[t] for t in seq]
             for u, seq in reb.srp_routes.items()
