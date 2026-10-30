@@ -93,6 +93,14 @@ class DMDEConfig:
     # 吞并停用（stderr 警告一次，不静默）——memetic 钩子不得破坏纯 DMDE
     # 的数值确定性。
     gen_callback: Callable[[int, Any], None] | None = None
+    # 代际种群方差回调（M2-1 A/B 多样性监控，设计稿 §3.4）：每代选择结束后调用
+    # ``population_callback(gen, cost_vectors, best_idx)``，``cost_vectors`` 为
+    # 整代个体的 gene-space 代价向量矩阵 ``(pop_size, K+N)``（含 Lamarckian
+    # 写回后的当代基因），供记录 cost_vector 种群方差、判断写回是否加速同质化。
+    # 默认 ``None`` ⇒ 纯 DMDE 行为逐位不变、零开销。回调一旦抛异常即被吞并停用
+    # （stderr 警告一次，不静默），且独立标记、绝不连坐停用 ``gen_callback``
+    # （memetic 钩子是生产行为，不得被诊断钩子连坐）。
+    population_callback: Callable[[int, np.ndarray, int], None] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -177,6 +185,9 @@ class DMDESolver(BaseOptimizer):
         # 代际回调保险：钩子一旦抛异常即吞并停用（见下方），此标记保证
         # 「每次 solve 最多警告一次」且不再重试已失败的回调。
         callback_failed = False
+        # ``population_callback`` 独立失败标记：绝不复用 ``callback_failed``，
+        # 避免诊断钩子连坐停用生产用的 ``gen_callback``（memetic 钩子）。
+        pop_callback_failed = False
 
         t_start = time.time()
 
@@ -238,6 +249,21 @@ class DMDESolver(BaseOptimizer):
                     if child.fitness < best_individual.fitness:
                         best_individual = child.copy()
                         best_idx = i
+
+            # 代际种群方差回调（M2-1 A/B 多样性监控）：每代选择结束后记录
+            # 含 Lamarckian 写回后的当代 gene-space 代价向量矩阵。默认 None
+            # ⇒ 零开销、零行为变化；异常即吞并停用、独立标记不连坐 gen_callback。
+            if cfg.population_callback is not None and not pop_callback_failed:
+                try:
+                    _cv = np.array([ind.cost_vector for ind in population])
+                    cfg.population_callback(gen, _cv, best_idx)
+                except Exception as exc:
+                    pop_callback_failed = True
+                    print(
+                        f"[dmde][warn] population_callback 在第 {gen} 代抛异常，"
+                        f"已吞并停用：{exc!r}",
+                        file=sys.stderr,
+                    )
 
             # GMR 灭绝判断 (公式 3-12)
             if should_extinct(cr, cfg.delta, rng):
