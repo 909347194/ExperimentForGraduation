@@ -28,6 +28,13 @@ class MarginalConfig:
     # 保证不会被名额或几何代价无限期挤出。
     forced_task_ids: set[int] = field(default_factory=set)
     forced_bonus: float = 1.0e6
+    # 边际收益的邻近加权：ΔB_i = max(R_i,0)·(1 + boost·exp(−d_min/scale))。
+    # 历史上这两个常数为实现内定值（0.2 / 500 m），且与
+    # ``priority.synergy_radius`` 不同源，无法从 yaml 调节；此处提为显式旋钮。
+    # **默认值与原内定值逐位相同** ⇒ 缺省时行为与历史完全等价（bit-exact），
+    # 仅显式给值时才改变选择行为。
+    proximity_boost: float = 0.2
+    proximity_scale: float = 500.0
 
 
 def _dist(a: tuple[float, float, float], b: tuple[float, float, float]) -> float:
@@ -89,13 +96,17 @@ def _delta_benefit(
     task: Task,
     selected: list[Task],
     distance_fn: Callable[[Sequence[float], Sequence[float]], float] | None = None,
+    proximity_boost: float = 0.2,
+    proximity_scale: float = 500.0,
 ) -> float:
     """任务 i 加入当前选择集的边际收益 ΔB_i。
 
-    ``ΔB_i = max(R_i, 0) · (1 + 0.2 · exp(−d_min/500))``：以任务收益为基底，
-    乘一个**邻近加权**——与已选集合最近距离 ``d_min`` 越小加成越高（上限
-    1.2 倍），与插入式 ΔC 的空间邻近效应同向。两个常数（0.2 加成幅度 /
-    500 m 尺度）为实现内定值，与 ``priority.synergy_radius`` 不同源。
+    ``ΔB_i = max(R_i, 0) · (1 + boost · exp(−d_min/scale))``：以任务收益为基底，
+    乘一个**邻近加权**——与已选集合最近距离 ``d_min`` 越小加成越高（默认上限
+    1.2 倍），与插入式 ΔC 的空间邻近效应同向。
+
+    ``boost`` / ``scale`` 由 :class:`MarginalConfig` 的 ``proximity_boost`` /
+    ``proximity_scale`` 注入（默认 0.2 / 500 m，与历史内定值一致）。
     """
     base = max(task.reward, 0.0)
     if not selected:
@@ -106,8 +117,9 @@ def _delta_benefit(
         )
     else:
         dmin = min(_dist(task.position, s.position) for s in selected)
-    proximity = np.exp(-dmin / 500.0) if dmin < 1e6 else 0.0
-    return base * (1.0 + 0.2 * float(proximity))
+    scale = max(float(proximity_scale), 1e-9)
+    proximity = np.exp(-dmin / scale) if dmin < 1e6 else 0.0
+    return base * (1.0 + proximity_boost * float(proximity))
 
 
 def select_by_marginal_gain(
@@ -175,7 +187,10 @@ def select_by_marginal_gain(
         best_delta_b = 0.0
         best_forced = False
         for tid, s in remaining.items():
-            db = _delta_benefit(s.task, selected_tasks, distance_fn)
+            db = _delta_benefit(
+                s.task, selected_tasks, distance_fn,
+                cfg.proximity_boost, cfg.proximity_scale,
+            )
             dc = insert_delta_cost(
                 s.task, selected_tasks, uavs, pairwise_cost, distance_fn
             )

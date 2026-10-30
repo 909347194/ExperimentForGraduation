@@ -1,0 +1,49 @@
+<Slide style={{ width: 1280, height: 720, background: '#FFFFFF', position: 'relative', fontFamily: 'Source Han Sans CN, Microsoft YaHei, sans-serif' }}>
+  <Box style={{ position: 'absolute', top: 0, left: 0, width: 1280, height: 12, background: '#1E4FA8' }} />
+  <Box style={{ position: 'absolute', top: 30, left: 40, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+    <Box style={{ width: 6, height: 34, background: '#1E4FA8' }} />
+    <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#0E3F8C' }}>Polish：为什么这一刀砍在搜索之外</Text>
+  </Box>
+  <Text style={{ position: 'absolute', top: 78, left: 60, fontSize: 15, color: '#8B97A8' }}>它只压缩成本、不碰任务集合 —— 因此在 不改变 语义不影响的前提下刷掉多余航程</Text>
+
+  <Box style={{ position: 'absolute', top: 112, left: 40, width: 606, flexDirection: 'column', gap: 12 }}>
+    <Box style={{ background: '#FFF8E1', border: '1px solid #E8D9A8', borderRadius: 10, padding: '14px 18px', flexDirection: 'column' }}>
+      <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#0E3F8C' }}>问题：适应度里的成本项几乎不起作用</Text>
+      <Text style={{ fontSize: 13.5, color: '#4A5568', lineHeight: 1.65, marginTop: 7 }}>
+        完成与迟到被放在压倒性的上层（T0 / T0.5 / T2），航程 λ·path 在最底层。实测应用层权重下，<span style={{ fontWeight: 'bold' }}>完成项 : 成本项 ≈ 800 : 1</span> —— 意味着进化几乎<span style={{ fontWeight: 'bold' }}>没有压力</span>去optimize飞行成本，它只在收益完全等价时才顺手裁决一下。
+      </Text>
+    </Box>
+    <Box style={{ background: '#F7F9FC', border: '1px solid #D6DCE5', borderRadius: 10, padding: '14px 18px', flexDirection: 'column' }}>
+      <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#0E3F8C' }}>解法：把成本留给专门的确定性算子</Text>
+      <Text style={{ fontSize: 13.5, color: '#4A5568', lineHeight: 1.65, marginTop: 7 }}>
+        既然搜索对成本不敏感，就不要求它做这件事。改为在交付前跑一轮
+        <span style={{ fontWeight: 'bold' }}>跨机改派 + 组内 2-opt / Or-opt 联合局部搜索</span>，
+        并恪守一条纪律 —— <span style={{ fontWeight: 'bold', color: '#B26A00' }}>只接受严格改进</span>。
+      </Text>
+    </Box>
+    <Box style={{ background: '#0E3F8C', borderRadius: 10, padding: '14px 18px', flexDirection: 'column' }}>
+      <Text style={{ fontSize: 15.5, fontWeight: 'bold', color: '#FFFFFF', lineHeight: 1.65 }}>
+        为什么不放进解码修复链里：修复链每一步都要重解终点机巢子问题，成本昂贵；而 polish 只在<span style={{ color: '#FFC107' }}>交付前跑一次</span>，把它当作邮递员出门前最后看一眼地图。
+      </Text>
+    </Box>
+  </Box>
+
+  <Box style={{ position: 'absolute', top: 112, left: 674, width: 566, flexDirection: 'column', gap: 12 }}>
+    {[
+      { t: '① 跨机改派', d: '把一个任务从当前航次挪到另一架机，若总航程下降则接受。注意它不改变「做不做」，只改变「谁来做」——所以覆盖与完成语义不受影响。' },
+      { t: '② 组内 2-opt', d: '同一航次内翻转一段子序列，消除自交。航线自交是贪心构造最容易留下的典型缺陷形态。' },
+      { t: '③ 组内 Or-opt', d: '把一小段（1~3 个连续任务）摘下来插到别处。比 2-opt 更细粒度，能修掉局部绕路。' },
+      { t: '④ 联合迭代 + 严格改进判据', d: '三类动作合成多轮迭代，每轮只在适应度严格变小（且航程 / 时间窗 / 机巢容量全部仍满足）时才落笔。因为任务集合始终不动，覆盖与完成语义不受影响。' },
+    ].map((c) => (
+      <Box key={c.t} style={{ background: '#F0F5FC', border: '1px solid #D6DCE5', borderLeft: '4px solid #1E4FA8', borderRadius: 10, padding: '12px 18px', flexDirection: 'column' }}>
+        <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#0E3F8C' }}>{c.t}</Text>
+        <Text style={{ fontSize: 13, color: '#4A5568', lineHeight: 1.6, marginTop: 5 }}>{c.d}</Text>
+      </Box>
+    ))}
+  </Box>
+
+  <Box style={{ position: 'absolute', bottom: 0, left: 0, width: 1280, height: 44, background: '#F7F9FC', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: '0 40px', borderTop: '1px solid #E5E7EB' }}>
+    <Text style={{ fontSize: 13, color: '#8B97A8' }}>第二阶段原理串讲 · 选择性多机巢 MUAS 是怎么被解出来的</Text>
+    <Text style={{ fontSize: 15, color: '#1E4FA8', fontWeight: 'bold' }}>11 / 12</Text>
+  </Box>
+</Slide>

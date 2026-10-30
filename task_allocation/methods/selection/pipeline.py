@@ -85,7 +85,13 @@ class SelectionConfig:
     # 硬性不停饿兜底（Fix②）：老化/临期任务强制纳入，保证不无限期推迟。
     anti_starvation: AntiStarvationConfig = field(default_factory=AntiStarvationConfig)
     current_time: float = 0.0
-    # 事件驱动强制纳入：紧急 / 故障释放的任务绕过 n_cand 预筛（仍过可行性过滤）
+    # 事件驱动强制纳入：紧急 / 故障释放的任务绕过 n_cand 预筛（仍过可行性过滤）。
+    #
+    # ⚠ 口径（2026-10-30 澄清）：本字段只在**单次直接调用** ``run_selection`` 时生效。
+    # 走滚动时域时 ``RollingHorizon.run_cycle`` 每周期按当前重规划上下文重建强制集
+    # （见 ``horizon.py`` 的 ``forced_ids``）并整体覆盖本字段 —— 即**这里填的值会被静默丢弃**。
+    # 这是有意的：滚动场景下"谁该被强制"必须由每周期的真实状态决定，不能被静态配置钉死。
+    # yaml 配置面（``selection_config_from_dict``）不接受本键，故只有代码构造能碰到这个坑。
     forced_task_ids: set[int] = field(default_factory=set)
 
     def __post_init__(self) -> None:
@@ -176,6 +182,13 @@ def run(
     diagnostics["capability_enabled"] = cfg.capability.enabled
 
     # ── 选择数 n_sel（真实承诺，该紧）：cap(t) 在此真正卡住 ───────────────
+    # 直白口径：n_sel 是**两道闸门取小**，不是一个旋钮 ——
+    #   ① 名额闸门 marginal.max_selected（给值则用它；否则 max_ratio × K）
+    #   ② 能力闸门 capability_cap（capability.enabled=True 时；否则 None）
+    # 组合规则由 effective_cap(quota, cap, mode) 决定；intersect（默认）取 min。
+    # ⇒ 想「让本周期尽量多装」必须**同时**放松两处
+    #    （MarginalConfig(max_selected=…) 且 CapabilityScaleConfig(enabled=False)），
+    #    只动一处会被另一处继续压住。这是两个 historically 不同来源的量，无自动联动。
     # intersect（默认）：min{名额, cap(t)}，能力只能收紧、绝不超派；
     # primary：cap(t) 可超过机数名额（宽松承诺）。两种 mode 见 capability.effective_cap。
     if marginal.max_selected is not None:

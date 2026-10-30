@@ -6,7 +6,9 @@
 - :meth:`__init__`              实体索引 / 有效收益 / 评估缓存
 - :meth:`_assemble`             routes + end_nests → ``AllocationSolution``
 - :meth:`evaluate`              DMDE 评估接口（缓存 → build_solution → problem）
-- :meth:`lamarckian_reencode`   修复解回写基因（只改起始基因通道，长度不变式）
+- :meth:`lamarckian_reencode`   修复解回写基因（长度不变式；两级：M1 起始 /
+                                M2-1 段内巡游序）
+- :func:`writeback_stats`       回写诊断计数（- 何以知道 M2-1 是否真的触发）
 
 解码 / 修复 / 成本 polish 算子组以 Mixin 拆在同包兄弟模块，共享
 ``tour_cost`` 原语：
@@ -42,15 +44,56 @@ from task_allocation.methods.muas.solvers.tour_cost import TourCostMixin
 
 
 @dataclass(frozen=True)
-
-
 class EvalResult:
     """DMDE 评估器返回值（求解器只读 ``fitness``）。"""
 
     fitness: float
     solution: AllocationSolution
 
-# 评估器：assignment → AllocationSolution → fitness
+
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Lamarckian 回写诊断计数器
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# 为什么需要它：M2-1 段内巡游序回写要连续通过五道闸门（见
+# ``lamarckian_reencode``），其中前四道**完全静默**——不开这一处计数就无法回答
+# 「M2-1 到底有没有触发」。实测曾出现 seg_match = 0/660 而控制台零输出，
+# 只能靠运行时 monkeypatch 插桩定位；本计数器把该成本前置到仓库里。
+#
+# 纯观测：只累加整数，**不参与任何控制流或数值计算** ⇒ 无条件 bit-exact。
+_WRITEBACK_STATS: dict[str, int] = {}
+
+# 键口径（与 lamarckian_reencode 的五道闸门一一对应）：
+#   called        进入回写（dmde_solver 的调用门 cfg.lamarckian 已放行）
+#   m1_start      走起始通道写法（M1），含 M2-1 各道闸门失败后的回退
+#   patrol_off    闸门② :attr:`lamarckian_patrol_writeback` 未开 → 走 M1
+#   non_srp       闸门③ model_type != "srp" → 走 M1
+#   hard_violation 闸门④ 修复解含硬违约 → 返回 None
+#   seg_match     闸门⑤ 段集合匹配，发生全量段内巡游序回写
+#   seg_mismatch  闸门⑤ 段集合不匹配，该段退回首任务（**最高频的静默降级**）
+#   exc           异常兜底
+_WRITEBACK_KEYS: tuple[str, ...] = (
+    "called", "m1_start", "patrol_off", "non_srp",
+    "hard_violation", "seg_match", "seg_mismatch", "exc",
+)
+
+
+def _wb_tick(key: str, n: int = 1) -> None:
+    """累加一只回写诊断计数。纯观测，不影响求解行为。"""
+    _WRITEBACK_STATS[key] = _WRITEBACK_STATS.get(key, 0) + int(n)
+
+
+def writeback_stats() -> dict[str, int]:
+    """返回回写诊断计数的副本（缺键补 0，便于直接打印/比对）。
+
+    典型用法：跑完一次求解后比对 ``seg_match`` 与 ``seg_mismatch``——
+    若后者远大于前者，说明修复链几乎每次都改了段内任务集，M2-1 结构性退化为 M1。
+    """
+    return {k: _WRITEBACK_STATS.get(k, 0) for k in _WRITEBACK_KEYS}
+
+
+def reset_writeback_stats() -> None:
+    """清零回写诊断计数（多次独立求解之间避免串味）。"""
+    _WRITEBACK_STATS.clear()
 
 
 class MUASAssignmentEvaluator(
@@ -209,6 +252,7 @@ class MUASAssignmentEvaluator(
         """
         if solution is None:
             return None
+        _wb_tick("called")
         # 修复解每机有序航线（局部下标）：{local_uav_idx: [local_task_idx,...]}。
         route_of = self._solution_routes_local(solution)
         start_of = {u: seq[0] for u, seq in route_of.items() if seq}
@@ -220,6 +264,8 @@ class MUASAssignmentEvaluator(
         patrol_on = bool(getattr(self.config, "lamarckian_patrol_writeback", False))
         if not patrol_on or child.model_type != "srp":
             # ── 历史行为（M1 起始通道回写，逐位不变）─────────────────
+            _wb_tick("patrol_off" if not patrol_on else "non_srp")
+            _wb_tick("m1_start")
             return self._reencode_start_only(
                 child.genes, start_of, cost_matrix, child.model_type
             )
@@ -230,6 +276,8 @@ class MUASAssignmentEvaluator(
         #  覆盖在结构上不变，故该子句被结构性满足；下方 Q3.2 仍显式复核覆盖不劣。）
         n_hard_src, _ = self._hard_stats_safe(solution)
         if n_hard_src > 0:
+            _wb_tick("hard_violation")
+            _wb_tick("m1_start")
             return None
 
         try:
@@ -237,6 +285,7 @@ class MUASAssignmentEvaluator(
                 child.genes, route_of, cost_matrix, n_uavs, n_targets
             )
         except Exception as exc:  # 任何异常（集合不匹配/索引越界等）
+            _wb_tick("exc")
             print(
                 "[evaluator][warn] M2-1 段内回写异常，回退起始通道写法："
                 f"{exc!r}",
@@ -246,6 +295,7 @@ class MUASAssignmentEvaluator(
                 child.genes, start_of, cost_matrix, child.model_type
             )
         if new_genes is None:
+            _wb_tick("m1_start")
             return self._reencode_start_only(
                 child.genes, start_of, cost_matrix, child.model_type
             )
@@ -324,6 +374,11 @@ class MUASAssignmentEvaluator(
     ) -> list["Gene"]:
         """M2-1：段内巡游序回写 + cost 逐链重算。
 
+        诊断记账：本函数是**唯一**知道每段到底有没有匹配的地方，故
+        ``seg_match`` / ``seg_mismatch`` 在此原位累加（按"段"计数）。
+        这两只计数解释 M2-1 是否真的起了作用——``seg_mismatch >> seg_match``
+        意味着修复链几乎每次都改动了段内任务集，M2-1 结构性退化为 M1。
+
         逐段处理基因序列（段 = 一条起始基因 + 其后续巡游基因）：
 
         - 段内集合匹配（段基因任务集 == 修复解航线集，且长度一致）→ 全量回写：
@@ -352,6 +407,7 @@ class MUASAssignmentEvaluator(
                 seg_genes = genes[seg_start:j]  # [起始] + [巡游...]
                 route = route_of.get(u)
                 if route is not None and self._segment_matches(seg_genes, route):
+                    _wb_tick("seg_match")
                     # 全量段内回写：起始 + 巡游序（cost 按新链重算）
                     new_genes.append(
                         Gene(
@@ -371,7 +427,9 @@ class MUASAssignmentEvaluator(
                             )
                         )
                 else:
-                    # 集合不匹配（剔除/改派）：保守退回起始通道写法，巡游原样保留。
+                    # 集合不匹配（剔除/改派/该机航线被清空）：保守退回起始通道写法，
+                    # 巡游基因原样保留。这是 M2-1 最高频的静默降级路径。
+                    _wb_tick("seg_mismatch")
                     if route is not None and route:
                         new_genes.append(
                             Gene(

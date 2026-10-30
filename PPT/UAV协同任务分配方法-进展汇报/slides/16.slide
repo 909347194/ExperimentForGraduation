@@ -4,75 +4,97 @@
     <Box style={{ width: 6, height: 34, background: '#1E4FA8' }} />
     <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#0E3F8C' }}>选择性多机巢 MUAS 优化模型与适应度</Text>
   </Box>
-  <Text style={{ position: 'absolute', top: 78, left: 60, fontSize: 15, color: '#8B97A8' }}>左：论文组合优化模型　右：进化评价分层结构（覆盖门禁口径）</Text>
+  <Text style={{ position: 'absolute', top: 78, left: 60, fontSize: 15, color: '#8B97A8' }}>左：论文组合优化模型　右：一次评价的内部顺序——先解码修复得解，再计算适应度</Text>
 
-  <Box style={{ position: 'absolute', top: 116, left: 40, width: 610, flexDirection: 'column', gap: 14 }}>
-    <Box style={{ background: '#F7F9FC', border: '1px solid #D6DCE5', borderRadius: 10, padding: '14px 18px', flexDirection: 'column' }}>
+  <Box style={{ position: 'absolute', top: 112, left: 40, width: 606, flexDirection: 'column', gap: 9 }}>
+    <Box style={{ background: '#F7F9FC', border: '1px solid #D6DCE5', borderRadius: 10, padding: '13px 18px', flexDirection: 'column' }}>
       <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#0E3F8C' }}>① 决策变量与耦合约束</Text>
-      <Box style={{ marginTop: 10, background: '#E8EFF8', borderRadius: 8, padding: '12px 14px' }}>
+      <Box style={{ marginTop: 9, background: '#E8EFF8', borderRadius: 8, padding: '10px 14px' }}>
         <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#0E3F8C' }}>
           y<span style={{ fontSize: 12 }}>j</span> ∈ {"{0,1}"}　x<span style={{ fontSize: 12 }}>uj</span> ∈ {"{0,1}"}　π<span style={{ fontSize: 12 }}>u</span>=(T<span style={{ fontSize: 12 }}>u1</span>,…,T<span style={{ fontSize: 12 }}>un</span>)　z<span style={{ fontSize: 12 }}>ub</span> ∈ {"{0,1}"}
         </Text>
-        <Text style={{ fontSize: 17, color: '#1E4FA8', marginTop: 8 }}>
+        <Text style={{ fontSize: 17, color: '#1E4FA8', marginTop: 7 }}>
           Σ<span style={{ fontSize: 11 }}>u</span> x<span style={{ fontSize: 11 }}>uj</span> = y<span style={{ fontSize: 11 }}>j</span>　（每任务至多一机；y=0 即暂不执行）
         </Text>
       </Box>
-      <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.65, marginTop: 8 }}>
+      <Text style={{ fontSize: 13.5, color: '#4A5568', lineHeight: 1.55, marginTop: 8 }}>
         y：任务是否执行　x：UAV–任务归属　π：访问顺序　z：终点机巢（起点由停靠状态给定）——允许 n<span style={{ fontSize: 11 }}>u</span>=0，即部分 UAV 空闲
       </Text>
     </Box>
 
-    <Box style={{ background: '#F7F9FC', border: '1px solid #D6DCE5', borderRadius: 10, padding: '14px 18px', flexDirection: 'column' }}>
+    <Box style={{ background: '#F7F9FC', border: '1px solid #D6DCE5', borderRadius: 10, padding: '13px 18px', flexDirection: 'column' }}>
       <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#0E3F8C' }}>② 目标退化：完成是约束，成本是目标</Text>
-      <Box style={{ marginTop: 10, background: '#E8EFF8', borderRadius: 8, padding: '12px 14px' }}>
+      <Box style={{ marginTop: 9, background: '#E8EFF8', borderRadius: 8, padding: '11px 14px' }}>
         <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#0E3F8C' }}>
           F<span style={{ fontSize: 12 }}>1</span> = Σ<span style={{ fontSize: 11 }}>j</span> R<span style={{ fontSize: 11 }}>j</span>(t)·y<span style={{ fontSize: 11 }}>j</span>
           <span style={{ fontWeight: 'normal', color: '#4A5568' }}>（事后统计指标）　　</span>
           min F<span style={{ fontSize: 12 }}>2</span> = C(x, π, z, y)
         </Text>
       </Box>
-      <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.65, marginTop: 8 }}>
-        F2 综合三维飞行代价与约束惩罚（航程、时间窗、终点可达、机巢容量末态泊位、三维地理、访问顺序）；「能装必交付」由覆盖门禁保证——F1 恒常、退化为事后指标
+      <Text style={{ fontSize: 13.5, color: '#4A5568', lineHeight: 1.6, marginTop: 7 }}>
+        F2 综合三维飞行代价与约束惩罚。「一定能交付」<span style={{ color: '#B26A00', fontWeight: 'bold' }}>不由目标承担，而由右侧③的装载环节保证</span>——F1 由此退化为事后指标。
       </Text>
     </Box>
 
-    <Box style={{ background: '#0E3F8C', borderRadius: 10, padding: '13px 18px', flexDirection: 'column' }}>
-      <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#FFFFFF', lineHeight: 1.6 }}>
+    <Box style={{ background: '#0E3F8C', borderRadius: 10, padding: '12px 18px', flexDirection: 'column' }}>
+      <Text style={{ fontSize: 14.5, fontWeight: 'bold', color: '#FFFFFF', lineHeight: 1.6 }}>
         终点机巢子问题：给定路线后 min Σ c<span style={{ fontSize: 11 }}>ub</span>(π<span style={{ fontSize: 11 }}>u</span>)·z<span style={{ fontSize: 11 }}>ub</span>（容量约束），结构是小规模运输问题——用最小费用流<span style={{ color: '#FFC107' }}>精确求解</span>，联合考虑所有 UAV 的终点竞争，返航代价进入完整成本评价。
+      </Text>
+    </Box>
+
+    <Box style={{ background: '#FFF8E1', border: '1px solid #E8D9A8', borderRadius: 10, padding: '11px 18px', flexDirection: 'column' }}>
+      <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#0E3F8C' }}>设计判断</Text>
+      <Text style={{ fontSize: 13, color: '#4A5568', lineHeight: 1.55, marginTop: 4 }}>
+        固定表述：搜索用 f 不含 −m·F1，F1 只作事后指标；λ / w_late / w_time 为层内偏好参数。覆盖门禁只做<span style={{ fontWeight: 'bold' }}>事后校验</span>，不单独撑起完成语义。
       </Text>
     </Box>
   </Box>
 
-  <Box style={{ position: 'absolute', top: 116, left: 674, width: 566, flexDirection: 'column', gap: 14 }}>
-    <Box style={{ background: '#F0F5FC', border: '1px solid #D6DCE5', borderTop: '4px solid #1E4FA8', borderRadius: 10, padding: '14px 18px', flexDirection: 'column' }}>
-      <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#0E3F8C' }}>③ 进化评价：四层准字典序（覆盖门禁口径）</Text>
-      <Box style={{ marginTop: 10, background: '#FFFFFF', borderRadius: 8, padding: '12px 14px' }}>
-        <Text style={{ fontSize: 17, fontWeight: 'bold', color: '#0E3F8C', lineHeight: 1.7 }}>
-          f = W<span style={{ fontSize: 11 }}>hard</span>·n<span style={{ fontSize: 11 }}>hard</span> + w<span style={{ fontSize: 11 }}>exc</span>·excess<span style={{ fontSize: 11 }}>m</span> + W<span style={{ fontSize: 11 }}>skip</span>·n<span style={{ fontSize: 11 }}>skip</span> + w<span style={{ fontSize: 11 }}>late</span>·L_tot + λ·path + w<span style={{ fontSize: 11 }}>time</span>·F<span style={{ fontSize: 11 }}>3</span>
-        </Text>
-      </Box>
-      <Box style={{ marginTop: 10, flexDirection: 'column', gap: 6 }}>
+  <Box style={{ position: 'absolute', top: 112, left: 674, width: 566, flexDirection: 'column', gap: 9 }}>
+    <Box style={{ background: '#F0F5FC', border: '1px solid #D6DCE5', borderTop: '4px solid #1E4FA8', borderRadius: 10, padding: '13px 18px', flexDirection: 'column' }}>
+      <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#0E3F8C' }}>③ 解码修复链：可行解是这样被造出来的</Text>
+      <Text style={{ fontSize: 13, color: '#4A5568', lineHeight: 1.5, marginTop: 5 }}>
+        顺序调整、超时重排、增删任务<span style={{ fontWeight: 'bold' }}>全由解码端这条链承担</span>，不占基因维度。
+      </Text>
+      <Box style={{ marginTop: 9, flexDirection: 'column', gap: 5 }}>
         {[
-          ['T0 物理硬约束', 'W_hard = κ·m·R_pool：任一次物理违约压倒其余各层全部差异——幽灵交付永不入选'],
-          ['T0.5 覆盖门禁', 'W_skip·n_skip：「能装却没装」即非法，不许成本权衡；构造修复下恒 0'],
-          ['T2 迟到（软）', 'w_late=0.01/s：迟到可接受但不免费，与航程代价同台竞争'],
-          ['T3 航程与时间', 'λ·path + w_time·F3，F3 = max_u T_u（最坏机时间）'],
+          ['1 联合收敛', '航线与终点机巢必须一轮轮共同定稿（≤6 轮不动点）：只有真正起飞的航次才让出泊位，先选巢再剪枝会算出「虚名额」→ 落地期超卖'],
+          ['2 覆盖装载', '选中却没被编进航次的任务在此补入（EDD 升序、修到不动点）——这是完成语义的主要承担者'],
+          ['3 时序守恒', '纯调序的时间窗重排 + 硬序列约束归位；调序会改变航程，所以后面必须再闸一次'],
+          ['4 交付前复查', '换巢 / 重排都会拉长航程，交付前最后一次航程闸 + 重新配巢，否则「航程已记账却解绑回池」＝废飞'],
         ].map((r) => (
           <Box key={r[0]} style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
-            <Box style={{ width: 116, background: '#1E4FA8', borderRadius: 4, alignItems: 'center', padding: '3px 0' }}>
-              <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#FFFFFF' }}>{r[0]}</Text>
+            <Box style={{ width: 92, background: '#1E4FA8', borderRadius: 4, alignItems: 'center', padding: '2px 0' }}>
+              <Text style={{ fontSize: 11.5, fontWeight: 'bold', color: '#FFFFFF' }}>{r[0]}</Text>
             </Box>
-            <Text style={{ fontSize: 13, color: '#4A5568', lineHeight: 1.55, flex: 1 }}>{r[1]}</Text>
+            <Text style={{ fontSize: 12, color: '#4A5568', lineHeight: 1.45, flex: 1 }}>{r[1]}</Text>
           </Box>
         ))}
       </Box>
     </Box>
 
-    <Box style={{ background: '#F7F9FC', border: '1px solid #D6DCE5', borderRadius: 10, padding: '13px 18px', flexDirection: 'column' }}>
-      <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#0E3F8C' }}>设计判断</Text>
-      <Text style={{ fontSize: 14, color: '#4A5568', lineHeight: 1.7, marginTop: 6 }}>
-        固定表述：搜索用 f 不含 −m·F1，F1 只作事后指标；「能装必交付」由覆盖门禁承担；λ/w_late/w_time 为层内偏好参数；big-M 旧式保留为兼容口径。实测 λ=1e-1 下完成项 : 成本项 ≈ 800:1，成本项只在收益等价时裁决——成本余量主要由交付后 polish 获取（3 seed −4.09%）
-      </Text>
+    <Box style={{ background: '#F0F5FC', border: '1px solid #D6DCE5', borderTop: '4px solid #1E4FA8', borderRadius: 10, padding: '13px 18px', flexDirection: 'column' }}>
+      <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#0E3F8C' }}>④ 进化评价：四层准字典序</Text>
+      <Box style={{ marginTop: 9, background: '#FFFFFF', borderRadius: 8, padding: '10px 14px' }}>
+        <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#0E3F8C', lineHeight: 1.65 }}>
+          f = W<span style={{ fontSize: 11 }}>hard</span>·n<span style={{ fontSize: 11 }}>hard</span> + w<span style={{ fontSize: 11 }}>exc</span>·excess<span style={{ fontSize: 11 }}>m</span> + W<span style={{ fontSize: 11 }}>skip</span>·n<span style={{ fontSize: 11 }}>skip</span> + w<span style={{ fontSize: 11 }}>late</span>·L_tot + λ·path + w<span style={{ fontSize: 11 }}>time</span>·F<span style={{ fontSize: 11 }}>3</span>
+        </Text>
+      </Box>
+      <Box style={{ marginTop: 9, flexDirection: 'column', gap: 5 }}>
+        {[
+          ['T0 物理硬约束', 'W_hard = κ·m·R_pool：任一次物理违约压倒其余各层全部差异——幽灵交付永不入选'],
+          ['T0.5 覆盖门禁', 'W_skip·n_skip：「能装却没装」即非法，不许成本权衡；作事后校验，构造修复下达不到'],
+          ['T2 迟到（软）', 'w_late=0.01/s：迟到可接受但不免费，与航程代价同台竞争'],
+          ['T3 航程与时间', 'λ·path + w_time·F3，F3 = max_u T_u（最坏机时间）'],
+        ].map((r) => (
+          <Box key={r[0]} style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
+            <Box style={{ width: 106, background: '#3D7BD9', borderRadius: 4, alignItems: 'center', padding: '2px 0' }}>
+              <Text style={{ fontSize: 11.5, fontWeight: 'bold', color: '#FFFFFF' }}>{r[0]}</Text>
+            </Box>
+            <Text style={{ fontSize: 12, color: '#4A5568', lineHeight: 1.45, flex: 1 }}>{r[1]}</Text>
+          </Box>
+        ))}
+      </Box>
     </Box>
   </Box>
 

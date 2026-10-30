@@ -63,17 +63,24 @@
     ))}
   </Box>
 
-  <Box style={{ position: 'absolute', top: 500, left: 60, width: 1160, flexDirection: 'row', gap: 20 }}>
-    <Box style={{ flex: 1, background: '#F0F5FC', border: '1px solid #D6DCE5', borderLeft: '4px solid #1E4FA8', borderRadius: 10, padding: '13px 18px' }}>
-      <Text style={{ fontSize: 15.5, fontWeight: 'bold', color: '#0E3F8C' }}>选择性 y=0 的决策位置：不占编码维度</Text>
-      <Text style={{ fontSize: 13.5, color: '#4A5568', lineHeight: 1.65, marginTop: 5 }}>
-        DE 空间中每个任务都被分配，「暂不执行」不占基因维度——由解码端修复链裁量（物理不可行才移除/改派，能装必装由覆盖门禁保证），并支持「任务少时并入更少机」的合并修复 _consolidate：空闲是解码侧概念，不进基因。
+  <Box style={{ position: 'absolute', top: 486, left: 60, width: 1160, flexDirection: 'row', gap: 18, alignItems: 'flex-start' }}>
+    <Box style={{ flex: 1, background: '#F0F5FC', border: '1px solid #D6DCE5', borderLeft: '4px solid #1E4FA8', borderRadius: 10, padding: '12px 16px' }}>
+      <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#0E3F8C' }}>选择性 y=0 的决策位置：不占编码维度</Text>
+      <Text style={{ fontSize: 12.5, color: '#4A5568', lineHeight: 1.55, marginTop: 5 }}>
+        DE 空间中每个任务都被分配，「暂不执行」不占基因维度——由解码端修复链裁量（物理不可行才移除 / 改派），并支持「任务少时并入更少机」的合并修复：空闲是解码侧概念，不进基因。
       </Text>
     </Box>
-    <Box style={{ flex: 1, background: '#F0F5FC', border: '1px solid #D6DCE5', borderLeft: '4px solid #0E3F8C', borderRadius: 10, padding: '13px 18px' }}>
-      <Text style={{ fontSize: 15.5, fontWeight: 'bold', color: '#0E3F8C' }}>Lamarckian 回写：只回写起始基因</Text>
-      <Text style={{ fontSize: 13.5, color: '#4A5568', lineHeight: 1.65, marginTop: 5 }}>
-        修复解只把首任务写回获胜个体的起始基因，巡游基因原样保留、绝不增删——基因长度恒定，这是「每任务恰出现一次」不变式下可安全落地的关键。
+    <Box style={{ flex: 1.35, background: '#FFF8E1', border: '1px solid #E8D9A8', borderLeft: '4px solid #B26A00', borderRadius: 10, padding: '12px 16px' }}>
+      <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#0E3F8C' }}>Lamarckian 回写：两级（默认为 M1）</Text>
+      <Text style={{ fontSize: 12.5, color: '#4A5568', lineHeight: 1.55, marginTop: 5 }}>
+        <span style={{ fontWeight: 'bold', color: '#B26A00' }}>M1（历史口径）</span>：只把每机首任务写回起始基因通道，巡游基因原样保留、绝不增删，长度恒定。
+        <span style={{ fontWeight: 'bold', color: '#B26A00' }}>M2-1（开关，默认关）</span>：额外把修复解<span style={{ fontWeight: 'bold' }}>重排过的段内访问顺序</span>写回巡游通道——触发要求「段基因任务集 ≡ 修复解航线集」，修复链只要剔除/改派过一个任务，该段自动退回 M1。<span style={{ fontWeight: 'bold' }}>⇒ 回写是修复成果回流种群的唯一通道，M2-1 属情境性增益。</span>
+      </Text>
+    </Box>
+    <Box style={{ flex: 1, background: '#F0F5FC', border: '1px solid #D6DCE5', borderLeft: '4px solid #0E3F8C', borderRadius: 10, padding: '12px 16px' }}>
+      <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#0E3F8C' }}>Polish：交付前的成本再压缩</Text>
+      <Text style={{ fontSize: 12.5, color: '#4A5568', lineHeight: 1.55, marginTop: 5 }}>
+        适应度里成本项只在收益等价时裁决，余量主要由此获取——<span style={{ fontWeight: 'bold' }}>跨机改派 + 组内 2-opt / Or-opt</span> 联合局部搜索，<span style={{ fontWeight: 'bold' }}>只接受严格改进</span>，因而不动已完成语义（不删任务、不降覆盖）。
       </Text>
     </Box>
   </Box>

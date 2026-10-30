@@ -1,0 +1,61 @@
+<Slide style={{ width: 1280, height: 720, background: '#FFFFFF', position: 'relative', fontFamily: 'Source Han Sans CN, Microsoft YaHei, sans-serif' }}>
+  <Box style={{ position: 'absolute', top: 0, left: 0, width: 1280, height: 12, background: '#1E4FA8' }} />
+  <Box style={{ position: 'absolute', top: 30, left: 40, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+    <Box style={{ width: 6, height: 34, background: '#1E4FA8' }} />
+    <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#0E3F8C' }}>逆映射：从连续向量还原出一条可执行航线</Text>
+  </Box>
+  <Text style={{ position: 'absolute', top: 78, left: 60, fontSize: 15, color: '#8B97A8' }}>这是「离散映射差分进化」名字里「映射」二字的落点 —— 差分在连续空间做，决策在离散空间读</Text>
+
+  <Box style={{ position: 'absolute', top: 112, left: 40, width: 600, flexDirection: 'column', gap: 10 }}>
+    <Box style={{ background: '#E8EFF8', borderRadius: 10, padding: '13px 18px', flexDirection: 'column' }}>
+      <Text style={{ fontSize: 17, fontWeight: 'bold', color: '#0E3F8C' }}>为什么必须先救「翻译」这一步</Text>
+      <Text style={{ fontSize: 13.5, color: '#4A5568', lineHeight: 1.6, marginTop: 6 }}>
+        差分变异后的代价值几乎必然不在代价矩阵里（是若干真实值的线性组合）。必须有一个规则把它读回「哪架机飞哪些、按什么顺序」，否则连续空间搜出来的东西没有表型。
+      </Text>
+    </Box>
+    <Box style={{ background: '#F7F9FC', border: '1px solid #D6DCE5', borderRadius: 10, padding: '13px 18px', flexDirection: 'column' }}>
+      <Text style={{ fontSize: 17, fontWeight: 'bold', color: '#0E3F8C' }}>读取规则：按最近距离贪心</Text>
+      <Text style={{ fontSize: 13.5, color: '#4A5568', lineHeight: 1.6, marginTop: 6 }}>
+        基因第三分量 C(i,j) 是「 行 i → 目标 j 」的代价。译码就是对矩阵的每一行取<span style={{ fontWeight: 'bold' }}> argmin |C_row − c_gene| </span>——找到基因最想连的那个目标。
+        <span style={{ fontWeight: 'bold', color: '#B26A00' }}>当 temperature = 0 时逆映射是确定性的，可复现。</span>
+      </Text>
+    </Box>
+    <Box style={{ background: '#FFF8E1', border: '1px solid #E8D9A8', borderRadius: 10, padding: '13px 18px', flexDirection: 'column' }}>
+      <Text style={{ fontSize: 17, fontWeight: 'bold', color: '#0E3F8C' }}>温度的作用：探索 → 开采</Text>
+      <Text style={{ fontSize: 13.5, color: '#4A5568', lineHeight: 1.6, marginTop: 6 }}>
+        温度随代数<span style={{ fontWeight: 'bold' }}> 1 → 0 线性衰减</span>：早期按 softmax 在较大候选集里软采样（保多样性），后期收敛为纯贪心（稳定开采）。
+        另外温度高于阈值时才施加随机扰动，扰动概率与温度<span style={{ fontWeight: 'bold' }}>正相关</span>。
+      </Text>
+    </Box>
+  </Box>
+
+  <Box style={{ position: 'absolute', top: 112, left: 664, width: 576, flexDirection: 'column', gap: 10 }}>
+    <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#0E3F8C' }}>四步流程</Text>
+    {[
+      { n: '1', t: '首任务匹配', d: '对 K 个起始行，按温度自适应 softmax 挑「本段的第一个任务」——决定每架机的切入点' },
+      { n: '2', t: '巡游边匹配', d: '迭代行替换：以上一步选中的任务为新起点行继续匹配，直到该段用完。这一步让「顺序」真正进入搜索空间' },
+      { n: '3', t: '扰动增强', d: '匹配成型后辅以 swap / insert / reverse 三类邻域扰动，跳出贪心路径依赖' },
+      { n: '4', t: '段结构规范化', d: '重建分段：起始基因按 UAV 升序、巡游基因紧跟其所属段——恢复 SRP 不变式' },
+    ].map((s) => (
+      <Box key={s.n} style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-start', background: '#F0F5FC', border: '1px solid #D6DCE5', borderLeft: '4px solid #1E4FA8', borderRadius: 8, padding: '11px 16px' }}>
+        <Box style={{ width: 34, height: 34, borderRadius: 17, background: '#1E4FA8', alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#FFFFFF' }}>{s.n}</Text>
+        </Box>
+        <Box style={{ flex: 1, flexDirection: 'column' }}>
+          <Text style={{ fontSize: 17, fontWeight: 'bold', color: '#0E3F8C' }}>{s.t}</Text>
+          <Text style={{ fontSize: 13, color: '#4A5568', lineHeight: 1.55, marginTop: 3 }}>{s.d}</Text>
+        </Box>
+      </Box>
+    ))}
+    <Box style={{ background: '#0E3F8C', borderRadius: 10, padding: '12px 18px' }}>
+      <Text style={{ fontSize: 13.5, fontWeight: 'bold', color: '#FFFFFF', lineHeight: 1.6 }}>
+        注意第 2 步：若不做迭代行替换、只做一次性指派，访问顺序就退化成了「由解码规则决定」的从变量，永远进不了搜索——这是本方法与朴素差分编码的分水岭。
+      </Text>
+    </Box>
+  </Box>
+
+  <Box style={{ position: 'absolute', bottom: 0, left: 0, width: 1280, height: 44, background: '#F7F9FC', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: '0 40px', borderTop: '1px solid #E5E7EB' }}>
+    <Text style={{ fontSize: 13, color: '#8B97A8' }}>第二阶段原理串讲 · 选择性多机巢 MUAS 是怎么被解出来的</Text>
+    <Text style={{ fontSize: 15, color: '#1E4FA8', fontWeight: 'bold' }}>06 / 12</Text>
+  </Box>
+</Slide>

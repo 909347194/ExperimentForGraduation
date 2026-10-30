@@ -3,37 +3,45 @@
 
 对照：M2-1 关 (OFF) vs 开 (ON)。每个随机实例上，ON/OFF 共用同一组求解器
 随机种子（DE 初值一致），差异仅来自 M2-1——构成**配对比较**。跨 ``--n-instances``
-个独立几何实例 × ``--seeds`` 个求解器种子，做配对的 ON−OFF 差值统计与胜/平/负计数，
-给「是否转正默认开」一个统计置信度。
+个独立几何实例 × ``--seeds`` 个求解器种子，做配对的 ON−OFF 差值统计与胜/平/负计数。
 
 记录设计稿要求的四类指标：
 
-  1. 路径成本 (path cost, T3 = ``f2_cost/λ``，含返巢)
-  2. 迟到     (late seconds, ``soft_violation``)
-  3. 收敛曲线 (``cost_history``，搜索期每代最优适应度)
+  1. 路径成本 (path cost, T3 = ``est_cost``，含返巢)
+  2. 迟到     (late seconds, ``lateness_by_task`` 总和)
+  3. 收敛曲线 (``cost_history``，搜索期每代最优适应度；滚动下跨周期拼接)
   4. 种群方差 (代际 ``cost_vector`` 种群方差，来自新增 ``population_callback``)
 
 为干净归因到 M2-1 的「搜索期」效应，默认关闭交付后 polish / memetic
 （与 OFF 同口径），使**交付解 == 搜索最优**——M2-1 是唯一变量。
-种群方差、收敛曲线均为搜索期口径（设计稿 §3.4「不做运行时熔断、只作
-A/B 否决指标」）。
 
-输出（结果落在 ``results/``）：
+周期 (n_cycles) 语义（见 methods/rolling/horizon.py）：
+  - ``--n-cycles 1``（默认）：走原离线选择性 MUAS（所有任务单快照一次性求解，
+    绕过 RollingHorizon 的 selection 限选，任务全量进第二阶段）。
+  - ``--n-cycles > 1``：走 RollingHorizon 滚动时域，任务均匀分批到多个周期逐周
+    期重规划（含 selection 阶段与 UAV 充电回巢）。M2-1 在每周期的 MUAS 内生效。
+
+三档场景：``--scenarios "60:1,40:2,20:3"`` —— 任务数:周期数 逗号分隔。
+每档独立落 ``results/t<任务数>/``，便于分档查看与跨档对比。
+
+输出（每档落在各自的 ``results/t<任务数>/``）：
   - ``ab_m21_raw.csv``         逐 run 原始指标（含 instance 列）
   - ``ab_m21_summary.csv``     聚合（mean/std，ON−OFF 差值/比例）
   - ``ab_m21_paired.csv``      配对 ON−OFF 差值 + 胜/平/负计数
-  - ``ab_m21_curves.png``      2×2 图（路径成本 / 迟到 / 收敛曲线均值 / 种群方差均值，跨实例池化）
+  - ``ab_m21_curves.png``      2×2 图（路径成本 / 迟到 / 收敛曲线均值 / 种群方差均值）
   - ``ab_m21_summary.json``    汇总结构化快照
 
 用法：
-  python run.py                          # 默认 6 实例 × 3 seed、关 polish/memetic
+  python run.py                                       # 默认三档 (60:1,40:2,20:3)
+  python run.py --scenarios "60:1"                    # 单档离线 60 任务
+  python run.py --scenarios "40:2" --deadline-s 150   # 40 任务 2 周期、注入时间窗
   python run.py --n-instances 10 --seeds 11,22,33
-  python run.py --deadline-s 150         # 注入时间窗，使排序产生迟到压力
-  python run.py --no-isolate             # 走完整生产管线（含 polish/memetic）
+  python run.py --no-isolate                          # 走完整生产管线（含 polish/memetic）
 """
 from __future__ import annotations
 
 import argparse
+import copy
 import csv
 import json
 import math
@@ -48,7 +56,12 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-REPO = Path(__file__).resolve().parents[2]  # .../ExperimentForGraduation
+# 中文图例/标题：优先用系统 Noto CJK 字体（matplotlib 注册为 *JP 子集，
+# 含 CJK 统一表意文字，可覆盖简体常用字），避免方框乱码
+plt.rcParams["font.family"] = ["Noto Sans CJK JP", "DejaVu Sans"]
+plt.rcParams["axes.unicode_minus"] = False
+
+REPO = Path(__file__).resolve().parents[3]  # .../ExperimentForGraduation (仓库根)
 if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
@@ -68,6 +81,13 @@ from task_allocation.methods.muas.solvers.stage_runner import (  # noqa: E402
     MUASStageConfig,
     run_selective_muas,
 )
+from task_allocation.methods.rolling.horizon import (  # noqa: E402
+    HorizonConfig,
+    RollingHorizon,
+)
+from task_allocation.methods.rolling.event_trigger import EventTriggerConfig  # noqa: E402
+from task_allocation.methods.task_pool import TaskPool  # noqa: E402
+from task_allocation.methods.uav_state import UAVFleet  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -75,17 +95,18 @@ from task_allocation.methods.muas.solvers.stage_runner import (  # noqa: E402
 # ---------------------------------------------------------------------------
 
 DEFAULTS = dict(
-    seeds=[11, 22, 33],
-    n_instances=6,
-    inst_base=1000,     # 实例几何种子基准：第 i 个实例用 inst_base+i
+    seeds=[11, 22],          # 求解器种子（同实例 ON/OFF 共用，构成配对）
+    n_instances=3,
+    inst_base=2000,          # 实例几何种子基准：第 i 个实例用 inst_base+i
     n_uavs=3,
-    n_targets=12,
     area=1000.0,
     pop_size=40,
     max_generations=120,
-    deadline_s=0,       # >0 ⇒ 注入时间窗（latest=earliest+deadline_s），使排序产生压力
-    isolate=True,  # 关闭交付后 polish/memetic，干净归因到 M2-1 搜索期
+    deadline_s=150,          # >0 ⇒ 注入时间窗 latest=earliest+该秒数，使排序产生迟到压力
+    isolate=True,            # 关闭交付后 polish/memetic，干净归因到 M2-1 搜索期
 )
+
+SCENARIOS = "60:1,40:2,20:3"  # 任务数:周期数
 
 
 # ---------------------------------------------------------------------------
@@ -146,25 +167,71 @@ class VarianceRecorder:
 
 
 # ---------------------------------------------------------------------------
-# 单次试验
+# 单次试验（分发器）
 # ---------------------------------------------------------------------------
 
 
 def run_trial(tasks, uavs, nests, *, on: bool, solver_seed: int, instance: int, params: dict) -> dict:
-    cb = build_pairwise_costs(tasks, uavs, nests=nests)
+    """单次试验：统一走滚动时域路径（n_cycles>=1；n_cycles==1 即单周期 RollingHorizon，
+    等价于离线但三档口径一致，便于跨档对比）。M2-1 在每周期的 MUAS 内生效。"""
+    return run_trial_rolling(
+        tasks, uavs, nests, on=on, solver_seed=solver_seed,
+        instance=instance, params=params,
+    )
+
+
+
+
+def run_trial_rolling(tasks, uavs, nests, *, on: bool, solver_seed: int, instance: int, params: dict) -> dict:
+    """滚动时域路径（n_cycles>1）：任务均匀分批到多周期逐周期重规划。
+
+    纯几何（dem=None, estimator=None），无需真实 DEM/坐标。ON/OFF 对 tasks/uavs
+    做深拷贝隔离——RollingHorizon 的 apply_solution 会就地写 UAV 位姿与 Task.meta，
+    不隔离会污染配对。配对仍由 ``inst_base+instance``（几何）与 ``solver_seed``
+    （DE 初值）一致保证。
+    """
+    n_cycles = int(params["n_cycles"])
     isolate = params["isolate"]
     deadline_s = float(params.get("deadline_s", 0.0))
-    # 时间窗口径：迟到计费 + 折减（与求解器内部同一组权重，保证指标口径一致）。
     prob_cfg = MUASProblemConfig()
     if deadline_s > 0:
         prob_cfg = MUASProblemConfig(w_violation=0.01, late_reward_decay_seconds=300.0)
 
+    # 隔离 ON/OFF（rolling 会就地修改输入实体）
+    tasks = copy.deepcopy(list(tasks))
+    uavs = copy.deepcopy(list(uavs))
+    nests = copy.deepcopy(list(nests))
+
+    # 分批到达：把 n_targets 个任务均匀轮流分到 n_cycles 个周期
+    rng = np.random.default_rng(int(params.get("inst_base", 1000)) + int(instance))
+    order = list(range(len(tasks)))
+    rng.shuffle(order)
+    per = [order[c::n_cycles] for c in range(n_cycles)]
+    arrivals = {c + 1: [tasks[i] for i in per[c]] for c in range(n_cycles)}
+
+    pool = TaskPool(current_time=0.0)
+    fleet = UAVFleet(list(uavs), current_time=0.0)
+    max_range = max((float(u.remaining_range) for u in uavs), default=1e7) or 1e7
+    # 放宽第一阶段选择：把 n_sel 上限抬到任务总数、并关闭 capability 能力收敛，
+    # 使每周期到达的全部任务都进入第二阶段 MUAS——符合「任务都参与分配」的口径，
+    # 让 M2-1 在充分参与的任务集上做 A/B（纯几何无 DEM 下可行性/几何可达性全过）。
+    # 注意：horizon.run_cycle 每周期重建 SelectionConfig 时透传 self.sel_cfg 的
+    # marginal 与 capability，但会用自己的 replan/故障 forced_ids 覆盖
+    # self.sel_cfg.forced_task_ids，故这里必须走 marginal+capability 两条旋钮，
+    # 单设 forced_task_ids 无效（实测仍被 n_sel 砍到 ~0.3 覆盖）。
+    from task_allocation.methods.selection.pipeline import SelectionConfig
+    from task_allocation.methods.selection.marginal_gain import MarginalConfig
+    from task_allocation.methods.selection.capability import CapabilityScaleConfig
+    sel_cfg = SelectionConfig(
+        marginal=MarginalConfig(max_selected=len(tasks)),
+        capability=CapabilityScaleConfig(enabled=False),
+    )
     stage_cfg = MUASStageConfig(
         lamarckian_patrol_writeback=on,
         cost_polish_enabled=not isolate,
         cost_polish_relocate_enabled=not isolate,
         polish_enabled=not isolate,
-        polish_in_loop=False,  # memetic 默认关（与 OFF 同口径）
+        polish_in_loop=False,
     )
     rec = VarianceRecorder()
     solver_cfg = DMDEConfig(
@@ -174,49 +241,55 @@ def run_trial(tasks, uavs, nests, *, on: bool, solver_seed: int, instance: int, 
         verbose=False,
         population_callback=rec,
     )
-
-    t0 = time.time()
-    res = run_selective_muas(
-        tasks=list(tasks),
-        uavs=list(uavs),
-        nests=list(nests),
-        cost_build=cb,
+    horizon = RollingHorizon(
+        pool, fleet, list(nests), dem=None, estimator=None,
+        horizon_config=HorizonConfig(
+            n_cycles=n_cycles, cycle_length=600.0,
+            complete_after_cycle=True, recharge_at_nest=True,
+            uav_max_range=max_range,
+        ),
+        problem_config=prob_cfg,
         stage_config=stage_cfg,
         solver_config=solver_cfg,
-        problem_config=prob_cfg,
+        selection_config=sel_cfg,
+        event_config=EventTriggerConfig(),
+        nest_offset=1_000_000,
     )
+    t0 = time.time()
+    records = horizon.run(n_cycles=n_cycles, arrivals=arrivals)
     elapsed = time.time() - t0
 
-    # 用同口径问题重算 path/late/hard（与 run_selective_muas 内部同一代价源/权重）。
-    prob = SelectiveMUASProblem.from_entities(
-        tasks,
-        uavs,
-        nests,
-        pairwise_cost=cb.provider.pairwise,
-        config=prob_cfg,
-    )
-    sol = res.solution
-    path_cost = float(prob.path_cost(sol))
-    late = float(prob.soft_violation(sol))
-    n_hard, excess_m = prob.hard_stats(sol)
-    delivered_fitness = float(prob.scalar_fitness(sol))  # 真实目标（λ·path + w_violation·late + 硬违约…）
-    executed = len(sol.executed_task_ids)
-    conv = [float(x) for x in res.cost_history]
+    # 汇总长程指标（跨周期池化）
+    completed: set[int] = set()
+    late = 0.0
+    n_hard = 0
+    path_cost = 0.0
+    conv: list[float] = []
     var = list(rec.variances)
+    for rec_ in records:
+        completed.update(int(t) for t in rec_.completed_ids)
+        late += float(sum(rec_.lateness_by_task.values()))
+        n_hard += len(rec_.infeasible_ids)
+        path_cost += float(sum(t.get("est_cost", 0.0) for t in rec_.tours))
+        conv.extend([float(x) for x in rec_.cost_history])
+    total = len(tasks)
     collapse = (var[-1] / var[0]) if (var and var[0] > 0) else float("nan")
+    # 交付质量代理（与离线 scalar_fitness 同量纲：λ·path + w_violation·late；
+    # 这里 λ=1 简化，ON/OFF 同公式，配对差值口径一致）。
+    delivered = path_cost + prob_cfg.w_violation * late + 1e6 * n_hard
 
     return dict(
         mode="ON" if on else "OFF",
         seed=solver_seed,
         instance=instance,
         search_best_fitness=float(conv[-1]) if conv else float("nan"),
-        delivered_fitness=delivered_fitness,
+        delivered_fitness=delivered,
         path_cost=path_cost,
         late=late,
         n_hard=int(n_hard),
-        excess_m=float(excess_m),
-        coverage=executed / max(1, len(tasks)),
-        n_evals=int(res.n_evals),
+        excess_m=0.0,
+        coverage=len(completed) / max(1, total),
+        n_evals=int(sum(int(rec_.muas.get("n_evals", 0)) for rec_ in records)),
         elapsed_s=elapsed,
         var_initial=var[0] if var else float("nan"),
         var_final=var[-1] if var else float("nan"),
@@ -392,8 +465,9 @@ def plot_curves(out_png: Path, rows: list[dict], params: dict) -> None:
 
     fig.suptitle(
         f"M2-1 A/B  (UAV={params['n_uavs']}, T={params['n_targets']}, "
-        f"pop={params['pop_size']}, gen={params['max_generations']}, "
-        f"deadline={params['deadline_s']}s, isolate={params['isolate']})",
+        f"cycles={params['n_cycles']}, pop={params['pop_size']}, "
+        f"gen={params['max_generations']}, deadline={params['deadline_s']}s, "
+        f"isolate={params['isolate']})",
         fontsize=12,
     )
     fig.tight_layout(rect=[0, 0, 1, 0.96])
@@ -434,45 +508,28 @@ def print_table(rows: list[dict], summ: dict, psumm: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 主流程
+# 场景解析 / 单场景执行
 # ---------------------------------------------------------------------------
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description="M2-1 段内巡游序回写 多实例 A/B 跑批")
-    ap.add_argument("--seeds", default=",".join(map(str, DEFAULTS["seeds"])),
-                   help="逗号分隔的求解器随机种子，如 11,22,33")
-    ap.add_argument("--n-instances", type=int, default=DEFAULTS["n_instances"],
-                   help="独立几何实例数（每个实例上 ON/OFF 配对比较）")
-    ap.add_argument("--inst-base", type=int, default=DEFAULTS["inst_base"],
-                   help="实例几何种子基准：第 i 个实例用 inst_base+i")
-    ap.add_argument("--n-uavs", type=int, default=DEFAULTS["n_uavs"])
-    ap.add_argument("--n-targets", type=int, default=DEFAULTS["n_targets"])
-    ap.add_argument("--area", type=float, default=DEFAULTS["area"])
-    ap.add_argument("--pop", type=int, default=DEFAULTS["pop_size"])
-    ap.add_argument("--gens", type=int, default=DEFAULTS["max_generations"])
-    ap.add_argument("--no-isolate", action="store_true",
-                   help="走完整生产管线（含交付后 polish / memetic），不清空")
-    ap.add_argument("--deadline-s", type=float, default=DEFAULTS["deadline_s"],
-                   help=">0 ⇒ 注入时间窗 latest=earliest+该秒数，使排序产生迟到压力（默认 0=无窗）")
-    ap.add_argument("--out-dir", default=str(Path(__file__).resolve().parent / "results"))
-    args = ap.parse_args()
+def parse_scenarios(s: str) -> list[tuple[int, int]]:
+    """解析 ``"60:1,40:2,20:3"`` ⇒ [(60,1),(40,2),(20,3)]。"""
+    out: list[tuple[int, int]] = []
+    for part in s.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if ":" in part:
+            a, b = part.split(":", 1)
+            out.append((int(a), int(b)))
+        else:
+            out.append((int(part), 1))
+    return out
 
-    params = dict(
-        seeds=[int(s) for s in args.seeds.split(",") if s.strip()],
-        n_instances=args.n_instances,
-        inst_base=args.inst_base,
-        n_uavs=args.n_uavs,
-        n_targets=args.n_targets,
-        area=args.area,
-        pop_size=args.pop,
-        max_generations=args.gens,
-        deadline_s=args.deadline_s,
-        isolate=not args.no_isolate,
-    )
-    out_dir = Path(args.out_dir)
+
+def run_scenario(params: dict, out_dir: Path) -> list[dict]:
+    """执行单档场景（固定 n_targets / n_cycles），落结果到 out_dir。"""
     out_dir.mkdir(parents=True, exist_ok=True)
-
     rows: list[dict] = []
     instance_seeds = [params["inst_base"] + i for i in range(params["n_instances"])]
     for inst_seed in instance_seeds:
@@ -483,11 +540,12 @@ def main() -> int:
         for solver_seed in params["seeds"]:
             for on in (False, True):
                 tag = "ON " if on else "OFF"
-                print(f"[run] inst={inst_seed} seed={solver_seed} M2-1={tag} ...",
-                      flush=True)
+                print(f"[run] T={params['n_targets']} cyc={params['n_cycles']} "
+                      f"inst={inst_seed} seed={solver_seed} M2-1={tag} ...", flush=True)
                 rows.append(run_trial(
                     tasks, uavs, nests, on=on, solver_seed=solver_seed,
-                    instance=inst_seed, params=params))
+                    instance=inst_seed, params=params,
+                ))
 
     summ = summarize(rows)
     psumm = paired_summary(rows)
@@ -499,6 +557,66 @@ def main() -> int:
     plot_curves(out_dir / "ab_m21_curves.png", rows, params)
     print_table(rows, summ, psumm)
     print(f"\n输出目录：{out_dir}")
+    return rows
+
+
+# ---------------------------------------------------------------------------
+# 主流程
+# ---------------------------------------------------------------------------
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="M2-1 段内巡游序回写 多实例 A/B 跑批（含滚动时域周期）")
+    ap.add_argument("--seeds", default=",".join(map(str, DEFAULTS["seeds"])),
+                   help="逗号分隔的求解器随机种子，如 11,22")
+    ap.add_argument("--n-instances", type=int, default=DEFAULTS["n_instances"],
+                   help="每个场景的独立几何实例数（同实例上 ON/OFF 配对）")
+    ap.add_argument("--inst-base", type=int, default=DEFAULTS["inst_base"],
+                   help="实例几何种子基准：第 i 个实例用 inst_base+i")
+    ap.add_argument("--n-uavs", type=int, default=DEFAULTS["n_uavs"])
+    ap.add_argument("--area", type=float, default=DEFAULTS["area"])
+    ap.add_argument("--pop", type=int, default=DEFAULTS["pop_size"])
+    ap.add_argument("--gens", type=int, default=DEFAULTS["max_generations"])
+    ap.add_argument("--deadline-s", type=float, default=DEFAULTS["deadline_s"],
+                   help=">0 ⇒ 注入时间窗 latest=earliest+该秒数，使排序产生迟到压力（默认 150）")
+    ap.add_argument("--no-isolate", action="store_true",
+                   help="走完整生产管线（含交付后 polish / memetic），不清空")
+    ap.add_argument("--scenarios", default=SCENARIOS,
+                   help="多档场景：n_targets:n_cycles 逗号分隔，如 60:1,40:2,20:3")
+    ap.add_argument("--out-dir", default=str(Path(__file__).resolve().parent / "results"))
+    args = ap.parse_args()
+
+    params = dict(
+        seeds=[int(s) for s in args.seeds.split(",") if s.strip()],
+        n_instances=args.n_instances,
+        inst_base=args.inst_base,
+        n_uavs=args.n_uavs,
+        area=args.area,
+        pop_size=args.pop,
+        max_generations=args.gens,
+        deadline_s=args.deadline_s,
+        isolate=not args.no_isolate,
+        n_cycles=1,  # 每档在 run_scenario 内覆盖
+    )
+    out_base = Path(args.out_dir)
+    out_base.mkdir(parents=True, exist_ok=True)
+
+    scenarios = parse_scenarios(args.scenarios)
+    print(f"[main] 场景：{scenarios}  out_dir={out_base}", flush=True)
+    if len(scenarios) == 1:
+        # 单档：直接写到 out_dir（便于多档并行时各占独立目录）
+        n_targets, n_cycles = scenarios[0]
+        sc_params = dict(params, n_targets=n_targets, n_cycles=n_cycles)
+        print(f"\n################ 场景 T={n_targets} cyc={n_cycles} ################", flush=True)
+        run_scenario(sc_params, out_base)
+    else:
+        for (n_targets, n_cycles) in scenarios:
+            sc_params = dict(params, n_targets=n_targets, n_cycles=n_cycles)
+            sc_dir = out_base / f"t{n_targets}"
+            print(f"\n################ 场景 T={n_targets} cyc={n_cycles} ################", flush=True)
+            run_scenario(sc_params, sc_dir)
+
+    print("\n[main] 全部场景完成。")
     return 0
 
 

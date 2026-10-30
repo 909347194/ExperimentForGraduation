@@ -1,0 +1,60 @@
+<Slide style={{ width: 1280, height: 720, background: '#FFFFFF', position: 'relative', fontFamily: 'Source Han Sans CN, Microsoft YaHei, sans-serif' }}>
+  <Box style={{ position: 'absolute', top: 0, left: 0, width: 1280, height: 12, background: '#1E4FA8' }} />
+  <Box style={{ position: 'absolute', top: 30, left: 40, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+    <Box style={{ width: 6, height: 34, background: '#1E4FA8' }} />
+    <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#0E3F8C' }}>第二阶段的边界：接过什么，交出什么</Text>
+  </Box>
+  <Text style={{ position: 'absolute', top: 78, left: 60, fontSize: 15, color: '#8B97A8' }}>它是一个「单周期精优化器」——不做跨周期规划，也不知道全局任务池的存在</Text>
+
+  <Box style={{ position: 'absolute', top: 112, left: 40, width: 1200, height: 372 }}>
+    <svg width={1200} height={372} viewBox='0 0 1200 372'>
+      <text x='10' y='20' font-size='15' fill='#3D7BD9'>第一阶段（上游）</text>
+      <rect x='10' y='32' width='236' height='228' rx='10' fill='#F0F5FC' stroke='#D6DCE5' />
+      <text x='128' y='58' font-size='16' font-weight='bold' fill='#0E3F8C' text-anchor='middle'>输入</text>
+      {['本周期选中的任务集 T_sel', '可用机队 U_avail', '每机的停靠巢 · 剩余航程', '机巢位置 · 泊位容量', '三维 DEM 代价场'].map((t, i) => (
+        <text key={i} x='28' y={88 + i * 34} font-size='13.5' fill='#4A5568'>• {t}</text>
+      ))}
+
+      <path d='M 254,146 L 316,146' stroke='#1E4FA8' strokeWidth='2' />
+      <path d='M 306,140 l 12,6 l -12,6 Z' fill='#1E4FA8' />
+
+      <rect x='322' y='32' width='300' height='228' rx='10' fill='#1E4FA8' />
+      <text x='472' y='62' font-size='17' font-weight='bold' fill='#FFFFFF' text-anchor='middle'>第二阶段 · 选择性 MUAS</text>
+      <text x='472' y='88' font-size='13' fill='#DCE7F5' text-anchor='middle'>单周期四类决策联合优化</text>
+      <rect x='342' y='104' width='260' height='34' rx='6' fill='#3D7BD9' />
+      <text x='472' y='126' font-size='13.5' fill='#FFFFFF' text-anchor='middle'>起点固定（由停靠状态给定）</text>
+      <rect x='342' y='144' width='260' height='34' rx='6' fill='#3D7BD9' />
+      <text x='472' y='166' font-size='13.5' fill='#FFFFFF' text-anchor='middle'>终点可选（决策变量 z）</text>
+      <text x='472' y='200' font-size='14' font-weight='bold' fill='#FFC107' text-anchor='middle'>异源起飞 — 异巢终止</text>
+      <text x='472' y='228' font-size='12.5' fill='#B5D4F4' text-anchor='middle'>搜索空间：参与机 × 选中任务</text>
+      <text x='472' y='248' font-size='12.5' fill='#B5D4F4' text-anchor='middle'>每任务至多一机 · 允许部分机空闲</text>
+
+      <path d='M 630,146 L 692,146' stroke='#1E4FA8' strokeWidth='2' />
+      <path d='M 682,140 l 12,6 l -12,6 Z' fill='#1E4FA8' />
+
+      <rect x='698' y='32' width='252' height='228' rx='10' fill='#F0F5FC' stroke='#D6DCE5' />
+      <text x='824' y='58' font-size='16' font-weight='bold' fill='#0E3F8C' text-anchor='middle'>输出（本周期解）</text>
+      {['每机航次：任务序列 π', '任务 → 机归属 x', '每机终点机巢 z', '未执行任务 + 归因理由'].map((t, i) => (
+        <text key={i} x='716' y={92 + i * 38} font-size='13.5' fill='#4A5568'>• {t}</text>
+      ))}
+
+      <path d='M 958,146 L 1016,146' stroke='#B26A00' strokeWidth='2' strokeDasharray='6 4' />
+      <path d='M 1006,140 l 12,6 l -12,6 Z' fill='#B26A00' />
+      <rect x='1022' y='32' width='168' height='228' rx='10' fill='#FFF8E1' stroke='#E8D9A8' />
+      <text x='1106' y='58' font-size='16' font-weight='bold' fill='#B26A00' text-anchor='middle'>它不管的事</text>
+      {['全局任务池', '跨周期规划', '用几架机', '任务该不该被选中', '落选任务的去留'].map((t, i) => (
+        <text key={i} x='1040' y={92 + i * 34} font-size='12.5' fill='#8B6B1F'>✕ {t}</text>
+      ))}
+
+      <rect x='10' y='280' width='1180' height='80' rx='10' fill='#F7F9FC' stroke='#D6DCE5' />
+      <text x='30' y='308' font-size='15' font-weight='bold' fill='#0E3F8C'>为什么边界要划这么死：</text>
+      <text x='30' y='334' font-size='14' fill='#4A5568'>把问题收敛到「给定」任务集 + 机队 → 决策规模从动态开放集退化为有限组合 → 才可能在一个滚动周期内解完。</text>
+      <text x='30' y='352' font-size='14' fill='#4A5568'>「不可控」的部分（客流到达、跨周期影响）交由外层滚动闭环承担，第二阶段对它们一无所知。</text>
+    </svg>
+  </Box>
+
+  <Box style={{ position: 'absolute', bottom: 0, left: 0, width: 1280, height: 44, background: '#F7F9FC', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: '0 40px', borderTop: '1px solid #E5E7EB' }}>
+    <Text style={{ fontSize: 13, color: '#8B97A8' }}>第二阶段原理串讲 · 选择性多机巢 MUAS 是怎么被解出来的</Text>
+    <Text style={{ fontSize: 15, color: '#1E4FA8', fontWeight: 'bold' }}>03 / 12</Text>
+  </Box>
+</Slide>

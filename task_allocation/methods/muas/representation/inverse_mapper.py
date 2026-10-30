@@ -13,6 +13,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import numpy as np
 
 from .encoder import Gene, Individual
@@ -23,6 +25,26 @@ from .repair_rules.terminal_nest import (
     TOUR_UAV_ID,
     normalize_srp_segments,
 )
+
+
+@dataclass(frozen=True)
+class InversePhiConfig:
+    """反映射随机性旋钮（``temperature`` → 扰动强度的映射）。
+
+    历史实现把「温度→扰动概率」的三处系数写死在函数体内，且两级扰动取值
+    互不一致（指派级 0.4 / 巡游级 0.5），无法从配置调节探索—开采强度。
+    本数据类把它们提为显式旋钮；**默认值与原写死值逐位相同**，故缺省时行为
+    与历史完全等价（bit-exact），仅实验 yaml 显式给值时才改变行为。
+    """
+
+    # 指派级扰动概率 = temperature × 本系数（balanced / overloaded 路径）
+    assign_perturb_factor: float = 0.4
+    # 巡游级扰动概率 = temperature × 本系数（SRP 路径 swap/insert/reverse）
+    tour_perturb_factor: float = 0.5
+    # 仅当 temperature > 本阈值才执行巡游扰动（低于阈值进入纯开发）
+    tour_perturb_temp_gate: float = 0.1
+    # 指派级对称门限：仅当 temperature > 本阈值才执行指派扰动
+    assign_perturb_temp_gate: float = 0.1
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -37,6 +59,7 @@ def inverse_phi(
     model_type: str,
     rng: np.random.Generator | None = None,
     temperature: float = 0.5,
+    inverse_config: InversePhiConfig | None = None,
 ) -> Individual:
     """反映射：将连续代价值向量还原为离散个体。
 
@@ -62,12 +85,19 @@ def inverse_phi(
     if rng is None:
         rng = np.random.default_rng()
 
+    cfg = inverse_config or InversePhiConfig()
     if model_type == "srp":
         return _inverse_phi_srp(
-            cost_vector, cost_matrix, n_uavs, n_targets, rng, temperature
+            cost_vector, cost_matrix, n_uavs, n_targets, rng, temperature,
+            perturb_factor=cfg.tour_perturb_factor,
+            temp_gate=cfg.tour_perturb_temp_gate,
         )
     else:
-        return _inverse_phi_standard(cost_vector, cost_matrix, n_uavs, n_targets, model_type, rng, temperature)
+        return _inverse_phi_standard(
+            cost_vector, cost_matrix, n_uavs, n_targets, model_type, rng,
+            temperature, perturb_factor=cfg.assign_perturb_factor,
+            temp_gate=cfg.assign_perturb_temp_gate,
+        )
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -82,6 +112,8 @@ def _inverse_phi_standard(
     model_type: str,
     rng: np.random.Generator,
     temperature: float = 0.5,
+    perturb_factor: float = 0.4,
+    temp_gate: float = 0.1,
 ) -> Individual:
     """标准反映射（balanced / overloaded）。
 
@@ -122,8 +154,8 @@ def _inverse_phi_standard(
             mask_overloaded(mask, row, col)
 
     # 匹配后扰动：以温度相关概率随机交换两对分配
-    if temperature > 0.1 and len(genes) >= 2:
-        _perturb_genes(genes, cm_work, n_uavs, model_type, temperature, rng)
+    if temperature > temp_gate and len(genes) >= 2:
+        _perturb_genes(genes, cm_work, n_uavs, model_type, temperature, rng, perturb_factor)
 
     # 规则 3.6: 无效值随机修补
     if invalid_indices:
@@ -235,6 +267,7 @@ def _perturb_genes(
     model_type: str,
     temperature: float,
     rng: np.random.Generator,
+    perturb_factor: float = 0.4,
 ) -> None:
     """对已匹配的基因执行随机扰动。
 
@@ -249,7 +282,7 @@ def _perturb_genes(
         return
 
     # 扰动概率：温度 1.0 → 40%，温度 0.1 → 2%
-    perturb_prob = temperature * 0.4
+    perturb_prob = temperature * perturb_factor
 
     # swap 扰动
     if rng.random() < perturb_prob and n_genes >= 2:
@@ -296,6 +329,8 @@ def _inverse_phi_srp(
     n_targets: int,
     rng: np.random.Generator,
     temperature: float = 0.5,
+    perturb_factor: float = 0.5,
+    temp_gate: float = 0.1,
 ) -> Individual:
     """SRP 反映射（K<N 巡游模型）。
 
@@ -422,8 +457,8 @@ def _inverse_phi_srp(
         remaining_targets.remove(tgt)
 
     # ── 第三阶段：巡游扰动 ──
-    if temperature > 0.1:
-        _perturb_srp_tour(genes, cm_work, n_uavs, n_targets, temperature, rng)
+    if temperature > temp_gate:
+        _perturb_srp_tour(genes, cm_work, n_uavs, n_targets, temperature, rng, perturb_factor)
 
     # ── 第四阶段：段结构规范化 ──
     # reverse / insert 扰动会把 uav_id >= 0 的起始基因卷进子序列
@@ -517,6 +552,7 @@ def _perturb_srp_tour(
     n_targets: int,
     temperature: float,
     rng: np.random.Generator,
+    perturb_factor: float = 0.5,
 ) -> None:
     """对 SRP 巡游顺序执行扰动。
 
@@ -532,7 +568,7 @@ def _perturb_srp_tour(
     if len(tour_indices) < 2:
         return
 
-    perturb_prob = temperature * 0.5
+    perturb_prob = temperature * perturb_factor
     if rng.random() >= perturb_prob:
         return
 

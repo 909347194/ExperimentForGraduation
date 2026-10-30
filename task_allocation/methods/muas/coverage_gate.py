@@ -103,29 +103,6 @@ def _task_deadline(problem: Any, tid: int) -> float | None:
     return None if lst is None else float(lst)
 
 
-def arrival_at(problem: Any, uav: UAV, seq: Sequence[int], pos: int) -> float:
-    """航次中第 ``pos`` 个任务的预计到达时刻（含 earliest 等待）。
-
-    与 ``muas_stage._arrival_time_of`` 严格同口径：DEM 三维航程 / speed，
-    先「等待至 earliest」再返回——完成闸门判 latest 用的正是等待后时刻。
-    """
-    speed = max(float(getattr(uav, "speed", 10.0) or 10.0), 1e-6)
-    service = float(getattr(problem.config, "default_service_time", 0.0) or 0.0)
-    t = float(getattr(problem.config, "current_time", 0.0) or 0.0)
-    prev = (float(uav.x), float(uav.y), float(uav.z))
-    for i, tid in enumerate(seq):
-        task = problem.task_by_id.get(tid)
-        if task is None:
-            continue
-        t += problem.costs.travel(prev, task.position) / speed
-        est = getattr(task, "earliest", None)
-        if est is not None and t < est:
-            t = est
-        if i == pos:
-            return t
-        t += service
-        prev = task.position
-    return t
 
 
 def _window_ok(problem: Any, uav: UAV, seq: Sequence[int], pos: int) -> bool:

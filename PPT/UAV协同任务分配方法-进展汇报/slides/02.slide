@@ -15,10 +15,10 @@
 
   <Box style={{ position: 'absolute', top: 110, left: 428, width: 812, height: 540, flexDirection: 'column', justifyContent: 'space-between' }}>
     {[
+      { n: '00', t: '研究背景与定位', d: '背景 · 意义 · 现状 · 动机 · 边界 · 进展——为什么必须做、为什么一起解、能做到哪', p: 'P3–P8' },
       { n: '01', t: '研究问题与总体框架', d: '任务动态到达与持续滞留、无人机状态动态变化、任务规模与执行能力失配——静态一次性规划失效，引出两阶段分层滚动框架', p: 'P9–P12' },
       { n: '02', t: '第一阶段：动态任务选择', d: '基础优先级预筛选 + 边际收益增量选择 + 快速可行性检查，把任务池压缩为规模可控的候选集', p: 'P13–P14' },
       { n: '03', t: '第二阶段：选择性 MUAS 与 DMDE', d: '多机巢选择性分配的组合优化模型、四层准字典序适应度、改进离散映射差分进化与终点机巢精确求解', p: 'P15–P17' },
-      { n: '00', t: '研究背景与定位', d: '背景 · 意义 · 现状 · 动机 · 边界 · 进展——为什么必须做、为什么一起解、能做到哪', p: 'P3–P8' },
     ].map((it) => (
       <Box key={it.n} style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 20, background: '#F0F5FC', borderRadius: 10, padding: '18px 22px', border: '1px solid #D6DCE5', borderLeft: '4px solid #1E4FA8' }}>
         <Box style={{ width: 54, height: 54, background: '#1E4FA8', borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}>

@@ -33,6 +33,7 @@ from task_allocation.methods.muas.cost.vertical_section import (
     make_distance_fn,
 )
 from task_allocation.methods.muas.cost.provider import CostProvider, build_cost_provider
+from task_allocation.methods.muas.cost.nest_keys import DEFAULT_NEST_OFFSET
 
 
 @dataclass
@@ -58,7 +59,7 @@ def build_pairwise_costs(
     nests: Sequence[Nest] | None = None,
     dem: DEMTerrain | None = None,
     estimator: VerticalSectionCostEstimator | None = None,
-    nest_offset: int = 1_000_000,
+    nest_offset: int = DEFAULT_NEST_OFFSET,
     store_details: bool = False,
     task_weight_from_reward: bool = False,
     distance_fn: Callable[[Sequence[float], Sequence[float]], float] | None = None,

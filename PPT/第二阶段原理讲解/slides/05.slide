@@ -1,0 +1,62 @@
+<Slide style={{ width: 1280, height: 720, background: '#FFFFFF', position: 'relative', fontFamily: 'Source Han Sans CN, Microsoft YaHei, sans-serif' }}>
+  <Box style={{ position: 'absolute', top: 0, left: 0, width: 1280, height: 12, background: '#1E4FA8' }} />
+  <Box style={{ position: 'absolute', top: 30, left: 40, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+    <Box style={{ width: 6, height: 34, background: '#1E4FA8' }} />
+    <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#0E3F8C' }}>统一编码：离散基因与连续代价向量</Text>
+  </Box>
+  <Text style={{ position: 'absolute', top: 78, left: 60, fontSize: 15, color: '#8B97A8' }}>差分算子作用在连续层（差分具有「三维航程差」的物理意义），再由逆映射还原为离散个体</Text>
+
+  <Box style={{ position: 'absolute', top: 108, left: 40 }}>
+    <svg width={1200} height={330} viewBox='0 0 1200 330'>
+      <text x='16' y='22' font-size='16' font-weight='bold' fill='#0E3F8C'>离散层：三元组基因 (U_i, T_j, C(i,j)) —— 基因总数恒为 N，每任务恰出现一次</text>
+
+      <rect x='40' y='40' width='92' height='44' rx='6' fill='#1E4FA8' />
+      <text x='86' y='67' font-size='14' fill='#FFFFFF' text-anchor='middle'>U0→T3</text>
+      <rect x='138' y='40' width='104' height='44' rx='6' fill='#B5D4F4' />
+      <text x='190' y='67' font-size='14' fill='#0E3F8C' text-anchor='middle'>T3→T7</text>
+      <rect x='248' y='40' width='100' height='44' rx='6' fill='#B5D4F4' />
+      <text x='298' y='67' font-size='14' fill='#0E3F8C' text-anchor='middle'>T7→T1</text>
+      <text x='86' y='102' font-size='12' fill='#4A5568' text-anchor='middle'>起始基因（uav_id ≥ 0）</text>
+      <text x='244' y='102' font-size='12' fill='#4A5568' text-anchor='middle'>巡游基因（uav_id = −1）</text>
+
+      <rect x='392' y='40' width='92' height='44' rx='6' fill='#1E4FA8' />
+      <text x='438' y='67' font-size='14' fill='#FFFFFF' text-anchor='middle'>U1→T2</text>
+      <rect x='490' y='40' width='104' height='44' rx='6' fill='#B5D4F4' />
+      <text x='542' y='67' font-size='14' fill='#0E3F8C' text-anchor='middle'>T2→T5</text>
+      <rect x='600' y='40' width='100' height='44' rx='6' fill='#B5D4F4' />
+      <text x='650' y='67' font-size='14' fill='#0E3F8C' text-anchor='middle'>T5→T8</text>
+
+      <rect x='744' y='40' width='92' height='44' rx='6' fill='#1E4FA8' />
+      <text x='790' y='67' font-size='14' fill='#FFFFFF' text-anchor='middle'>U2→T6</text>
+      <rect x='842' y='40' width='104' height='44' rx='6' fill='#B5D4F4' />
+      <text x='894' y='67' font-size='14' fill='#0E3F8C' text-anchor='middle'>T6→T4</text>
+      <rect x='952' y='40' width='96' height='44' rx='6' fill='#D6DCE5' stroke='#8B97A8' strokeDasharray='4 3' />
+      <text x='1000' y='67' font-size='13' fill='#4A5568' text-anchor='middle'>T4→巢?</text>
+      <text x='1000' y='102' font-size='11.5' fill='#8B97A8' text-anchor='middle'>终点不占编码维度</text>
+
+      <line x1='372' y1='38' x2='372' y2='108' stroke='#B26A00' strokeWidth='1.4' strokeDasharray='5 4' />
+      <line x1='724' y1='38' x2='724' y2='108' stroke='#B26A00' strokeWidth='1.4' strokeDasharray='5 4' />
+      <text x='376' y='126' font-size='11.5' fill='#B26A00'>段边界</text>
+
+      <path d='M 600,116 L 600,152' stroke='#3D7BD9' strokeWidth='1.6' strokeDasharray='5 4' />
+      <text x='612' y='140' font-size='12.5' fill='#3D7BD9'>取每段 gene 的第三分量 cost，按顺序铺平成向量</text>
+
+      <text x='16' y='172' font-size='16' font-weight='bold' fill='#0E3F8C'>连续层：固定布局的代价值向量（DE 的变异 / 交叉在此平面上进行）</text>
+      <rect x='40' y='188' width='236' height='42' rx='6' fill='#1E4FA8' />
+      <text x='158' y='214' font-size='13.5' fill='#FFFFFF' text-anchor='middle'>起始基因代价 [0, K)</text>
+      <rect x='284' y='188' width='440' height='42' rx='6' fill='#3D7BD9' />
+      <text x='504' y='214' font-size='13.5' fill='#FFFFFF' text-anchor='middle'>巡游基因代价（任务→任务）[K, N)</text>
+      <rect x='732' y='188' width='316' height='42' rx='6' fill='#D6DCE5' strokeDasharray='5 4' />
+      <text x='890' y='214' font-size='13.5' fill='#4A5568' text-anchor='middle'>终止段 [N, N+K)（主方案为空）</text>
+      <text x='40' y='252' font-size='13' fill='#4A5568'>∇ 差分算子 Δ = c_a − c_b 即「两条候选边的三维航程之差」——搜索方向被地形代价引导，不是随机游走。</text>
+      <text x='40' y='274' font-size='13' fill='#4A5568'>∇ 三个不变式：<tspan font-weight='bold'>I1</tspan> 长度恒 N ｜ <tspan font-weight='bold'>I2</tspan> target_id 是全排列 ｜ <tspan font-weight='bold'>I3</tspan> K 个起始基因（id 各异）+ N−K 个巡游基因</text>
+      <text x='40' y='296' font-size='13' fill='#B26A00'>∇ 代价 (uav_id, cost) 必须构成函数关系：同一行不能指向两个不同目标，否则无法由 cost 反解出唯一的 j——这是这套编码的硬约束。</text>
+      <text x='40' y='318' font-size='13' fill='#4A5568'>∇ 逆映射四步见 P6；个体能否真的执行，由 P7 的解码修复链裁决。</text>
+    </svg>
+  </Box>
+
+  <Box style={{ position: 'absolute', bottom: 0, left: 0, width: 1280, height: 44, background: '#F7F9FC', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: '0 40px', borderTop: '1px solid #E5E7EB' }}>
+    <Text style={{ fontSize: 13, color: '#8B97A8' }}>第二阶段原理串讲 · 选择性多机巢 MUAS 是怎么被解出来的</Text>
+    <Text style={{ fontSize: 15, color: '#1E4FA8', fontWeight: 'bold' }}>05 / 12</Text>
+  </Box>
+</Slide>

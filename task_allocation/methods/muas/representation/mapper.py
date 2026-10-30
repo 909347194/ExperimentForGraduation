@@ -37,13 +37,3 @@ def phi(individual: Individual) -> np.ndarray:
     return individual.cost_vector
 
 
-def phi_batch(population: list[Individual]) -> np.ndarray:
-    """批量正向映射。
-
-    Args:
-        population: 种群个体列表。
-
-    Returns:
-        代价值矩阵，shape = (pop_size, gene_length)。
-    """
-    return np.array([phi(ind) for ind in population])

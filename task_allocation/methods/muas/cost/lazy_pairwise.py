@@ -28,6 +28,7 @@ from collections.abc import Mapping
 from typing import Callable, Iterable, Iterator, Sequence
 
 from task_allocation.common.types import Nest, Task, UAV
+from task_allocation.methods.muas.cost.nest_keys import DEFAULT_NEST_OFFSET
 from task_allocation.methods.muas.cost.vertical_section import (
     VerticalSectionCostEstimator,
 )
@@ -126,7 +127,7 @@ def make_lazy_pairwise(
     nests: Sequence[Nest] | None = None,
     estimator: VerticalSectionCostEstimator | None = None,
     *,
-    nest_offset: int = 1_000_000,
+    nest_offset: int = DEFAULT_NEST_OFFSET,
     task_weight_from_reward: bool = False,
 ) -> LazyPairwiseCost:
     """装配一阶段用的惰性代价表（位置注册表 = 全部节点，值按需算）。

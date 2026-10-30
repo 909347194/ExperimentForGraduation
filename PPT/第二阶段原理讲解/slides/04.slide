@@ -1,0 +1,69 @@
+<Slide style={{ width: 1280, height: 720, background: '#FFFFFF', position: 'relative', fontFamily: 'Source Han Sans CN, Microsoft YaHei, sans-serif' }}>
+  <Box style={{ position: 'absolute', top: 0, left: 0, width: 1280, height: 12, background: '#1E4FA8' }} />
+  <Box style={{ position: 'absolute', top: 30, left: 40, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+    <Box style={{ width: 6, height: 34, background: '#1E4FA8' }} />
+    <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#0E3F8C' }}>四类决策：谁进搜索空间，谁不进</Text>
+  </Box>
+  <Text style={{ position: 'absolute', top: 78, left: 60, fontSize: 15, color: '#8B97A8' }}>编码维度是最贵的资源——每多一维，组合空间指数膨胀；能确定性或精确求解的一律踢出去</Text>
+
+  <Box style={{ position: 'absolute', top: 112, left: 40, width: 1200, flexDirection: 'column', gap: 12 }}>
+    {[
+      {
+        tag: 'x', name: '归属', sym: 'x_uj',
+        inside: true,
+        who: 'DE 搜索（起始基因）',
+        why: '哪架机飞哪些任务是真组合问题，没有已知的多项式解法——必须交给搜索',
+        cost: '占 K 个起始基因通道',
+      },
+      {
+        tag: 'π', name: '访问顺序', sym: 'π_u',
+        inside: true,
+        who: 'DE 搜索（巡游基因）',
+        why: '段内先后 MTSP 本质，与归属耦合：改归属会改变最优顺序，二者必须同空间联合搜索',
+        cost: '占 N−K 个巡游基因通道',
+      },
+      {
+        tag: 'y', name: '是否执行', sym: 'y_j',
+        inside: false,
+        who: '解码端修复链裁量',
+        why: '「可达即执行」是硬约束；删除只发生在物理不可行时，是确定性规则而非权衡——若给它一维让搜索决定删不删，搜索会用「删任务」刷低成本',
+        cost: '不占维度',
+      },
+      {
+        tag: 'z', name: '终点机巢', sym: 'z_ub',
+        inside: false,
+        who: '内层最小费用流精确解',
+        why: '航线一旦给定，选终点巢就是一个带容量的小规模运输问题——存在多项式精确解，交给搜索只会拖慢且找不到更优',
+        cost: '不占维度',
+      },
+    ].map((r) => (
+      <Box key={r.tag} style={{ flexDirection: 'row', gap: 16, alignItems: 'flex-start', background: r.inside ? '#F0F5FC' : '#F7F9FC', border: '1px solid #D6DCE5', borderLeft: r.inside ? '4px solid #1E4FA8' : '4px solid #B26A00', borderRadius: 10, padding: '13px 20px' }}>
+        <Box style={{ width: 46, height: 46, background: r.inside ? '#1E4FA8' : '#B26A00', borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#FFFFFF' }}>{r.tag}</Text>
+        </Box>
+        <Box style={{ width: 150, flexDirection: 'column' }}>
+          <Text style={{ fontSize: 19, fontWeight: 'bold', color: '#0E3F8C' }}>{r.name}</Text>
+          <Text style={{ fontSize: 13, color: '#8B97A8', marginTop: 3 }}>{r.sym}　{r.cost}</Text>
+        </Box>
+        <Box style={{ width: 168, flexDirection: 'column' }}>
+          <Text style={{ fontSize: 12, color: '#FFFFFF', background: r.inside ? '#1E4FA8' : '#B26A00', padding: '3px 8px', borderRadius: 4, textAlign: 'center' }}>
+            {r.inside ? '✓ 进搜索空间' : '✕ 不进搜索空间'}
+          </Text>
+          <Text style={{ fontSize: 13.5, fontWeight: 'bold', color: '#1A2230', marginTop: 6 }}>{r.who}</Text>
+        </Box>
+        <Text style={{ flex: 1, fontSize: 13.5, color: '#4A5568', lineHeight: 1.55 }}>{r.why}</Text>
+      </Box>
+    ))}
+  </Box>
+
+  <Box style={{ position: 'absolute', bottom: 56, left: 40, width: 1200, background: '#0E3F8C', borderRadius: 10, padding: '14px 24px' }}>
+    <Text style={{ fontSize: 15, fontWeight: 'bold', color: '#FFFFFF', lineHeight: 1.65 }}>
+      设计判断：<span style={{ color: '#FFC107' }}>把 y 与 z 留在外面，是整个编码能做成「每个任务恰出现一次」紧致结构的前提</span>——一旦让「不执行」占维度，基因长度就不再恒为 N，差分算子会在可变长向量上失效。
+    </Text>
+  </Box>
+
+  <Box style={{ position: 'absolute', bottom: 0, left: 0, width: 1280, height: 44, background: '#F7F9FC', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: '0 40px', borderTop: '1px solid #E5E7EB' }}>
+    <Text style={{ fontSize: 13, color: '#8B97A8' }}>第二阶段原理串讲 · 选择性多机巢 MUAS 是怎么被解出来的</Text>
+    <Text style={{ fontSize: 15, color: '#1E4FA8', fontWeight: 'bold' }}>04 / 12</Text>
+  </Box>
+</Slide>

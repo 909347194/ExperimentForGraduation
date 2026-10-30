@@ -193,7 +193,10 @@ class MUASStageConfig:
     # 任务逐个剥给最近的空闲机（拉入参与），直到无过载或达 K 上限。直接针对
     # 「K 塌缩→远任务未服务」这一 exp01 残余瓶颈。
     demand_provision_serving: bool = True
-    demand_serve_margin: float = 0.95  # 服务可行性裕度（与 selection.feasibility.range_margin 对齐）
+    # 澄清：本裕度与 ``selection.feasibility.range_margin`` 是**同类量但互不联动**——
+    # 二者默认值本就不同（此处 0.95 vs range_margin 1.0），代码中亦无同步强制；
+    # 旧注释称「对齐」属口径漂移式误导。调节本旋钮时须**手动**确认两口径一致。
+    demand_serve_margin: float = 0.95
     # Fix⑥「可达即执行」的救援池口径。方法论：任务只要能力可达、不违反约束就
     # 应最终被执行，成本最小化是此前提下的次级目标（字典序两阶段）。而「可达」
     # 是**存在量化**（∃ 机队中某方案可服务），不是「给定方案内塞得进」。

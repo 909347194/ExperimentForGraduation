@@ -235,22 +235,3 @@ def mutate_best_1(
     return trials
 
 
-def mutate_with_strategy(
-    cost_vectors: np.ndarray,
-    best_idx: int,
-    f_values: np.ndarray,
-    cr: float,
-    strategy: str = "mixed",
-    rng: np.random.Generator | None = None,
-) -> np.ndarray:
-    """根据策略名称选择变异方式。
-
-    Args:
-        strategy: "rand/1" | "best/1" | "mixed"
-    """
-    if strategy == "rand/1":
-        return mutate_rand_1(cost_vectors, best_idx, f_values, cr, rng)
-    elif strategy == "best/1":
-        return mutate_best_1(cost_vectors, best_idx, f_values, cr, rng)
-    else:  # "mixed" or default
-        return hybrid_differential_population(cost_vectors, best_idx, f_values, cr, rng)

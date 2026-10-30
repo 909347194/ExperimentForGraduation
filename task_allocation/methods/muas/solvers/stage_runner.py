@@ -20,6 +20,7 @@ import numpy as np
 from task_allocation.common.types import AllocationSolution, Nest, Task, UAV
 from task_allocation.methods.muas.base import BaseOptimizer
 from task_allocation.methods.muas.cost.cost_matrix import CostMatrixBuildResult
+from task_allocation.methods.muas.cost.nest_keys import DEFAULT_NEST_OFFSET
 from task_allocation.methods.muas.problem import (
     MUASProblemConfig,
     SelectiveMUASProblem,
@@ -144,7 +145,7 @@ def run_selective_muas(
     problem_config: MUASProblemConfig | None = None,
     stage_config: MUASStageConfig | None = None,
     solver_config: DMDEConfig | None = None,
-    nest_offset: int = 1_000_000,
+    nest_offset: int = DEFAULT_NEST_OFFSET,
     current_time: float | None = None,
     solver: BaseOptimizer | None = None,
 ) -> MUASStageResult:

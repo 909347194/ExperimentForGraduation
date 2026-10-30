@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Mapping, Sequence
 
 from task_allocation.common.types import Nest, Task, UAV
+from task_allocation.methods.muas.cost.nest_keys import DEFAULT_NEST_OFFSET
 
 
 def _euclid(
@@ -35,7 +36,7 @@ class CostProvider:
 
     pairwise: dict[tuple[int, int], float] = field(default_factory=dict)
     positions: dict[int, tuple[float, float, float]] = field(default_factory=dict)
-    nest_offset: int = 1_000_000
+    nest_offset: int = DEFAULT_NEST_OFFSET
     # 统一距离口径：``f(xyz_a, xyz_b) -> 米``；None → 回退欧氏（无 DEM 场景）
     distance_fn: Callable[[Sequence[float], Sequence[float]], float] | None = None
 
@@ -91,7 +92,7 @@ def build_cost_provider(
     nests: Sequence[Nest],
     uavs: Sequence[UAV],
     pairwise: Mapping[tuple[int, int], float] | None = None,
-    nest_offset: int = 1_000_000,
+    nest_offset: int = DEFAULT_NEST_OFFSET,
     distance_fn: Callable[[Sequence[float], Sequence[float]], float] | None = None,
 ) -> CostProvider:
     positions: dict[int, tuple[float, float, float]] = {}

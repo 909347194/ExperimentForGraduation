@@ -1,0 +1,61 @@
+<Slide style={{ width: 1280, height: 720, background: '#FFFFFF', position: 'relative', fontFamily: 'Source Han Sans CN, Microsoft YaHei, sans-serif' }}>
+  <Box style={{ position: 'absolute', top: 0, left: 0, width: 1280, height: 12, background: '#1E4FA8' }} />
+  <Box style={{ position: 'absolute', top: 30, left: 40, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+    <Box style={{ width: 6, height: 34, background: '#1E4FA8' }} />
+    <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#0E3F8C' }}>终点机巢：为什么不让它占基因维度</Text>
+  </Box>
+  <Text style={{ position: 'absolute', top: 78, left: 60, fontSize: 15, color: '#8B97A8' }}>航线一旦确定，选终点巢就退化为一个带容量的小规模运输问题 —— 存在多项式精确解</Text>
+
+  <Box style={{ position: 'absolute', top: 112, left: 40, width: 606, flexDirection: 'column', gap: 12 }}>
+    <Box style={{ background: '#F7F9FC', border: '1px solid #D6DCE5', borderRadius: 10, padding: '14px 18px', flexDirection: 'column' }}>
+      <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#0E3F8C' }}>① 子问题的数学形式</Text>
+      <Box style={{ marginTop: 10, background: '#E8EFF8', borderRadius: 8, padding: '11px 14px' }}>
+        <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#0E3F8C' }}>
+          min Σ<span style={{ fontSize: 11 }}>u</span> Σ<span style={{ fontSize: 11 }}>b</span> c<span style={{ fontSize: 11 }}>ub</span>(π<span style={{ fontSize: 11 }}>u</span>) · z<span style={{ fontSize: 11 }}>ub</span>
+        </Text>
+        <Text style={{ fontSize: 15, color: '#1E4FA8', marginTop: 7 }}>
+          s.t. Σ<span style={{ fontSize: 11 }}>b</span> z<span style={{ fontSize: 11 }}>ub</span> = 1　（每架机恰落一个巢）
+        </Text>
+        <Text style={{ fontSize: 15, color: '#1E4FA8', marginTop: 5 }}>
+          泊位占用 = 现有 − 起飞 + 降落　≤ 容量
+        </Text>
+      </Box>
+      <Text style={{ fontSize: 13.5, color: '#4A5568', lineHeight: 1.6, marginTop: 9 }}>
+        c<span style={{ fontSize: 11 }}>ub</span>(π<span style={{ fontSize: 11 }}>u</span>) 是 u 按当前序列访问完最后一个任务后、从那里飞到巢 b 的三维返航代价。<span style={{ fontWeight: 'bold' }}>它依赖 π</span>，所以是每次路线定稿后都要重解一次的内层子问题。
+      </Text>
+    </Box>
+
+    <Box style={{ background: '#0E3F8C', borderRadius: 10, padding: '13px 18px', flexDirection: 'column' }}>
+      <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#FFFFFF' }}>用最小费用流精确求解</Text>
+      <Text style={{ fontSize: 13.5, color: '#DCE7F5', lineHeight: 1.65, marginTop: 6 }}>
+        把每架落地中的 UAV 看作发 1 单位流的源、每个机巢的剩余泊位看作收点，费用即返航代价 —— 结构上是标准运输问题，一次求解即可<span style={{ color: '#FFC107', fontWeight: 'bold' }}>联合</span>处理所有 UAV 对同一批泊位的竞争，不存在贪心逐机指派那种「先到先得」的次优。
+      </Text>
+    </Box>
+
+    <Box style={{ background: '#FFF8E1', border: '1px solid #E8D9A8', borderRadius: 10, padding: '13px 18px', flexDirection: 'column' }}>
+      <Text style={{ fontSize: 15.5, fontWeight: 'bold', color: '#B26A00' }}>④ 一个反直觉的点：配完巢还要再闸一次航程</Text>
+      <Text style={{ fontSize: 13.5, color: '#4A5568', lineHeight: 1.6, marginTop: 6 }}>
+        容量竞争下终点巢未必是最近的那个，配巢会把原本可行的航次重新推过剩余航程。所以配巢后必须回到 P7 的④再闸一次，否则就有任务「记账了航程、却没被计完成」。
+      </Text>
+    </Box>
+  </Box>
+
+  <Box style={{ position: 'absolute', top: 112, left: 674, width: 566, flexDirection: 'column', gap: 12 }}>
+    {[
+      { t: '为什么不用进化搜', d: '搜索要在组合空间里反复试；而这个问题存在精确解。让搜索去解一个能精确解的子问题，只会拖慢收敛、且找不到更好的答案 —— 编码维度应该全部留给真正无多项式解的「归属 × 顺序」。' },
+      { t: '为什么不能用「落最近巢」', d: '多架机可能同时盯上同一个剩余泊位。逐机取最近会导致后者无巢可落，或在容量约束下被迫飞到很远的地方。只有联合求解才是全局最优。' },
+      { t: '为什么返航代价必须进完整评价', d: '返航腿占总航程相当比例。若评价时忽略它、只在交付后才发现超出剩余航程，就会出现「看起来最优、实际飞不回来」的幽灵解。' },
+      { t: '与起点的不对称性', d: '起点机巢由 UAV 当前停靠状态唯一确定（已知、不可选）；终点机巢是决策变量（可选、受容量约束）。这个不对称正是「异源起飞 — 异巢终止」的由来。' },
+    ].map((c) => (
+      <Box key={c.t} style={{ background: '#F0F5FC', border: '1px solid #D6DCE5', borderLeft: '4px solid #1E4FA8', borderRadius: 10, padding: '12px 18px', flexDirection: 'column' }}>
+        <Text style={{ fontSize: 16, fontWeight: 'bold', color: '#0E3F8C' }}>{c.t}</Text>
+        <Text style={{ fontSize: 13, color: '#4A5568', lineHeight: 1.6, marginTop: 5 }}>{c.d}</Text>
+      </Box>
+    ))}
+  </Box>
+
+  <Box style={{ position: 'absolute', bottom: 0, left: 0, width: 1280, height: 44, background: '#F7F9FC', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: '0 40px', borderTop: '1px solid #E5E7EB' }}>
+    <Text style={{ fontSize: 13, color: '#8B97A8' }}>第二阶段原理串讲 · 选择性多机巢 MUAS 是怎么被解出来的</Text>
+    <Text style={{ fontSize: 15, color: '#1E4FA8', fontWeight: 'bold' }}>08 / 12</Text>
+  </Box>
+</Slide>

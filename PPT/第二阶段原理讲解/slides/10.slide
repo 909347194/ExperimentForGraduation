@@ -1,0 +1,71 @@
+<Slide style={{ width: 1280, height: 720, background: '#FFFFFF', position: 'relative', fontFamily: 'Source Han Sans CN, Microsoft YaHei, sans-serif' }}>
+  <Box style={{ position: 'absolute', top: 0, left: 0, width: 1280, height: 12, background: '#1E4FA8' }} />
+  <Box style={{ position: 'absolute', top: 30, left: 40, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+    <Box style={{ width: 6, height: 34, background: '#1E4FA8' }} />
+    <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#0E3F8C' }}>Lamarckian 回写：修复成果如何回流种群</Text>
+  </Box>
+  <Text style={{ position: 'absolute', top: 78, left: 60, fontSize: 15, color: '#8B97A8' }}>解码修复链每代都在改进解，但这些改进发生在基因之外 —— 不回写就随个体淘汰一同丢失</Text>
+
+  <Box style={{ position: 'absolute', top: 112, left: 40, width: 620, flexDirection: 'column', gap: 12 }}>
+    <Box style={{ background: '#F7F9FC', border: '1px solid #D6DCE5', borderRadius: 10, padding: '14px 18px', flexDirection: 'column' }}>
+      <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#0E3F8C' }}>为什么必须回写</Text>
+      <Text style={{ fontSize: 13.5, color: '#4A5568', lineHeight: 1.65, marginTop: 7 }}>
+        适应度是照着<span style={{ fontWeight: 'bold' }}>修复后的解</span>算的，基因型却是修复前的样子。若不回写，同一个基因型每次译码都要重新被修一遍，修复效益永远停留在表型上 —— 这等于把每代最大的一块免费收益扔掉。回写就是把「后天修来的本事」写回先天基因。
+      </Text>
+    </Box>
+
+    <Box style={{ background: '#E8EFF8', border: '1px solid #C8D6EA', borderRadius: 10, padding: '14px 18px', flexDirection: 'column' }}>
+      <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#0E3F8C' }}>绝对不变式</Text>
+      <Text style={{ fontSize: 13.5, color: '#4A5568', lineHeight: 1.65, marginTop: 7 }}>
+        <span style={{ fontWeight: 'bold', color: '#B26A00' }}>基因长度恒为 N，绝不增删。</span>
+        因为只有置换（而不是插入 / 删除），才能在「每任务恰出现一次」的不变式下安全落地；长度若变了，差分算子就会在错位向量上作差。
+      </Text>
+    </Box>
+
+    <Box style={{ background: '#FFF8E1', border: '1px solid #E8D9A8', borderRadius: 10, padding: '14px 18px', flexDirection: 'column' }}>
+      <Text style={{ fontSize: 17.5, fontWeight: 'bold', color: '#0E3F8C' }}>两级口径</Text>
+      <Text style={{ fontSize: 13.5, color: '#4A5568', lineHeight: 1.6, marginTop: 7 }}>
+        <span style={{ fontWeight: 'bold' }}>M1（默认，历史口径）</span>：只把每架机的首任务写回起始基因通道，巡游基因原样保留。
+        <span style={{ fontWeight: 'bold' }}>M2-1（开关，默认关）</span>：额外把段内访问顺序写回巡游通道。
+        二者共用同一调用入口 —— 所以 lamarckian=False 时 M2-1 <span style={{ fontWeight: 'bold' }}>永不触发</span>。
+      </Text>
+    </Box>
+  </Box>
+
+  <Box style={{ position: 'absolute', top: 112, left: 680, width: 560, flexDirection: 'column', gap: 12 }}>
+    <Box style={{ background: '#0E3F8C', borderRadius: 10, padding: '14px 18px', flexDirection: 'column' }}>
+      <Text style={{ fontSize: 17.5, fontWeight: 'bold', color: '#FFFFFF' }}>M2-1 的触发条件：一道很严的闸门</Text>
+      <Text style={{ fontSize: 13.5, color: '#DCE7F5', lineHeight: 1.65, marginTop: 7 }}>
+        要写回段内序，必须<span style={{ color: '#FFC107', fontWeight: 'bold' }}>「段基因任务集 ≡ 修复解航线集」严格相等</span>。
+        修复链只要剔除 / 改派过<span style={{ color: '#FFC107', fontWeight: 'bold' }}>一个</span>任务，整段就自动退回 M1 —— 保守正确，但触发概率因此很低。
+      </Text>
+    </Box>
+
+    <Box style={{ background: '#F0F5FC', border: '1px solid #D6DCE5', borderLeft: '4px solid #B26A00', borderRadius: 10, padding: '14px 18px', flexDirection: 'column' }}>
+      <Text style={{ fontSize: 17, fontWeight: 'bold', color: '#0E3F8C' }}>三档 A/B 实测（18 对，同实例同种子配对）</Text>
+      <Box style={{ marginTop: 8, flexDirection: 'column', gap: 6 }}>
+        {[
+          ['60 任务 / 1 周期', '6 对全部逐位相同 Δ ≡ 0', '#B26A00'],
+          ['40 任务 / 2 周期', '3 对触发：2 胜 1 负，最大 −3.36%', '#1E4FA8'],
+          ['20 任务 / 3 周期', '3 对触发：3 胜 0 负，最大 −6.47%', '#2E7D32'],
+        ].map((r) => (
+          <Box key={r[0]} style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+            <Box style={{ width: 132, alignItems: 'center', padding: '3px 0', background: r[2], borderRadius: 4 }}>
+              <Text style={{ fontSize: 11.5, fontWeight: 'bold', color: '#FFFFFF' }}>{r[0]}</Text>
+            </Box>
+            <Text style={{ flex: 1, fontSize: 12.5, color: '#4A5568', lineHeight: 1.45 }}>{r[1]}</Text>
+          </Box>
+        ))}
+      </Box>
+      <Text style={{ fontSize: 12.5, color: '#4A5568', lineHeight: 1.55, marginTop: 9 }}>
+        机理：单周期下没有跨周期滞留 ⇒ 任务都没逼近截止期 ⇒ 修复链基本不重排段内序 ⇒ <span style={{ fontWeight: 'bold' }}>没有新信息可写回</span>。
+        三档均值趋势单调，但 |均值| 远小于标准差，n=6 下不显著 —— 结论是<span style={{ fontWeight: 'bold' }}>维持默认关闭</span>，把它定位为「情境性增益」。
+      </Text>
+    </Box>
+  </Box>
+
+  <Box style={{ position: 'absolute', bottom: 0, left: 0, width: 1280, height: 44, background: '#F7F9FC', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: '0 40px', borderTop: '1px solid #E5E7EB' }}>
+    <Text style={{ fontSize: 13, color: '#8B97A8' }}>第二阶段原理串讲 · 选择性多机巢 MUAS 是怎么被解出来的</Text>
+    <Text style={{ fontSize: 15, color: '#1E4FA8', fontWeight: 'bold' }}>10 / 12</Text>
+  </Box>
+</Slide>

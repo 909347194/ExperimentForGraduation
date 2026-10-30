@@ -29,6 +29,7 @@
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass, field, replace
 from typing import Any, Callable, Mapping, Sequence
 
@@ -80,6 +81,7 @@ from task_allocation.methods.selection.feasibility import (
     static_unreachable,
 )
 from task_allocation.methods.selection.marginal_gain import MarginalConfig
+from task_allocation.methods.muas.cost.nest_keys import DEFAULT_NEST_OFFSET
 from task_allocation.methods.selection.priority import PriorityConfig, PriorityWeights
 from task_allocation.methods.selection.pipeline import SelectionConfig
 from task_allocation.methods.task_pool import TaskPool
@@ -279,7 +281,7 @@ class RollingHorizon:
         stage_config: MUASStageConfig | None = None,
         solver_config: DMDEConfig | None = None,
         event_config: EventTriggerConfig | None = None,
-        nest_offset: int = 1_000_000,
+        nest_offset: int = DEFAULT_NEST_OFFSET,
         solver_factory: Callable[[], Any] | None = None,
     ) -> None:
         self.pool = pool
@@ -303,6 +305,7 @@ class RollingHorizon:
         # 避免每周期重算 O(n²) 段长（垂直切面 0.37 ms/段，不复用会线性放大）。
         self._distance_cache: dict = {}
         self._distance_fn = make_distance_fn(self.estimator, cache=self._distance_cache)
+        self._warn_stale_forced_task_ids()
 
         self._nest_by_id = {n.id: n for n in self.nests}
         self._time = float(pool.current_time)
@@ -322,6 +325,26 @@ class RollingHorizon:
     # ------------------------------------------------------------------
     # 单周期
     # ------------------------------------------------------------------
+
+    def _warn_stale_forced_task_ids(self) -> None:
+        """配置面 ``SelectionConfig.forced_task_ids`` 的一次性告警。
+
+        滚动层每个周期都按当前重规划上下文重建强制集（
+        ``forced = urgent_task_ids ∪ 上周期故障释放``）并覆盖该字段，故构造期
+        填进来的值是**无效输入**。历史上几次调试都栽在这里（配了强制集、覆盖
+        度纹丝不动），而失败是静默的——所以按「回退永不静默」惯例显式说一句。
+        默认空集 ⇒ 不打印 ⇒ 对既有基线的输出零影响。
+        """
+        forced = getattr(self.sel_cfg, "forced_task_ids", None)
+        if not forced:
+            return
+        print(
+            "[horizon][warn] selection_config.forced_task_ids 非空，但在滚动层无效："
+            "run_cycle 每周期按 urgent_task_ids ∪ 故障释放 重建强制集并覆盖该字段"
+            f"（已填 {sorted(forced)[:8]}{'…' if len(forced) > 8 else ''}，共 {len(forced)} 个）。"
+            "如需每周期恒强制某任务，请改走 anti_starvation 或直接 fix 事件源。",
+            file=sys.stderr,
+        )
 
     def _screen_unreachable(self, tasks: Sequence[Task]) -> list[Task]:
         """静态物理不可达筛选：往返航程超满电可及范围的任务出池。
@@ -406,7 +429,7 @@ class RollingHorizon:
             overdue_ids=list(snap.overdue_ids),
         )
 
-        # 2.5) 静态物理不可达筛选（用户原则 2026-10-15：任务不被完成
+        # 2) 静态物理不可达筛选（用户原则 2026-10-15：任务不被完成
         # 只有物理约束被违反）。任务/巢位固定 + 每周期满电 ⇒ 判定与周期
         # 状态无关：所有机巢往返航程都超过满电可及范围的任务一次性出池
         # （UNREACHABLE），不留在池里空转——否则它每周期进选择、被规划器
@@ -417,7 +440,7 @@ class RollingHorizon:
             dropped = {t.id for t in unreachable}
             tasks = [t for t in tasks if t.id not in dropped]
 
-        # 2) 事件检测 + 事件驱动重规划决策（论文 §6）
+        # 3) 事件检测 + 事件驱动重规划决策（论文 §6）
         events = detect_events(
             self.fleet.all(),
             self.pool.active_tasks(),
@@ -505,7 +528,7 @@ class RollingHorizon:
             forced_task_ids=forced_ids,
         )
         cost_hint = self._cost_hint(tasks, avail, lazy)
-        # 2.6) 机队服务不可达出池（2026-10-25 口径对齐）：几何可达但连续
+        # 6.1) 机队服务不可达出池（2026-10-25 口径对齐）：几何可达但连续
         # service_patience 周期无可用机在往返航程内 → 与静态几何不可达
         # 同等出池（单列归因 service），使完成率分母只含「能力范围内」
         # 任务。必须在选择前移除，否则它每周期进候选又被拒，空转 churn。
@@ -619,11 +642,11 @@ class RollingHorizon:
         record.deferred_ids = [t.id for t in tasks if t.id not in executed]
         record.capacity_violations = [v.as_dict() for v in violations]
 
-        # 8.5) 执行中故障注入 → 未完成任务释放回任务池（T_t^release）
+        # 9) 执行中故障注入 → 未完成任务释放回任务池（T_t^release）
         # 时机必须在本周期解回写之后、完成反馈之前：此时 UAV 才真正带着任务。
         self._inject_faults(snap.cycle, record)
 
-        # 9) 执行推进：位置 / 航程 / 完成反馈
+        # 10) 执行推进：位置 / 航程 / 完成反馈
         self._advance_execution(solution, record)
 
         self._fill_occupancy(record)
