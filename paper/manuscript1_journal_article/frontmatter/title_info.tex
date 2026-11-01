@@ -1,0 +1,28 @@
+% ============================================================
+% frontmatter/title_info.tex —— 首页信息
+% 标题 / 作者 / 单位 / 中图分类号·文献标志码·文章编号·DOI
+% 元信息统一在 main.tex 中定义，此处只负责排版。
+% ============================================================
+
+\begin{center}
+  {\heiti\zihao{3}\paperTitleCN\par}          % 中文标题：黑体三号
+  \vspace{1.2em}
+  {\kaishu\zihao{-4}\paperAuthors\par}        % 作者：楷体小四
+  \vspace{0.8em}
+  {\songti\zihao{5}\paperAffiliation\par}     % 单位：宋体五号
+\end{center}
+
+\vspace{1em}
+
+% 文献标识信息行（字号可按期刊要求缩小）
+{\songti\zihao{5}\noindent
+  中图分类号：\clcNumber\quad
+  文献标志码：\docTypeCode\quad
+  文章编号：\articleNumber\quad
+  DOI：\doiNumber\par}
+
+\vspace{1em}
+
+% 【占位】如目标期刊首页含"收稿日期"脚注，可在此用 \thanks 或脚注排版；
+% 本文模板将收稿日期/基金项目/作者简介统一放在文末（backmatter/author_bio.tex），
+% 投稿时按目标期刊要求移动。

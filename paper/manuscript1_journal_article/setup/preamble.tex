@@ -1,0 +1,35 @@
+% ============================================================
+% setup/preamble.tex —— 全局宏包与依赖
+% 只放"与内容无关"的全局依赖；排版规范见 format.tex
+% ============================================================
+
+\usepackage{geometry}          % 页面几何（尺寸在 format.tex 中设置）
+\usepackage{graphicx}          % 插图
+\usepackage{amsmath,amssymb}   % 数学
+\usepackage{amsthm}            % 定理环境（\theoremstyle 依赖，必须加载）
+\usepackage{bm}                % 数学粗体
+\usepackage{mathtools}         % amsmath 增强
+\usepackage{booktabs}          % 三线表
+\usepackage{multirow}          % 跨行单元格
+\usepackage{caption}           % 图表题定制（格式在 format.tex）
+\usepackage{subcaption}        % 子图
+\usepackage{xcolor}            % 颜色（占位标记用）
+\usepackage{enumitem}          % 列表定制
+\usepackage{algorithm}         % 算法浮动体
+\usepackage{algpseudocode}     % 算法伪代码
+
+% 参考文献：GB/T 7714—2015 顺序编码制（与 manuscript1 同后端）
+\usepackage[
+  backend  = biber,
+  style    = gb7714-2015,
+  sorting  = none              % 按引用顺序编码（顺序编码制）
+]{biblatex}
+\addbibresource{bib/references.bib}
+
+% hyperref 通常放最后
+\usepackage[
+  colorlinks = true,
+  linkcolor  = black,
+  citecolor  = black,
+  urlcolor   = blue
+]{hyperref}

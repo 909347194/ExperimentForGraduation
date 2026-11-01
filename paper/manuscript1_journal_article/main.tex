@@ -1,0 +1,66 @@
+%! TEX program = xelatex
+% ============================================================
+% 中文核心期刊论文主文档（manuscript1_journal_article）
+% 目标期刊样式参考：《系统工程与电子技术》/《信息与控制》
+% 论文核心：多无人机任务分配（task allocation）
+% 编译顺序：xelatex -> biber -> xelatex -> xelatex
+% 也可直接：latexmk（已提供 .latexmkrc）
+% ============================================================
+\documentclass[
+  zihao   = 5,        % 五号字（期刊常用；如目标期刊要求小四，改 zihao=-4）
+  fontset = windows,  % Windows 字体集（宋体/黑体/楷体/仿宋）
+                      % Linux/macOS 临时调试可换：fontset=fandol（正式投稿保持 windows）
+  scheme  = chinese   % 中文主方案（定义 \songti/\heiti/\zihao 等命令）
+]{ctexart}
+
+% 全局宏包与依赖
+\input{setup/preamble}
+% 字体（英文 = Times New Roman）
+\input{setup/fonts}
+% 自定义命令 / 定理环境 / 算法汉化
+\input{setup/commands}
+% 版面格式（页边距 / 标题 / 图表题 / 公式编号）
+\input{setup/format}
+
+% ============================================================
+% 论文元信息（投稿前按目标期刊要求逐项填写）
+% ============================================================
+\newcommand{\paperTitleCN}{【占位：中文标题，一般不超过 20 字】}
+\newcommand{\paperTitleEN}{【Placeholder: English Title】}
+\newcommand{\paperAuthors}{【占位：作者一$^{1}$，作者二$^{1,2}$】}
+\newcommand{\paperAuthorsEN}{【Placeholder: Author One$^{1}$, Author Two$^{1,2}$】}
+\newcommand{\paperAffiliation}{%
+  （1. 【占位：单位名称】，【占位：城市】 【占位：邮编】；\\
+   2. 【占位：单位名称】，【占位：城市】 【占位：邮编】）}
+\newcommand{\paperAffiliationEN}{%
+  (1. 【Placeholder: Affiliation】, 【City】 【Zip】, China;\\
+   2. 【Placeholder: Affiliation】, 【City】 【Zip】, China)}
+% 文献标识信息（按目标期刊公布的中图分类号填写）
+\newcommand{\clcNumber}{TP391}                 % 中图分类号（占位示例）
+\newcommand{\docTypeCode}{A}                   % 文献标志码
+\newcommand{\articleNumber}{XXXX-XXXX(YYYY)NN-NNNNN-NN}  % 文章编号（占位）
+\newcommand{\doiNumber}{10.xxxxx/xxxxx}        % DOI（占位）
+
+\begin{document}
+
+% ---------- 首页：标题 / 作者 / 单位 / 文献标识 ----------
+\input{frontmatter/title_info}
+% ---------- 中文摘要 + 关键词 ----------
+\input{frontmatter/abstract_cn}
+% ---------- 英文摘要 + 关键词 ----------
+\input{frontmatter/abstract_en}
+
+% ---------- 正文（按节拆分，核心 = 任务分配） ----------
+\input{sections/s01_introduction}          % 1 引言
+\input{sections/s02_problem_formulation}   % 2 问题描述与系统模型
+\input{sections/s03_task_allocation}       % 3 多无人机任务分配方法（核心章节）
+\input{sections/s04_experiments}           % 4 仿真实验与结果分析
+\input{sections/s05_conclusion}            % 5 结论
+
+% ---------- 参考文献（GB/T 7714—2015，顺序编码制） ----------
+\printbibliography[title={参考文献}]
+
+% ---------- 收稿日期 / 基金项目 / 作者简介（部分期刊置于文末） ----------
+\input{backmatter/author_bio}
+
+\end{document}

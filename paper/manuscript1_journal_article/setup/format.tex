@@ -1,0 +1,43 @@
+% ============================================================
+% setup/format.tex —— 版面与排版规范（按目标期刊微调）
+% 参考样式：《系统工程与电子技术》/《信息与控制》投稿版式
+% 注：各刊细节不同，投稿前以目标期刊"稿件模板/征稿简则"为准。
+% ============================================================
+
+% ---------- 页边距（期刊通行：上下 2.5cm，左右 2.0~2.5cm） ----------
+\geometry{top=2.5cm, bottom=2.5cm, left=2.2cm, right=2.2cm}
+
+% ---------- 各级标题（黑体；标题层级= 节 / 小节） ----------
+\ctexset{
+  section = {
+    format     = \heiti\zihao{4},      % 节标题：黑体四号
+    beforeskip = 1.5ex plus .2ex minus .2ex,
+    afterskip  = 1.2ex plus .2ex minus .2ex,
+    indent     = 0pt
+  },
+  subsection = {
+    format     = \heiti\zihao{-4},     % 小节标题：黑体小四
+    beforeskip = 1.2ex plus .2ex minus .2ex,
+    afterskip  = 1ex plus .2ex minus .2ex,
+    indent     = 0pt
+  },
+  subsubsection = {
+    format     = \heiti\zihao{5},      % 小小节标题：黑体五号
+    beforeskip = 1ex plus .2ex minus .2ex,
+    afterskip  = 1ex plus .2ex minus .2ex,
+    indent     = 0pt
+  }
+}
+
+% ---------- 图表题（五号；图题在下、表题在上） ----------
+\captionsetup{font=small, labelsep=quad, skip=4pt}
+\captionsetup[figure]{position=bottom}
+\captionsetup[table]{position=top}
+
+% ---------- 公式编号：按节编号 (1)、(2)… ----------
+\numberwithin{equation}{section}
+
+% ---------- 段落 ----------
+% 中文首行缩进 2 字符（ctex 默认），行距保持紧凑（期刊默认单倍行距）
+\linespread{1.1}
+\setlength{\parindent}{2em}

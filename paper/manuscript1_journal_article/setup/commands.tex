@@ -1,0 +1,36 @@
+% ============================================================
+% setup/commands.tex —— 自定义命令 / 定理环境 / 算法汉化
+% ============================================================
+
+% ---------- 占位标记 ----------
+% 正文中所有待写内容统一用 \placeholder{} 标出，终稿前逐项替换并删除。
+% 占位文本为灰色斜体，便于一眼识别未完成部分。
+\newcommand{\placeholder}[1]{%
+  \textcolor{gray}{\textit{【占位：#1】}}}
+
+% 写作要点提示（仅注释用，不输出）
+% \writingnote{...} —— 以注释形式写在各节文件里更直观，此命令备用
+\newcommand{\writingnote}[1]{}
+
+% ---------- 常用缩写/排版命令 ----------
+\newcommand{\ie}{\textit{i.e.}}
+\newcommand{\eg}{\textit{e.g.}}
+\newcommand{\etal}{\textit{et al.}}
+\newcommand{\R}{\mathbb{R}}          % 实数域
+\newcommand{\abs}[1]{\left|#1\right|}
+\newcommand{\norm}[1]{\left\|#1\right\|}
+
+% ---------- 定理类环境（汉化） ----------
+\theoremstyle{plain}
+\newtheorem{definition}{定义}
+\newtheorem{theorem}{定理}
+\newtheorem{lemma}{引理}
+\newtheorem{proposition}{命题}
+\newtheorem{assumption}{假设}
+\theoremstyle{remark}
+\newtheorem{remark}{注}
+
+% ---------- 算法浮动体汉化 ----------
+\floatname{algorithm}{算法}
+\algrenewcommand{\algorithmicrequire}{\textbf{输入：}}
+\algrenewcommand{\algorithmicensure}{\textbf{输出：}}
