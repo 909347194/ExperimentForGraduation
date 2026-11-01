@@ -209,6 +209,11 @@ def build_uavs(nests: Sequence[Nest], cfg: Mapping[str, Any]) -> list[UAV]:
     n_uavs = int(p["n_uavs"])
     speed = float(p.get("uav_speed", 15.0))
     max_range = float(p.get("uav_max_range", 120000.0))
+    # 最大飞行时间（秒）：显式 uav_max_time 优先；否则派生 = 航程/速度，
+    # 与航程预算严格自洽（派生下 time 约束是 range 约束的等价重述，不新增淘汰）。
+    max_time = p.get("uav_max_time")
+    if max_time is None and speed > 0:
+        max_time = max_range / speed
     if not nests:
         raise ValueError("无机巢，无法生成机队")
     return [
@@ -219,6 +224,7 @@ def build_uavs(nests: Sequence[Nest], cfg: Mapping[str, Any]) -> list[UAV]:
             z=nests[i % len(nests)].z,
             remaining_range=max_range,
             speed=speed,
+            max_time=max_time,
             nest_id=nests[i % len(nests)].id,
         )
         for i in range(n_uavs)

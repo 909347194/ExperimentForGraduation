@@ -361,6 +361,13 @@ class DecodeRepairMixin:
             length += self._return_leg_cost(seq[-1], None)
             if length > budget + 1e-6:
                 return None
+            # 飞行时间预算（与航程对称）：max_time 为 None 时不约束；否则
+            # 全航程 / 速度 超 max_time 即判该访问序不可行（返回 None）。
+            mt = getattr(uav, "max_time", None)
+            if mt is not None:
+                sp = max(float(getattr(uav, "speed", 1e-6)), 1e-6)
+                if length / sp > float(mt) + 1e-6:
+                    return None
             return (n_late, round(late_total, 6), round(length, 6))
 
         base_key = _evaluate(list(tids))

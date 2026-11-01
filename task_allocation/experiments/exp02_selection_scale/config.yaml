@@ -24,6 +24,7 @@ problem:
   # 满电航程（m）：与 exp01 生产口径一致（城关区 20 km，2026-10-26 起）。
   # 航程必须是真实瓶颈，「按机队能力标定规模」的机制才可被真正检验。
   uav_max_range: 20000.0
+  uav_max_time: null # 最大飞行时间（秒）；null=自动派生 uav_max_range/uav_speed（与航程预算自洽，不新增淘汰）。
   # 与 exp01 / exp05 生产口径保持一致的模型权重（单位：收益当量 / 米）
   allow_unassigned: true
   allow_idle_uav: true

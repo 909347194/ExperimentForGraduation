@@ -151,6 +151,20 @@ def _range_ok(cost: float, uav: UAV) -> bool:
     return cost <= float(getattr(uav, "remaining_range", float("inf"))) + _EPS
 
 
+def _time_ok(cost: float, uav: UAV) -> bool:
+    """飞行时间预算判据（与航程对称）：全航程代价 / 速度 ≤ 最大飞行时间。
+
+    ``uav.max_time`` 为 ``None``（未配置）时恒真——约束不绑定，行为与
+    仅航程约束时完全一致；派生/显式配置后，超时任务被归为 capacity_shortfall
+    （物理装不下），而非 voluntary_skip（能装不装）。
+    """
+    mt = getattr(uav, "max_time", None)
+    if mt is None:
+        return True
+    speed = max(float(getattr(uav, "speed", 1e-6)), 1e-6)
+    return cost / speed <= float(mt) + _EPS
+
+
 # ── 机巢容量账（起飞释放原巢名额、落地占终点巢名额）────────────────
 
 
@@ -211,7 +225,7 @@ def _check_open(
         problem, uav, [tid],
         cap_ok=(cap_ok if cap_on else None),
     )
-    return nid is not None and _range_ok(cost, uav)
+    return nid is not None and _range_ok(cost, uav) and _time_ok(cost, uav)
 
 
 def _check_insert(
@@ -229,7 +243,7 @@ def _check_insert(
             end, cost = _best_end_nest(problem, uav, cand)
         else:
             cost = _tour_cost(problem, uav, cand, end)
-        if end is None or not _range_ok(cost, uav):
+        if end is None or not _range_ok(cost, uav) or not _time_ok(cost, uav):
             continue
         if _window_ok(problem, uav, cand, pos):
             return True
@@ -377,7 +391,7 @@ def _best_insert_plan(
                 use_end, cost = _best_end_nest(problem, u, cand)
             else:
                 cost = _tour_cost(problem, u, cand, use_end)
-            if use_end is None or not _range_ok(cost, u):
+            if use_end is None or not _range_ok(cost, u) or not _time_ok(cost, u):
                 continue
             if not _window_ok(problem, u, cand, pos):
                 continue
@@ -407,7 +421,7 @@ def _best_insert_plan(
         nid, cost = _best_end_nest(
             problem, u, [tid], cap_ok=(cap_ok if cap_on else None)
         )
-        if nid is None or not _range_ok(cost, u):
+        if nid is None or not _range_ok(cost, u) or not _time_ok(cost, u):
             continue
         if cost < best_cost - 1e-12:
             best_cost = cost

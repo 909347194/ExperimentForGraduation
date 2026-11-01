@@ -68,6 +68,7 @@ problem:
     n_uavs: 10 # 机队规模（<= n_nests × nest_capacity 才不初始超容；6×4=24）
     uav_speed: 15.0 # m/s
     uav_max_range: 20000.0 # 满电航程（m）；20 km（城关区口径，与 exp01 一致）
+    uav_max_time: null # 最大飞行时间（秒）；null=自动派生 uav_max_range/uav_speed（与航程预算自洽，不新增淘汰）。显式给更小值即成独立绑定约束。
 
 # 合成任务点（暂无实测任务数据；后续换 data/task_location_data.csv 时
 # 只需替换生成函数，本节参数可平移）

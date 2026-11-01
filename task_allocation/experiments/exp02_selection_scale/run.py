@@ -204,6 +204,12 @@ def main(argv: list[str] | None = None) -> int:
 
     n_uavs = int(problem_cfg["n_uavs"])
     max_range = float(problem_cfg.get("uav_max_range", 80000.0))
+    speed = float(problem_cfg.get("uav_speed", 15.0))  # 与 exp01/exp05 build_uavs 同口径读 config
+    # 最大飞行时间（秒）：显式 uav_max_time 优先；否则派生 = 航程/速度，
+    # 与航程预算严格自洽（派生下 time 约束是 range 约束的等价重述，不新增淘汰）。
+    max_time = problem_cfg.get("uav_max_time")
+    if max_time is None and speed > 0:
+        max_time = max_range / speed
     # UAV 驻留其机巢（exp01 build_uavs 同口径）：任务锚定在散布的机巢周围
     # （nest span 约 70km×87km），驻巢后最近可用机距离中位数 ~15km、
     # cap(t)≈42，与 full baseline 的执行数同量级，能力驱动标定才真正可测。
@@ -216,7 +222,8 @@ def main(argv: list[str] | None = None) -> int:
             z=nest_list[i % len(nest_list)].z,
             nest_id=i % len(nest_list),
             remaining_range=max_range,
-            speed=15.0,
+            speed=speed,
+            max_time=max_time,
         )
         for i in range(n_uavs)
     ]

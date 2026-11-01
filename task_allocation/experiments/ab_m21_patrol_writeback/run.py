@@ -142,6 +142,8 @@ def make_instance(seed: int, n_uavs: int, n_targets: int, area: float, deadline_
             z=0.0,
             remaining_range=1e7,
             speed=10.0,
+            # 最大飞行时间派生 = 航程/速度（此处 1e6s 近乎无界，约束不绑定）
+            max_time=1e7 / 10.0,
             nest_id=0,
             status=UAVStatus.IDLE,
         )

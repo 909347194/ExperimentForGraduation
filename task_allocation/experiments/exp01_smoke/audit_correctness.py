@@ -566,6 +566,7 @@ def _run_checks(
     #      （那条腿的采样点没落在边界上，纯属运气）。
     # 另：make_distance_fn 的坐标量化（0.1 m）也已取消，使距离值唯一确定。
     range_bad, match_bad, chain_bad = [], [], []
+    time_bad = []  # J2：飞行时间核对（与航程对称）
     seg_sym_diff = []  # M 项：ETA 侧段长 vs 代价矩阵段长的差异（应恒为 0）
     prev_end: dict[int, tuple] = {}
     for c in sol["cycles"]:
@@ -593,6 +594,14 @@ def _run_checks(
                                   round(float(tour["est_cost"]), 1)))
             if cost > max_range + 1.0:
                 range_bad.append((c["cycle"], uid, f"航程 {cost:.0f} > {max_range:.0f}"))
+            # 飞行时间核对（与航程对称）：派生/显式 uav_max_time；None 时不约束。
+            # 派生 = max_range/speed，与 build_uavs 的派生口径一致 ⇒ 满足航程即
+            # 满足时间；仅当显式给定更小值才成为独立绑定约束。
+            mt = m["problem"].get("uav_max_time")
+            if mt is None and speed > 0:
+                mt = max_range / speed
+            if mt is not None and cost / speed > float(mt) + 1.0:
+                time_bad.append((c["cycle"], uid, f"飞行时间 {cost/speed:.0f}s > {float(mt):.0f}s"))
             # 起点链：本周期起点 = 上周期终点机巢位置（降落后换电/驻留）
             if uid in prev_end:
                 sp = tuple(float(v) for v in tour["start"])
@@ -603,6 +612,8 @@ def _run_checks(
           not match_bad, str(match_bad[:3]))
     check("J 所有航次 ≤ 满电航程（recharge_at_nest=True）",
           not range_bad, str(range_bad[:3]))
+    check("J2 所有航次 ≤ 最大飞行时间（派生/显式 uav_max_time）",
+          not time_bad, str(time_bad[:3]))
     check("K 起点链无瞬移：起点 = 上周期终点机巢", not chain_bad, str(chain_bad[:3]))
 
     # ── O 无幻影腿：metrics final_path_m == dump est_cost 之和 ────

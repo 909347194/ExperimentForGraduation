@@ -95,6 +95,10 @@ def check_solution_feasibility(
                 report.add_time(
                     f"time_uav_{tour.uav_id}", cons.w_endurance * tv
                 )
+                # 与 range 同款硬物理不可行：标记航次不可行，触发 horizon
+                # 返工/剔除（与 174 行注释口径一致；旧实现只记惩罚不置
+                # feasible，导致超时航次被放行交付）。
+                tour_ok = False
         tour.feasible = tour_ok
 
     # ---- 终点机巢：合法性 + 可用性 + 可达性 ----
