@@ -12,6 +12,15 @@
 % \writingnote{...} —— 以注释形式写在各节文件里更直观，此命令备用
 \newcommand{\writingnote}[1]{}
 
+% ---------- 首页页脚 ----------
+% 无编号脚注：用于首页页脚的基金项目 / 通信作者（两刊投稿须知要求）
+\newcommand{\blfootnote}[1]{%
+  \begingroup
+  \renewcommand{\thefootnote}{}%
+  \footnote{#1}%
+  \addtocounter{footnote}{-1}%
+  \endgroup}
+
 % ---------- 常用缩写/排版命令 ----------
 \newcommand{\ie}{\textit{i.e.}}
 \newcommand{\eg}{\textit{e.g.}}
@@ -19,6 +28,7 @@
 \newcommand{\R}{\mathbb{R}}          % 实数域
 \newcommand{\abs}[1]{\left|#1\right|}
 \newcommand{\norm}[1]{\left\|#1\right\|}
+\newcommand{\transpose}{\mathrm{T}}      % 转置符号：正体 T（两刊均要求）
 
 % ---------- 定理类环境（汉化） ----------
 \theoremstyle{plain}

@@ -5,11 +5,11 @@
 % ============================================================
 
 \begin{center}
-  {\heiti\zihao{3}\paperTitleCN\par}          % 中文标题：黑体三号
+  {\heiti\zihao{3}\paperTitleCN\par}          % 中文标题：黑体三号（≤ 20 字）
   \vspace{1.2em}
   {\kaishu\zihao{-4}\paperAuthors\par}        % 作者：楷体小四
   \vspace{0.8em}
-  {\songti\zihao{5}\paperAffiliation\par}     % 单位：宋体五号
+  {\songti\zihao{5}\paperAffiliation\par}     % 单位：宋体五号（省 城市 邮编）
 \end{center}
 
 \vspace{1em}
@@ -23,6 +23,12 @@
 
 \vspace{1em}
 
-% 【占位】如目标期刊首页含"收稿日期"脚注，可在此用 \thanks 或脚注排版；
-% 本文模板将收稿日期/基金项目/作者简介统一放在文末（backmatter/author_bio.tex），
-% 投稿时按目标期刊要求移动。
+% ---------- 首页页脚（两刊要求） ----------
+% 《系统工程与电子技术》：首页页脚注明基金项目（标准名称+编号）
+% 《信息与控制》：首页页脚注明“通信作者：姓名，E-mail”
+% \blfootnote 生成无编号首页脚注（定义见 setup/commands.tex）
+\blfootnote{基金项目：\fundProject}
+\blfootnote{通信作者：\corrAuthor，E-mail：\corrEmail}
+
+% 【注】如目标期刊要求将基金项目/作者简介列于文末，
+% 则移除上方脚注，改在 backmatter/author_bio.tex 中列出。

@@ -25,8 +25,8 @@
 % ============================================================
 % 论文元信息（投稿前按目标期刊要求逐项填写）
 % ============================================================
-\newcommand{\paperTitleCN}{【占位：中文标题，一般不超过 20 字】}
-\newcommand{\paperTitleEN}{【Placeholder: English Title】}
+\newcommand{\paperTitleCN}{【占位：中文标题，不超过 20 字】}
+\newcommand{\paperTitleEN}{【Placeholder: English Title（实词 ≤ 10 个）】}
 \newcommand{\paperAuthors}{【占位：作者一$^{1}$，作者二$^{1,2}$】}
 \newcommand{\paperAuthorsEN}{【Placeholder: Author One$^{1}$, Author Two$^{1,2}$】}
 \newcommand{\paperAffiliation}{%
@@ -40,6 +40,11 @@
 \newcommand{\docTypeCode}{A}                   % 文献标志码
 \newcommand{\articleNumber}{XXXX-XXXX(YYYY)NN-NNNNN-NN}  % 文章编号（占位）
 \newcommand{\doiNumber}{10.xxxxx/xxxxx}        % DOI（占位）
+% 首页页脚信息：基金项目（《系统工程与电子技术》要求首页页脚）
+% 与通信作者（《信息与控制》要求首页页脚），均以脚注形式排在首页底部
+\newcommand{\fundProject}{【占位：国家自然科学基金（XXXXXXX）；XX 省重点研发计划（XXXXXXX）】}
+\newcommand{\corrAuthor}{【占位：通信作者姓名】}
+\newcommand{\corrEmail}{【占位：xxx@xxx.edu.cn】}
 
 \begin{document}
 
@@ -57,10 +62,13 @@
 \input{sections/s04_experiments}           % 4 仿真实验与结果分析
 \input{sections/s05_conclusion}            % 5 结论
 
-% ---------- 参考文献（GB/T 7714—2015，顺序编码制） ----------
+% ---------- 致谢（可选；《信息与控制》要求位于正文后、参考文献前） ----------
+\input{backmatter/acknowledgements}
+
+% ---------- 参考文献（GB/T 7714，顺序编码制） ----------
 \printbibliography[title={参考文献}]
 
-% ---------- 收稿日期 / 基金项目 / 作者简介（部分期刊置于文末） ----------
+% ---------- 收稿日期 / 作者简介（两刊均置文末） ----------
 \input{backmatter/author_bio}
 
 \end{document}

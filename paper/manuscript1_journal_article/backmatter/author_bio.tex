@@ -1,8 +1,12 @@
 % ============================================================
 % backmatter/author_bio.tex —— 文末信息
-% 收稿日期 / 修回日期 / 基金项目 / 作者简介
-% 注：《系统工程与电子技术》《信息与控制》等多将此块置于文末；
-% 如目标期刊要求首页脚注，请将本块移至 frontmatter/title_info.tex。
+% 收稿日期 / 作者简介
+% 《系统工程与电子技术》：文后提供所有作者简介，含出生年月、性别、
+%   职称、学位、主要研究方向以及 E-mail；
+% 《信息与控制》：作者简介体例类似（部分版本含通信作者信息）。
+% 注：基金项目与通信作者已按两刊要求置于首页页脚
+%   （frontmatter/title_info.tex 中的 \blfootnote）；
+%   如目标刊要求文末列出基金项目，可在本文件加回。
 % ============================================================
 
 \vspace{1.5em}
@@ -14,16 +18,16 @@
 
 \par\vspace{0.8em}
 
-\noindent{\heiti\zihao{5}基金项目：}%
-\placeholder{国家自然科学基金（编号：XXXXXXX）；XX 省重点研发计划（编号：XXXXXXX）等}
+\noindent{\heiti\zihao{5}作者简介：}
 
-\par\vspace{0.8em}
+\par\vspace{0.3em}
 
-\noindent{\heiti\zihao{5}作者简介：}%
-\placeholder{姓名（出生年—），性别，籍贯，职称/学位，研究方向。
-示例：张三（1998—），男，湖北武汉人，硕士研究生，研究方向为多无人机协同任务分配。}
+\noindent\placeholder{作者一（出生年月—），性别，职称，学位，主要研究方向。
+E-mail：xxx@xxx.edu.cn
+示例：张三（1998 年 3 月—），男，硕士研究生，研究方向为多无人机协同任务分配。
+E-mail：zhangsan@xxx.edu.cn}
 
-\par\vspace{0.5em}
+\par\vspace{0.3em}
 
-\noindent{\heiti\zihao{5}通信作者：}%
-\placeholder{姓名，E-mail：xxx@xxx.edu.cn}
+\noindent\placeholder{作者二（出生年月—），性别，职称，学位，主要研究方向。
+E-mail：xxx@xxx.edu.cn（按作者数量逐一列出，所有作者均需简介）}
