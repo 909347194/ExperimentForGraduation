@@ -25,13 +25,13 @@ from __future__ import annotations
 
 import sys
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable
 
 import numpy as np
 
 from ..base.base_optimizer import BaseOptimizer, SolverResult
-from ..representation.encoder import PopulationEncoder, Individual, Gene
+from ..representation.encoder import PopulationEncoder, Individual
 from ..representation.inverse_mapper import inverse_phi
 from ..operators.crossover import dynamic_crossover_rate
 from ..operators.mutation import mutate_population

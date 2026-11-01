@@ -39,7 +39,6 @@ import json
 import sys
 import time
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Mapping
 
 # 任意调用方式可跑（python -m / 任意 cwd）：脚本目录先入 sys.path，

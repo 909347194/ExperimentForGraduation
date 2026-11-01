@@ -230,7 +230,6 @@ def test_coverage_guard_tracks_current_best_not_initial():
     修复后（接受时同步 best_exec）：候选1 接受后 best_exec={0,1,2}，候选2
     因 {0,1}⊉{0,1,2} 被守护拒绝 → 交付 exec {0,1,2}、f=90。
     """
-    from collections import namedtuple
 
     class _Sol:
         def __init__(self, executed):

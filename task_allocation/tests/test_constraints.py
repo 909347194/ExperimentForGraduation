@@ -182,7 +182,6 @@ def main() -> None:
     test_check_feasible_window_violation()
     test_check_feasible_empty_feasible()
     test_tour_time_deterministic()
-    test_scalar_fitness_bottleneck_term()
     print("OK: constraints package tests passed")
 
 

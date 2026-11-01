@@ -16,7 +16,7 @@ from .random_assign import RandomAssignSolver
 from .vrptw import VRPTWInsertionSolver
 
 if TYPE_CHECKING:
-    from task_allocation.methods.muas.base import BaseOptimizer
+    pass
 
 REGISTRY: dict[str, type] = {
     "random": RandomAssignSolver,

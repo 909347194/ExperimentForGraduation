@@ -40,7 +40,6 @@ if __name__ == "__main__" and __package__ in (None, ""):
 from pathlib import Path
 from typing import Any, Sequence
 
-import numpy as np
 
 from ..theme import FIG_WIDE, FS, footnote, plt, save_figure, style_axes
 from ._common import (
@@ -51,7 +50,6 @@ from ._common import (
     label,
     marker,
     scales_present,
-    sel_n,
     t_muas_s,
     variants_present,
 )

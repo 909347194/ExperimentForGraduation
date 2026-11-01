@@ -29,7 +29,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from statistics import mean, pstdev
+from statistics import mean
 
 HERE = Path(__file__).resolve().parent
 EXP01_DIR = HERE.parent / "exp01_smoke"

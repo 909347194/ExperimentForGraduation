@@ -29,7 +29,6 @@ UAV 起飞点 ``U#``、机巢 ``巢#``、任务 ``T#·Ck``（外加甘特里的�
 """
 from __future__ import annotations
 
-from itertools import combinations
 
 __all__ = [
     "CANDIDATE_STEPS",

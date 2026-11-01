@@ -16,7 +16,6 @@ import random
 
 import numpy as np
 
-from .nearest_match import nearest_match
 
 
 def repair_invalid(

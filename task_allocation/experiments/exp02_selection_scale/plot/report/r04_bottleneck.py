@@ -52,7 +52,6 @@ from ._common import (
     n_candidate,
     n_sel_cap,
     sel_n,
-    scales_present,
 )
 
 __all__ = ["plot_r04_bottleneck"]

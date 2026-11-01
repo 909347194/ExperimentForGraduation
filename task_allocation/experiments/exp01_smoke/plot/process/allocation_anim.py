@@ -89,7 +89,6 @@ from ..theme import (
     footnote,
     plt,
     robust_pil_save,
-    robust_savefig,
     save_poster,
     style_axes,
     declutter_figure,

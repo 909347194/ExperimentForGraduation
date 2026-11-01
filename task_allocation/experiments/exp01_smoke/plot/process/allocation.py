@@ -51,7 +51,6 @@ from pathlib import Path
 from typing import Any, Sequence
 
 import numpy as np
-from matplotlib.lines import Line2D
 
 from ..base.backdrop import _backdrop_extent, _draw_backdrop
 from ..base.buildings import _building_legend_patch

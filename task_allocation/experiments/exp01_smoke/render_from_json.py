@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import argparse
 import sys
-from pathlib import Path
 
 # 任意调用方式可跑（python -m / 任意 cwd）：脚本目录先入 sys.path，
 # 供 `from paths import` 在非脚本路径调用下也能解析（2026-10-22 修复）。

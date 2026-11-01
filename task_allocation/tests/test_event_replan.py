@@ -206,7 +206,6 @@ def test_unavailable_nest_excluded() -> None:
 def test_unit_summarize_and_should_replan() -> None:
     """summarize_events / should_replan 解析正确。"""
     from task_allocation.methods.rolling.event_trigger import (
-        EventReplanContext,
         EventType,
         ReplanEvent,
     )

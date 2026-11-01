@@ -19,7 +19,6 @@ import numpy as np
 from task_allocation.common.types import UAV
 from task_allocation.methods.muas.solvers.stage_config import (
     MUASStageConfig,
-    POLICY_CHEAPEST,
     POLICY_DEMAND,
     POLICY_DEMAND_MARGINAL,
     POLICY_FIRST,
