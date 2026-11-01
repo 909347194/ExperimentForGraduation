@@ -183,6 +183,32 @@ references.bib ──biber──► main.bbl（把文献排成 GB/T 7714 格式�
 调用 `\placeholder{这里是待写内容}` 就会渲染出灰色斜体的【占位：这里是待写内容】。
 自己写命令的好处：样式只写一处，全文一致，改一处全局生效。
 
+### 5.4 列表：分条陈列与“行内不换行”的贡献点
+
+条目陈列用 `enumerate`（有序号）/ `itemize`（无序号），都必须有配对的 `\begin`/`\end`：
+
+```latex
+\begin{enumerate}
+  \item 第一点
+  \item 第二点
+\end{enumerate}
+```
+
+**行内不换行**（如引言贡献点写成 “(1)(2)(3)” 连排）需要 `enumitem` 的**行内变体** `enumerate*`，而它默认**不启用**：
+
+```latex
+\usepackage[inline]{enumitem}   % ← 必须带 inline 选项，否则 enumerate* 未定义
+...
+\begin{enumerate*}[label=(\arabic*), itemjoin=\quad]
+  \item 第一点 \item 第二点 \item 第三点
+\end{enumerate*}
+```
+
+要点：
+- 忘了 `inline` 选项会报 `enumerate* undefined`；只写 `\begin{enumerate*}` 却漏掉 `\end{enumerate*}` 会报 `Lonely \item`——两者都源于“行内列表没配对好 + 没开 inline”。
+- `label=(\arabic*)` 控制序号样式；`itemjoin=\quad` 控制条目间间隔（不设会挤在一起）。
+- 行内列表适合“贡献点/要点”这类短句连排；长篇分点仍用普通 `enumerate`。
+
 ---
 
 ## 6. 数学公式
@@ -315,6 +341,14 @@ references.bib ──biber──► main.bbl（把文献排成 GB/T 7714 格式�
 "等"、中英文文献格式差异、DOI 处理等）。所以 `.bib` 里只写**数据**，
 格式不用管。投稿他刊如果参考文献体例不同，通常只换样式参数，文献库不动。
 
+### 9.4 文献库管理：单一权威库 + 避坑纪律
+
+- **单一权威库**：全篇只 `\addbibresource{bib/references.bib}` 一个文献库（`setup/preamble.tex` 第 27 行）。新增文献**直接往这个文件追加**，切勿再建第二个 `.bib` 或在别处 `\addbibresource`——多库会导致键冲突、`\cite` 解析不到。
+- **引用键大小写敏感、须与 `.bib` 完全一致**：`\cite{Zhang2026}` 里哪怕大小写错一个字母都会 `undefined`。
+- **粘贴文献务必核对“作者/年/DOI”三件套**：曾出现把一篇论文的 DOI 错贴到另一篇作者名下（如 `liu2026disaster` 的 DOI 与 `pu_dynamic_2026` 完全相同但作者不同）。处理原则是**不加重复条目**，而是按真实归属补正确的那篇（本例补 `liu2024dawn`）。
+- **删旧句要删干净**：从别处整段复制引用时，残留的旧长句若还带着一串 `\cite`，会因键不存在而 `undefined`。改完用 `grep -n '\\cite' sections/` 核对一遍。
+- **改了 `.bib` 或引用键后必须重跑 biber**（见第 12 节“只显示 [1]”那条）。
+
 ---
 
 ## 10. 特殊字符转义（必背 8 个）
@@ -361,11 +395,13 @@ grep -rn '【占位' . --include=*.tex
 | `File not found` | `\input`/`\includegraphics` 路径错 | 路径相对 main.tex，注意大小写 |
 | `Option clash for package xxx` | 同一宏包加载两次且选项不同 | 删掉多余的 `\usepackage` |
 | `Missing \begin{document}` | 导言区混进了正文文字 | 检查 preamble 里是否有裸文本 |
-| `Citation 'xxx' undefined` | 第一遍正常 | 跑完 biber + 两遍 xelatex 即消失 |
+| `Citation 'xxx' undefined` / 全文只显示 `[1]` | ① 首次编译第一遍正常；② **陈旧 `.bbl`/`.bcf`**：改了 `.bib` 或引用键后 biber 没重跑，旧 bbl 仍指向旧条目 | 情况①跑完 biber+两遍 xelatex 即消失；情况②先 `rm -f main.bbl main.bcf` 再 `latexmk -xelatex main.tex` 强制完整重编 |
 | `Overfull \hbox` | 一行太长溢出边界 | 警告可暂忍；终稿微调措辞或加 `\allowdisplaybreaks` |
 | 中文编译失败 / 字体缺失 | Linux 用 `fontset=windows` | 临时改 `fontset=fandol` |
 | `Too many }'s` | 花括号不配对 | 数对 `{}`；或二分法定位 |
 | 参考文献不出现 | 没跑 biber 或 .bib 有语法错 | 看 `.blg` 日志定位条目 |
+| `enumerate* undefined` / `Lonely \item` | 行内列表 `enumerate*` 需 `\usepackage[inline]{enumitem}` 且漏了 `\end{enumerate*}` | preamble 加 `inline` 选项并补 `\end{enumerate*}` |
+| `*.bbl` / `*.blg` 进了版本库 | 它们是 biber 生成物，可由 `.bib` 重建 | 勿 `git add`；建议把 `*.bbl *.blg` 加入 `.gitignore`（本仓库已加） |
 
 排查心法：**看报错的第一行 + 出错的行号**，日志（`.log`）里上下文最全。
 改一处、编译一次，别一次改一堆。

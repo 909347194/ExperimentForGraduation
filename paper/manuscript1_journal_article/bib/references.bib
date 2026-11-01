@@ -1,5 +1,5 @@
 % ============================================================
-% bib/references.bib —— 参考文献库
+% bib/references.bib —— 参考文献库（唯一权威库）
 % 格式：GB/T 7714—2015 顺序编码制（biblatex-gb7714-2015 自动排版）
 % 要求（两刊对照）：
 %   - 数量 20~35 条为宜，近 5 年文献占比 ≥ 1/3
@@ -9,42 +9,170 @@
 %     数值体例与 2015 版基本兼容，投稿前与编辑部核对）
 %   - 《信息与控制》：作者只列前 3 位，其余用“等”/“et al.”省略；
 %     中文参考文献需附英文译文
-% 以下为占位示例条目，写作时替换为真实文献。
+% 管理：\addbibresource 只指向本文件。新增文献直接在此追加
+% @article/@book/@inproceedings 条目，正文用 \cite{key} 引用即可；
+% sorting=none 会自动按首次引用顺序编号，无需手工排序。
 % ============================================================
-
-@article{placeholder2025a,
-  author   = {【占位：作者】},
-  title    = {【占位：英文论文题目】},
-  journal  = {【占位：期刊名】},
-  year     = {2025},
-  volume   = {0},
-  number   = {0},
-  pages    = {0--0},
-  doi      = {00.0000/00000000},
+@article{alqefari_multi-uav_2025,
+  title        = {Multi-{UAV} Task Assignment in Dynamic Environments: Current Trends and Future Directions},
+  volume       = {9},
+  issn         = {2504-446X},
+  url          = {https://www.mdpi.com/2504-446X/9/1/75},
+  doi          = {10.3390/drones9010075},
+  shorttitle   = {Multi-{UAV} Task Assignment in Dynamic Environments},
+  abstract     = {The rapid advancement of unmanned aerial vehicles ({UAVs}) has transformed a wide range of applications, including military operations, disaster response, agricultural monitoring, and infrastructure inspection. Deploying multiple {UAVs} to work collaboratively offers significant advantages in terms of enhanced coverage, redundancy, and operational efficiency. However, as {UAV} missions become more complex and operate in dynamic environments, the task assignment problem becomes increasingly challenging. Multi-{UAV} dynamic task assignment is critical for optimizing mission success. It involves allocating tasks to {UAVs} in real-time while adapting to unpredictable changes, such as sudden task appearances, {UAV} failures, and varying mission requirements. A key contribution of this article is that it provides a comprehensive study of state-of-the-art solutions for dynamic task assignment in multi-{UAV} systems from 2013 to 2024. It also introduces a comparative framework to evaluate algorithms based on metrics such as responsiveness, robustness, and scalability in handling real-world dynamic conditions. Our analysis reveals distinct strengths and limitations across three major approaches: market-based, intelligent optimization, and clustering-based solutions. Market-based solutions excel in distributed coordination and real-time adaptability, but face challenges with communication overhead. Intelligent optimization solutions, including evolutionary and swarm intelligence, provide high flexibility and performance in complex scenarios but require significant computational resources. Clustering-based solutions efficiently group and allocate tasks geographically, reducing overlap and improving efficiency, although they struggle with adaptability in dynamic environments. By identifying these strengths, limitations, and emerging trends, this article not only offers a detailed comparative analysis but also highlights critical research gaps. Specifically, it underscores the need for scalable algorithms that can efficiently handle larger {UAV} fleets, robust methods to adapt to sudden task changes and {UAV} failures, and multi-objective optimization frameworks to balance competing goals such as energy efficiency and task completion. These insights serve as a guide for future research and a valuable resource for developing resilient and efficient strategies for multi-{UAV} dynamic task assignment in complex environments.},
+  pages        = {75},
+  number       = {1},
+  journaltitle = {Drones},
+  shortjournal = {Drones},
+  author       = {Alqefari, Shahad and Menai, Mohamed El Bachir},
+  urldate      = {2026-09-21},
+  date         = {2025-01-19},
+  langid       = {english},
+  note         = {remark: 综述；Multi-{UAV} Task Assignment
+                  rate: 5},
+  file         = {PDF:D\:\\SchoolAffairs\\zotero\\storage\\CUHXR55D\\Alqefari和Menai - 2025 - Multi-UAV Task Assignment in Dynamic Environments Current Trends and Future Directions.pdf:application/pdf}
 }
 
-@article{placeholder2025b,
-  author   = {【占位：作者】},
-  title    = {【占位：中文论文题目】},
-  journal  = {【占位：期刊名】},
-  year     = {2025},
-  volume   = {0},
-  number   = {0},
-  pages    = {0--0},
+
+@article{zhang_survey_2026,
+  title        = {A Survey on Task Allocation Methods of Heterogeneous {UAV} Swarms},
+  issn         = {2949-7159},
+  url          = {https://www.sciencedirect.com/science/article/pii/S2949715926000879},
+  doi          = {10.1016/j.jiixd.2026.08.005},
+  abstract     = {Unmanned aerial vehicle ({UAV}) swarms have evolved from single-platform operations to heterogeneous collaborative systems, significantly enhancing mission capabilities in complex environments. This survey provides a comprehensive review of task allocation methods for heterogeneous {UAV} swarms, addressing static, dynamic, and cross-domain scenarios involving diverse unmanned platforms such as ground and surface vehicles. We establish a standardized modeling framework that formally defines {UAV} attributes, task specifications, environmental constraints, and typical objective functions. The surveyed algorithms are taxonomically classified into six categories, i.e., classical optimization, intelligent optimization, market-based, clustering-based, learning-based, and game-theory-based methods, and are critically evaluated across multiple dimensions such as optimality, scalability, computational efficiency, and so on. Beyond qualitative assessment, we extract and aggregate quantitative performance metrics from the literature to offer a benchmark-oriented analysis that guides practical algorithm selection. We further identify key future research directions, including ultra-large-scale swarm scalability, robust decision-making under uncertainty, field validation through hardware-in-the-loop and real-world testing, as well as the integration of emerging technologies such as large language models, reconfigurable intelligent surfaces, and semantic communication. By synthesizing the state of the art and outlining open challenges, this survey serves as a foundational reference for researchers and practitioners in autonomous swarm systems.},
+  journaltitle = {Journal of Information and Intelligence},
+  author       = {Zhang, Yan and Du, Guangxun and Luo, Feng and Liang, Yueqian},
+  date         = {2026},
+  keywords     = {Cross-domain coordination, Heterogeneous {UAV} swarms, Learning-based methods, Market-based mechanisms, Optimization, Swarm intelligence, Task allocation}
 }
 
-@book{placeholder2024book,
-  author    = {【占位：作者】},
-  title     = {【占位：书名】},
-  publisher = {【占位：出版社】},
-  address   = {【占位：出版地】},
-  year      = {2024},
+
+@article{pu_dynamic_2026,
+  title        = {Dynamic task allocation for multi-{UAVs} in disaster scenarios: A novel two-level optimization method with forecasting},
+  volume       = {172},
+  issn         = {1270-9638},
+  url          = {https://www.sciencedirect.com/science/article/pii/S1270963826000921},
+  doi          = {https://doi.org/10.1016/j.ast.2026.111711},
+  abstract     = {In disaster relief operations, unmanned aerial vehicles ({UAVs}) play a critical role in tasks such as search and rescue, material delivery, and monitoring, significantly improving rescue efficiency. However, the large-scale, dynamic, and diverse nature of these tasks poses substantial challenges to task allocation, as traditional methods often suffer from limited accuracy and slow response times. This study proposes a novel two-level task allocation mechanism that integrates a three-dimensional self-organizing map (3D-{SOM}) for initial task clustering and an auction-based optimization algorithm for refined allocation. Additionally, this research introduces a radial basis function multi-kernel extreme learning machine ({RBF}-{MKELM}), which achieves high-precision prediction of supply and demand changes even with limited data. Experimental results demonstrate that the proposed method outperforms nine benchmark algorithms, achieving an average performance improvement of 34.5\% in single-type task scenarios and 33.9\% in multi-type task scenarios. Compared to five other time-series forecasting models, the {RBF}-{MKELM} model improves prediction accuracy by 48.6\%, highlighting its robustness in data-scarce environments. Simulation validations confirm the framework’s effectiveness in dynamic task reallocation for large-scale disaster scenarios, providing a scalable and practical solution for {UAV} swarm operations.},
+  pages        = {111711},
+  journaltitle = {Aerospace Science and Technology},
+  author       = {Pu, Quancheng and Yang, Lu and Li, Tieshan},
+  date         = {2026},
+  keywords     = {3D-{SOM}, {RBF}-{MKELM}, Task allocation, Temporal forecasting, {UAV} swarm}
 }
 
-@inproceedings{placeholder2024conf,
-  author    = {【占位：作者】},
-  title     = {【占位：会议论文题目】},
-  booktitle = {【占位：会议论文集名】},
-  year      = {2024},
-  pages     = {0--0},
+@article{wang2024review,
+  author       = {Wang, J. F. and Jia, G. W. and Guo, Z. and others},
+  title        = {Review of Research on Multi-{UAV} Collaborative Mission Planning Method},
+  journaltitle = {Systems Engineering and Electronics},
+  date         = {2024},
+  volume       = {46},
+  number       = {10},
+  pages        = {3437--3450},
+  language     = {english}
 }
+
+
+@article{baig2026sar,
+  author       = {Qamar, Rahim Ali and Sarfraz, Mubashar and Ghauri, Sajjad Ahmed and Baig, Nauman Anwar and Sohail, Muhammad Farhan},
+  title        = {Optimizing the dynamic task allocation for multi-{UAV} systems in a search and rescue scenario},
+  journaltitle = {Cluster Computing},
+  date         = {2026},
+  volume       = {29},
+  number       = {6},
+  pages        = {351},
+  doi          = {10.1007/s10586-026-06148-z},
+  langid       = {english}
+}
+
+
+@article{liu2024dawn,
+  author       = {Liu, Daqian and Fei, Bowen and Bao, Weidong and Zhu, Xiaomin and Li, Xiaoqing},
+  title        = {{DAWN}: Dynamic Task Planning of Multi-{UAV} With Two-Layer Optimization Mechanism in Uncertain Environments},
+  journaltitle = {IEEE Internet of Things Journal},
+  date         = {2024},
+  volume       = {11},
+  number       = {23},
+  pages        = {37813--37830},
+  doi          = {10.1109/JIOT.2024.3440017},
+  langid       = {english}
+}
+
+
+@article{hu2023survey,
+  author       = {Hu, Jiawei and Jia, Zequn and Sun, Yantao and Liu, Qiang},
+  title        = {多约束条件下多无人机协同任务规划问题分析及求解方法综述},
+  journaltitle = {计算机科学},
+  date         = {2023},
+  volume       = {50},
+  number       = {7},
+  pages        = {176--193},
+  doi          = {10.11896/jsjkx.220700066},
+  langid       = {chinese}
+}
+
+
+@article{zhao2017dmde,
+  author       = {Zhao, Ming and Zhao, Lingling and Su, Xiaohong and Ma, Peijun and Zhang, Yanhang},
+  title        = {Improved discrete mapping differential evolution for multi-unmanned aerial vehicles cooperative multi-targets assignment under unified model},
+  journaltitle = {International Journal of Machine Learning and Cybernetics},
+  date         = {2017},
+  volume       = {8},
+  pages        = {765--780},
+  doi          = {10.1007/s13042-015-0364-3},
+  langid       = {english}
+}
+
+
+@inproceedings{wang2023defl,
+  author    = {Wang, Na and Xu, Qingzheng and Liao, Feifan and Zhao, Weihu and Zhao, Zhiyuan and Wang, Lei},
+  title     = {A Differential Evolution for Task Allocation for Multi-{UAV}s with No-Fly Zone},
+  booktitle = {2023 7th Asian Conference on Artificial Intelligence Technology (ACAIT)},
+  date      = {2023},
+  doi       = {10.1109/ACAIT60137.2023.10528614},
+  langid    = {english}
+}
+
+
+
+
+@article{han2025apso,
+  author       = {Han, Zhen and Guo, Weian},
+  title        = {Dynamic {UAV} Task Allocation and Path Planning with Energy Management Using Adaptive {PSO} in Rolling Horizon Framework},
+  journaltitle = {Applied Sciences},
+  date         = {2025},
+  volume       = {15},
+  number       = {8},
+  pages        = {4220},
+  doi          = {10.3390/app15084220},
+  langid       = {english}
+}
+
+
+@article{choi2009cbaa,
+  author       = {Choi, Han-Lim and Brunet, Luc and How, Jonathan P.},
+  title        = {Consensus-Based Decentralized Auctions for Robust Task Allocation},
+  journaltitle = {IEEE Transactions on Robotics},
+  date         = {2009},
+  volume       = {25},
+  number       = {4},
+  pages        = {912--926},
+  doi          = {10.1109/TRO.2009.2022423},
+  langid       = {english}
+}
+
+
+@article{zhu2021qlearn,
+  author       = {Zhu, Pengxing and Fang, Xi},
+  title        = {Multi-{UAV} Cooperative Task Assignment Based on Half Random {Q-Learning}},
+  journaltitle = {Symmetry},
+  date         = {2021},
+  volume       = {13},
+  number       = {12},
+  pages        = {2417},
+  doi          = {10.3390/sym13122417},
+  langid       = {english}
+}
+
+

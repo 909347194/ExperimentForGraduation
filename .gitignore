@@ -25,6 +25,8 @@ task_allocation/data/shp/
 *.xdv
 *.out
 *.toc
+*.bbl
+*.blg
 __pycache__/
 *.py[cod]
 .workbuddy/
