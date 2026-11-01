@@ -34,3 +34,23 @@ __pycache__/
 
 # OpenClaw 本地备份/临时（不入库）
 .openclaw/
+
+# ─────────────────────────────────────────────────────────────
+# 大体积二进制：超出合理体积，不入库（均可由代码重跑 / 外部数据源重生成）
+# ─────────────────────────────────────────────────────────────
+
+# 交互式 plotly 图（单个可达 ~29MB，且历史多次提交已造成 .git 严重膨胀）
+# 与 task_allocation 约定一致：实验结果产物不跟踪、可由代码重生成
+path_planning/experiments/**/results*
+
+# 论文参考文献 PDF（paper/reference，合计 ~39MB；如需版本化参考文献可删除本行）
+paper/reference/**/*.pdf
+
+# 建筑矢量数据（.dbf/.shp）+ DEM（与 path_planning 约定一致：原始数据走外部源，不入库）
+# 注：忽略后全新 clone 需从外部数据源补全 building/ 与 DEM，代码方能跑
+task_allocation/data/**/building/
+task_allocation/data/**/*.tif
+task_allocation/data/*.tif
+
+# 其他实验产物（动画等）
+path_planning/experiments/**/*.gif
