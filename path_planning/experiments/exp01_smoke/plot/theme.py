@@ -38,6 +38,7 @@ __all__ = [
     "plt",
     "CJK_FONTS",
     "PALETTE",
+    "OD_CYCLE",
     "MONO_ZH",
     "FIG_SINGLE",
     "FIG_WIDE",
@@ -69,7 +70,7 @@ MONO_ZH = (
 PALETTE = {
     "building": "#d0d0d0",     # 建筑轮廓填充
     "building_edge": "#8a8a8a",
-    "control": "#2b7bba",      # 控制点
+    "node": "#2b7bba",         # 可见性图节点（可视点）；旧名 "control" 属已弃用控制网络术语
     "route": "#9a9a9a",        # route 走廊（虚线）
     "path": "#1f77b4",         # path 平滑曲线（实线）
     "origin": "#2ca02c",       # 起点
@@ -78,6 +79,14 @@ PALETTE = {
     "nofly_stat": "#b30000",   # 静态禁飞区
     "crop": "#0050ff",         # 裁剪活跃窗口
 }
+
+#: 多 OD 同图时的区分色环（色盲友好；与 path 主色同族但可辨）。
+#: 用于 overview / full_city 这类"多条 OD 并排、颜色必须表达 OD 身份"的图；
+#: trajectory 图颜色让给时间维，不用本环。
+OD_CYCLE = (
+    "#1f77b4", "#d1495b", "#2ca02c", "#ff7f0e",
+    "#9467bd", "#8c564b", "#17becf", "#bcbd22",
+)
 
 #: 版面尺寸（in）
 FIG_SINGLE = (5.9, 5.9)

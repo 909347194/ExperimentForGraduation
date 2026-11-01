@@ -3,9 +3,10 @@
 
 职责：定义全模块共享的名词，与论文术语一一对应：
 
-    route       控制网络上的连续虚拟链路序列（可行"走廊"）  —— Lin2021 Fig.1(a)
-    path        路径平滑后的三维空间几何曲线                —— Lin2021 Fig.1(b)
-    trajectory  带时间维的时空轨迹（位置/速度/加速度）       —— Lin2021 Fig.1(c)
+    route       可见性图节点折线走廊（纯几何可行通道）        —— 本研究交付物之一
+    path        平滑后的三维空间几何曲线（route 的平滑版）    —— 本研究**主交付物**
+    trajectory  仅匀速 ETA 占位（位置+时间，用于可视化时间色标）；
+                非 claimed 时间最优轨迹，time-optimal 轨迹生成不在本研究范围（交下游飞控）
 
 已定义类型：
 
@@ -209,8 +210,9 @@ class ExpandedNetwork:
 
 @dataclass
 class Route:
-    nodes: list[int]  # 虚拟节点 id 序列
-    points: list[int]  # 控制点序号序列
+    nodes: list[int]  # 图节点 id 序列（可见性图：图节点下标）
+    points: list[int]  # 图节点序号序列（同 nodes，保留以兼容控制网络字段名）
+    pts: list = field(default_factory=list)  # 走廊世界坐标折线 [(x,y,z), ...]（与 nodes 一一对应）
     time: float = 0.0
     dist: float = 0.0
 
@@ -251,11 +253,11 @@ class ODRequest:
 
 @dataclass
 class PlanResult:
-    route: Optional[Route] = None
-    path: Optional[Path] = None
-    trajectory: Optional[Trajectory] = None
-    total_time: float = float("inf")
-    total_tpr: float = 0.0  # λ_r = 0（槽位保留）
+    route: Optional[Route] = None          # 节点折线走廊（纯几何）
+    path: Optional[Path] = None            # 平滑曲线，本研究主交付物（纯几何）
+    trajectory: Optional[Trajectory] = None  # 匀速 ETA 占位，仅可视化辅助；非 claimed 轨迹
+    total_time: float = float("inf")       # 取自匀速 ETA，仅供估算
+    total_tpr: float = 0.0  # λ_r = 0（TPR 槽位保留，代码侧未实现）
     feasible: bool = False
     infeasible_reason: Optional[InfeasibilityReason] = None
     level: str = ""  # L1 / L2 / L2.5 / L4

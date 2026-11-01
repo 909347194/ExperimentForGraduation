@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""L3 对外契约层：TrajectoryPlanner 门面 + 事件/反馈协议。
+"""L3 对外契约层：PathPlanner 门面 + 事件/反馈协议。
 
 约定：
 1. 上层任务分配（task_allocation/）与根 closed_loop/ 只经本层交互，
@@ -10,3 +10,27 @@
    定义（下层产物归 path_planning，上层产物归 task_allocation），
    closed_loop/protocol 只引用、不重复定义，杜绝反向依赖。
 """
+
+from __future__ import annotations
+
+from path_planning.interface.planner import PathPlanner
+from path_planning.common.types import (
+    ODRequest,
+    PlanResult,
+    InfeasibilityReason,
+    CostUpdate,
+    Route,
+    Path as PathResult,
+    Trajectory,
+)
+
+__all__ = [
+    "PathPlanner",
+    "ODRequest",
+    "PlanResult",
+    "InfeasibilityReason",
+    "CostUpdate",
+    "Route",
+    "PathResult",
+    "Trajectory",
+]

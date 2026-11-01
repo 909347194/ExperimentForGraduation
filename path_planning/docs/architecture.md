@@ -10,15 +10,14 @@
 │   expNN_xxx/：run.py 只做编排；config / metrics / plot 分离          │
 ├────────────────────────────────────────────────────────────────────┤
 │ interface/     L3 对外契约层                                        │
-│   planner.py（TrajectoryPlanner 门面） · feedback.py（事件/反馈）    │
+│   planner.py（PathPlanner 门面） · feedback.py（事件/反馈）    │
 ├───────────────────────────────┬────────────────────────────────────┤
 │ methods/        L2 算法层     │ baselines/    对照层（独立注册）     │
 │   tpr/（第三方风险）          │   registry / lin_original /         │
 │   control_network_planning/   │   euclidean_cost                    │
-│     (constraints/cost/       │   （只依赖 L0/L1，不碰 methods/）   │
-│      offline/online/)         │                                     │
+│     (已弃用/存档·非交付路径)  │   （只依赖 L0/L1，不碰 methods/）   │
 │   visibility_graph/          │                                     │
-│     (仅几何约束·放弃TPR)      │                                     │
+│     (第4章正文方法·已验证)    │                                     │
 ├───────────────────────────────┴────────────────────────────────────┤
 │ utils/         L1 通用工具层：geometry / math3d（纯函数）            │
 ├────────────────────────────────────────────────────────────────────┤
@@ -27,7 +26,7 @@
   data/（数据资产） · tests/（测试） · docs/（文档）—— 不在依赖链上
 ```
 
-`methods/control_network_planning/` 包内再分一层：
+`methods/control_network_planning/` 包内再分一层（**已弃用/存档，详见 module_map §2.4–§2.7**）：
 
 ```text
         constraints/   cost/        ← 共用模型层（offline/online 都依赖）
@@ -56,7 +55,7 @@
 
 ## 3. 三条数据流
 
-### 3.1 离线预处理流（不依赖任务，只执行一次）
+### 3.1 离线预处理流（不依赖任务，只执行一次）【已弃用/存档，属 control_network_planning，非第4章交付路径】
 
 ```text
 data/raw ─► common/scenario ─► offline/control_points ─► offline/link_builder
@@ -67,7 +66,7 @@ data/raw ─► common/scenario ─► offline/control_points ─► offline/lin
         4 对虚拟连线）               昼/夜 TPR 回填）          含参数指纹）
 ```
 
-### 3.2 在线规划流（每 OD 一次，实时）
+### 3.2 在线规划流（每 OD 一次，实时）【已弃用/存档，属 control_network_planning，非第4章交付路径】
 
 ```text
 ODRequest + 动态临时禁飞 ─► online/dynamic_prune ─► online/route_search
@@ -88,7 +87,7 @@ PlanResult ─► interface/feedback.detect_events
    ─► 新 OD 集合 ─► 回到 3.2
 ```
 
-### 3.4 可见性图流（visibility_graph，替代方案，仅几何约束）
+### 3.4 可见性图流（visibility_graph，第 4 章正文方法，仅几何约束）
 
 ```text
 data/raw ─► common/scenario ─► obstacles.SimplifiedObstacles（建筑外扩+简化+STRtree）
@@ -141,6 +140,8 @@ OD + depart_time ─► plan（端点吸附+增边）─► search.shortest_path
 | 文档即口径 | 与第 3 章 `Chapter3_README.md` 一样，实现落地后 README/模块 docstring 必须与代码逐条对齐 |
 
 ## 6. 目录 ↔ 论文/README 映射
+
+> 下表前 13 行（Lin2021 / `control_network_planning` 相关）属**已弃用/存档**方法；可见性图条目为第 4 章正文方法。
 
 | 论文/README 小节 | 目录 |
 |------------------|------|

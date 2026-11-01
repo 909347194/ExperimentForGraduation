@@ -11,6 +11,8 @@
 
 from __future__ import annotations
 
+import os
+
 from .registry import FIGURES, Figure, PlotContext, figure_ids, resolve
 from .theme import setup_style
 
@@ -21,6 +23,7 @@ __all__ = ["FIGURES", "Figure", "PlotContext", "figure_ids", "resolve",
 def make_plots(ctx: PlotContext, out_dir: str, only: tuple[str, ...] = ()) -> list[str]:
     """按 registry 逐图绘制并落盘，返回产物路径列表。"""
     setup_style()
+    os.makedirs(out_dir, exist_ok=True)
     saved: list[str] = []
     for fig in FIGURES:
         if only and fig.id not in only:

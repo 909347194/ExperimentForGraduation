@@ -18,7 +18,7 @@
 from __future__ import annotations
 
 import time
-from typing import Optional, Sequence
+from typing import Sequence
 
 import numpy as np
 from shapely.geometry import LineString, Polygon, box

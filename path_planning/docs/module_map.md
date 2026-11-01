@@ -2,9 +2,9 @@
 
 > 逐模块的职责、输入→输出、边界与论文章节映射。分层与依赖规则见 [architecture.md](architecture.md)。
 > 禁飞区时空扩展的算法设计（阶段一：可行性约束，TPR 权重 0）见 [design_nofly_zones.md](design_nofly_zones.md)。
-> 本模块地图覆盖两类已着手实现的方法：`control_network_planning/`（第 4 章正文方法，含 TPR 与闭环）
-> 与 `visibility_graph/`（放弃 TPR、仅几何约束的替代性预研，由 exp02_vg 验证）。文件 docstring 以代码为准；
-> 若拆分有变，先改本文再动代码。
+> 本模块地图覆盖两类方法：`visibility_graph/`（**第 4 章正文方法，已验证**，放弃 TPR、仅几何约束，由 exp02_vg 验证）
+> 与 `control_network_planning/`（**已弃用/存档，非交付路径**，2026-10-30 裁定：其"重"设计从未被实验验证，空桩不补全，仅作对比参考）。
+> 文件 docstring 以代码为准；若拆分有变，先改本文再动代码。
 
 ## 1. 拆分原则
 
@@ -38,13 +38,19 @@
 
 ### 2.3 methods/tpr/（L2 第三方地面风险）
 
+> **用户裁定（2026-10-30）：TPR 暂不实现。** 当前本包只有 `__init__.py`（`tpr_enabled()` 恒 False、
+> `LAMBDA_R = 0.0`），下表三个文件**尚未创建**，属保留槽位——论文第 4 章保留 TPR 章节位置，代码侧不做。
+> 勿将其当作待修缺陷；若将来启用，再在本包内补全三部分。
+
 | 文件 | 职责 | 输入 → 输出 | 不负责 | 映射 |
 |------|------|-------------|--------|------|
 | `crash_model.py` | 坠毁概率 | 弧段+飞行状态 → p_crash | 暴露/时变 | README §4.3.2 |
 | `ground_exposure.py` | 地面暴露人口/财产 | 链路+人口栅格 → E | 时变切换 | README §4.3.2 |
 | `risk_field.py` | 昼/夜时变风险场、链路 TPR 预计算/查询 | (p_crash, E) → TPR(link) | 加权合成 | README §4.3.2 |
 
-### 2.4 methods/control_network_planning/constraints/（L2 约束模型）
+> **⚠️ 弃用提示（2026-10-30 裁定）**：§2.4–§2.7 描述的 `control_network_planning` 各模块**已从第 4 章交付路径移除**，降为存档/对比参考。其空桩（`composite` / `cost_matrix` / `time_optimal` / `interface` 全为 9–11 行空桩、0 个函数）**不再补全**。第 4 章正文方法见 §2.10 可见性图。
+
+### 2.4 methods/control_network_planning/constraints/（L2 约束模型，已弃用）
 
 | 文件 | 职责 | 输入 → 输出 | 不负责 | 映射 |
 |------|------|-------------|--------|------|
@@ -57,7 +63,7 @@
 | 文件 | 职责 | 输入 → 输出 | 不负责 | 映射 |
 |------|------|-------------|--------|------|
 | `link_cost.py` | 4 种虚拟链路情形最小飞行时间（Eq.1-4），含动力学加减速与限速 | VirtualLink → time | TPR、加权 | Lin2021 §2.2.2 |
-| `composite.py` | 时间-风险加权综合代价 | (time, TPR, λ) → cost | 分量计算 | README §4.3.3 |
+| `composite.py` | 时间-风险加权综合代价 **（暂不实现：TPR 暂不做 ⇒ λ_r=0，目标退化为纯飞行时间；当前无调用方）** | (time, TPR, λ) → cost | 分量计算 | README §4.3.3 |
 | `cost_matrix.py` | C(i,j,k) 结构、fill/update（不可行 → ∞+原因） | 组合 → 代价 | 事件判定 | README §4.4.1 |
 
 ### 2.6 methods/control_network_planning/offline/（L2 离线线）
@@ -87,7 +93,7 @@
 
 | 文件 | 职责 | 输入 → 输出 | 不负责 | 映射 |
 |------|------|-------------|--------|------|
-| `planner.py` | TrajectoryPlanner 门面：plan / update_dynamic_nofly / build_cost_matrix / update_cost_matrix | OD → PlanResult、组合 → C(i,j,k) | 重调度 | README §4.4 |
+| `planner.py` | PathPlanner 门面（路径规划器，交付物 path）：plan / update_dynamic_nofly / build_cost_matrix / update_cost_matrix | OD → PlanResult（route+path）、组合 → C(i,j,k) | 重调度 | README §4.4 |
 | `feedback.py` | 事件检测 + 反馈组装（真实代价 / ∞+原因） | PlanResult → TriggerEvent/CostUpdate | 上层策略 | README §4.4.2-4.4.3 |
 
 ### 2.9 baselines/（对照）
@@ -98,10 +104,10 @@
 | `lin_original.py` | Lin2021 原始基线（仅建筑+仅时间） | OD → PlanResult | 本章改进项 | README §4.2 |
 | `euclidean_cost.py` | 欧氏距离代价预估（开环对照口径） | OD → 估价 | 真实规划 | README §4.5.4 |
 
-### 2.10 methods/visibility_graph/（L2 可见性图/稀疏路图规划器，替代方案）
+### 2.10 methods/visibility_graph/（L2 可见性图/稀疏路图规划器，第 4 章正文方法，已验证）
 
-> 与控制网络方法**相互独立、不共享代码**：仅依赖 common/scenario 与 utils/geometry。放弃 TPR，
-> 仅用几何约束（建筑 + 禁飞区）；动态禁飞按**选项 A** 在查询期按时间窗检查（图只建一次、长期复用）。由 exp02_vg 验证。
+> **第 4 章当前交付方法**（2026-10-30 裁定）。与控制网络方法**相互独立、不共享代码**：仅依赖 common/scenario 与 utils/geometry。放弃 TPR，
+> 仅用几何约束（建筑 + 禁飞区）；动态禁飞按**选项 A** 在查询期按时间窗检查（图只建一次、长期复用）。由 exp02_vg 验证（节点 1397、删边 65.2%、ON/OFF 8/8 可达、审计全清、膨胀 10.35%±9.35%）。
 
 | 文件 | 职责 | 输入 → 输出 | 不负责 | 映射 |
 |------|------|-------------|--------|------|
@@ -110,9 +116,13 @@
 | `nodes.py` | 节点生成（轮廓采样 + 离散高度层 + 网格骨干 + 预算填充，剔除障碍/禁飞内落点） | env/params/障碍 → (nodes, meta, stats) | 边/搜索 | exp02_vg |
 | `edges.py` | 边连接（网格哈希邻域 + LOS + 离线碰撞 + 机动保护区 prune + 竖向边） | nodes/障碍/参数 → 邻接表 | 搜索 | exp02_vg |
 | `search.py` | 堆优化 Dijkstra/A*（三维欧氏代价，支持动态时间窗门） | 邻接表/节点/起终点 → 路径/代价 | 图构建 | exp02_vg |
-| `pipeline.py` | `VisibilityGraph` 门面：`build_visibility_graph` / `plan(origin, dest, depart_time)` | env/params → 图；OD → poly/cost | 场景解析 | exp02_vg |
+| `smoothing.py` | 折线 → 平滑曲线（先简后繁）：Chaikin 圆角 / Catmull-Rom 样条 + 基于 SimplifiedObstacles/NoFlyField 的碰撞复核；侵入则回退原始折线 | route 折线 → path（纯几何） | 最优控制 | exp02_vg / exp01_smoke/full_city |
+| `trajectory.py` | **ETA 辅助**（非 claimed 轨迹生成）：path 采样点 → 匀速时间占位 Trajectory(pts,times,speeds)，每段弧长/巡航速度=时间，times 从 t_dep 累计。仅供可视化时间色标 | path 采样点 → Trajectory(pts,times,speeds) | time-optimal 轨迹生成不在本研究范围（交下游飞控） | exp02_vg / exp01_smoke/full_city |
+| `pipeline.py` | `VisibilityGraph` 门面：`build_visibility_graph` / `plan(origin, dest, depart_time)` → **PlanResult**（route + path 为交付物；trajectory 仅匀速 ETA 辅助） | env/params → 图；OD → PlanResult | 场景解析 | exp02_vg / interface/PathPlanner |
 
 ## 3. 关键接口契约（实现时按此签名，改动先改本文）
+
+> 契约与具体方法无关；`PathPlanner` 门面**已实现于 `interface/planner.py`，底层为 `visibility_graph`（§2.10）**，`control_network_planning` 的对应实现已弃用。B 收口已完成：平滑（smoothing.py）/ 匀速 ETA 辅助（trajectory.py，仅可视化用）/ PlanResult（pipeline.plan 返回 path 为主）/ PathPlanner 闭环门面（interface/planner.py）均落地，exp01_smoke/full_city 已用新 API 跑通全城 3-OD。本方法是**路径规划器**，不生成时间最优轨迹。
 
 ```python
 # offline/pipeline.py
@@ -123,7 +133,7 @@ def plan_od(net: ExpandedNetwork, od: ODRequest,
             dyn_nofly: DynamicNoFlyView, cfg: OnlineConfig) -> PlanResult
 
 # interface/planner.py
-class TrajectoryPlanner:
+class PathPlanner:
     def __init__(self, network_path: str, cfg: Config): ...
     def plan(self, od: ODRequest, dynamic_nofly=None) -> PlanResult: ...
     def update_dynamic_nofly(self, zones) -> None: ...
@@ -148,11 +158,13 @@ class CollisionQuery:
 
 ## 4. 实验映射（README §4.5）
 
+> **方法归属**：`exp01_smoke` / `exp02_ablation` / `exp03_sensitivity` 属已弃用的控制网络方法（存档）；`exp02_vg` 是第 4 章正文方法（可见性图）的验证；`exp04_closed_loop` / `exp05_joint_sim` 为方法无关的闭环/联合仿真（经 `interface/PathPlanner` 对接，现基于可见性图）。
+
 | 实验目录 | 论文小节 | 依赖模块 | 对照臂 |
 |----------|----------|----------|--------|
-| `exp01_smoke` | —（冒烟） | 全链路最小配置 | — |
+| `exp01_smoke` | —（冒烟，**已弃用/存档**，属控制网络方法） | 全链路最小配置 | — |
 | `exp02_ablation` | §4.5.2 消融 | online 全链 + tpr | 完整 vs 去禁飞/去 TPR/去二次校验 vs lin_original |
 | `exp03_sensitivity` | §4.5.2 灵敏度 | offline 全链 | d3 / d* / d1 / λ / 阈值扫描 |
 | `exp04_closed_loop` | §4.5.3 闭环验证 | interface + task_allocation/rolling + 根 closed_loop | 闭环 vs 开环 |
 | `exp05_joint_sim` | §4.5.4 联合仿真 | 全部 | 闭环真实代价 vs 欧氏预估开环 |
-| `exp02_vg` | （可见性图替代方案验证，非 §4.5.2 消融） | methods/visibility_graph + common/scenario | 固定节点集 保护区开/关 + 直线基线 + 独立碰撞审计 + 动态时间窗演示 |
+| `exp02_vg` | （**第 4 章正文方法验证**） | methods/visibility_graph + common/scenario | 固定节点集 保护区开/关 + 直线基线 + 独立碰撞审计 + 动态时间窗演示 |

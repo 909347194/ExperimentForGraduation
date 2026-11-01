@@ -22,7 +22,7 @@ import numpy as np
 from shapely.geometry import box
 from shapely.strtree import STRtree
 
-from path_planning.common.types import DynamicNoFly, Period, StaticNoFly
+from path_planning.common.types import DynamicNoFly, StaticNoFly
 from path_planning.utils.geometry import segment_prism_hit
 
 

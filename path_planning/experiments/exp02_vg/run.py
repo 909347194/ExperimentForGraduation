@@ -29,7 +29,7 @@ _REPO = os.path.abspath(os.path.join(_ROOT, ".."))        # 仓库根（导入�
 if _REPO not in sys.path:
     sys.path.insert(0, _REPO)
 
-from path_planning.common.config import Config, load_config  # noqa: E402
+from path_planning.common.config import load_config  # noqa: E402
 from path_planning.common.scenario import (  # noqa: E402
     load_scenario,
     load_dynamic_nofly,
@@ -201,8 +201,14 @@ def dynamic_demo(graph, env, query, audit_step):
 
     t_active = 50.0   # 落在 [0,300) 内 → 动态区生效
     t_idle = 500.0    # 落在生效窗之后 → 动态区不活跃
-    p_a, r_a, c_a = graph.plan(o, d, depart_time=t_active)
-    p_i, r_i, c_i = graph.plan(o, d, depart_time=t_idle)
+    res_a = graph.plan(o, d, depart_time=t_active, smooth=False)
+    res_i = graph.plan(o, d, depart_time=t_idle, smooth=False)
+    p_a = res_a.path.pts if res_a.path else None
+    p_i = res_i.path.pts if res_i.path else None
+    r_a = res_a.infeasible_reason.name if not res_a.feasible else "ok"
+    r_i = res_i.infeasible_reason.name if not res_i.feasible else "ok"
+    c_a = res_a.route.dist if res_a.route else float("inf")
+    c_i = res_i.route.dist if res_i.route else float("inf")
     return {
         "zone_id": "SYN_DEMO",
         "zone_center_local_m": [round(cx, 1), round(cy, 1)],
@@ -303,8 +309,14 @@ def main() -> int:
 
     recs = []
     for i, (o, d) in enumerate(ods):
-        poly_on, reason_on, cost_on = graph_on.plan(o, d, depart_time=depart_time)
-        poly_off, reason_off, cost_off = graph_off.plan(o, d, depart_time=depart_time)
+        res_on = graph_on.plan(o, d, depart_time=depart_time, smooth=False)
+        res_off = graph_off.plan(o, d, depart_time=depart_time, smooth=False)
+        poly_on = res_on.path.pts if res_on.path else None
+        poly_off = res_off.path.pts if res_off.path else None
+        reason_on = res_on.infeasible_reason.name if not res_on.feasible else "ok"
+        reason_off = res_off.infeasible_reason.name if not res_off.feasible else "ok"
+        cost_on = res_on.route.dist if res_on.route else float("inf")
+        cost_off = res_off.route.dist if res_off.route else float("inf")
         L, blocked = straight_line(env, o, d, audit_q)
         rec = {
             "od": i,

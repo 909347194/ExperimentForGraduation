@@ -14,7 +14,6 @@ PlanResult 聚合：route / path / trajectory、总飞行时间、可行性标�
 from __future__ import annotations
 
 import time
-from typing import Optional
 
 import numpy as np
 

@@ -48,8 +48,21 @@ class VisibilityGraphParams:
 
     @classmethod
     def from_dict(cls, d: Optional[dict] = None) -> "VisibilityGraphParams":
+        """从配置字典构造。
+
+        未知键**直接抛错**而非静默丢弃：键名拼错、或嵌套层级写错（如把
+        `selection.marginal.max_ratio` 写成平铺 `selection.max_ratio`）时，静默过滤会
+        退回默认值且毫无提示，导致"以为改了参数、其实没生效"——历史上由此得出过错误结论。
+        宁可启动即失败，也不要静默用默认值跑完。
+        """
         d = d or {}
-        return cls(**{k: v for k, v in d.items() if k in cls.__dataclass_fields__})
+        unknown = sorted(k for k in d if k not in cls.__dataclass_fields__)
+        if unknown:
+            raise ValueError(
+                f"VisibilityGraphParams 收到未知配置键 {unknown}。"
+                f"可用键：{sorted(cls.__dataclass_fields__)}"
+            )
+        return cls(**d)
 
     def to_dict(self) -> dict:
         out = {}

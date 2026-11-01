@@ -10,7 +10,9 @@
 用法：
     from path_planning.methods.visibility_graph import build_visibility_graph, VisibilityGraphParams
     graph, stats = build_visibility_graph(env, params, extra_points=ods)
-    poly, reason, cost = graph.plan(origin, dest)
+    res = graph.plan(origin, dest)          # -> PlanResult(route/path/trajectory/feasible/...)
+    poly = res.path.pts if res.path else None
+    cost = res.route.dist if res.route else float("inf")
 """
 
 from __future__ import annotations
@@ -20,6 +22,8 @@ from .obstacles import NoFlyField, SimplifiedObstacles
 from .nodes import generate_nodes
 from .edges import build_edges
 from .search import shortest_path
+from .smoothing import smooth_polyline, chaikin, catmull_rom, recheck
+from .trajectory import make_trajectory
 from .pipeline import VisibilityGraph, build_visibility_graph
 
 __all__ = [
@@ -29,6 +33,11 @@ __all__ = [
     "generate_nodes",
     "build_edges",
     "shortest_path",
+    "smooth_polyline",
+    "chaikin",
+    "catmull_rom",
+    "recheck",
+    "make_trajectory",
     "VisibilityGraph",
     "build_visibility_graph",
 ]

@@ -29,7 +29,7 @@ class PlotContext:
     Attributes:
         env:         裁剪后的 CityEnvironment（活跃窗口）
         env_full:    全量 CityEnvironment（区域总览背景）
-        net:         扩展控制网络
+        graph:       已建好的可见性图（VisibilityGraph；overview/scene_3d 画节点用）
         results:     metrics.od_results 的记录列表（dict）
         planned:     [(origin, dest, PlanResult)]，side_view 需要完整 path.pts
         scenario_dir: 场景目录（region.geojson 定位用）
@@ -37,7 +37,7 @@ class PlotContext:
 
     env: Any
     env_full: Any
-    net: Any
+    graph: Any
     results: Sequence[dict]
     planned: Sequence[tuple]
     scenario_dir: str
@@ -82,22 +82,22 @@ FIGURES: tuple[Figure, ...] = (
     Figure(
         id="scene_3d",
         group="overview",
-        title="三维场景：建筑棱柱 + 禁飞区棱柱 + 3D 轨迹（plotly 交互式）",
-        source="env.buildings(棱柱) + 静/动态禁飞(0→120m 示意) + planned[].path.pts/route.points",
+        title="三维场景：建筑棱柱 + 禁飞区棱柱 + 3D 轨迹（静态 PNG + 交互 HTML）",
+        source="env.buildings(棱柱,按高着色) + 静/动态禁飞(0→120m 示意) + planned[].path.pts/route.points",
         func=plot_scene_3d,
     ),
     Figure(
         id="overview",
         group="overview",
-        title="场景俯视：建筑 / 控制点 / 规划路径",
-        source="env.buildings + net.points + od_results[].path_xy",
+        title="场景俯视：建筑 / 可见性图节点 / 规划路径",
+        source="env.buildings + graph.nodes + od_results[].path_xy",
         func=plot_overview,
     ),
     # ── ② process：route / path / trajectory 与剖面 ──────────
     Figure(
         id="route_vs_path",
         group="process",
-        title="route（虚线=控制点走廊） vs path（实线=Dubins 平滑曲线）",
+        title="route（虚线=图节点走廊） vs path（实线=Chaikin/Catmull-Rom 平滑）",
         source="od_results[].route_control_points + path_xy",
         func=plot_route_vs_path,
     ),

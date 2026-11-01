@@ -10,9 +10,9 @@
 
 route / path / trajectory 三者定义（``DEFINITIONS``，随产物落盘自解释）：
 
-    route      控制网络上的虚拟链路序列（走廊），仅几何、无平滑   Lin2021 Fig.1(a)
-    path       Dubins 平滑后的三维空间曲线，仅几何、无时间        Lin2021 Fig.1(b)
-    trajectory path + 时间参数化（当前匀速占位，time_optimal 待实现）Lin2021 Fig.1(c)
+    route      可见性图上的节点折线走廊（几何、无平滑，世界坐标）   第 4 章方法
+    path       走廊经 Chaikin/Catmull-Rom 圆角平滑后的空间曲线（仅几何、无时间）
+    trajectory path + 匀速时间占位（当前为匀速，time_optimal 二期待实现）
 """
 
 from __future__ import annotations
@@ -34,17 +34,17 @@ __all__ = [
 # 三者定义（自解释，确保结果里 route/path/trajectory 不被混用）
 DEFINITIONS = {
     "route": (
-        "控制网络上的虚拟链路序列（走廊）：起点+控制点序列+终点，含各段时刻与距离。"
-        "仅几何、无平滑。对应 Lin2021 Fig.1(a)。"
+        "可见性图上的节点折线走廊：起点+图节点序列+终点（世界坐标，仅几何、无平滑）。"
+        "对应第 4 章方法（B 路线，稀疏路图）。"
     ),
     "path": (
-        "Dubins 平滑后的三维空间曲线（仅几何、无时间）：route → smooth_route。"
-        "对应 Lin2021 Fig.1(b)。"
+        "route 经 Chaikin 圆角（或 Catmull-Rom 样条）平滑后的三维空间曲线"
+        "（仅几何、无时间）；平滑若侵入约束则回退原始折线。对应 Fig.1(b)。"
     ),
     "trajectory": (
-        "path + 时间参数化（位置+速度/时刻）。当前时间为匀速占位"
-        "（trajectory.timing='uniform_placeholder'），非 Lin2021 §2.4 时间最优轨迹"
-        "（time_optimal.py 待实现）。对应 Lin2021 Fig.1(c)。"
+        "path + 匀速时间占位（trajectory.timing='uniform_placeholder'）："
+        "每段弧长 / 巡航速度 = 飞行时间，times 从出发时刻累计。非时间最优轨迹"
+        "（time_optimal 二期待实现）。对应 Fig.1(c)。"
     ),
 }
 
@@ -76,7 +76,6 @@ def od_record(
     o: np.ndarray,
     d: np.ndarray,
     res: Any,
-    net: Any,
     *,
     t_dep: float = 0.0,
     group: str = "auto",
@@ -86,19 +85,19 @@ def od_record(
 
     route / path / trajectory 三者**分存**（严格区分，不合并）：
 
-    * ``route_control_points``   起点 + 控制点序列 + 终点（3D，走廊）
+    * ``route_control_points``   起点 + 图节点走廊序列 + 终点（3D，世界坐标）
     * ``path_xy``                平滑曲线的 xy 采样（仅几何、无时间）
     * ``trajectory``             path + 匀速时间占位（times/speeds）
     """
-    # route：起点 + 控制点序列 + 终点（走廊，含几何但无平滑）
+    # route：起点 + 图节点走廊（世界坐标）+ 终点（仅几何、无平滑）
     route_pts_3d = None
-    if res.route is not None:
+    if res.route is not None and res.route.pts:
         seq = [np.asarray(o, dtype=float)] + [
-            net.points[pi] for pi in res.route.points
+            np.asarray(p, dtype=float) for p in res.route.pts
         ] + [np.asarray(d, dtype=float)]
         route_pts_3d = [[_r(v) for v in p] for p in seq]
 
-    # path：Dubins 平滑后的三维空间曲线（仅几何、无时间），下采样存 xy
+    # path：平滑后的三维空间曲线（仅几何、无时间），下采样存 xy
     path_xy = None
     if res.path is not None and len(res.path.pts):
         pp = _downsample(np.asarray(res.path.pts, dtype=float), step=3)
@@ -112,13 +111,14 @@ def od_record(
         traj = {
             "timing": "uniform_placeholder",
             "note": (
-                "trajectory = path + 匀速时间占位（非 Lin2021 §2.4 时间最优轨迹，"
-                "time_optimal.py 待实现）"
+                "trajectory = path + 匀速时间占位（非时间最优轨迹，"
+                "time_optimal 二期待实现）"
             ),
             "times_s": [_r(t) for t in tt],
             "speeds_mps": [_r(s, 3) for s in ss],
         }
 
+    smooth_applied = bool(res.stats.get("smooth_applied", True))
     rec = {
         "od_id": od_id,
         "group": group,
@@ -130,7 +130,7 @@ def od_record(
         "total_time_s": (
             _r(res.total_time, 3) if np.isfinite(res.total_time) else None
         ),
-        # ── route（走廊）：控制点序列 + 链路距离 ──
+        # ── route（走廊）：图节点序列 + 折线距离 ──
         "route_dist_m": _r(res.route.dist) if res.route else None,
         "n_route_points": len(res.route.points) if res.route else 0,
         "route_control_points": route_pts_3d,
@@ -140,11 +140,8 @@ def od_record(
         "path_xy": path_xy,
         # ── trajectory（轨迹）：path + 时间维（匀速占位，与 path 严格分离）──
         "trajectory": traj,
-        "smooth_failed": bool(res.stats.get("smooth_failed", False)),
-        "plan_time_s": res.stats.get("plan_time_s"),
-        "n_dijkstra": res.stats.get("n_dijkstra"),
-        "n_l2_iters": res.stats.get("n_l2_iters"),
-        "blocked_pairs": res.stats.get("blocked_pairs"),
+        "smooth_failed": (bool(res.feasible) and not smooth_applied),
+        "plan_stats": res.stats,
         "reason": (res.infeasible_reason.name if res.infeasible_reason else None),
     }
     if audit is not None:
@@ -161,7 +158,8 @@ def build_metrics(
     *,
     cfg: Any,
     env: Any,
-    net_stats: dict,
+    graph_stats: dict,
+    planner_params: dict,
     unit: dict,
     results: Sequence[dict],
     scenario_dir: str,
@@ -193,6 +191,7 @@ def build_metrics(
 
     return {
         "experiment": "exp01_smoke",
+        "method": "visibility_graph (第4章 B 路线稀疏路图)",
         "definitions": dict(DEFINITIONS),
         "nofly_zones": [
             {
@@ -211,9 +210,15 @@ def build_metrics(
             for z in env.dynamic_nofly
         ],
         "scenario": {"dir": scenario_dir, "crop": [_r(c) for c in crop]},
-        "config": cfg.to_dict(),
+        "config": {
+            **cfg.to_dict(),
+            "visibility_graph": planner_params,
+            "nofly": cfg.section("nofly"),
+            "od": cfg.section("od"),
+            "checks": cfg.section("checks"),
+        },
         "env": env.summary(),
-        "network": net_stats,
+        "graph": graph_stats,
         "unit_checks": unit,
         "od_results": list(results),
         "summary": summary,

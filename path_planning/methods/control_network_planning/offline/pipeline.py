@@ -13,7 +13,7 @@ from __future__ import annotations
 import time
 
 from path_planning.common.config import Config
-from path_planning.common.types import CityEnvironment, ControlPoint, ExpandedNetwork
+from path_planning.common.types import CityEnvironment, ExpandedNetwork
 from path_planning.methods.control_network_planning.constraints.query import CollisionQuery
 from path_planning.methods.control_network_planning.offline.control_points import generate_control_points
 from path_planning.methods.control_network_planning.offline.link_builder import build_links

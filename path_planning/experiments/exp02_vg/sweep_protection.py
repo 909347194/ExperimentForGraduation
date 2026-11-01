@@ -69,11 +69,13 @@ for clr in [2.0, 4.0, 6.0, 8.0, 12.0]:
 
     deltas, feas, audits = [], 0, 0
     for (o, d) in ods:
-        _, _, c_on = g_on.plan(o, d)
-        _, _, c_off = g_off.plan(o, d)
+        r_on = g_on.plan(o, d, smooth=False)
+        r_off = g_off.plan(o, d, smooth=False)
+        c_on = r_on.route.dist if r_on.route else float("inf")
+        c_off = r_off.route.dist if r_off.route else float("inf")
         if c_on is not None and c_on != float("inf"):
             feas += 1
-            if audit_path(g_on.plan(o, d)[0], audit_q, 2.0):
+            if audit_path(r_on.path.pts if r_on.path else None, audit_q, 2.0):
                 audits += 1
             if c_off is not None and c_off != float("inf") and c_off > 1e-6:
                 deltas.append((c_on - c_off) / c_off * 100.0)
