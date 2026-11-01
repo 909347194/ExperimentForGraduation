@@ -79,6 +79,9 @@ make            # xelatex -> biber -> xelatex -> xelatex
 latexmk -xelatex main.tex
 ```
 
+> 第一次用 LaTeX？看 **[LATEX_GUIDE.md](LATEX_GUIDE.md)**——
+> 以本模板为例的写作入门（编译原理 / 中文排版 / 公式图表 / 参考文献 / 报错排查）。
+
 依赖:TeX Live(xelatex、biber)+ `ctex` + `biblatex-gb7714-2015`。
 Linux/macOS 无 Windows 字体时,临时把 `main.tex` 中 `fontset=windows`
 改为 `fontset=fandol` 调试(**正式投稿保持 windows 并在 Windows/Overleaf 编译**)。
