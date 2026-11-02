@@ -402,9 +402,17 @@ grep -rn '【占位' . --include=*.tex
 | 参考文献不出现 | 没跑 biber 或 .bib 有语法错 | 看 `.blg` 日志定位条目 |
 | `enumerate* undefined` / `Lonely \item` | 行内列表 `enumerate*` 需 `\usepackage[inline]{enumitem}` 且漏了 `\end{enumerate*}` | preamble 加 `inline` 选项并补 `\end{enumerate*}` |
 | `*.bbl` / `*.blg` 进了版本库 | 它们是 biber 生成物，可由 `.bib` 重建 | 勿 `git add`；建议把 `*.bbl *.blg` 加入 `.gitignore`（本仓库已加） |
+| **多 key 引用整串 `undefined`、`.bbl` 条目数远少于引用数、文献列表大面积缺失** | **`\cite{...}` 内用了全角逗号 `，` 而非半角逗号 `,`**：biber 把 `alqefari_multi-uav_2025，wang2024review` 当成「一个长 key」去找，找不到 → 静默失效；**编译不报错、不报 undefined（首编除外），极易被漏检** | 用脚本只替换 `\cite{...}` 实参内的 `，`→`,`（`sed`/python 限定在 `\{[^}]*\}` 内替换，切勿全局替换正文里的中文全角逗号）。修完 `rm -f main.bbl main.bcf` 重编，并核对 `.bbl` 条目数 == 实际被引文献数 |
 
 排查心法：**看报错的第一行 + 出错的行号**，日志（`.log`）里上下文最全。
 改一处、编译一次，别一次改一堆。
+
+**静默失效专项核查（极易漏检）**：biber 解析失败时往往只在第一遍 xelatex 报 `Citation undefined`，跑完 biber 后若 `.bbl` 条目数明显少于 `\cite` 数，就是 key 解析（全角逗号/拼写/大小写）问题。验证命令：
+```bash
+# 期望：.bbl 的 entry 数 == 正文实际引用的不同 key 数；且下方不打印任何 MISSING
+for k in key1 key2 key3; do grep -q "entry{$k}" main.bbl || echo "MISSING: $k"; done
+```
+切勿用「首遍 undefined 消失 + latexmk 退出 0」来判定引用成功——本仓库就曾因此假象遗漏了全角逗号导致的整篇文献失效。
 
 ---
 
