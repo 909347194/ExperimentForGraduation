@@ -96,7 +96,8 @@ def test_selection_forced_inclusion() -> None:
           f"(control={res_off.selected_ids}, forced={res_on.selected_ids})")
 
 
-def _make_horizon(n_tasks=10, n_uavs=24, n_nests=8, nest_capacity=4, event_replan=True):
+def _make_horizon(n_tasks=10, n_uavs=24, n_nests=8, nest_capacity=4, event_replan=True,
+                  faults=None, nest_closures=None):
     """用合成实体（不依赖 CSV/DEM）搭一个最小可用的 RollingHorizon。"""
     nests = [
         Nest(id=i, x=float(i * 5000.0), y=0.0, z=0.0,
@@ -121,6 +122,7 @@ def _make_horizon(n_tasks=10, n_uavs=24, n_nests=8, nest_capacity=4, event_repla
         n_cycles=1, cycle_length=600.0, complete_after_cycle=True,
         recharge_at_nest=True, uav_max_range=120000.0,
         event_replan=event_replan,
+        faults=dict(faults or {}), nest_closures=dict(nest_closures or {}),
     )
     event_config = EventTriggerConfig(
         reward_threshold=8.0, slack_threshold=900.0,
@@ -226,10 +228,97 @@ def test_unit_summarize_and_should_replan() -> None:
     print("[E] summarize_events / should_replan: PASS")
 
 
+def test_events_disabled_detects_nothing() -> None:
+    """F2：events.enabled=False → detect_events 直接返回空（E0 干净对照）。"""
+    from task_allocation.methods.rolling.event_trigger import detect_events
+    tasks = _build_tasks(2, reward=10.0)  # reward≥8，若启用会被判 URGENT_TASK
+    events = detect_events(
+        _build_uavs(2), tasks, [], EventTriggerConfig(enabled=False),
+        current_time=0.0)
+    assert events == [], f"enabled=False 应完全不检测，实际 {events}"
+    print("[F] events.enabled gate (F2): PASS")
+
+
+def test_fresh_events_edge_dedup() -> None:
+    """F3：同一事件（UAV_FAULT 持续态）只报首次，后续周期不再重复进日志。"""
+    from task_allocation.methods.rolling.event_trigger import EventType, ReplanEvent
+    horizon, _, _ = _make_horizon()
+    ev = ReplanEvent(EventType.UAV_FAULT, {"uav_id": 3})
+    first = horizon._fresh_events([ev])
+    second = horizon._fresh_events([ev])
+    assert len(first) == 1 and second == [], \
+        f"边沿化失效：first={len(first)} second={len(second)}"
+    print("[G] fresh-events edge dedup (F3): PASS")
+
+
+def test_fault_busiest_and_pending_forced() -> None:
+    """F4/F6：busiest 选中有实效目标；释放任务跨退化周期仍强制纳入。
+
+    两阶段验证：
+      ① 周期 1 故障 busiest（带任务）→ released_by_fault 非空、pending 入集；
+      ② 周期 2 人为置空机队 → 走「无可用机」退化分支，pending 不得被消费；
+      ③ 周期 3 恢复机队 → 释放任务必须出现在 forced_task_ids。
+    """
+    horizon, tasks, _ = _make_horizon(faults={1: ["busiest"]})
+    rec1 = horizon.run_cycle(new_tasks=tasks)
+    assert rec1.released_by_fault, "busiest 注入应有未完成任务可释放（F6）"
+    assert horizon._pending_forced == set(rec1.released_by_fault), \
+        "释放任务未进 pending_forced（F4）"
+
+    # 周期 2：除故障机外全置 CHARGING → 无可用机退化提前 return，pending 不消费
+    # （不得覆盖 FAULT 状态，否则故障事件被测试自己抹掉）
+    saved = {u.id: u.status for u in horizon.fleet.all()}
+    from task_allocation.common.types import UAVStatus as _S
+    for u in horizon.fleet.all():
+        if u.status is not _S.FAULT:
+            u.status = _S.CHARGING
+    rec2 = horizon.run_cycle()
+    assert rec2.muas.get("reason") == "no_available_uav", "预期退化分支"
+    assert horizon._pending_forced, "退化周期不得消费 pending（F4）"
+    # F3：故障在周期 1 末注入、周期 2 首次检测上报——且之后不得重复上报
+    n_fault_events = sum(
+        1 for r in horizon.records for e in r.events if e["type"] == "uav_fault")
+    assert n_fault_events == 1, f"同一故障应只报一次事件（F3），实际 {n_fault_events}"
+
+    # 周期 3：恢复机队 → 释放任务进强制集
+    for u in horizon.fleet.all():
+        u.status = saved[u.id]
+    rec3 = horizon.run_cycle()
+    forced3 = set(rec3.selection.get("forced_task_ids", []))
+    assert set(rec1.released_by_fault) <= forced3, \
+        f"释放任务未跨退化周期强制纳入：forced={forced3}"
+    n_fault_events = sum(
+        1 for r in horizon.records for e in r.events if e["type"] == "uav_fault")
+    assert n_fault_events == 1, f"边沿化失效：故障事件累计 {n_fault_events} 次"
+    print(f"[H] busiest + pending_forced (F4/F6): PASS  "
+          f"released={rec1.released_by_fault} forced3={sorted(forced3)}")
+
+
+def test_nest_closures_injection() -> None:
+    """F5：nest_closures 注入面 → 一次 NEST_UNAVAILABLE 边沿 + 剔除 + 改降。"""
+    horizon, tasks, nests = _make_horizon(nest_closures={1: [0]})
+    rec = horizon.run_cycle(new_tasks=tasks)
+    ev_types = [(e["type"], e.get("nest_id")) for e in rec.events]
+    assert ("nest_unavailable", 0) in ev_types, f"闭巢事件未上报：{ev_types}"
+    assert 0 in rec.muas.get("excluded_nest_ids", []), "闭巢未传入终点剔除"
+    occ = horizon.fleet.nest_occupancy(nests)
+    assert occ.get(0, 0) == 0, "闭巢仍有 UAV 挂靠（未改降）"
+    # 边沿：后续周期不再重复报同一闭巢
+    rec2 = horizon.run_cycle()
+    assert not [e for e in rec2.events if e["type"] == "nest_unavailable"], \
+        "闭巢事件应边沿化，不得重复上报"
+    print("[I] nest_closures injection (F5): PASS  "
+          f"events={ev_types} excluded={rec.muas.get('excluded_nest_ids')}")
+
+
 if __name__ == "__main__":
     test_unit_summarize_and_should_replan()
     test_selection_forced_inclusion()
     test_urgent_task_replan()
     test_urgent_task_no_replan_when_disabled()
     test_unavailable_nest_excluded()
+    test_events_disabled_detects_nothing()
+    test_fresh_events_edge_dedup()
+    test_fault_busiest_and_pending_forced()
+    test_nest_closures_injection()
     print("\nALL TESTS PASSED")

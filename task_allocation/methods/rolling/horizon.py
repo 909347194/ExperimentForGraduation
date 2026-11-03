@@ -40,6 +40,7 @@ from task_allocation.common.types import (
     Nest,
     Task,
     UAV,
+    UAVStatus,
     UAVTour,
 )
 from task_allocation.methods.muas.constraints.nest_capacity import (
@@ -106,11 +107,17 @@ class HorizonConfig:
     # 降落后在机巢换电，剩余航程恢复满值
     recharge_at_nest: bool = True
     uav_max_range: float = 60000.0
-    # 故障注入：{周期号(1-based): [uav_id, ...]}，用于验证 T_t^release 链路。
+    # 故障注入：{周期号(1-based): [uav_id 或 "busiest", ...]}，用于验证 T_t^release 链路。
     # 注入时机是「本周期解已回写、任务尚在执行中」，即 UAV 真正带着任务时，
     # 这样 mark_fault 才有未完成任务可释放（若在周期起点注入，上一周期的任务
     # 已全部完成解绑，无任务可释放，链路观察不到）。
-    faults: dict[int, list[int]] = field(default_factory=dict)
+    # "busiest" = 注入时刻绑定任务最多的未故障 UAV（平手取 id 小者）——保证
+    # 故障**有实效**（有任务可释放），不靠运气选中空闲机（exp03 E1 稳定性）。
+    faults: dict[int, list[int | str]] = field(default_factory=dict)
+    # 机巢闭塞注入：{周期号(1-based): [nest_id, ...]}，周期起点（事件检测前）
+    # 置 available=False + meta.close_reason="injected"，经 known_unavailable
+    # 边沿机制上报 NEST_UNAVAILABLE（exp03 E3 的注入面，对称 faults）。
+    nest_closures: dict[int, list[int]] = field(default_factory=dict)
     # 落地期容量硬校验：True 时超容直接抛异常
     strict_capacity: bool = False
     # 完成反馈的可行性闸门（论文 §6 完成反馈的判据）：
@@ -310,6 +317,12 @@ class RollingHorizon:
         self._nest_by_id = {n.id: n for n in self.nests}
         self._time = float(pool.current_time)
         self._known_unavailable = {n.id for n in self.nests if not n.available}
+        # 事件日志边沿去重：同一事件主键只报首次，见 _fresh_events（补丁 F3）
+        self._seen_event_keys: set[tuple[str, int]] = set()
+        # 故障释放任务的强制纳入保护（补丁 F4）：释放即入集、选择消费后清空；
+        # 退化周期（无任务/无可用机提前 return）不消费、顺延到下个选择周期，
+        # 「释放任务下周期强制纳入」不因单周期空转而丢失。
+        self._pending_forced: set[int] = set()
         self.records: list[CycleRecord] = []
         # 收敛早停状态：到达阶段（cycle <= 最后到达周期）不计数；之后监测
         # 池内未完成任务数，连续 stable_patience 周期不变即判稳态。
@@ -440,7 +453,8 @@ class RollingHorizon:
             dropped = {t.id for t in unreachable}
             tasks = [t for t in tasks if t.id not in dropped]
 
-        # 3) 事件检测 + 事件驱动重规划决策（论文 §6）
+        # 3) 事件注入（实验时刻表）→ 检测 → 事件驱动重规划决策（论文 §6）
+        self._apply_nest_closures(snap.cycle)
         events = detect_events(
             self.fleet.all(),
             self.pool.active_tasks(),
@@ -449,16 +463,21 @@ class RollingHorizon:
             current_time=self._time,
             known_unavailable=self._known_unavailable,
         )
-        record.events = [e.as_dict() for e in events]
         self._known_unavailable = {n.id for n in self.nests if not n.available}
+        # 事件日志走边沿（补丁 F3）：UAV_FAULT 是持续态、URGENT_TASK 是静态属性，
+        # 电平上报会让同一事件每周期重复进日志、replan 计数虚高（P1-3）。
+        # 决策上下文 replan_ctx 仍取电平全集（强制纳入是持续语义）。
+        fresh_events = self._fresh_events(events)
+        record.events = [e.as_dict() for e in fresh_events]
         # 机巢不可用 → 其**全部**归属 UAV 强制改降（含闲置机：合并修复可能
         # 让参与机零任务停在原巢）——归属巢退出运行后不得再有 UAV 挂靠。
         if self.hcfg.event_replan:
             self._rehome_stranded_uavs()
 
-        # 把事件解析为本期重规划上下文；replan 决定后续是否做反应式调整
+        # 把事件解析为本期重规划上下文；replan = 本周期发生**新**事件（边沿）
+        # 且机制启用——可直接计「重规划次数」（补丁 F3）。
         replan_ctx = summarize_events(events, self.event_cfg)
-        replan = self.hcfg.event_replan and should_replan(events, self.event_cfg)
+        replan = self.hcfg.event_replan and should_replan(fresh_events, self.event_cfg)
         # 上下文里的 replan 标志需与本期真实决策一致（event_replan 关停时记为 False）
         replan_ctx.replan = replan
         record.replan = replan
@@ -500,8 +519,13 @@ class RollingHorizon:
         )
 
         # 6) 第一阶段：动态任务选择 → T_t^sel
-        # 事件驱动：紧急任务 + 上一周期故障释放的任务强制纳入（绕过 Top-αK 预筛）
-        forced_ids = set(replan_ctx.urgent_task_ids) | set(self._prior_fault_released())
+        # 事件驱动（补丁 F1 闸门）：紧急任务 + 故障释放任务强制纳入（绕过 Top-αK
+        # 预筛）。强制纳入是「反应式调整」的组成部分，必须与 _rehome_stranded_uavs
+        # 同受 event_replan 开关控制——此前无条件生效，消融臂关停不干净（P0-1）。
+        forced_ids = set()
+        if self.hcfg.event_replan:
+            forced_ids = set(replan_ctx.urgent_task_ids) | set(self._pending_forced)
+        self._pending_forced.clear()
         # 记账同步：二阶段②③吞吐上限（sortie_budget / max_participating_uavs）
         # 会把可用机强行压地，其航程不得计入一阶段能力预算；两侧旋钮取交，
         # 保证打开②③时 cap(t) 自动跟着收紧（γ 经济性是二阶段裁量，不计入）
@@ -553,9 +577,10 @@ class RollingHorizon:
         record.selection = dict(sel.diagnostics)
         record.selection["replan"] = replan
         # S 成员无条件落盘（2026-10-22 覆盖门禁）：一阶检验与三分账的 S 基准，
-        # 供「进过 S 没装」vs「从未进 S」归因；replan 时 forced_ids 仍只在重规划落。
+        # 供「进过 S 没装」vs「从未进 S」归因；forced_ids 有即落（与 replan
+        # 解耦——边沿化后「有强制」与「有新事件」不再同周期出现）。
         record.selection["selected_ids"] = sorted(sel.selected_ids)
-        if replan:
+        if forced_ids:
             record.selection["forced_task_ids"] = sorted(forced_ids)
 
         selected = sel.selected
@@ -588,10 +613,12 @@ class RollingHorizon:
             distance_fn=self._distance_fn,
             pairwise_source=lazy,
         )
-        # 事件驱动：不可用机巢（NEST_UNAVAILABLE）从终点候选集剔除
-        stage_cfg = replace(
-            self.stage_cfg, excluded_nest_ids=set(replan_ctx.unavailable_nest_ids)
+        # 事件驱动（补丁 F1 闸门，同上）：不可用机巢（NEST_UNAVAILABLE）从
+        # 终点候选集剔除。反应式调整，event_replan 关停时不得生效（P0-1）。
+        excluded_nest_ids = (
+            set(replan_ctx.unavailable_nest_ids) if self.hcfg.event_replan else set()
         )
+        stage_cfg = replace(self.stage_cfg, excluded_nest_ids=excluded_nest_ids)
         stage: MUASStageResult = run_selective_muas(
             selected,
             self.fleet.all(),
@@ -612,8 +639,8 @@ class RollingHorizon:
         record.muas["n_evals"] = stage.n_evals
         record.muas["n_selected"] = len(selected)
         record.muas["replan"] = replan
-        if replan:
-            record.muas["excluded_nest_ids"] = sorted(replan_ctx.unavailable_nest_ids)
+        if excluded_nest_ids:
+            record.muas["excluded_nest_ids"] = sorted(excluded_nest_ids)
         feas = solution.meta.get("feasibility", {}) or {}
         record.muas["violations"] = list(feas.get("violations", []))
         record.muas["penalty"] = float(feas.get("penalty", 0.0))
@@ -739,17 +766,20 @@ class RollingHorizon:
                 key=lambda n: (n.x - uav.x) ** 2 + (n.y - uav.y) ** 2 + (n.z - uav.z) ** 2,
             )
             self.fleet.reassign_nest(uav.id, target.id)
-            free[target.id] = free.get(target.id, 0) - 1
+            # 记账 clamp：无空位硬塞时不得记负（只影响选巢偏好，防误读）
+            free[target.id] = max(0, free.get(target.id, 0) - 1)
 
     def _inject_faults(self, cycle: int, record: CycleRecord) -> None:
         """执行中注入 UAV 故障，把其未完成任务释放回任务池。
 
         ``fleet.mark_fault`` 与 ``pool.release`` 两个状态机互不 import，
         由本层显式串联（论文 §6 的 T_t^release）。释放的任务记入
-        ``record.released_by_fault``，供下一周期事件驱动重规划时强制纳入选择。
+        ``record.released_by_fault`` 并进 ``_pending_forced``（补丁 F4），
+        供后续选择周期强制纳入（不再只看上一周期记录，退化周期不丢）。
         """
-        for uav_id in self.hcfg.faults.get(cycle, []):
-            if uav_id not in self.fleet:
+        for sel in self.hcfg.faults.get(cycle, []):
+            uav_id = self._resolve_fault_target(sel)
+            if uav_id is None or uav_id not in self.fleet:
                 continue
             stranded = self.fleet.mark_fault(uav_id)
             if not stranded:
@@ -757,12 +787,66 @@ class RollingHorizon:
             self.pool.release(stranded, reason="uav_fault")
             record.released_ids.extend(int(t) for t in stranded)
             record.released_by_fault.extend(int(t) for t in stranded)
+            self._pending_forced.update(int(t) for t in stranded)
 
-    def _prior_fault_released(self) -> list[int]:
-        """上一周期因 UAV 故障释放回任务池的任务 id（本周期强制纳入选择）。"""
-        if not self.records:
-            return []
-        return list(self.records[-1].released_by_fault)
+    def _resolve_fault_target(self, sel: int | str) -> int | None:
+        """故障注入目标解析（补丁 F6）：字面 uav_id 或 "busiest"。
+
+        "busiest" = 注入时刻绑定任务最多的未故障 UAV（平手取 id 小者），
+        保证故障**有实效**（有未完成任务可释放），不靠运气选中空闲机。
+        """
+        if not isinstance(sel, str):
+            return int(sel)
+        if sel != "busiest":
+            raise ValueError(
+                f"未知的故障注入目标 {sel!r}：支持 uav_id（整数）或 'busiest'"
+            )
+        candidates = [
+            u for u in self.fleet.all() if u.status is not UAVStatus.FAULT
+        ]
+        if not candidates:
+            return None
+        best = max(
+            candidates, key=lambda u: (len(self.fleet.bound_tasks(u.id)), -u.id)
+        )
+        return int(best.id)
+
+    def _apply_nest_closures(self, cycle: int) -> None:
+        """实验时刻表注入机巢闭塞（补丁 F5）：周期起点置不可用（检测之前）。
+
+        与 ``_inject_faults`` 对称的 E3 注入面；置位后经 ``known_unavailable``
+        边沿机制在本期检测中上报一次 NEST_UNAVAILABLE。已不可用的巢不重复注入。
+        """
+        for nid in self.hcfg.nest_closures.get(cycle, []):
+            nest = self._nest_by_id.get(int(nid))
+            if nest is not None and nest.available:
+                nest.available = False
+                nest.meta.setdefault("close_reason", "injected")
+
+    @staticmethod
+    def _event_key(e) -> int:
+        detail = e.detail or {}
+        for key in ("task_id", "uav_id", "nest_id"):
+            if key in detail:
+                return int(detail[key])
+        return -1
+
+    def _fresh_events(self, events: Sequence) -> list:
+        """事件日志边沿化（补丁 F3）：每类事件按主键只报**首次**发生。
+
+        UAV_FAULT 是持续态、URGENT_TASK 判据是静态/单调属性，电平上报会让
+        同一事件每周期重复进日志（同一故障报 N 次）、replan 计数虚高。
+        NEST_UNAVAILABLE 已由 known_unavailable 边沿化，主键去重是双保险。
+        决策上下文（replan_ctx）仍取电平全集，不影响强制纳入语义。
+        """
+        fresh = []
+        for e in events:
+            key = (e.type.value, self._event_key(e))
+            if key in self._seen_event_keys:
+                continue
+            self._seen_event_keys.add(key)
+            fresh.append(e)
+        return fresh
 
     def _cost_hint(
         self,

@@ -60,8 +60,9 @@ class EventTriggerConfig:
     on_urgent_task: bool = True
     reward_threshold: float = 8.0
     slack_threshold: float = 900.0
-    # 是否启用事件驱动重规划；置 False 则 detect_events 仍识别事件（供记录），
-    # 但 should_replan 不再触发本期重规划（供消融对比关停该机制）
+    # 事件检测总开关：置 False 则 detect_events 直接返回空——不检测、不记录、
+    # 不产生任何反应式调整的输入（E0 无事件对照只关这一个键即干净）。
+    # 与 HorizonConfig.event_replan 是「检测」与「反应」两层开关，勿混用。
     enabled: bool = True
 
 
@@ -85,6 +86,8 @@ def detect_events(
         known_unavailable: 上一周期已标记为不可用的机巢，用于识别**新发生**的关闭。
     """
     cfg = config or EventTriggerConfig()
+    if not cfg.enabled:
+        return []
     events: list[ReplanEvent] = []
 
     if cfg.on_uav_fault:

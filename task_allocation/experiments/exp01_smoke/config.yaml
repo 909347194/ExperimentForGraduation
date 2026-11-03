@@ -498,7 +498,7 @@ rolling:
     # 机巢不可用时，本周期内做反应式调整（强制纳入紧急任务、剔除不可用机巢）。
     # false → 事件仅记录、不重规划，用于消融对比关停该机制。
     event_replan: true
-    faults: {} # 故障注入：{周期号: [uav_id, ...]}，验证 T_t^release 链路
+    faults: {} # 故障注入：{周期号: [uav_id 或 "busiest", ...]}，验证 T_t^release 链路；busiest=注入时绑定任务最多的未故障机
     events:
         enabled: true # 总开关：false 则完全不做事件检测
         on_uav_fault: true
