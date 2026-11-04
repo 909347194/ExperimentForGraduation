@@ -23,7 +23,7 @@ late_reward_decay_seconds）。时间窗预筛仅在 ``check_time_window=True`` 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Sequence
+from typing import Callable, Mapping, Sequence
 
 from task_allocation.common.types import ScoredTask, Task, TaskStatus, UAV
 
@@ -58,6 +58,43 @@ def _euclid(a: Sequence[float], b: Sequence[float]) -> float:
     return float(
         ((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2 + (a[2] - b[2]) ** 2) ** 0.5
     )
+
+
+def fleet_max_range(
+    uavs: Sequence[UAV], default: float | None = None
+) -> float | None:
+    """机队最强满电航程（异构机队取全队最大值）。
+
+    **永久性不可达判定必须用它**（2026-11-04 设计关键点 1）：任务/巢位
+    静态 + 每周期换电回满 ⇒ 「永久不可达」只在**最强机也够不着**时成立；
+    用单机/短机航程判定会在异构下误杀长航程机可服务的任务。
+    无可用参考值（无机且无缺省）时返回 None（判定自动放宽为不筛）。
+    """
+    vals = [u.full_charge_range(default) for u in uavs]
+    vals = [v for v in vals if v is not None]
+    return max(vals) if vals else None
+
+
+def _pair_cost(
+    uav: UAV,
+    task: Task,
+    pairwise_cost: "Mapping[tuple[int, int], float] | None" = None,
+    distance_fn: DistanceFn | None = None,
+) -> float:
+    """单机→单任务行进代价，口径优先级：pairwise 三维 > distance_fn > 欧氏。
+
+    ``pairwise_cost``（滚动层惰性代价表，键 ``(-(1+uav_id), task_id)``）与
+    ``cost_hint`` 同源同尺；异构化（2026-11-04）后可行性判定必须**逐机**取
+    代价——「最近可用机」可能航程不够、更远的长航程机才装得下，不能用
+    cost_hint 的全队最小值一刀切。
+    """
+    if pairwise_cost is not None:
+        key = (-(1 + uav.id), task.id)
+        if key in pairwise_cost:
+            return float(pairwise_cost[key])
+    if distance_fn is not None:
+        return float(distance_fn(uav.position, task.position))
+    return _euclid(uav.position, task.position)
 
 
 def _nearest_avail_uav(
@@ -95,6 +132,7 @@ def prefilter(
     distance_fn: DistanceFn | None = None,
     nests: Sequence[Nest] | None = None,
     max_range: float | None = None,
+    pairwise_cost: Mapping[tuple[int, int], float] | None = None,
 ) -> tuple[list[ScoredTask], list[ScoredTask]]:
     """初步可行性过滤（**只拦物理不可达与终态**）。
 
@@ -106,8 +144,12 @@ def prefilter(
             缺省退回欧氏直线。
         nests: 机巢列表（几何可达性判据，与 ``static_unreachable`` 同源）。
             非 None 且 ``max_range`` 有效时，往返超限先分两种归因。
-        max_range: 满电航程上限（米）。与 ``nests`` 共同决定「真几何不可达」
+        max_range: **机队最强**满电航程（米，异构机队取全队最大值，见
+            :func:`fleet_max_range`）。与 ``nests`` 共同决定「真几何不可达」
             与「当前无可用机」的分界。
+        pairwise_cost: 逐机三维代价表（键 ``(-(1+uav_id), task_id)``，与
+            ``cost_hint`` 同源同尺）。异构化后可行性判定逐机取代价
+            （短航程机装不下 ≠ 任务不可服务），缺省回退 distance_fn/欧氏。
 
     拒绝理由以物理原因为主：``no_available_uav``（无机可用）与
     ``exceed_round_trip_range``（**真几何不可达**——所有机巢往返都超限）；
@@ -139,26 +181,28 @@ def prefilter(
         if t.status in (TaskStatus.EXPIRED, TaskStatus.UNREACHABLE, TaskStatus.DONE):
             reason = f"status_{t.status.value}"
         else:
-            u, dist = _nearest_avail_uav(t, uavs, distance_fn=distance_fn)
-            # 行进代价统一口径：三维代价优先、欧氏回退
-            travel = (
-                float(cost_hint[t.id]) if (cost_hint and t.id in cost_hint) else dist
-            )
-            if u is None:
-                reason = "no_available_uav"
-            elif 2.0 * travel > cfg.range_margin * max(u.remaining_range, 0.0):
+            # 逐机可行性（2026-11-04 异构化）：∃ 可用机 u 满足
+            # 2·c(t,u) ≤ range_margin·remaining_range(u)。同构等剩余航程时
+            # 与旧「最近机 + cost_hint 全队最小值」口径逐位一致；异构下
+            # 不被短航程机误拒（更远的长航程机可能才装得下）。
+            served: list[tuple[UAV, float]] = []
+            for u in avail:
+                c_u = _pair_cost(u, t, pairwise_cost, distance_fn)
+                if 2.0 * c_u <= cfg.range_margin * max(u.remaining_range, 0.0):
+                    served.append((u, c_u))
+            if not served:
                 # 往返口径：航次必须返航（终点机巢由内层 MCF 选，最近巢
                 # 往返是下界），单程可达 ≠ 可服务。T52 实证：单程 39.9km
                 # < 0.95×80km 放行过，往返 79.7km 实则物理不可达，旧单程
                 # 口径下它每周期空转 churn 到淘汰。
                 #
-                # 2026-10-25 归因分离：travel 取自「最近**可用** UAV」，而
-                # 物理可达性应由「最近**机巢**」判定（静态、与机队状态无关）。
-                # 机队漂移致空巢时，几何可达任务的 travel 会来自远处巢而
-                # 超限——那是服务能力不足（no_uav_in_range），不是物理不可达
-                # （exceed_round_trip_range）。两类混同会让完成率既非 100%
-                # 又无从解释（exp05 seed43：3 个任务最近巢往返 74km ≤ 80km，
-                # 却因空巢被永久误拒）。
+                # 2026-10-25 归因分离：可用机都装不下时，物理可达性应由
+                # 「最近**机巢**」判定（静态、与机队状态无关）。机队漂移致
+                # 空巢时，几何可达任务会因当前无可用机而超限——那是服务
+                # 能力不足（no_uav_in_range），不是物理不可达
+                # （exceed_round_trip_range）。异构机队下 max_range 传
+                # **机队最强满电航程**（fleet_max_range），只有最强机也
+                # 够不着才判真几何不可达（2026-11-04 设计关键点 1）。
                 geo_reachable = False
                 if nests and max_range and max_range > 0:
                     for n in nests:
@@ -173,11 +217,13 @@ def prefilter(
                 reason = (
                     "no_uav_in_range" if geo_reachable else "exceed_round_trip_range"
                 )
-            elif cfg.check_time_window and t.latest is not None:
-                eta = travel / max(u.speed, 1e-6)
-                # 消融口径：迟到容忍 W 内放行，超过则拒（奖励已趋零）。
-                if cfg.current_time + eta > t.latest + cfg.late_tolerance_seconds:
-                    reason = "miss_time_window"
+            else:
+                u, travel = min(served, key=lambda p: p[1])
+                if cfg.check_time_window and t.latest is not None:
+                    eta = travel / max(u.speed, 1e-6)
+                    # 消融口径：迟到容忍 W 内放行，超过则拒（奖励已趋零）。
+                    if cfg.current_time + eta > t.latest + cfg.late_tolerance_seconds:
+                        reason = "miss_time_window"
         if reason is not None:
             s.filter_reason = reason
             rejected.append(s)
@@ -204,6 +250,9 @@ def static_unreachable(
     被规划器丢弃、直到超期）把指标误导成「淘汰」。
 
     Args:
+        max_range: **机队最强满电航程**（异构机队取全队 ``max_range`` 的最大值，
+            见 :func:`fleet_max_range`）。永久性判定必须用最强机：「永久不可达」
+            只在最强机也够不着时成立，用短航程机会误杀长航程机可服务的任务。
         margin: 物理裕度。**默认 1.0 = 物理上限**，与完成闸门
             ``check_range_constraint(margin=1.0)`` 同口径。规划保守度
             （0.95）属于 stage 内部的 participation/provisioning 决策，

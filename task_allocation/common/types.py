@@ -29,6 +29,11 @@ class TaskStatus(str, Enum):
     DONE = "done"
     EXPIRED = "expired"
     UNREACHABLE = "unreachable"
+    # 服务休眠（2026-11-04 异构化口径）：几何可达但连续 service_patience
+    # 周期无可用机在往返航程内。**不是出池**——留在池中、不进候选，
+    # 条件恢复（出现可服务的可用机）即唤醒回 PENDING，年龄累计不中断。
+    # 与 UNREACHABLE（几何永久不可达，真出池）严格区分。
+    DORMANT = "dormant"
 
 
 class UAVStatus(str, Enum):
@@ -89,6 +94,9 @@ class UAV:
     remaining_range: float = 1e9
     speed: float = 10.0
     max_time: float | None = None  # 最大飞行时间（秒）；None 表示不限制（默认）
+    # 满电航程（米）。异构机队（2026-11-04）：各机航程/续航可不同。
+    # None = 跟随全局缺省（HorizonConfig.uav_max_range），即同构退化。
+    max_range: float | None = None
     nest_id: int | None = None
     status: UAVStatus = UAVStatus.IDLE
     meta: dict[str, Any] = field(default_factory=dict)
@@ -100,6 +108,17 @@ class UAV:
     @property
     def is_available(self) -> bool:
         return self.status == UAVStatus.IDLE
+
+    def full_charge_range(self, default: float | None = None) -> float | None:
+        """满电航程解析：per-UAV ``max_range`` 优先，缺省回退全局值。
+
+        换电恢复（``recharge_at_nest``）、静态不可达判定、服务休眠判定
+        都必须经此口径取满电航程，禁止再直接读全局配置——否则异构机队
+        下短航程机会误杀长航程机可服务的任务（2026-11-04 设计关键点 1）。
+        """
+        if self.max_range is not None:
+            return float(self.max_range)
+        return None if default is None else float(default)
 
 
 @dataclass

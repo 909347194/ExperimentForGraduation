@@ -79,6 +79,7 @@ from task_allocation.methods.selection.capability import (
 )
 from task_allocation.methods.selection.feasibility import (
     FeasibilityConfig,
+    fleet_max_range,
     static_unreachable,
 )
 from task_allocation.methods.selection.marginal_gain import MarginalConfig
@@ -106,6 +107,10 @@ class HorizonConfig:
     complete_after_cycle: bool = True
     # 降落后在机巢换电，剩余航程恢复满值
     recharge_at_nest: bool = True
+    # 缺省满电航程（米）：UAV.max_range 为 None 时的回退值（同构退化）。
+    # 异构机队（2026-11-04）：各机自带 max_range / max_time / speed，
+    # 换电恢复与可达性判定一律经 UAV.full_charge_range(default) 取值，
+    # 禁止直接读本字段判定单机能力。
     uav_max_range: float = 60000.0
     # 故障注入：{周期号(1-based): [uav_id 或 "busiest", ...]}，用于验证 T_t^release 链路。
     # 注入时机是「本周期解已回写、任务尚在执行中」，即 UAV 真正带着任务时，
@@ -140,19 +145,23 @@ class HorizonConfig:
     # 两种出池途径），提前停止（周期数本身不定）。n_cycles 仅作安全上限。
     stop_when_stable: bool = False
     stable_patience: int = 4
-    # 服务不可达出池（2026-10-25 口径对齐）：任务**几何可达**（存在机巢使
-    # 往返 ≤ 满电航程，static_unreachable 判否）却连续 service_patience 个
-    # 周期「无可用 UAV 在往返航程内」时，判「机队服务不可达」出池。
+    # 服务休眠（2026-11-04 异构化口径；2026-10-25 起归因分离）：任务
+    # **几何可达**（存在机巢使往返 ≤ 机队最强满电航程，static_unreachable
+    # 判否）却连续 service_patience 个周期「无可用 UAV 在往返航程内」时，
+    # 转**休眠**（DORMANT：不出池、不进候选），条件恢复即唤醒。
     #
-    # 为什么必须出池：预筛原先把「最近可用机往返超限」一律记
+    # 归因背景：预筛原先把「最近可用机往返超限」一律记
     # exceed_round_trip_range（物理不可达），于是这类任务既不进
     # UNREACHABLE（分母照算）、又每周期被拒（分子不计）——exp05 seed43
     # 实证 3 个任务（最近巢往返 74km ≤ 80km，但机队漂移后该巢空巢）被
     # 永久卡死，完成率虚低为 0.950。两把尺子（几何 vs 当前可用机）必须
-    # 同源归因，否则完成率既非 100% 也无可解释性。
+    # 同源归因。
     #
-    # 与静态几何不可达同属「能力范围外」，是完成率分母的合法排除项；
-    # 单列计数（n_unreachable_service）供归因：机队漂移空巢 vs 真几何死。
+    # 为什么休眠而非出池（2026-11-04）：服务可达性是时变条件（可用机集合
+    # 随换电/故障恢复/机队拓扑演化而变，异构机队尤甚），「连续够不着」≠
+    # 「永远够不着」；出池会永久丢失可服务任务，与「暂缓任务回池保留、
+    # 持续获得调度机会」矛盾。休眠任务不进候选（同擑 churn 效果）、不入
+    # 完成率分母，逐周期复查唤醒（记录 dormant_ids / woken_ids 供归因）。
     service_patience: int = 4
 
 
@@ -223,10 +232,16 @@ class CycleRecord:
     # 「迟到不是废飞」——计入完成与吞吐，按时率/平均迟到单独统计。
     late_ids: list[int] = field(default_factory=list)
     lateness_by_task: dict[str, float] = field(default_factory=dict)
-    # 静态物理不可达（「过于偏远」）：所有机巢往返航程都超过满电可及
-    # 范围，入池判定一次性出池。用户原则（2026-10-15）下唯一合法的
+    # 静态物理不可达（「过于偏远」）：所有机巢往返航程都超过**机队最强**
+    # 满电可及范围（异构口径：最强机也够不着才叫永久，2026-11-04），
+    # 入池判定一次性出池。用户原则（2026-10-15）下唯一合法的
     # 未完成原因，单列计数，不混入淘汰。
     unreachable_ids: list[int] = field(default_factory=list)
+    # 服务休眠（2026-11-04 异构化口径）：几何可达但连续 service_patience
+    # 周期无可用机在往返航程内 → 休眠（不出池、不进候选），条件恢复
+    # 即唤醒。dormant_ids = 本周期新休眠；woken_ids = 本周期唤醒。
+    dormant_ids: list[int] = field(default_factory=list)
+    woken_ids: list[int] = field(default_factory=list)
     # 分配结构与求解轨迹：不进 as_dict()/metrics.json（数值指标保持精简），
     # 由实验编排写入 results/solution.json，供分配图 / 收敛图取用。
     tours: list[dict[str, Any]] = field(default_factory=list)
@@ -262,6 +277,10 @@ class CycleRecord:
             "lateness_by_task": self.lateness_by_task,
             "n_unreachable": len(self.unreachable_ids),
             "unreachable_ids": self.unreachable_ids,
+            "n_dormant": len(self.dormant_ids),
+            "dormant_ids": self.dormant_ids,
+            "n_woken": len(self.woken_ids),
+            "woken_ids": self.woken_ids,
         }
 
 
@@ -359,24 +378,37 @@ class RollingHorizon:
             file=sys.stderr,
         )
 
+    def _fleet_max_range(self) -> float:
+        """机队最强满电航程（异构 per-UAV max_range 优先，回退全局缺省）。
+
+        永久性不可达判定（static_unreachable）与预筛归因分界必须用最强机：
+        「永久不可达」只在最强机也够不着时成立（2026-11-04 设计关键点 1）。
+        """
+        return float(
+            fleet_max_range(self.fleet.all(), self.hcfg.uav_max_range)
+            or self.hcfg.uav_max_range
+        )
+
     def _screen_unreachable(self, tasks: Sequence[Task]) -> list[Task]:
         """静态物理不可达筛选：往返航程超满电可及范围的任务出池。
 
-        判据用 ``hcfg.uav_max_range``（与 ``recharge_at_nest`` 恢复的满电
-        航程同源；本实验机队同构，满电值唯一）。margin 取**物理上限 1.0**
-        （与完成闸门同口径）——规划保守度（range_margin）是 stage 内部
-        的参与/provisioning 决策，用作静态边界会误杀物理可达的远站任务。
-        距离走运行级记忆化的 DEM 三维 ``_distance_fn``，跨周期命中缓存。
+        判据用**机队最强满电航程**（``_fleet_max_range``：异构机队取全队
+        ``max_range`` 最大值、None 回退 ``hcfg.uav_max_range``）。margin 取
+        **物理上限 1.0**（与完成闸门同口径）——规划保守度（range_margin）
+        是 stage 内部的参与/provisioning 决策，用作静态边界会误杀物理
+        可达的远站任务。距离走运行级记忆化的 DEM 三维 ``_distance_fn``，
+        跨周期命中缓存。
         """
         if not tasks:
             return []
+        fleet_max = self._fleet_max_range()
         hit = [
             t
             for t in tasks
             if static_unreachable(
                 t,
                 self.nests,
-                self.hcfg.uav_max_range,
+                fleet_max,
                 distance_fn=self._distance_fn,
             )
         ]
@@ -384,29 +416,63 @@ class RollingHorizon:
             self.pool.mark_unreachable([t.id for t in hit], reason="geo")
         return hit
 
-    def _update_service_stall(
-        self, tasks: Sequence[Task], cost_hint: dict[int, float]
-    ) -> list[Task]:
-        """机队服务不可达追踪：几何可达但持续无可用机在往返航程内的任务出池。
+    def _serviceable(self, task: Task, uavs: Sequence[UAV]) -> bool:
+        """是否存在可用机在往返航程内（逐机判定，异构口径）。
 
-        ``cost_hint[t.id]`` = 最近**可用** UAV 到该任务的三维代价（第一阶段
-        粗粒度口径）。判据 ``2·cost_hint ≤ uav_max_range`` 即「本周期有可用
-        机能服务它」——与预筛 ``no_uav_in_range`` 同源同尺。连续
-        ``service_patience`` 个周期不满足，说明不是单周期运气问题，而是
-        机队结构性够不着（典型：机队漂移致空巢，最近巢本可往返 ≤ 满电）。
+        ∃ 可用机 u：``2·c(task,u) ≤ u.full_charge_range``。同构等航程时与
+        旧「2·cost_hint ≤ 全局 uav_max_range」逐位一致；异构下短航程机
+        装不下 ≠ 任务不可服务（更远的长航程机可能装得下）。代价走运行级
+        记忆化的 DEM 三维 ``_distance_fn``（与预筛/静态判定同源同尺）。
+        """
+        for u in uavs:
+            if not u.is_available:
+                continue
+            r = u.full_charge_range(self.hcfg.uav_max_range)
+            if r is None:
+                continue
+            c = float(self._distance_fn(u.position, task.position))
+            if 2.0 * c <= r:
+                return True
+        return False
+
+    def _wake_dormant(self) -> list[int]:
+        """服务休眠唤醒（2026-11-04）：本周期有可用机可服务即回 PENDING。
+
+        在 ``begin_cycle`` 之前调用，唤醒任务立即进入本周期 T_t；年龄
+        （arrival_time）累计不中断，唤醒后继续参与优先级/防饥饿排序。
+        """
+        uavs = self.fleet.all()
+        wake_ids = [
+            t.id for t in self.pool.dormant_tasks() if self._serviceable(t, uavs)
+        ]
+        if not wake_ids:
+            return []
+        self.pool.wake(wake_ids)
+        for tid in wake_ids:
+            self._service_stall.pop(tid, None)
+        return wake_ids
+
+    def _update_service_stall(self, tasks: Sequence[Task]) -> list[Task]:
+        """机队服务不可达追踪：持续无可用机在往返航程内的任务**转休眠**。
+
+        逐机判据 ``_serviceable``（∃ 可用机：2·c ≤ 该机满电航程，异构
+        口径）即「本周期有可用机能服务它」——与预筛 ``no_uav_in_range``
+        同源同尺。连续 ``service_patience`` 个周期不满足 → 休眠（
+        ``mark_dormant``：不出池、不进候选，2026-11-04 起取代旧
+        ``reason="service"`` 出池口径——服务可达性是时变条件，异构机队下
+        「连续够不着」≠「永远够不着」）。条件恢复由 ``_wake_dormant``
+        唤醒，年龄累计不中断。
 
         判据**独立于任务是否被选中/完成**（只看机队几何能力），因此不构成
-        循环定义；单列归因 ``reason="service"`` 与几何不可达区分。
+        循环定义；休眠与几何不可达（UNREACHABLE 出池）严格区分。
         """
         patience = int(getattr(self.hcfg, "service_patience", 0) or 0)
         if patience <= 0:
             return []
-        max_range = float(self.hcfg.uav_max_range)
+        uavs = self.fleet.all()
         newly: list[int] = []
         for t in tasks:
-            c = cost_hint.get(t.id, float("inf"))
-            serviceable = 2.0 * float(c) <= max_range
-            if serviceable:
+            if self._serviceable(t, uavs):
                 self._service_stall.pop(t.id, None)
             else:
                 n = self._service_stall.get(t.id, 0) + 1
@@ -415,7 +481,7 @@ class RollingHorizon:
                     newly.append(t.id)
         if not newly:
             return []
-        marked = self.pool.mark_unreachable(newly, reason="service")
+        marked = self.pool.mark_dormant(newly, reason="service")
         for tid in newly:
             self._service_stall.pop(tid, None)
         return marked
@@ -431,6 +497,10 @@ class RollingHorizon:
         if advance:
             self._time += float(cfg.cycle_length)
 
+        # 0) 服务休眠唤醒（2026-11-04）：条件恢复（出现可服务的可用机）
+        #    即唤醒回 PENDING，本周期即重新进入 T_t，年龄累计不中断。
+        woken_ids = self._wake_dormant()
+
         # 1) 周期开始：T_t = remain ∪ new ∪ release
         snap = self.pool.begin_cycle(new_tasks=new_tasks, current_time=self._time)
         tasks = snap.tasks
@@ -441,6 +511,7 @@ class RollingHorizon:
             pool_counts=dict(snap.counts),
             overdue_ids=list(snap.overdue_ids),
         )
+        record.woken_ids = list(woken_ids)
 
         # 2) 静态物理不可达筛选（用户原则 2026-10-15：任务不被完成
         # 只有物理约束被违反）。任务/巢位固定 + 每周期满电 ⇒ 判定与周期
@@ -552,15 +623,15 @@ class RollingHorizon:
             forced_task_ids=forced_ids,
         )
         cost_hint = self._cost_hint(tasks, avail, lazy)
-        # 6.1) 机队服务不可达出池（2026-10-25 口径对齐）：几何可达但连续
-        # service_patience 周期无可用机在往返航程内 → 与静态几何不可达
-        # 同等出池（单列归因 service），使完成率分母只含「能力范围内」
-        # 任务。必须在选择前移除，否则它每周期进候选又被拒，空转 churn。
-        svc_unreach = self._update_service_stall(tasks, cost_hint)
-        if svc_unreach:
-            svc_ids = {t.id for t in svc_unreach}
-            record.unreachable_ids.extend(t.id for t in svc_unreach)
-            tasks = [t for t in tasks if t.id not in svc_ids]
+        # 6.1) 机队服务不可达转休眠（2026-11-04 异构化口径）：几何可达但
+        # 连续 service_patience 周期无可用机在往返航程内 → 休眠（不出池、
+        # 不进候选，擑 churn），条件恢复即唤醒、年龄累计不中断。必须在
+        # 选择前转休眠，否则它每周期进候选又被拒，空转 churn。
+        newly_dormant = self._update_service_stall(tasks)
+        if newly_dormant:
+            dorm_ids = {t.id for t in newly_dormant}
+            record.dormant_ids = [t.id for t in newly_dormant]
+            tasks = [t for t in tasks if t.id not in dorm_ids]
         sel = run_selection(
             tasks,
             self.fleet.all(),
@@ -572,7 +643,7 @@ class RollingHorizon:
             # 几何可达性判据（与 static_unreachable 同源）：让预筛把往返
             # 超限分成「真几何不可达」与「当前无可用机」两类归因
             nests=self.nests,
-            max_range=self.hcfg.uav_max_range,
+            max_range=self._fleet_max_range(),
         )
         record.selection = dict(sel.diagnostics)
         record.selection["replan"] = replan
@@ -951,7 +1022,10 @@ class RollingHorizon:
             if nest is not None:
                 self.fleet.update_position(tour.uav_id, nest.x, nest.y, nest.z)
             if cfg.recharge_at_nest:
-                uav.remaining_range = float(cfg.uav_max_range)
+                # 换电恢复到**该机**满电航程（异构 per-UAV，2026-11-04）
+                uav.remaining_range = float(
+                    uav.full_charge_range(cfg.uav_max_range) or 0.0
+                )
 
         if not cfg.complete_after_cycle:
             return

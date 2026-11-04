@@ -252,6 +252,7 @@ def run(
         distance_fn=distance_fn,
         nests=nests,
         max_range=max_range,
+        pairwise_cost=pairwise_cost,
     )
     diagnostics["n_after_prefilter"] = len(passed)
     diagnostics["n_rejected_prefilter"] = len(rejected_pre)

@@ -248,6 +248,14 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
         for i in r.unreachable_ids
         if _unreach_reason.get(int(i)) == "service"
     )
+    # 服务休眠/唤醒（2026-11-04 异构化口径：service 不再出池，改休眠）：
+    # n_dormant_events = 累计休眠次数；n_woken = 累计唤醒次数；
+    # n_dormant_end = 末周期仍在休眠的任务数。
+    n_dormant_events = sum(len(r.dormant_ids) for r in records)
+    n_woken = sum(len(r.woken_ids) for r in records)
+    n_dormant_end = (
+        int((records[-1].pool_counts or {}).get("n_dormant", 0)) if records else 0
+    )
     # 只统计真正求解过的周期（2026-10-16 审查 I2：空转周期 muas 无解，
     # 旧口径把它们当 feasible=False 摊薄，1/4 被记成 1/8）
     feas_flags = [
@@ -537,6 +545,9 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
             "n_unreachable": n_unreachable,
             "n_unreachable_geo": n_unreachable_geo,
             "n_unreachable_service": n_unreachable_service,
+            "n_dormant_events": n_dormant_events,
+            "n_woken": n_woken,
+            "n_dormant_end": n_dormant_end,
             "n_late": n_late,
             # ── 2026-10-24 指标体系审查 A2：删除池化 on_time_rate 键 ───
             # 旧键 on_time_rate（出动池化正确执行率）与 correct_exec_rate
@@ -689,6 +700,9 @@ _SEED_AGG_KEYS = (
     "n_unreachable",
     "n_unreachable_geo",
     "n_unreachable_service",
+    "n_dormant_events",
+    "n_woken",
+    "n_dormant_end",
     "n_late",
     "avg_lateness_s",
     "correct_exec_rate",

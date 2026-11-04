@@ -68,6 +68,8 @@ class TaskPoolSnapshot:
         tasks: T_t = remain ∪ new ∪ release，即本周期参与任务选择的任务
         remain_ids / new_ids / release_ids: 三个来源的 task_id，互不相交且并集为 tasks
         executing_ids: 已分配执行中的任务，不参与本周期选择
+        dormant_ids: 服务休眠任务（DORMANT），不参与本周期选择、
+            **仍在池中**（条件恢复即唤醒，区别于 UNREACHABLE 出池）
         overdue_ids: 本周期已过 deadline 仍在池中的任务（**无超期淘汰**，
             2026-10-24 口径：超期任务滞留池中、仍可迟到交付，只作诊断）
         current_time: 本周期的时间戳
@@ -80,6 +82,7 @@ class TaskPoolSnapshot:
     release_ids: tuple[int, ...]
     executing_ids: tuple[int, ...]
     overdue_ids: tuple[int, ...]
+    dormant_ids: tuple[int, ...] = ()
     current_time: float = 0.0
 
     @property
@@ -96,6 +99,7 @@ class TaskPoolSnapshot:
             "n_release": len(self.release_ids),
             "n_executing": len(self.executing_ids),
             "n_overdue": len(self.overdue_ids),
+            "n_dormant": len(self.dormant_ids),
         }
 
 
@@ -191,6 +195,14 @@ class TaskPool:
     def executing_tasks(self) -> list[Task]:
         """已分配执行中、与 UAV 绑定、不参与本周期选择的任务。"""
         return [self._tasks[i] for i in sorted(self._executing) if i in self._tasks]
+
+    def dormant_tasks(self) -> list[Task]:
+        """服务休眠任务（DORMANT）：留在池中、不进候选、待条件恢复唤醒。"""
+        return [
+            t
+            for t in self._tasks.values()
+            if t.status == TaskStatus.DORMANT and t.id not in self._executing
+        ]
 
     def uav_of(self, task_id: int) -> int | None:
         """执行该任务的 UAV id；未在执行返回 None。"""
@@ -291,8 +303,13 @@ class TaskPool:
         # 3) 超期诊断（无超期淘汰：只标注，不出池）
         overdue = self.overdue_tasks(self._current_time)
 
-        # 4) 冻结 T_t：活动且未在执行
-        self._planning_ids = [t.id for t in self._tasks.values() if t.id not in self._executing]
+        # 4) 冻结 T_t：活动且未在执行、未在服务休眠（休眠任务不进候选，
+        #    唤醒后下一周期重新入 T_t）
+        self._planning_ids = [
+            t.id
+            for t in self._tasks.values()
+            if t.id not in self._executing and t.status != TaskStatus.DORMANT
+        ]
 
         self._cycle += 1
         return TaskPoolSnapshot(
@@ -303,6 +320,9 @@ class TaskPool:
             release_ids=tuple(i for i in self._planning_ids if self._source.get(i) == TaskSource.RELEASE),
             executing_ids=tuple(sorted(self._executing)),
             overdue_ids=tuple(t.id for t in overdue),
+            dormant_ids=tuple(
+                t.id for t in self._tasks.values() if t.status == TaskStatus.DORMANT
+            ),
             current_time=self._current_time,
         )
 
@@ -330,6 +350,8 @@ class TaskPool:
             task = self.get(task_id)
             if task.status == TaskStatus.EXECUTING:
                 raise ValueError(f"任务 {task_id} 正在执行，不能标记为待选")
+            if task.status == TaskStatus.DORMANT:
+                raise ValueError(f"任务 {task_id} 服务休眠中，不能标记为待选（应先 wake）")
             task.status = TaskStatus.SELECTED
             marked.append(task)
         return marked
@@ -426,11 +448,11 @@ class TaskPool:
         两类归因（2026-10-25 口径对齐，完成率分母的合法排除项）：
 
         - ``reason="geo"``：静态几何不可达——对所有机巢的往返航程都超过
-          满电可及范围（见 selection.feasibility.static_unreachable）。
-        - ``reason="service"``：机队服务不可达——几何可达（存在机巢往返
-          ≤ 满电航程），但连续 service_patience 个周期无可用 UAV 在往返
-          航程内（典型：机队漂移致空巢）。任务仍滞留则完成率虚低且无法
-          被解释，故与几何不可达同等出池、单列计数供归因。
+          满电可及范围（见 selection.feasibility.static_unreachable）。异构
+          机队下按**机队最强满电航程**判定（只有最强机也够不着才叫永久）。
+        - ``reason="service"``：**历史口径**（2026-11-04 起不再使用）——机队
+          服务不可达改走 :meth:`mark_dormant` 休眠唤醒，不再出池；保留
+          此分支仅为兼容旧调用/历史数据语义。
 
         正在执行的任务不受影响（已在飞，物理上已证明可达）。
         """
@@ -450,6 +472,50 @@ class TaskPool:
             self._finished[task_id] = task
             marked.append(task)
         return marked
+
+    def mark_dormant(
+        self, task_ids: Iterable[int], *, reason: str = "service"
+    ) -> list[Task]:
+        """服务不可达任务转休眠（DORMANT）——**不出池**，条件恢复即唤醒。
+
+        2026-11-04 异构化口径：服务可达性是时变条件（可用机集合随换电/
+        故障恢复/机队拓扑演化而变，异构机队尤甚），「连续 service_patience
+        周期够不着」≠「永远够不着」。旧口径直接出池（mark_unreachable
+        reason="service"）会在长航程机恰好充电/故障时永久丢失可服务任务，
+        与「暂缓任务回池保留、持续获得调度机会」矛盾。改为休眠：留在池中、
+        不进候选（擑 churn）、不入完成率分母，由滚动层每周期复查唤醒。
+
+        正在执行的任务不受影响（已在飞，物理上已证明可达）。
+        """
+        marked: list[Task] = []
+        for task_id in task_ids:
+            task = self._tasks.get(task_id)
+            if task is None or task_id in self._executing:
+                continue
+            if task.status == TaskStatus.DORMANT:
+                continue
+            task.status = TaskStatus.DORMANT
+            task.meta["dormant_time"] = self._current_time
+            task.meta["dormant_reason"] = str(reason)
+            self._planning_ids = [i for i in self._planning_ids if i != task_id]
+            marked.append(task)
+        return marked
+
+    def wake(self, task_ids: Iterable[int]) -> list[Task]:
+        """休眠任务唤醒回 PENDING（条件恢复：出现可服务的可用机）。
+
+        年龄累计不中断（arrival_time 不动），唤醒后按 remain 进入下一周期
+        T_t，继续参与优先级/防饥饿排序。
+        """
+        woken: list[Task] = []
+        for task_id in task_ids:
+            task = self._tasks.get(task_id)
+            if task is None or task.status != TaskStatus.DORMANT:
+                continue
+            task.status = TaskStatus.PENDING
+            task.meta["wake_time"] = self._current_time
+            woken.append(task)
+        return woken
 
     def overdue_tasks(self, current_time: float | None = None) -> list[Task]:
         """已过 ``latest`` 仍在池中的任务（纯诊断，**无超期淘汰**）。

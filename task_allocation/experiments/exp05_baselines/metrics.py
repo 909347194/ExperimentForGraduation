@@ -52,6 +52,9 @@ CSV_COLUMNS = (
     "n_unreachable",
     "n_unreachable_geo",
     "n_unreachable_service",
+    "n_dormant_events",
+    "n_woken",
+    "n_dormant_end",
     "n_voluntary_skip",
     "n_capacity_shortfall",
     "n_gate_rescued",
@@ -146,6 +149,12 @@ def build_summary(
         for r in records
         for i in r.unreachable_ids
         if _unreach_reason.get(int(i)) == "service"
+    )
+    # 服务休眠/唤醒（2026-11-04 异构化口径：service 不再出池，改休眠）
+    n_dormant_events = sum(len(r.dormant_ids) for r in records)
+    n_woken = sum(len(r.woken_ids) for r in records)
+    n_dormant_end = (
+        int((records[-1].pool_counts or {}).get("n_dormant", 0)) if records else 0
     )
     n_capacity_violations = sum(len(r.capacity_violations) for r in records)
     # 覆盖门禁三分账（2026-10-22）：逐周期 gate_stats 累加；
@@ -282,6 +291,9 @@ def build_summary(
         "n_unreachable": n_unreachable,
         "n_unreachable_geo": n_unreachable_geo,
         "n_unreachable_service": n_unreachable_service,
+        "n_dormant_events": n_dormant_events,
+        "n_woken": n_woken,
+        "n_dormant_end": n_dormant_end,
         "n_voluntary_skip": n_voluntary_skip,
         "n_capacity_shortfall": n_capacity_shortfall,
         "n_gate_rescued": n_gate_rescued,
