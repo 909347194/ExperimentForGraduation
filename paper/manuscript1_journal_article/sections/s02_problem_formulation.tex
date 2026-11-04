@@ -28,28 +28,27 @@
       \item 任意两节点间的飞行代价由地形与障碍条件决定的三维航程度量刻画，
             一般具有非对称性且不等同于欧氏距离，目标与航程约束均采用该度量构造代价
             矩阵。
-      \item 单航次总航程不得超过当期剩余航程（或满电航程上界），总飞行时间不得超过续航上限，不可行
-            航次不进入解空间；机队服务能力上界由可起飞平台的剩余航程决定。
+      \item 单航次受当期剩余航程与最大飞行时间上界约束，超出上界的航次视为不可行；
+            机队服务能力上界由可起飞平台的剩余航程决定，具体不等式见约束条件。
       \item 各任务给定期望服务期限，迟到交付仍视为完成，其收益随迟到时长折减，
             迟到量计入目标代价；时间窗不构成任务的参选资格，服务时效性以按时率与
             迟到量单独度量。
 \end{enumerate}
 
-综上，单周期 $t$ 的输入为任务池
+综上，单周期 $t$ 的输入包括三部分：任务池
 $\mathcal{T}_t=\mathcal{T}_t^{\mathrm{remain}}\cup
-      \mathcal{T}_t^{\mathrm{new}}\cup\mathcal{T}_t^{\mathrm{release}}$，
-即滞留未执行任务、新到达任务与故障释放任务的并集；机队状态 $\mathcal{U}_t$，
-刻画各平台的位置、剩余航程与可用性；以及机巢集合 $\mathcal{N}$，给定各机巢
-的位置、容量占用与可用性。输出为四项决策：接纳任务集
-$\mathcal{T}_t^{\mathrm{sel}}\subseteq\mathcal{T}_t$，未被接纳的任务暂缓
-顺延；接纳任务与无人机之间的指派，由此确定执行集
-$\mathcal{T}_t^{\mathrm{exec}}$，恒有
+      \mathcal{T}_t^{\mathrm{new}}\cup\mathcal{T}_t^{\mathrm{release}}$
+（滞留未执行、新到达与故障释放任务的并集）；机队状态 $\mathcal{U}_t$（各平台位置、剩余航程与可用性）；
+以及机巢集合 $\mathcal{N}$（位置、容量占用与可用性）。
+输出为四项决策：接纳集 $\mathcal{T}_t^{\mathrm{sel}}\subseteq\mathcal{T}_t$（未接纳者暂缓顺延）；
+指派所确定的执行集 $\mathcal{T}_t^{\mathrm{exec}}$（满足
 $\mathcal{T}_t^{\mathrm{exec}}\subseteq\mathcal{T}_t^{\mathrm{sel}}
-      \subseteq\mathcal{T}_t$；各无人机的访问顺序；各航次的终点机巢。其中
-$\mathcal{T}_t^{\mathrm{remain}}\cup\mathcal{T}_t^{\mathrm{new}}\cup\mathcal{T}_t^{\mathrm{release}}$
-按任务到达状态划分任务池，而 $\mathcal{T}_t^{\mathrm{sel}}$、$\mathcal{T}_t^{\mathrm{exec}}$
-按本周期决策状态（是否纳入计划、是否实际执行）划分，二者属于不同维度的分解。
-未执行任务与演化后的机队状态滚动至下一周期，构成序贯决策。
+      \subseteq\mathcal{T}_t$）；各无人机访问顺序；各航次终点机巢。
+决策变量记为接纳 $z_j$、指派 $x_{uj}$、执行 $y_j$、顺序 $\pi_u$ 与终点机巢 $\nu_u$。
+须区分两套划分：前者 $\mathcal{T}_t^{\mathrm{remain}}\cup\mathcal{T}_t^{\mathrm{new}}\cup\mathcal{T}_t^{\mathrm{release}}$
+按到达状态分解任务池；后者 $\mathcal{T}_t^{\mathrm{sel}}$、$\mathcal{T}_t^{\mathrm{exec}}$
+按本周期是否纳入计划、是否实际执行划分。
+未执行任务与演化后的机队状态写入下一周期，形成序贯决策。
 
 为提高表述清晰度与可读性，本文主要符号及其含义汇总于表~\ref{tab:symbols}。
 除特别说明外，时间以秒为单位、航程与代价以米为单位；向量以粗体表示；周期下标 $t$ 在不致混淆时省略。
@@ -70,7 +69,7 @@ $\mathcal{T}_t^{\mathrm{remain}}\cup\mathcal{T}_t^{\mathrm{new}}\cup\mathcal{T}_
         \multicolumn{4}{l}{\emph{外生参数}} \\
         $\bm{p}_j$ & 任务 $j$ 的位置向量 & $R_j$ & 任务 $j$ 的收益 \\
         $a_j$ & 任务 $j$ 的到达时刻 & $e_j,\ l_j$ & 任务 $j$ 期望服务期限的下界与上界；迟到允许并计入代价 \\
-        $\bm{p}_u(t),\ B_u(t)$ & 周期 $t$ 无人机 $u$ 的位置与剩余航程 & $v,\ B_{\max},\ T_{\max}$ & 无人机的飞行速度、满电航程与最大续航时间 \\
+        $\bm{p}_u(t),\ B_u(t)$ & 周期 $t$ 无人机 $u$ 的位置与剩余航程 & $v,\ B_{\max},\ T_u^{\max}$ & 飞行速度、满电航程；$T_u^{\max}$ 为无人机 $u$ 的最大飞行时间 \\
         $\bm{p}_n,\ C_n,\ \delta_n(t)$ & 机巢 $n$ 的位置、停机位容量与可用性 & $c(\bm{p},\bm{p}\,')$ & 节点间三维地形飞行代价，一般非对称 \\
         $W$ & 迟到折减容忍时长 &  &  \\
         \midrule
@@ -94,13 +93,13 @@ $\mathcal{T}_t^{\mathrm{remain}}\cup\mathcal{T}_t^{\mathrm{new}}\cup\mathcal{T}_
 \paragraph{单机约束：最大航程与续航时间}
 无人机 $u$ 由当前位置 $\bm{p}_u$ 出发，按访问顺序 $\pi_u$ 依次服务指派任务后，降落于终点机巢 $\nu_u$。含返航的三维总航程与飞行时长记为 $d_u(\pi_u,\nu_u)$ 与 $\tau_u(\pi_u,\nu_u)$，由非对称代价 $c(\cdot,\cdot)$ 与速度 $v$ 归纳。硬资源约束为
 \begin{equation}
-  d_u(\pi_u,\nu_u) \le B_u,
+  d_u(\pi_u,\nu_u) \le B_u(t),
   \qquad
   \tau_u(\pi_u,\nu_u) \le T_u^{\max},
   \qquad \forall u\in\mathcal{U}^{\mathrm{avail}},
   \label{eq:range_time}
 \end{equation}
-其中 $B_u$ 为该机\textbf{当期剩余航程}（非一律满电），$T_u^{\max}$ 为最大飞行时间（可由满电航程与速度派生，亦可独立给定更紧上界）。任一航次违反式~\eqref{eq:range_time} 即视为物理不可行，不进入可交付解。空序列（本周期不出动）不占用航程与时长。
+其中 $B_u(t)$ 为该机\textbf{当期剩余航程}（非一律满电），$T_u^{\max}$ 为最大飞行时间（可由满电航程与速度派生，亦可独立给定更紧上界）。任一航次违反式~\eqref{eq:range_time} 即视为物理不可行，不进入可交付解。空序列（本周期不出动）不占用航程与时长。
 
 \paragraph{多机结构约束：指派、执行与访问顺序}
 接纳、执行与指派满足
@@ -133,7 +132,7 @@ $\mathcal{T}_t^{\mathrm{remain}}\cup\mathcal{T}_t^{\mathrm{new}}\cup\mathcal{T}_
 
 \subsection{优化模型与问题性质}
 
-在上述硬约束界定的可行域内，本周期关心两件事：\textbf{在物理可装的前提下尽可能完成已纳入计划的任务}（覆盖作为构造性要求），以及在合法解之间\textbf{压缩含返航的三维航程并抑制迟到}。搜索并不采用已放弃的“先优化 $F_1$ 再优化成本”的经典字典序分层，也不再使用含 $-m\cdot F_1$ 的 big-M 四层标量；与实现一致的主口径是\textbf{覆盖门禁下的单一最小化适应度}。
+在上述硬约束界定的可行域内，本周期关心两件事：\textbf{在物理可装的前提下尽可能完成已纳入计划的任务}（覆盖作为构造性要求），以及在合法解之间\textbf{压缩含返航的三维航程并抑制迟到}。本文不采用先最大化完成收益、再最小化成本的字典序形式，也不将 $-m\cdot F_1$ 写入搜索目标；主口径为\textbf{覆盖门禁下的单一最小化适应度}。
 
 记 $n_{\mathrm{hard}}$ 为硬约束违约次数（航程/续航、时序、机巢容量与可用性、终点不可达、结构非法等），$E_m$ 为航程超限总量（米），$n_{\mathrm{skip}}$ 为“任务已在承诺集中且存在可装载方式却未执行”的自愿放弃数（voluntary skip），$L_{\mathrm{tot}}=\sum_j L_j$ 为总迟到秒量，$C_{\mathrm{path}}=\sum_u d_u(\pi_u,\nu_u)$ 为含返航总航程。标量适应度为
 \begin{equation}
@@ -147,13 +146,13 @@ $\mathcal{T}_t^{\mathrm{remain}}\cup\mathcal{T}_t^{\mathrm{new}}\cup\mathcal{T}_
   + w_{\mathrm{late}}\, L_{\mathrm{tot}}
   + \lambda\, C_{\mathrm{path}} \\
   \text{s.t.}\quad
-  &\text{式~\eqref{eq:range_time}--\eqref{eq:nest_cap} 及结构、时序可行性定义下的解表示。}
+  &\text{式~\eqref{eq:assign_link}--\eqref{eq:nest_cap}，且 $\pi_u$ 为执行集上的排列、时序可行。}
 \end{aligned}
 \label{eq:obj}
 \end{equation}
 各层含义与实现一致：
 \begin{itemize}
-  \item \textbf{T0（物理硬违约）}：$W_{\mathrm{hard}}$ 取足够大（由任务池规模与收益上界自动推导），使任意一次硬违约压倒任何“纸面高收益”；$E_m$ 仅在不可行解之间细分。
+  \item \textbf{T0（物理硬违约）}：$W_{\mathrm{hard}}$ 取足够大（由任务池规模与收益上界自动推导），使任意一次硬违约压倒任何仅由完成计数带来的表面收益；$E_m$ 仅在不可行解之间细分。
   \item \textbf{T0.5（覆盖门禁）}：$W_{\mathrm{skip}}$ 与 $W_{\mathrm{hard}}$ 同量级，将 voluntary skip 视为与硬违约同级的非法；在门禁修复开启时，构造性补载使合法解上 $n_{\mathrm{skip}}=0$。因此\textbf{搜索用的 $f$ 不含 $-m\cdot F_1$}；收益和 $F_1=\sum_j R_j y_j$ 只作事后指标。门禁对“可装”的判定为一阶插入检验（不枚举多任务拼班组合），完备性边界在方法节声明。
   \item \textbf{T2（软迟到）}：$w_{\mathrm{late}}>0$ 对 $L_{\mathrm{tot}}$ 线性计价，迟到可与航程同台权衡，但不淘汰任务。
   \item \textbf{T3（航程）}：$\lambda>0$ 最小化含返航三维航程；防漂移不另设负载均衡或 makespan 项，而由返航代价、终点机巢容量耦合与跨周期状态继承承担。
