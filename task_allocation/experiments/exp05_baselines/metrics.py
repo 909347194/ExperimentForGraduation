@@ -150,9 +150,9 @@ def build_summary(
         for i in r.unreachable_ids
         if _unreach_reason.get(int(i)) == "service"
     )
-    # 服务休眠/唤醒（2026-11-04 异构化口径：service 不再出池，改休眠）
-    n_dormant_events = sum(len(r.dormant_ids) for r in records)
-    n_woken = sum(len(r.woken_ids) for r in records)
+    # 服务休眠/唤醒（2026-11-04 异构化口径：service 不再出池，改休眠）；缺字段按 0 计
+    n_dormant_events = sum(len(getattr(r, "dormant_ids", []) or []) for r in records)
+    n_woken = sum(len(getattr(r, "woken_ids", []) or []) for r in records)
     n_dormant_end = (
         int((records[-1].pool_counts or {}).get("n_dormant", 0)) if records else 0
     )

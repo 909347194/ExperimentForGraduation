@@ -250,9 +250,9 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
     )
     # 服务休眠/唤醒（2026-11-04 异构化口径：service 不再出池，改休眠）：
     # n_dormant_events = 累计休眠次数；n_woken = 累计唤醒次数；
-    # n_dormant_end = 末周期仍在休眠的任务数。
-    n_dormant_events = sum(len(r.dormant_ids) for r in records)
-    n_woken = sum(len(r.woken_ids) for r in records)
+    # n_dormant_end = 末周期仍在休眠的任务数。缺字段（旧记录/测试桩）按 0 计。
+    n_dormant_events = sum(len(getattr(r, "dormant_ids", []) or []) for r in records)
+    n_woken = sum(len(getattr(r, "woken_ids", []) or []) for r in records)
     n_dormant_end = (
         int((records[-1].pool_counts or {}).get("n_dormant", 0)) if records else 0
     )

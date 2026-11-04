@@ -78,20 +78,25 @@ def fleet_max_range(
 def _pair_cost(
     uav: UAV,
     task: Task,
+    cost_hint: dict[int, float] | None = None,
     pairwise_cost: "Mapping[tuple[int, int], float] | None" = None,
     distance_fn: DistanceFn | None = None,
 ) -> float:
-    """单机→单任务行进代价，口径优先级：pairwise 三维 > distance_fn > 欧氏。
+    """单机→单任务行进代价。优先级：pairwise 逐机三维 > cost_hint 统一三维
+    > distance_fn > 欧氏。
 
     ``pairwise_cost``（滚动层惰性代价表，键 ``(-(1+uav_id), task_id)``）与
-    ``cost_hint`` 同源同尺；异构化（2026-11-04）后可行性判定必须**逐机**取
+    ``cost_hint`` 同源同尺；异构化（2026-11-04）后可行性判定**逐机**取
     代价——「最近可用机」可能航程不够、更远的长航程机才装得下，不能用
-    cost_hint 的全队最小值一刀切。
+    全队最小值一刀切。仅提供 ``cost_hint``（无 pairwise）时退回统一三维
+    代价口径（历史行为，各机同值），与既有测试/调用方逐位一致。
     """
     if pairwise_cost is not None:
         key = (-(1 + uav.id), task.id)
         if key in pairwise_cost:
             return float(pairwise_cost[key])
+    if cost_hint and task.id in cost_hint:
+        return float(cost_hint[task.id])
     if distance_fn is not None:
         return float(distance_fn(uav.position, task.position))
     return _euclid(uav.position, task.position)
@@ -187,7 +192,7 @@ def prefilter(
             # 不被短航程机误拒（更远的长航程机可能才装得下）。
             served: list[tuple[UAV, float]] = []
             for u in avail:
-                c_u = _pair_cost(u, t, pairwise_cost, distance_fn)
+                c_u = _pair_cost(u, t, cost_hint, pairwise_cost, distance_fn)
                 if 2.0 * c_u <= cfg.range_margin * max(u.remaining_range, 0.0):
                     served.append((u, c_u))
             if not served:

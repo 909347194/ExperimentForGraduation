@@ -83,6 +83,8 @@ class _FakeRecord:
         self.completed_ids = []
         self.deferred_ids = []
         self.released_by_fault = []
+        self.dormant_ids = []
+        self.woken_ids = []
         self.replan = False
         self.tours = list(tours or [])
         self.cost_history = []
