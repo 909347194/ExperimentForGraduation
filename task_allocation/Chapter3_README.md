@@ -1,9 +1,9 @@
 # 第 3 章方法:动态滚动的选择性多机巢多无人机协同任务分配
 
-本文只描述**当前实现中的方法**（与 `task_allocation/methods/` 逐条对齐，代码口径 2026-11-01；F3 已整体移除），
+本文只描述**当前实现中的方法**（与 `task_allocation/methods/` 逐条对齐，代码口径 2026-11-04（异构 per-UAV 化 + 服务休眠态）；F3 已整体移除），
 不写文献综述与贡献口号。配置默认值以 `experiments/exp01_smoke/config.yaml` 为准。
 
-**目标口径（全文一致）：完成是约束，成本是目标。** 可完成任务必须全部交付，由覆盖门禁构造性强制；在该可行域上以单一加权标量最小化含返航三维航程与迟到软计价。不采用以交付收益最大化为第一目标的字典序形式，也不采用 big-M 加权把完成数写进目标（该路径已从代码移除）；`lexicographic`、`lexicographic_coverage` 等开关名为历史命名，不代表当前方法采用字典序。迟到在搜索适应度与 \(F_1\) 中只经 \(w_{\mathrm{late}}L_{\mathrm{tot}}\) 单一计价、计全额奖励不折减、不淘汰任务；奖励折减仅存在于事后指标，见 §8。
+**目标口径(全文一致):完成是约束,成本是目标。** 可完成任务必须全部交付,由覆盖门禁构造性强制;在该可行域上以单一加权标量最小化含返航三维航程与迟到软计价。不采用以交付收益最大化为第一目标的字典序形式,也不采用 big-M 加权把完成数写进目标(该路径已从代码移除);`lexicographic`、`lexicographic_coverage` 等开关名为历史命名,不代表当前方法采用字典序。迟到在搜索适应度与 \(F_1\) 中只经 \(w_{\mathrm{late}}L_{\mathrm{tot}}\) 单一计价、计全额奖励不折减、不淘汰任务;奖励折减仅存在于事后指标,见 §8。
 
 ---
 
@@ -17,7 +17,7 @@
 | **供不应求** | 机队吞吐 < 任务到达规模(广域巡检:万基杆塔 vs 单机日 15~50 基) | "全部执行"不可行,**任务选择(执行/暂缓)本身是决策变量** |
 | **多机巢、异源起降** | 机队分散在多个自动机巢;起降点不是同一个 | 起点 = 当前所在巢,**终点机巢是决策变量**(不必返原巢),受巢容量竞争 |
 | **三维地理代价** | 高原/山地高差大、城市场景建筑密集,平面欧氏距离与真实航程严重偏离 | 航段代价 = 垂直切面三维航程(障碍包络 = 地形+建筑屋顶),且时间窗/ETA 同源 |
-| 机队状态动态 | 位置、剩余航程、归属巢、可用性(充电/故障/忙碌) | 能力是时变量 cap(t),"充电中的机不计入幻影容量" |
+| 机队状态动态 | 位置、剩余航程、归属巢、可用性(充电/故障/忙碌)、**异构飞行性能**(各机 `max_range`/`max_time`/`speed` 可不同，`UAV.full_charge_range()` 解析，None 回退全局缺省=同构退化) | 能力是时变量 cap(t)，"充电中的机不计入幻影容量"；换电恢复到**该机**满电航程 |
 
 一句话:**在任务持续动态到达、机队部分可用、机巢异源起降、真实三维地形代价下,
 滚动地决定"执行哪些任务、由谁执行、按何顺序、落哪个巢",并把可完成任务的完成作为硬约束,在该约束下压缩含返航的三维航程。**
@@ -42,9 +42,9 @@
 **约束(硬 / 软分开):**
 
 - 硬约束（物理可行性，任何一次违约在适应度中压倒任意交付收益）：
-  航程（起点→任务链→**终点巢返航**全航程 ≤ 剩余航程）、飞行时间/续航
-  （全航迹时长 ≤ `uav_max_time`，与航程**对称**；null 时自动派生
-  max_range/speed、不新增淘汰，显式更小值即成独立绑定约束）、时序/前置依赖、
+  航程（起点→任务链→**终点巢返航**全航程 ≤ 该机剩余航程，逐机判定）、飞行时间/续航
+  （全航迹时长 ≤ `UAV.max_time`（per-UAV），与航程**对称**；null 时按该机
+  max_range/speed 自动派生、不新增淘汰，显式更小值即成独立绑定约束）、时序/前置依赖、
   同步到达、机巢容量与可用性、末任务→终点巢可达性、结构（无重复分配/未知任务）；
 - 软约束:**时间窗迟到**--「迟到不是废飞」:迟到交付仍计完成、计全额奖励,
   仅按迟到秒数经 \(w_{\mathrm{late}}L_{\mathrm{tot}}\) 单一软计价(不折减奖励、不否决参选资格、不判航次作废;见 §4.5)。
@@ -127,7 +127,10 @@ n_{\mathrm{sel}}
    \(P_i(t)=w_r\tilde R+w_u\tilde U+w_w\tilde W+w_s\tilde G-w_c\tilde C\)
    (收益 / 时间紧迫度 / 等待补偿 / 空间协同增益 / 粗执行代价,min-max 归一、权重自动归一)。
 2. **Top-α 预筛选**:按 \(P_i(t)\) 取前 \(n_{\mathrm{cand}}\) 个进候选池。
-3. **物理向预筛**(`feasibility.py`):只拒物理不可达(无机可用、往返超航程);
+3. **物理向预筛**(`feasibility.py`):只拒物理不可达(无机可用、**逐机**往返超航程：
+   ∃ 可用机 u 满足 2·c(t,u) ≤ margin·remaining(u) 即放行——异构口径下短程机
+   装不下 ≠ 不可服务，更远的长程机可能装得下；归因分界 `no_uav_in_range` /
+   `exceed_round_trip_range` 按**机队最强满电航程**判几何可达);
    **迟到不作为参选资格否决**(软约束原则)。
 4. **边际纳入**(`marginal_gain.py`):贪心追加,接受判据
    \(\mathrm{eff}=\dfrac{\Delta B}{\max(\Delta C,\varepsilon)}\,(1+\gamma\cdot\mathrm{age})+b_{\mathrm{forced}}\)
@@ -165,21 +168,21 @@ n_{\mathrm{sel}}
 - **统一编码**:起始基因(UAV→首任务倾向)+ 巡游基因(访问顺序相关的连续代价量),
   基因规模与任务数绑定;**终点巢不进基因**(由解码后内层精确分配,方案 A)。
 - **离散映射 DE(与 Ming 等 2017 同族)**:差分变异在**飞行代价空间**进行
-  （`cost_vector`），再按匹配规则逆映射回离散 \((u,j)\) 指派与顺序；
+  (`cost_vector`),再按匹配规则逆映射回离散 \((u,j)\) 指派与顺序;
   每代个体经同一套解码修复链评价。
-- **搜索机制**：动态交叉率 \(CR(g)=1-(\log g/\log S)^{\zeta}\)（公式 3-9，ζ=3；
-  大 CR 偏探索、小 CR 偏开发）、混合差分策略（公式 3-10：CR 高时 DE/rand/1
-  探索、低时 DE/best/2 开发）、动态缩放因子 \(F\)（公式 3-11）、
-  逆映射温度退火（\(T=1-g/S\)）、GMR 灭绝重启（公式 3-12 原式 GMR=1−CR，
-  δ 门限可选）、贪婪选择；主口径 pop50 × **gen200**（2026-10-28 由 gen100 上调；
-  gen 数是搜索预算的量级标定项，CR/温度调度均以其为分母，500 代作敏感性对照，
-  见 exp01 notes）。
-- **Lamarckian 回写**（M1，默认开）：获胜个体被修复后，把修复解的**起始任务归属**
-  写回基因（只改起始基因通道、绝不增删基因——长度不变式有测试守护），使后继
-  代际的差分围绕修复后的可行子空间展开。**M2-1 段内巡游序回写**（2026-10-30，
-  默认关，开关对照进行中）：进一步把修复解的**段内访问顺序**写回巡游基因通道，
-  五道闸门守护 + `writeback_stats` 诊断计数（`lamarckian_patrol_writeback`，
-  见 `experiments/ab_m21_patrol_writeback/`）。
+- **搜索机制**:动态交叉率 \(CR(g)=1-(\log g/\log S)^{\zeta}\)(公式 3-9,ζ=3;
+  大 CR 偏探索、小 CR 偏开发)、混合差分策略(公式 3-10:CR 高时 DE/rand/1
+  探索、低时 DE/best/2 开发)、动态缩放因子 \(F\)(公式 3-11)、
+  逆映射温度退火(\(T=1-g/S\))、GMR 灭绝重启(公式 3-12 原式 GMR=1-CR,
+  δ 门限可选)、贪婪选择;主口径 pop50 × **gen200**(2026-10-28 由 gen100 上调;
+  gen 数是搜索预算的量级标定项,CR/温度调度均以其为分母,500 代作敏感性对照,
+  见 exp01 notes)。
+- **Lamarckian 回写**(M1,默认开):获胜个体被修复后,把修复解的**起始任务归属**
+  写回基因(只改起始基因通道、绝不增删基因--长度不变式有测试守护),使后继
+  代际的差分围绕修复后的可行子空间展开。**M2-1 段内巡游序回写**(2026-10-30,
+  默认关,开关对照进行中):进一步把修复解的**段内访问顺序**写回巡游基因通道,
+  五道闸门守护 + `writeback_stats` 诊断计数(`lamarckian_patrol_writeback`,
+  见 `experiments/ab_m21_patrol_writeback/`)。
 
 ### 4.3 解码与可行性修复(`solvers/decode_repair.py`,`decode_mode=repair_chain`)
 
@@ -199,7 +202,7 @@ DMDE 给出的原始指派不保证可行;解码 = **按固定管线调用修复
 | 算子 | 作用 | 接受纪律 |
 |------|------|----------|
 | `_consolidate` | 任务少时向更少机合并,闲置合法化 | 只改派不删任务;合并后必须落进受体航程预算 |
-| `_repair_range` | 超航程航次逐个移除“移除后节省最多”的任务 | 被移除任务**当场改派**（reflow），全不可行才记 \(y_j=0\) 证明性暂缓；飞行时间预算对称生效——访问序评估（`_best_order`：全航程/速度 > `max_time` 即该序不可行）与可行性/门禁一阶检验均同口径核对 |
+| `_repair_range` | 超航程航次逐个移除"移除后节省最多"的任务 | 被移除任务**当场改派**(reflow),全不可行才记 \(y_j=0\) 证明性暂缓;飞行时间预算对称生效--访问序评估(`_best_order`:全航程/速度 > `max_time` 即该序不可行)与可行性/门禁一阶检验均同口径核对 |
 | `_reflow_task` | 改派救援:插入现有航次 / 闲置机开班 / 换机腾位 | 可达即执行(存在量化);修复不得制造**新**迟到 |
 | `_choose_end_nests` | 终点机巢内层求解(见 §4.4) | 容量约束下联合最优 |
 | `_reorder_for_deadlines` | 航次内调序降迟到 | 不改任务集;按 (迟到数, 迟到量, 航程) 依次逐分量比较(算子内判据,与目标层口径无关) |
@@ -230,15 +233,15 @@ f(s)=
 \quad(\text{最小化})
 \]
 
-- **T0**：物理硬违约含航程/飞行时间/时序/同步/巢容量/终点不可达/结构各判据。
-  \(W_{\mathrm{hard}}=\kappa\, m R_{\mathrm{pool}}\)（自动推导）使任何一次物理违约
-  压倒任意交付收益——“纸面可行、执行弹回”的幽灵解永不入选；
-  \(E_m\)（超限米数）只在不可行解间做层内排序。
+- **T0**:物理硬违约含航程/飞行时间/时序/同步/巢容量/终点不可达/结构各判据。
+  \(W_{\mathrm{hard}}=\kappa\, m R_{\mathrm{pool}}\)(自动推导)使任何一次物理违约
+  压倒任意交付收益--"纸面可行、执行弹回"的幽灵解永不入选;
+  \(E_m\)(超限米数)只在不可行解间做层内排序。
 - **T0.5**:\(W_{\mathrm{skip}}\) 同推导。门禁定义合法解:不存在"任务 \(j\in S\)
   未被交付,且存在空闲机可开班或某航次可插入"(**voluntary_skip** → 非法);
-  一阶检验确实装不下的记 **capacity_shortfall**（能力不足，允许不交付）。
-  一阶可插检验同时核对航程与飞行时间预算（`_time_ok`）：超时任务归
-  capacity_shortfall（物理装不下），而非 voluntary_skip（能装不装）。
+  一阶检验确实装不下的记 **capacity_shortfall**(能力不足,允许不交付)。
+  一阶可插检验同时核对航程与飞行时间预算(`_time_ok`):超时任务归
+  capacity_shortfall(物理装不下),而非 voluntary_skip(能装不装)。
   门禁修复模式下 voluntary_skip 由构造归零;**一阶判据不完备,非全局最大覆盖证明**
   (不查"两个未覆盖任务拼班才装得下"的组合可行--边界显式声明并随
   `gate_stats` 落盘)。
@@ -260,14 +263,14 @@ DMDE 收敛后对**交付解**做局部搜索(不重开种群);三层邻域互�
 | 搜索/收敛后 | `polish_assignment`:relocate / swap / 插入位 | 归属+顺序 | 开 |
 | 交付后组内 | 2-opt(段反转)/ Or-opt(段迁移) | 顺序 | 开 |
 | 交付后跨机 | 单任务改派(受体含空闲机) | 归属 | 开 |
-| 覆盖再装载开关 | 单调成本 polish + 覆盖再装载(`coverage_first`，为算子开关名，非目标层口径) | 两段式 | 关(开关对照消融用) |
+| 覆盖再装载开关 | 单调成本 polish + 覆盖再装载(`coverage_first`,为算子开关名,非目标层口径) | 两段式 | 关(开关对照消融用) |
 
-统一接受纪律（**四道门**）：① 航程门（改后全航程 ≤ 各自剩余航程）；
-② 迟到门（迟到数与迟到总量逐分量不劣化）；③ 执行集门（覆盖只增不减）；
-④ 成本门（航程**严格下降** > ε）。全程无随机、逐位可复现；
-`sequence_group` 激活时另加两道保守门（2026-10-30 时序交叉补齐）：
-顺序维度算子过**时序门**（候选同链逆序对不得多于基线），跨机改派对
-**链成员整体禁迁**，防调序/改派破坏 `sequence_order` 硬约束；
+统一接受纪律(**四道门**):1 航程门(改后全航程 ≤ 各自剩余航程);
+2 迟到门(迟到数与迟到总量逐分量不劣化);3 执行集门(覆盖只增不减);
+4 成本门(航程**严格下降** > ε)。全程无随机、逐位可复现;
+`sequence_group` 激活时另加两道保守门(2026-10-30 时序交叉补齐):
+顺序维度算子过**时序门**(候选同链逆序对不得多于基线),跨机改派对
+**链成员整体禁迁**,防调序/改派破坏 `sequence_order` 硬约束;
 纯成本改进 ⇒ 任意 λ>0 下适应度严格改进,不触碰主适应度阶梯。
 
 口径细节:空任务航次**不计**「机→巢」幻影距离;组内顺序优化只作用于交付解
@@ -290,10 +293,17 @@ DMDE 收敛后对**交付解**做局部搜索(不重开种群);三层邻域互�
 3. **完成闸门**:物理不可行的任务不顺延完成(解绑回池、下周期重选,完成率不说谎;
    迟到交付仍计完成);
 4. 推进仿真时钟;事件触发(UAV 故障 / 突发高优先级任务 / 机巢不可用)本周期重规划;
-5. 稳态早停:池内未完成任务数连续多周期不变即可停(剩余为不可达任务：真几何不可达与机队服务不可达两类，单列分账，不计淘汰)。
+5. **服务休眠/唤醒**(2026-11-04):几何可达但连续 `service_patience` 周期无可用机
+   在往返航程内的任务转**休眠**(`DORMANT`:不出池、不进候选,擑 churn)——
+   服务可达性是时变条件,异构机队下「连续够不着」≠「永远够不着」,不得出池
+   丢失;条件恢复(出现可服务的可用机)即唤醒回 PENDING、年龄累计不中断;
+   **几何永久不可达**(`static_unreachable`,按机队最强满电航程判定:最强机也
+   够不着)才是唯一出池途径,与休眠严格分账;
+6. 稳态早停:池内未完成任务数连续多周期不变即可停(剩余为永久不可达/休眠任务,单列分账,不计淘汰)。
 
 跨周期语义:任务暂缓**不是丢失**--shortfall 非永久淘汰,滞留任务经等待补偿与
-防饥饿机制持续获得机会;机队降落后换电回满航程(`recharge_at_nest`)。
+防饥饿机制持续获得机会,休眠任务条件恢复即唤醒;机队降落后换电回**该机**满电
+航程(`recharge_at_nest`,异构 per-UAV)。
 
 ---
 
@@ -313,13 +323,13 @@ DMDE 收敛后对**交付解**做局部搜索(不重开种群);三层邻域互�
 同一滚动外壳、同一任务到达序列、同一约束评价可注入不同第二阶段引擎:
 随机可行分配 / 收益代价比贪心插入 / VRPTW 硬时间窗插入 / 本文方法(DMDE),
 外加同架构欧氏距离对照(只换代价模型)。**这同时是"求解器可替换"的证据**--
-本文贡献在问题形式化与分层框架，DMDE 是该框架的一个求解器实例。
+本文贡献在问题形式化与分层框架,DMDE 是该框架的一个求解器实例。
 
-实验台一览（详见 `experiments/README.md`）：exp01_smoke（冒烟/回归基线，
-3 seed 正式口径）、exp02_selection_scale（选择层规模）、exp03_event_rolling
-（事件滚动）、exp04_ablation（消融，含 B1 构造式解码对照设置）、exp05_baselines
-（基线对照）、exp06_joint_regime（长程 Poisson 吞吐）、ab_m21_patrol_writeback
-（M2-1 巡游序回写开关对照）。
+实验台一览(详见 `experiments/README.md`):exp01_smoke(冒烟/回归基线,
+3 seed 正式口径)、exp02_selection_scale(选择层规模)、exp03_event_rolling
+(事件滚动)、exp04_ablation(消融,含 B1 构造式解码对照设置)、exp05_baselines
+(基线对照)、exp06_joint_regime(长程 Poisson 吞吐)、ab_m21_patrol_writeback
+(M2-1 巡游序回写开关对照)。
 
 ---
 
@@ -327,11 +337,11 @@ DMDE 收敛后对**交付解**做局部搜索(不重开种群);三层邻域互�
 
 | 项 | 默认 | 备注 |
 |----|------|------|
-| 适应度 | 覆盖门禁(唯一口径) | `coverage_gate`+`lexicographic_coverage` 开(后者为历史命名，实为覆盖门禁罚层，非字典序口径)；F1 只作指标、不进 f |
+| 适应度 | 覆盖门禁(唯一口径) | `coverage_gate`+`lexicographic_coverage` 开(后者为历史命名,实为覆盖门禁罚层,非字典序口径);F1 只作指标、不进 f |
 | λ(成本权重) | 1e-1 | 与 1e-2/1e-4 的历史数据**不可混用** |
-| 迟到 | 软约束：迟到只经 `w_violation=0.01/s` 的 `w_late·L` 单一计价 | 迟到计完成、\(F_1\) 计全额奖励且不折减、f 不含奖励项；`W=1800 s` 不进 f，仅用于事后指标 `reward_effective` 的折减、默认关的 `prune_zero_reward`，以及 `check_time_window=true` 消融口径下的选择层时间窗预筛 |
-| 飞行时间约束 | `endurance: true`；`uav_max_time=null` 自动派生（max_range/speed） | 与航程对称；显式更小值成独立绑定约束 |
-| Lamarckian | M1 起始基因回写开；M2-1 段内巡游序回写**关**（开关对照） | `lamarckian_patrol_writeback` |
+| 迟到 | 软约束:迟到只经 `w_violation=0.01/s` 的 `w_late·L` 单一计价 | 迟到计完成、\(F_1\) 计全额奖励且不折减、f 不含奖励项;`W=1800 s` 不进 f,仅用于事后指标 `reward_effective` 的折减、默认关的 `prune_zero_reward`,以及 `check_time_window=true` 消融口径下的选择层时间窗预筛 |
+| 飞行时间约束 | `endurance: true`;`UAV.max_time=null` 自动派生(per-UAV max_range/speed) | 与航程对称、逐机判定;显式更小值成独立绑定约束 |
+| Lamarckian | M1 起始基因回写开;M2-1 段内巡游序回写**关**(开关对照) | `lamarckian_patrol_writeback` |
 | 解码 | `repair_chain` | `constructive` 为 exp04 B1 对照设置 |
 | 参与策略 | `demand`(Fix45) | 救援池 `fleet`(Fix6) |
 | 剔除 | 全关(`prune_unprofitable=false`) | 与"完成是约束"冲突,仅消融开 |
@@ -345,33 +355,33 @@ DMDE 收敛后对**交付解**做局部搜索(不重开种群);三层邻域互�
 
 ```text
 methods/
-  task_pool.py          任务池（到达/滞留/释放）
-  uav_state.py          机队状态（位置/航程/巢/可用性）
-  utils/                building_layer / coordinates / dem_geotiff（数据与坐标工具）
-  selection/            阶段一：priority → feasibility → marginal_gain → capability
+  task_pool.py          任务池（到达/滞留/释放/服务休眠 DORMANT 与唤醒）
+  uav_state.py          机队状态(位置/航程/巢/可用性)
+  utils/                building_layer / coordinates / dem_geotiff(数据与坐标工具)
+  selection/            阶段一:priority → feasibility → marginal_gain → capability
   muas/
     config.py / fitness_weights.py / feasibility.py
-                        配置、评价权重快照（可独立重算对账）、可行性判据（含飞行时间）
-    problem.py          模型、目标分量、scalar_fitness（门禁口径）
-    coverage_gate.py    覆盖门禁：一阶检验（航程+_time_ok）/ 审计 / 构造性修复
-    cost/               三维地理代价：vertical_section（地形+建筑包络）/ dem_terrain /
+                        配置、评价权重快照(可独立重算对账)、可行性判据(含飞行时间)
+    problem.py          模型、目标分量、scalar_fitness(门禁口径)
+    coverage_gate.py    覆盖门禁:一阶检验(航程+_time_ok)/ 审计 / 构造性修复
+    cost/               三维地理代价:vertical_section(地形+建筑包络)/ dem_terrain /
                         provider / cost_matrix / nest_keys / lazy_pairwise
     representation/     统一编码 encoder / mapper / inverse_mapper / repair_rules/
-    operators/          mutation / crossover / scale_factor / extinction（DMDE 算子）
+    operators/          mutation / crossover / scale_factor / extinction(DMDE 算子)
     constraints/        single_constraints / coop_constraints / evaluator /
-                        nest_capacity（终点巢内层 MCF）
-    base/               base_optimizer（求解器基类）
+                        nest_capacity(终点巢内层 MCF)
+    base/               base_optimizer(求解器基类)
     solvers/
       stage_config.py        编排参数 MUASStageConfig / POLICY_*
-      participating.py       参与机选择（K 决策）
-      tour_cost.py           航次代价 / ETA / 时间窗原语（口径唯一来源）
+      participating.py       参与机选择(K 决策)
+      tour_cost.py           航次代价 / ETA / 时间窗原语(口径唯一来源)
       decode_repair.py       repair_chain 解码与修复算子组
-      decode_constructive.py 构造式解码（exp04 B1 对照设置）
-      route_polish.py        交付解成本 polish 算子组（四道门+时序门）
-      evaluator.py           MUASAssignmentEvaluator / Lamarckian 回写（M1 起始 / M2-1 巡游序）
+      decode_constructive.py 构造式解码(exp04 B1 对照设置)
+      route_polish.py        交付解成本 polish 算子组(四道门+时序门)
+      evaluator.py           MUASAssignmentEvaluator / Lamarckian 回写(M1 起始 / M2-1 巡游序)
       stage_runner.py        run_selective_muas 主入口 / 枚举参照
-      dmde_solver.py         DMDE 循环（算法 3.1）
-      local_search.py        指派邻域（relocate/swap/position）
-      muas_stage.py          兼容门面（2026-10-27 拆分，导入路径不变）
-  rolling/              horizon.py（滚动闭环）/ event_trigger.py（事件）
+      dmde_solver.py         DMDE 循环(算法 3.1)
+      local_search.py        指派邻域(relocate/swap/position)
+      muas_stage.py          兼容门面(2026-10-27 拆分,导入路径不变)
+  rolling/              horizon.py(滚动闭环)/ event_trigger.py(事件)
 ```
