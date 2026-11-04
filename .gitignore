@@ -27,6 +27,8 @@ task_allocation/data/shp/
 *.toc
 *.bbl
 *.blg
+# biber 写盘失败（main.bbl 被 PDF 阅读器占用）时留下的副本，纯冗余
+*-SAVE-ERROR
 __pycache__/
 *.py[cod]
 .workbuddy/
