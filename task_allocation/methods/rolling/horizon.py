@@ -69,6 +69,13 @@ from task_allocation.methods.rolling.event_trigger import (
     should_replan,
     summarize_events,
 )
+from task_allocation.methods.rolling.sequence_group import (
+    expand_to_groups,
+    group_members,
+    has_groups,
+    prune_incomplete_groups,
+    prune_unwakeable_groups,
+)
 from task_allocation.methods.selection.pipeline import (
     AntiStarvationConfig,
     run as run_selection,
@@ -139,10 +146,13 @@ class HorizonConfig:
     # 在本周期计划内做反应式调整（强制纳入紧急任务、剔除不可用机巢）。
     # 置 False 则事件仅被记录、不触发本期重规划（供消融对比关停该机制）。
     event_replan: bool = True
-    # 收敛早停（论文长程吞吐口径）：到达全部注入后，若池内未完成任务数
-    # len(pool) 连续 stable_patience 个周期不变，说明剩余为物理不可达的
-    # 死任务（无超期淘汰，2026-10-24 口径下任务只有 DONE/UNREACHABLE
-    # 两种出池途径），提前停止（周期数本身不定）。n_cycles 仅作安全上限。
+    # 收敛早停（2026-11-04 用户裁定口径）：到达全部注入后，**池空**（不存在
+    # 「能被完成却没被完成」的任务；静态几何不可达已出池，服务休眠仍在池中）
+    # 即自然收敛停机；否则持续推进，让休眠任务等条件恢复唤醒——「没服务，
+    # 只要能服务，迟早被服务」。stable_patience 降为兜底：池非空但连续该数
+    # 个周期零进展（无完成/唤醒/新休眠/新出池且池大小不变）才提前停，防止
+    # 时变能力永不恢复时空转到 n_cycles 硬上限。n_cycles 是硬安全上限，
+    # 不是主停机条件（真实周期数由本判据决定）。
     stop_when_stable: bool = False
     stable_patience: int = 4
     # 服务休眠（2026-11-04 异构化口径；2026-10-25 起归因分离）：任务
@@ -242,6 +252,17 @@ class CycleRecord:
     # 即唤醒。dormant_ids = 本周期新休眠；woken_ids = 本周期唤醒。
     dormant_ids: list[int] = field(default_factory=list)
     woken_ids: list[int] = field(default_factory=list)
+    # 停机原因（2026-11-04）：仅收敛那一周期由 run() 回填。
+    # "pool_empty" = 自然收敛（不存在能被完成却没被完成的任务）；
+    # "no_progress" = stable_patience 零进展兜底、非自然收敛（须与
+    # n_dormant_end 等单列指标并读）；"" = 本周期未发生停机。
+    stop_reason: str = ""
+    # 顺序组连坐暂缓（2026-11-04 用户裁定 3）：组内某成员物理不可行被弹回
+    # 时，为守住「同周期完成或同时暂缓」，同组其余成员一并撤下、release 回
+    # 池、下周期整组重试。它们本身没有物理违约，**不计废飞**
+    # （infeasible_ids），单列于此供审计；也不与 deferred_ids 混账（它们
+    # 本周期已进执行集，只是周期末判定不完成）。
+    seq_group_rolled_back_ids: list[int] = field(default_factory=list)
     # 分配结构与求解轨迹：不进 as_dict()/metrics.json（数值指标保持精简），
     # 由实验编排写入 results/solution.json，供分配图 / 收敛图取用。
     tours: list[dict[str, Any]] = field(default_factory=list)
@@ -281,6 +302,9 @@ class CycleRecord:
             "dormant_ids": self.dormant_ids,
             "n_woken": len(self.woken_ids),
             "woken_ids": self.woken_ids,
+            "stop_reason": self.stop_reason,
+            "seq_group_rolled_back_ids": self.seq_group_rolled_back_ids,
+            "n_seq_group_rolled_back": len(self.seq_group_rolled_back_ids),
         }
 
 
@@ -343,12 +367,16 @@ class RollingHorizon:
         # 「释放任务下周期强制纳入」不因单周期空转而丢失。
         self._pending_forced: set[int] = set()
         self.records: list[CycleRecord] = []
-        # 收敛早停状态：到达阶段（cycle <= 最后到达周期）不计数；之后监测
-        # 池内未完成任务数，连续 stable_patience 周期不变即判稳态。
+        # 收敛早停状态（2026-11-04 口径）：主判据 = 池空（不存在「能被完成
+        # 却没被完成」的任务）；stable_patience 降为零进展兜底。到达阶段
+        # （cycle <= 最后到达周期）不计数。
         self._conv_enabled = bool(self.hcfg.stop_when_stable)
         self._conv_patience = int(self.hcfg.stable_patience)
         self._conv_streak = 0
-        self._conv_last_len: int | None = None
+        # 零进展签名 = (池内未完成任务数, 休眠数)；用于识别「条件恢复中」
+        # 的推进（唤醒/休眠数变化算有进展，不误判死循环）。
+        self._conv_last_sig: tuple[int, int] | None = None
+        self._conv_reason: str = ""
         # 服务不可达追踪（2026-10-25 口径对齐）：task_id → 连续「无可用 UAV
         # 在往返航程内」的周期数。达到 hcfg.service_patience 即判机队服务
         # 不可达出池（与静态几何不可达同等对待，单列归因 reason="service"）。
@@ -440,11 +468,17 @@ class RollingHorizon:
 
         在 ``begin_cycle`` 之前调用，唤醒任务立即进入本周期 T_t；年龄
         （arrival_time）累计不中断，唤醒后继续参与优先级/防饥饿排序。
+
+        顺序组原子性（2026-11-04 用户裁定）：带 ``sequence_group`` 的链**整组
+        一起唤醒**——组内只要还有一个成员不可服务，整条链继续休眠，避免
+        「组内部分唤醒进 T_t、部分仍休眠」把调度单元拆开。无组任务行为不变。
         """
         uavs = self.fleet.all()
-        wake_ids = [
-            t.id for t in self.pool.dormant_tasks() if self._serviceable(t, uavs)
-        ]
+        dormant = self.pool.dormant_tasks()
+        wakeable = {t.id for t in dormant if self._serviceable(t, uavs)}
+        if has_groups(dormant):
+            wakeable = prune_unwakeable_groups(wakeable, group_members(dormant))
+        wake_ids = sorted(wakeable)
         if not wake_ids:
             return []
         self.pool.wake(wake_ids)
@@ -481,10 +515,71 @@ class RollingHorizon:
                     newly.append(t.id)
         if not newly:
             return []
+        # 顺序组原子性（2026-11-04）：命中组内任一成员 ⇒ **整组一起休眠**，
+        # 避免「组内一个 DORMANT、其余仍 PENDING」把调度单元拆成两半。
+        # 组映射取全池（含在途/已出池外的活动成员），mark_dormant 会自行
+        # 跳过不在池 / 已在执行 / 已休眠的 id，无需额外过滤。
+        if has_groups(tasks):
+            newly = sorted(expand_to_groups(set(newly), self._seq_groups()))
         marked = self.pool.mark_dormant(newly, reason="service")
         for tid in newly:
             self._service_stall.pop(tid, None)
         return marked
+
+    # ------------------------------------------------------------------
+    # 顺序约束组原子性（2026-11-04 用户裁定）：带 sequence_group 的链是
+    # 不可拆的调度单元，本周期要么整组一起完成，要么整组一起暂缓。
+    # 所有方法在「无组」时立即旁路，既有实验 sequence_chain_ratio=0.0
+    # ⇒ 零行为变化。详见 methods/rolling/sequence_group.py 的口径边界。
+    # ------------------------------------------------------------------
+
+    def _seq_groups(self) -> dict[int, list[int]]:
+        """全池活动任务的顺序组映射（含 DORMANT，不含已出池 DONE/UNREACHABLE）。
+
+        以**全池**而非本周期候选为基准，才能识别「组内某成员休眠/在途」
+        导致的不完整；已出池成员不再阻塞其余成员（避免永久暂缓死锁）。
+        """
+        return group_members(self.pool.active_tasks())
+
+    def _seq_admission_gate(self, tasks: list[Task]) -> tuple[list[Task], list[int]]:
+        """准入闸门：成员不齐全的组整组一起暂缓（不进本周期候选）。
+
+        组映射取**全池活动任务**：组内若有成员休眠 / 在途（不在本周期 T_t），
+        则把已在 T_t 的成员一并撤下，返回 ``(收口后候选, 一起暂缓的 id)``。
+        已出池（DONE / UNREACHABLE）成员不在组映射里，故不会造成永久不完整。
+        被撤下的任务保持 PENDING 留池、年龄不中断，下周期整组再一起参与调度。
+        这是**批次 defer**（调度原子性），不打 DORMANT 标、不计休眠指标。
+        """
+        if not has_groups(tasks):
+            return tasks, []
+        drop = prune_incomplete_groups({int(t.id) for t in tasks}, self._seq_groups())
+        if not drop:
+            return tasks, []
+        return [t for t in tasks if int(t.id) not in drop], sorted(drop)
+
+    def _seq_delivery_gate(self, solution: AllocationSolution) -> list[int]:
+        """交付闸门：解里只装载了组的一部分 ⇒ 把已装载成员撤下（整组暂缓）。
+
+        在 ``apply_solution`` / ``record.tours`` 生成之前调用，直接修改
+        ``tour.task_ids``；撤下的任务自然落入 ``deferred_ids``。est_cost
+        沿用原 tour 估值（偏保守，recharge_at_nest 下会回满），不重算——
+        组原子性优先于航程记账精度，如实声明、不影响完成口径。
+        """
+        groups = self._seq_groups()
+        if not groups:
+            return []
+        executed: set[int] = set()
+        for tour in solution.tours:
+            executed.update(int(i) for i in tour.task_ids)
+        drop = prune_incomplete_groups(executed, groups)
+        if not drop:
+            return []
+        for tour in solution.tours:
+            tour.task_ids = [int(i) for i in tour.task_ids if int(i) not in drop]
+        solution.executed_task_ids = [
+            int(i) for i in solution.executed_task_ids if int(i) not in drop
+        ]
+        return sorted(drop)
 
     def run_cycle(
         self,
@@ -632,8 +727,14 @@ class RollingHorizon:
             dorm_ids = {t.id for t in newly_dormant}
             record.dormant_ids = [t.id for t in newly_dormant]
             tasks = [t for t in tasks if t.id not in dorm_ids]
+        # 6.2) 顺序组准入闸门（2026-11-04 用户裁定 3「同周期完成，或同时暂缓」）：
+        # 组内成员不齐（部分休眠/在途）时，把已在 T_t 的成员一并撤下，整组
+        # 本周期不进选择层。只收窄**送进选择层的副本**，`tasks` 保持 6.1 后的
+        # 候选全集不变，使步骤 8 的 deferred_ids 记账天然包含被暂缓的组，
+        # 无需额外补账。无组时 has_groups() 为 False ⇒ 原列表原样返回。
+        tasks_for_selection, seq_deferred = self._seq_admission_gate(tasks)
         sel = run_selection(
-            tasks,
+            tasks_for_selection,
             self.fleet.all(),
             config=sel_config,
             cost_hint=cost_hint,
@@ -647,6 +748,10 @@ class RollingHorizon:
         )
         record.selection = dict(sel.diagnostics)
         record.selection["replan"] = replan
+        if seq_deferred:
+            # 准入门禁整组暂缓的 id：本周期未进选择层，仍留池 PENDING。
+            # 单列供审计（它们不在 selected_ids / deferred_ids 的求解口径里）。
+            record.selection["seq_group_admission_deferred"] = list(seq_deferred)
         # S 成员无条件落盘（2026-10-22 覆盖门禁）：一阶检验与三分账的 S 基准，
         # 供「进过 S 没装」vs「从未进 S」归因；forced_ids 有即落（与 replan
         # 解耦——边沿化后「有强制」与「有新事件」不再同周期出现）。
@@ -704,6 +809,12 @@ class RollingHorizon:
             solver=(self.solver_factory() if self.solver_factory is not None else None),
         )
         solution = stage.solution
+        # 7.1) 顺序组交付闸门（2026-11-04 用户裁定 3）：MUAS 解里只装载了组的
+        # 一部分 ⇒ 把已装载成员一并撤下，整组批次 defer（留池 PENDING、下周期
+        # 整组重试）。必须在 record.tours / apply_solution / fleet.apply_solution
+        # 之前改 tour.task_ids，让任务池回写与机队绑定同步撤下，避免出现
+        # 「解里只有半个组、机队却已绑定」的不一致。无组时立即返回 []。
+        seq_drop = self._seq_delivery_gate(solution)
         record.muas = dict(stage.diagnostics)
         record.muas["model_type"] = stage.model_type
         record.muas["solve_seconds"] = round(stage.elapsed_seconds, 4)
@@ -715,6 +826,13 @@ class RollingHorizon:
         feas = solution.meta.get("feasibility", {}) or {}
         record.muas["violations"] = list(feas.get("violations", []))
         record.muas["penalty"] = float(feas.get("penalty", 0.0))
+        # 交付闸门撤下的成员：同步求解期诊断（n_executed/n_deferred 是
+        # stage 求解时快照，撤下后会偏大），并单列被撤 id 供审计。
+        # 真正的交付记账仍以 apply_res.executing_ids / deferred_ids 为准。
+        if seq_drop:
+            record.muas["seq_group_deferred_ids"] = list(seq_drop)
+            record.muas["n_executed"] = len(solution.executed_task_ids)
+            record.muas["n_deferred"] = len(selected) - len(solution.executed_task_ids)
 
         # 分配结构与 DMDE 收敛轨迹（只记有任务的航次）
         record.tours = [tour_snapshot(t) for t in solution.tours if t.task_ids]
@@ -756,28 +874,72 @@ class RollingHorizon:
     # ------------------------------------------------------------------
 
     def _converged(self, cycle: int, last_arrival_cycle: int) -> bool:
-        """收敛早停判定：到达全部注入后，池内未完成任务数 ``len(pool)`` 连续
-        ``stable_patience`` 个周期不变即判稳态、建议停止。
+        """收敛早停判定（2026-11-04 用户裁定口径）。
+
+        主判据：**不存在「能被完成却没被完成」的任务即停止**。静态几何不可达
+        任务已在 ``run_cycle`` 出池，池内留存的未完成任务（含服务休眠）都属
+        能力范围内、迟早会被服务，故「池空」= 自然收敛（``pool_empty``）。
+
+        否则持续推进（「一直下去」）——不再因「池大小连续不变」提前停：休眠
+        任务留在池里等条件恢复唤醒时，池大小不变恰恰是「正在等」，不是「没
+        进展」。旧口径把这种状态误判稳态、把休眠任务锁死，本次废弃。
+
+        ``stable_patience`` 降为**兜底**：仅当池非空、**池内无休眠任务**（不
+        在等条件恢复）且连续该数个周期零进展（池大小不变，本周期无完成 /
+        唤醒 / 新休眠 / 新不可达出池）才提前停，防止能力范围外的死循环空转到
+        ``n_cycles`` 硬安全上限。此时记 ``no_progress``，属**非自然收敛**，
+        metrics 侧的 ``n_dormant_end`` 等单列指标如实暴露，不粉饰成干净收敛。
+
+        ``stop_when_stable`` 仍是「是否允许早于 n_cycles 停止」的总开关；关闭
+        时按固定周期数跑满（既有固定周期实验 / 全部单周期测试依赖此语义）。
 
         Args:
             cycle: 刚完成的周期号（1-based）。
             last_arrival_cycle: 最后有任务到达的周期号；此周期及之前为到达阶段，
-                不计入稳态判定（到达本身就会改变池大小）。
+                不计入收敛判定（到达本身会改变池大小与任务集）。
         """
         if not self._conv_enabled:
             return False
-        cur = len(self.pool)  # 未完成任务数 = 已完成/不可达之后剩余
+        # 到达阶段：任务尚未全部注入，池空也不代表收敛
         if cycle <= last_arrival_cycle:
-            # 仍在到达阶段：重置计数，避免把"到达导致的变化"误判为稳态
-            self._conv_last_len = cur
+            self._conv_last_sig = None
             self._conv_streak = 0
             return False
-        if self._conv_last_len is not None and cur == self._conv_last_len:
-            self._conv_streak += 1
-        else:
+
+        cur = len(self.pool)  # 含 DORMANT；UNREACHABLE / DONE 已出池
+        n_dormant = len(self.pool.dormant_tasks())
+
+        # 主判据：池空 = 不存在「能被完成却没被完成」的任务 → 自然收敛
+        if cur == 0:
+            self._conv_reason = "pool_empty"
+            return True
+
+        # 池里还有休眠任务 = 正在等条件恢复，忠实「一直下去」，禁用兜底
+        if n_dormant > 0:
+            self._conv_last_sig = None
             self._conv_streak = 0
-        self._conv_last_len = cur
-        return self._conv_streak >= self._conv_patience
+            return False
+
+        # 兜底：无休眠但连续 stable_patience 周期零进展 → 防死循环
+        rec = self.records[-1] if self.records else None
+        progressed = bool(rec) and any(
+            (
+                getattr(rec, "completed_ids", None),
+                getattr(rec, "woken_ids", None),
+                getattr(rec, "dormant_ids", None),
+                getattr(rec, "unreachable_ids", None),
+            )
+        )
+        sig = (cur, n_dormant)
+        if progressed or self._conv_last_sig != sig:
+            self._conv_streak = 0
+        else:
+            self._conv_streak += 1
+        self._conv_last_sig = sig
+        if self._conv_streak >= self._conv_patience:
+            self._conv_reason = "no_progress"
+            return True
+        return False
 
     def run(
         self,
@@ -788,7 +950,9 @@ class RollingHorizon:
         """连续推进多个周期。
 
         Args:
-            n_cycles: 周期数；省略取 :class:`HorizonConfig` 的 ``n_cycles``。
+            n_cycles: 硬安全上限（省略取 :class:`HorizonConfig` 的 ``n_cycles``）。
+                真实停止由 :meth:`_converged` 决定：池空即自然收敛；否则持续
+                推进，仅由 ``stable_patience`` 兜底防死循环。
             arrivals: ``{周期号(1-based): [Task, ...]}``，该周期开始时到达的任务。
             progress_cb: 可选回调，每个周期完成后调用 ``progress_cb(record,
                 step, n_total)``（``record`` 为该周期 ``CycleRecord``）。用于向
@@ -802,8 +966,15 @@ class RollingHorizon:
             if progress_cb is not None:
                 progress_cb(self.records[-1], step, n)
             if self._converged(step, last_arrival):
-                print(f"[horizon] 收敛于周期 {step}：池内未完成任务数连续 "
-                      f"{self._conv_streak} 周期不变（={len(self.pool)}），提前停止。")
+                # 停机原因落进末周期记录，供 metrics / 审计区分「自然收敛」与
+                # 「零进展兜底」（后者属非自然收敛，须与 n_dormant_end 并读）。
+                self.records[-1].stop_reason = self._conv_reason
+                if self._conv_reason == "pool_empty":
+                    why = "不存在能被完成却没被完成的任务（池空，自然收敛）"
+                else:
+                    why = (f"连续 {self._conv_streak} 周期零进展（池={len(self.pool)}），"
+                           "stable_patience 兜底，非自然收敛")
+                print(f"[horizon] 收敛于周期 {step}：{why}，停止。")
                 break
         return self.records
 
@@ -1045,6 +1216,17 @@ class RollingHorizon:
             for tid, tags in violated.items()
             if any(not str(tag).startswith("tw_task_") for tag in tags)
         }
+        hard_ids = {int(t) for t in hard_violated}
+        # 顺序组原子性（完成闸门，2026-11-04 用户裁定 3）：组内任一成员被判
+        # 物理不可行 ⇒ **整组一起暂缓**，避免「组里一个弹回、其余照常完成」
+        # 把调度单元拆开。连坐成员本身没有物理违约，故不计废飞
+        # （infeasible_ids），单列 seq_group_rolled_back_ids 供审计。
+        # 无组或本周期无硬违约时 seq_deferred 为空 ⇒ 零行为变化。
+        groups = self._seq_groups()
+        seq_deferred = (
+            expand_to_groups(hard_ids, groups) - hard_ids
+            if (groups and hard_ids) else set()
+        )
         lateness_map = (solution.meta.get("feasibility", {}) or {}).get(
             "lateness", {}
         ) or {}
@@ -1056,8 +1238,12 @@ class RollingHorizon:
             if not bound:
                 continue
 
-            bad = [int(t) for t in bound if int(t) in hard_violated]
-            ok = [int(t) for t in bound if int(t) not in hard_violated]
+            bad = [int(t) for t in bound if int(t) in hard_ids]
+            group_defer = [int(t) for t in bound if int(t) in seq_deferred]
+            ok = [
+                int(t) for t in bound
+                if int(t) not in hard_ids and int(t) not in seq_deferred
+            ]
 
             # ① 物理不可行交付：解绑回任务池，下一周期重新纳入选择
             #    （不计完成、不计奖励；废飞指标只统计这一类）
@@ -1073,6 +1259,13 @@ class RollingHorizon:
                     task.meta["infeasible_tags"] = list(tags)
                     record.infeasible_tags[str(tid)] = list(tags)
                 record.infeasible_ids.extend(bad)
+
+            # ①b 顺序组连坐暂缓（本身未违约、不计废飞）：与真违约成员一起
+            #     撤下本周期交付、release 回池，下周期整组重试。
+            if group_defer:
+                self.fleet.unbind_tasks(tour.uav_id, group_defer)
+                self.pool.release(group_defer, reason="seq_group_defer")
+                record.seq_group_rolled_back_ids.extend(group_defer)
 
             if not ok:
                 continue

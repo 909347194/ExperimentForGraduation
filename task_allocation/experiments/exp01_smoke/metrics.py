@@ -253,9 +253,15 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
     # n_dormant_end = 末周期仍在休眠的任务数。缺字段（旧记录/测试桩）按 0 计。
     n_dormant_events = sum(len(getattr(r, "dormant_ids", []) or []) for r in records)
     n_woken = sum(len(getattr(r, "woken_ids", []) or []) for r in records)
+    # 末态休眠数 = 周期初快照（唤醒后、新休眠前）+ 本周期新转休眠数。
+    # 不能只读 records[-1].pool_counts：那是 begin_cycle 的周期初切面，
+    # 其后的 _update_service_stall 新休眠不在其中，直接读会漏掉末周期
+    # 新休眠的任务，使完成率分母排除项失真。
+    _last = records[-1] if records else None
     n_dormant_end = (
-        int((records[-1].pool_counts or {}).get("n_dormant", 0)) if records else 0
-    )
+        int((getattr(_last, "pool_counts", {}) or {}).get("n_dormant", 0))
+        + len(getattr(_last, "dormant_ids", []) or [])
+    ) if _last else 0
     # 只统计真正求解过的周期（2026-10-16 审查 I2：空转周期 muas 无解，
     # 旧口径把它们当 feasible=False 摊薄，1/4 被记成 1/8）
     feas_flags = [
@@ -299,12 +305,18 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
     cp_rejected = sum(
         int((r.muas or {}).get("cost_polish_rejected", 0) or 0) for r in records
     )
-    # ── 论文主表口径 v2（2026-10-22 指标体系）────────────────────────
+    # ── 论文主表口径 v3（2026-11-04 用户裁定 A）──────────────────────
     # 「可完成的最终都应完成，只是或早或晚；在此前提下控成本与时效」。
-    # η_final 分母**只排除物理不可达**（问题固有、不归算法能力）；
-    # 淘汰(elim)是机制缺陷信号、须为 0、不单列合法失败类——若出现，
-    # 它自然留在分母里压低 η_final，暴露「可完成却未完成」的缺陷。
-    n_final_denom = n_arrived - n_unreachable
+    # η_final 分母排除两类「当前能力范围外」的任务：
+    #   ① 静态几何不可达（问题固有、不归算法能力，已出池）；
+    #   ② 停机时仍处于服务休眠（时变能力不足的暂缓，不出池）。
+    # 休眠不是放弃：可完成必被完成（假设 1），新停机判据保证「不存在
+    # 能被完成却没被完成的任务」才自然收敛，故自然停机时 n_dormant_end=0、
+    # 本排除为恒等操作；它只为异常/兜底停机兜底，不靠缩小分母粉饰指标。
+    # 分账恒等式：arrived = done + unreachable + dormant_end + remain
+    #   （remain = 未完成且非不可达/非休眠的滞留任务，仍留在分母压低 η）。
+    # 淘汰(elim)是机制缺陷信号、须为 0、不单列合法失败类。
+    n_final_denom = max(0, n_arrived - n_unreachable - n_dormant_end)
     completion_rate_final = (len(completed) / n_final_denom) if n_final_denom else 0.0
     # 按时率（最终交付口径）：迟到交付计完成、不计按时（与“做没做完”分开）
     on_time_rate_final = (

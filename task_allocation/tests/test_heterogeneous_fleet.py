@@ -105,8 +105,12 @@ def test_fleet_max_range_helper() -> None:
             _uav(2, 0.0, max_range=80000.0)]
     assert fleet_max_range(uavs, default=60000.0) == 80000.0   # 取最强（含缺省解析）
     assert fleet_max_range([_uav(0, 0.0)], default=60000.0) == 60000.0
-    assert fleet_max_range([], default=60000.0) == 60000.0 or True  # 空队 → None（判定放宽）
+    # 空队即便给了 default 也必须返回 None（判定放宽为「不筛」）；旧断言
+    # `== 60000.0 or True` 恒真，钉不住任何语义，2026-11-04 审查后改为 is None。
+    assert fleet_max_range([], default=60000.0) is None
     assert fleet_max_range([], default=None) is None
+    # 全队 max_range=None 且无缺省 ⇒ 同样 None（不误回退成 0 / 全局值）
+    assert fleet_max_range([_uav(0, 0.0), _uav(1, 0.0)], default=None) is None
     print("[A] fleet_max_range helper: PASS")
 
 
@@ -254,6 +258,12 @@ def test_service_stall_dormant_then_wake() -> None:
     rec = horizon.run_cycle()
     assert rec.woken_ids == [1], f"应唤醒 1 号，实际 {rec.woken_ids}"
     assert 1 in rec.executed_ids, "唤醒后任务应进入本周期执行"
+    # 「→ complete」名实相符（2026-11-04 审查）：旧断言只到 executed_ids，
+    # 完成闸门若回归（hard_violated 误判 → release 回池）仍会全过。补钉
+    # completed_ids / 状态 DONE / 出池，守住「休眠→唤醒→完成」全链路末端。
+    assert 1 in rec.completed_ids, f"应完成 1 号，实际 {rec.completed_ids}"
+    assert t.status == TaskStatus.DONE, f"任务状态应为 DONE，实际 {t.status}"
+    assert 1 not in horizon.pool, "完成任务应出池"
     # 换电按该机满电航程恢复（F 项顺带钉住）
     assert horizon.fleet.get(1).remaining_range == 80000.0
     print("[E] service-stall dormant → wake → complete: PASS")

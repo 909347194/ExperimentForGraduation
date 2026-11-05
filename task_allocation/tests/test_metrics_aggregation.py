@@ -67,7 +67,8 @@ class _FakeTask:
 class _FakeRecord:
     def __init__(self, cycle, muas=None, executed=(), late=(), infeasible=(),
                  expired=(), unreachable=(), overdue=(), lateness=None,
-                 selection_extra=None, pool_counts=None, tours=None):
+                 selection_extra=None, pool_counts=None, tours=None,
+                 dormant=(), woken=(), stop_reason=""):
         self.cycle = cycle
         self.current_time = 600.0 * cycle
         self.muas = dict(muas or {})
@@ -83,8 +84,10 @@ class _FakeRecord:
         self.completed_ids = []
         self.deferred_ids = []
         self.released_by_fault = []
-        self.dormant_ids = []
-        self.woken_ids = []
+        self.dormant_ids = list(dormant)
+        self.woken_ids = list(woken)
+        self.stop_reason = stop_reason
+        self.seq_group_rolled_back_ids = []
         self.replan = False
         self.tours = list(tours or [])
         self.cost_history = []
@@ -407,6 +410,93 @@ def test_max_backlog_peak_aggregation():
     # 普通键仍是 mean±std（ddof=0）：[10,12,11] ⇒ 11 ± sqrt(2/3)
     assert abs(ss["n_completed"]["mean"] - 11.0) < 1e-9, ss["n_completed"]
     assert abs(ss["n_completed"]["std"] - (2 / 3) ** 0.5) < 1e-6, ss["n_completed"]
+
+
+# ---------------------------------------------------------------------------
+# 2026-11-04 用户裁定 A：休眠列入完成率分母排除项 + 末态休眠真实计数
+# ---------------------------------------------------------------------------
+
+
+def test_final_denom_excludes_dormant_end_v3():
+    """裁定 A：η_final 分母排除「停机时仍服务休眠」的任务。
+
+    6 个到达：T0/T1/T5 完成，T2 静态几何不可达（出池），T3/T4 停机时仍
+    休眠（不出池）。分母 = 6 − 1 − 2 = 3，完成 3 ⇒ η_final = 1.0。
+
+    钉住两处回归：
+      ① 沿用旧 v2 分母（只减 unreachable）⇒ 6−1=5，η=3/5=0.6 < 1；
+      ② 只改早停不动分母时「停机时休眠任务仍在，完成率 <100%，铁律照破」。
+    分账恒等式：arrived 6 = done 3 + unreachable 1 + dormant_end 2 + remain 0。
+    """
+    t0 = _FakeTask(0, 5.0, 0.0, 6000.0, completed_at=600.0)
+    t1 = _FakeTask(1, 5.0, 0.0, 6000.0, completed_at=1200.0)
+    t2 = _FakeTask(2, 5.0, 0.0, 6000.0, completed_at=None)   # 几何不可达
+    t3 = _FakeTask(3, 5.0, 0.0, 6000.0, completed_at=None)   # 停机仍休眠
+    t4 = _FakeTask(4, 5.0, 0.0, 6000.0, completed_at=None)   # 停机仍休眠
+    t5 = _FakeTask(5, 5.0, 0.0, 6000.0, completed_at=1800.0)
+    records = [
+        # 周期1：T3/T5 转休眠（2 次休眠事件）
+        _FakeRecord(1, muas={"feasible": True}, executed=[0],
+                    unreachable=[2], dormant=[3, 5]),
+        # 周期2：T5 条件恢复唤醒
+        _FakeRecord(2, muas={"feasible": True}, executed=[1], woken=[5]),
+        # 周期3（末周期）：周期初已有 1 个休眠（T3），本周期 T4 新转休眠
+        _FakeRecord(3, muas={"feasible": True}, executed=[5],
+                    pool_counts={"n_dormant": 1}, dormant=[4],
+                    stop_reason="no_progress"),
+    ]
+    m = exp01_metrics.build_metrics(
+        _facts(records, [t0, t1, t2, t3, t4, t5], [t0, t1, t5])
+    )
+    s = m["summary"]
+    # 休眠单列指标非零（不只报 100% 掩盖状态）
+    assert s["n_dormant_events"] == 3, s          # 2 + 0 + 1
+    assert s["n_woken"] == 1, s
+    assert s["n_dormant_end"] == 2, s             # 1(周期初) + 1(末周期新增)
+    assert s["n_completed"] == 3, s
+    assert s["n_unreachable"] == 1, s
+    # 裁定 A 的核心：分母排除休眠 ⇒ 完成率 100%（铁律不被兜底停机打破）
+    assert abs(s["completion_rate_final"] - 1.0) < 1e-9, s
+    # 分账恒等式（remain=0）：6 = 3 + 1 + 2 + 0
+    assert s["n_arrived"] == 6, s
+    assert (s["n_completed"] + s["n_unreachable"] + s["n_dormant_end"]) == 6, s
+
+
+def test_dormant_end_counts_last_cycle_new_dormant():
+    """末周期新休眠不能被漏掉：pool_counts 是周期初切面。
+
+    若只读 records[-1].pool_counts["n_dormant"] 会得到 0，分母排除项失真、
+    η 从 1.0 掉到 0.5；正确口径须叠加本周期 dormant_ids。
+    """
+    t0 = _FakeTask(0, 5.0, 0.0, 6000.0, completed_at=600.0)
+    t1 = _FakeTask(1, 5.0, 0.0, 6000.0, completed_at=None)   # 末周期新休眠
+    records = [
+        _FakeRecord(1, muas={"feasible": True}, executed=[0],
+                    pool_counts={"n_dormant": 0}, dormant=[1],
+                    stop_reason="no_progress"),
+    ]
+    m = exp01_metrics.build_metrics(
+        _facts(records, [t0, t1], [t0])
+    )
+    s = m["summary"]
+    assert s["n_dormant_end"] == 1, s
+    assert abs(s["completion_rate_final"] - 1.0) < 1e-9, s   # 1 / (2−1)
+    # 旧实现（单读 pool_counts）会是 0 ⇒ η = 1/2 = 0.5，铁律破
+    assert s["n_dormant_events"] == 1, s
+
+
+def test_dormant_end_zero_on_natural_convergence():
+    """自然收敛（stop_reason=pool_empty）时 n_dormant_end 必为 0，
+    裁定 A 的排除项是恒等操作，不靠缩小分母粉饰指标。"""
+    t0 = _FakeTask(0, 5.0, 0.0, 6000.0, completed_at=600.0)
+    records = [
+        _FakeRecord(1, muas={"feasible": True}, executed=[0],
+                    pool_counts={"n_dormant": 0}, stop_reason="pool_empty"),
+    ]
+    s = exp01_metrics.build_metrics(_facts(records, [t0], [t0]))["summary"]
+    assert s["n_dormant_end"] == 0, s
+    assert s["n_dormant_events"] == 0, s
+    assert abs(s["completion_rate_final"] - 1.0) < 1e-9, s
 
 
 if __name__ == "__main__":

@@ -143,10 +143,12 @@ def prefilter(
 
     Args:
         cost_hint: ``task_id -> 三维行进代价``（与优先级 C_i(t) 同源）。
-            非 None 时航程检查以其为 travel；缺省回退距离（distance_fn/
-            欧氏）。
-        distance_fn: 统一距离口径（DEM 三维航程）。用于「选最近可用机」，
-            缺省退回欧氏直线。
+            **兼容回退**：未提供逐机 ``pairwise_cost``（或键未命中）时，以
+            该任务的统一三维代价作为各机行进代价（历史行为，各机同值）。
+            异构机队应传 ``pairwise_cost`` 以获得真正的逐机判定。
+        distance_fn: 统一距离口径（DEM 三维航程）。本函数中用于 (a)
+            ``_pair_cost`` 的逐机回退、(b) 机巢往返几何可达判据；两者都
+            缺 ``distance_fn`` 时才退欧氏直线。
         nests: 机巢列表（几何可达性判据，与 ``static_unreachable`` 同源）。
             非 None 且 ``max_range`` 有效时，往返超限先分两种归因。
         max_range: **机队最强**满电航程（米，异构机队取全队最大值，见
@@ -154,7 +156,8 @@ def prefilter(
             与「当前无可用机」的分界。
         pairwise_cost: 逐机三维代价表（键 ``(-(1+uav_id), task_id)``，与
             ``cost_hint`` 同源同尺）。异构化后可行性判定逐机取代价
-            （短航程机装不下 ≠ 任务不可服务），缺省回退 distance_fn/欧氏。
+            （短航程机装不下 ≠ 任务不可服务）；优先级最高，缺项时依次
+            回退 ``cost_hint`` → ``distance_fn`` → 欧氏。
 
     拒绝理由以物理原因为主：``no_available_uav``（无机可用）与
     ``exceed_round_trip_range``（**真几何不可达**——所有机巢往返都超限）；

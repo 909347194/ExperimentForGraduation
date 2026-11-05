@@ -153,9 +153,14 @@ def build_summary(
     # 服务休眠/唤醒（2026-11-04 异构化口径：service 不再出池，改休眠）；缺字段按 0 计
     n_dormant_events = sum(len(getattr(r, "dormant_ids", []) or []) for r in records)
     n_woken = sum(len(getattr(r, "woken_ids", []) or []) for r in records)
+    # 末态休眠数 = 周期初快照（唤醒后、新休眠前）+ 本周期新转休眠数，
+    # 与 exp01 同源；pool_counts 是 begin_cycle 周期初切面，单读会漏掉
+    # 末周期新休眠的任务，使完成率分母排除项失真。
+    _last = records[-1] if records else None
     n_dormant_end = (
-        int((records[-1].pool_counts or {}).get("n_dormant", 0)) if records else 0
-    )
+        int((getattr(_last, "pool_counts", {}) or {}).get("n_dormant", 0))
+        + len(getattr(_last, "dormant_ids", []) or [])
+    ) if _last else 0
     n_capacity_violations = sum(len(r.capacity_violations) for r in records)
     # 覆盖门禁三分账（2026-10-22）：逐周期 gate_stats 累加；
     # 缺字段 = 未插桩/未开启（schema 容缺）按 0 计。
@@ -167,11 +172,15 @@ def build_summary(
     n_voluntary_skip = _gate_sum("n_skip")
     n_capacity_shortfall = _gate_sum("n_shortfall")
     n_gate_rescued = _gate_sum("n_rescued")
-    # ── 论文主表口径 v2（2026-10-22 指标体系，与 exp01 同源）──────────
-    # η_final 分母只排除物理不可达；淘汰是机制缺陷信号、须为 0（不单列
-    # 合法失败类）；按时率 = 最终交付中按时比例（迟到交付计完成、不计按时）。
+    # ── 论文主表口径 v3（2026-11-04 用户裁定 A，与 exp01 同源）────────
+    # 分母排除两类「当前能力范围外」任务：① 静态几何不可达（问题固有）；
+    # ② 停机时仍服务休眠（时变能力不足的暂缓，不出池）。休眠不是放弃：
+    # 新停机判据保证「不存在能被完成却没被完成的任务」才自然收敛，
+    # 故自然停机时 n_dormant_end=0、排除为恒等操作；仅异常/兜底停机兜底。
+    # 分账恒等式：arrived = done + unreachable + dormant_end + remain。
+    # 淘汰是机制缺陷信号、须为 0（不单列合法失败类）；
     # 按时率 = 最终交付中按时比例（迟到交付计完成、不计按时）。
-    n_final_denom = n_arrived - n_unreachable
+    n_final_denom = max(0, n_arrived - n_unreachable - n_dormant_end)
     completion_rate_final = (len(completed) / n_final_denom) if n_final_denom else 0.0
     on_time_rate_final = (
         (len(completed) - n_late) / len(completed) if completed else 0.0

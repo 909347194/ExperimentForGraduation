@@ -7,7 +7,9 @@
     * 图的落盘目录由 ``run.py`` 传入（约定在 ``results/figures/``），
       配置项 ``experiment.figures_dir``；
     * 读的是已经落盘的 ``metrics.json`` / ``solution.json``，因此图与数值产物
-      同源、可独立复现（改图不必重跑实验）；
+      同源、可独立复现（改图不必重跑实验）；绘制周期轴统一裁到最后一个有
+      活动周期，收敛判定的空周期不绘制（落盘 json 不动，见
+      ``_trim_cycles_for_plot``）；
     * 图文件名固定，便于论文引用与跨实验扫描。
 
 目录按「**看图目的**」分四层（论文叙事线），而不是按实现技术::
@@ -114,6 +116,95 @@ def discover_variants(results_dir: Path | str) -> dict[str, dict[str, Any]]:
     return variants
 
 
+def _cycle_has_activity(
+    m_cyc: dict[str, Any] | None,
+    s_cyc: dict[str, Any] | None,
+) -> bool:
+    """该周期是否有可绘制的活动 / 状态变化（用于判定尾部空周期）。
+
+    空周期 = 零出动、零到达、零状态转移、零求解的收敛判定周期（如新「池空」
+    判据下的末周期 ``stop_reason=pool_empty``）。中间周期即便零出动，只要有
+    新到达 / 休眠 / 唤醒 / 不可达 / 违约等状态变化也算有内容，必须保留——
+    时间轴不能断、休眠等待状态要可见。
+    """
+    if m_cyc:
+        for key in ("n_executed", "n_completed", "n_infeasible", "n_late",
+                    "n_unreachable", "n_woken"):
+            if int(m_cyc.get(key, 0) or 0) > 0:
+                return True
+        for key in ("completed_ids", "dormant_ids", "woken_ids",
+                    "unreachable_ids", "infeasible_ids", "overdue_ids",
+                    "seq_group_rolled_back_ids"):
+            if m_cyc.get(key):
+                return True
+        pool_counts = m_cyc.get("pool_counts") or {}
+        for key in ("n_new", "n_release", "n_dormant", "n_woken"):
+            if int(pool_counts.get(key, 0) or 0) > 0:
+                return True
+    if s_cyc:
+        if any(t.get("task_ids") for t in (s_cyc.get("tours") or [])):
+            return True
+        if s_cyc.get("cost_history"):
+            return True
+    return False
+
+
+def _trim_cycles_for_plot(
+    metrics: dict[str, Any],
+    solution: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any], int]:
+    """把**绘图视图**的周期轴裁到「最后一个有活动周期」（2026-11-05 用户裁定）。
+
+    「哪周期结束就绘制到哪个周期；不要绘制空周期了」：滚动时域收敛判定会产生
+    零出动的空周期（新「池空」判据下为末周期；旧稳态 patience 兜底下为末尾
+    若干个），它们在结果总览里是全零柱、在动画里是定格空帧，不进入论文叙事。
+
+    返回 ``(metrics_view, solution_view, n_trimmed)``：两者都是**浅拷贝**，仅替换
+    ``cycles`` 列表；落盘 ``metrics.json`` / ``solution.json`` 完全不动（收敛周期
+    的 ``stop_reason`` 属审计链，必须保留）。两份数据按 ``cycle`` 号对齐裁剪，
+    保证结果总览横轴与动画帧序列同源。只裁「最后一个有活动周期之后」的尾部
+    连续空段，中间的空周期保留（时间轴连续、状态可见）。
+    """
+    m_all = list(metrics.get("cycles") or [])
+    s_all = list(solution.get("cycles") or [])
+    if not m_all and not s_all:
+        return metrics, solution, 0
+
+    # 以 metrics 周期序列为主轴（缺 metrics 时退回 solution），按周期号关联
+    s_by_no = {int(c.get("cycle", 0)): c for c in s_all}
+    if m_all:
+        pairs: list[tuple[int, dict[str, Any] | None, dict[str, Any] | None]] = [
+            (no, c, s_by_no.get(no))
+            for c in m_all
+            for no in (int(c.get("cycle", 0)),)
+        ]
+    else:
+        pairs = [(int(c.get("cycle", 0)), None, c) for c in s_all]
+
+    last_active: int | None = None
+    for no, m_cyc, s_cyc in pairs:
+        if _cycle_has_activity(m_cyc, s_cyc):
+            last_active = no
+    if last_active is None:
+        return metrics, solution, 0   # 全空 / 无法判定：不裁，避免把图清空
+
+    m_keep = [c for c in m_all if int(c.get("cycle", 0)) <= last_active]
+    s_keep = [c for c in s_all if int(c.get("cycle", 0)) <= last_active]
+    if not m_keep and m_all:
+        m_keep = m_all[:1]
+    if not s_keep and s_all:
+        s_keep = s_all[:1]
+    n_trim = max(len(m_all) - len(m_keep), len(s_all) - len(s_keep))
+    if n_trim <= 0:
+        return metrics, solution, 0
+
+    m_view = dict(metrics)
+    m_view["cycles"] = m_keep
+    s_view = dict(solution)
+    s_view["cycles"] = s_keep
+    return m_view, s_view, n_trim
+
+
 def make_plots(
     metrics: dict[str, Any],
     solution: dict[str, Any],
@@ -126,6 +217,9 @@ def make_plots(
     extras: dict[str, Any] | None = None,
 ) -> list[Path]:
     """按 ``FIGURES`` 顺序生成图到 ``out_dir``，返回落盘路径列表。
+
+    绘制前统一把周期轴裁到「最后一个有活动周期」（不画收敛空周期），使所有
+    图的横轴 / 帧序列同源；落盘 ``metrics.json`` / ``solution.json`` 不受影响。
 
     ``names`` / ``groups`` 用于只出一部分图（例如只出 ``report`` 层进论文）；
     两者都省略则出全部。绘制函数返回值可能为空列表——某张图的数据不满足
@@ -148,6 +242,14 @@ def make_plots(
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     font = setup_style()
+
+    # 2026-11-05：绘图周期轴裁到最后一个有活动周期，不绘制收敛空周期。
+    # 只作用于绘图视图（浅拷贝），落盘 json 保持完整；见 _trim_cycles_for_plot。
+    metrics, solution, n_trim = _trim_cycles_for_plot(metrics, solution)
+    if n_trim:
+        kept = [int(c.get("cycle", 0)) for c in (metrics.get("cycles") or [])]
+        print(f"[plot] 周期轴：裁掉尾部 {n_trim} 个空周期，绘制至 "
+              f"C{kept[-1] if kept else '?'}（落盘 json 保持完整）")
 
     written: list[Path] = []
     skipped: list[str] = []

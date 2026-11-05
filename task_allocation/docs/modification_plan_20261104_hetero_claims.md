@@ -115,3 +115,35 @@ WP-A（1 天，立即）──→ WP-B（3–4 天）──→ D3/D4
 ```
 
 总计约 **1.5–2 周**（单人节奏）。风险点：①geo 判定口径（设计点 1）；②全局缺省回退的回归风险（用测试锁）；③本篇"不声称代价反馈"与 `closed_loop/` 既有代码的口径协调——若学位论文第 4/5 章涉及闭环机制，两稿表述需对齐"声称范围"边界，避免自相矛盾。
+
+---
+
+## 落实度对账（2026-11-04 收口，2026-11-05 复核）
+
+本计划是**改动前**的施工清单，实际落地以用户后续三项裁定为准；下表按「计划 → 实际」逐项对账，避免把计划文字当成已实现口径引用。
+
+### 三项用户裁定（覆盖计划文字）
+
+| # | 计划原文 | 用户裁定 / 实际落地 |
+|---|----------|---------------------|
+| 裁定 1 | C1「休眠不入完成率分母（三分账扩展）」 | 落地为**完成率分母排除项**（裁定 A）：`n_final_denom = n_arrived − n_unreachable − n_dormant_end`，exp01 与 exp05 同源；`n_dormant_end = 末周期 pool_counts.n_dormant + 末周期 dormant_ids`（周期初切面 + 末周期新休眠，单读快照会漏）。分账恒等式 `arrived = done + unreachable + dormant_end + remain`。自然收敛停机下 `n_dormant_end=0`，排除项是恒等操作，不靠缩小分母粉饰指标。 |
+| 裁定 2 | C2「稳态早停改『可服务池稳定』」 | **未按计划文字实现，改按用户裁定**：主判据 = 「池空」（不存在能被完成却没被完成的任务）即自然收敛（`stop_reason=pool_empty`）；池非空则持续推进，`stable_patience` 降为**零进展兜底**（池内无休眠且连续该数周期无完成/唤醒/新休眠/新出池）→ `no_progress`，属非自然收敛，须与 `n_dormant_end` 单列并读。旧「池大小连续不变即稳态」口径会把休眠任务锁死，已废弃。 |
+| 裁定 3 | 计划中无此项 | **新增**：带同一 `sequence_group` 的链是调度层不可拆单元，本周期要么整组一起完成、要么整组一起暂缓。新增 `methods/rolling/sequence_group.py`，并在 `horizon.py` 接入三处闸门（准入 `_seq_admission_gate`、交付 `_seq_delivery_gate`、完成闸门连坐）。 |
+
+### C 组逐项
+
+| # | 状态 | 说明 |
+|---|------|------|
+| C1 | 已落地（口径按裁定 1） | `TaskStatus.DORMANT` + `mark_dormant`/`wake`；休眠不出池、不进候选、年龄累计不中断。 |
+| C2 | 已落地（口径按裁定 2） | 休眠/唤醒每周期复查；组内原子性另按裁定 3 扩展（整组休眠/整组唤醒）。 |
+| C3 | 部分落地 | `CycleRecord` 新增 `dormant_ids` / `woken_ids` / `stop_reason` / `seq_group_rolled_back_ids`（均进 `as_dict()`）；metrics 新增 `n_dormant_events` / `n_woken` / `n_dormant_end`。**休眠年龄未单独落盘**（任务池已有 `dormant_time` 元数据，未做汇总指标），如实标注。 |
+| C4 | 已落地（文件与计划不同） | 实际落在 `tests/test_heterogeneous_fleet.py`（用户推送 a8bad17 的 7 项）、`task_allocation/tests/test_metrics_aggregation.py`（3 项分母用例）、新增 `task_allocation/tests/test_rolling_caliber_20261104.py`（21 项：停机四分支 + `stop_reason` 落盘、顺序组三处闸门与纯函数、无组旁路、prefilter 逐机 DEM 分支、exp05 同源分母）。计划中的 `tests/test_dormant_wake.py` / `test_anti_starvation.py` **未新建**；防饥饿边界未单独补测。 |
+
+### 仍需用户复核的技术性区分（两条暂缓路径）
+
+1. **服务休眠路径**（能力不足）：组内任一成员连续无可用机在往返航程内 ⇒ 整组转 `DORMANT`，条件恢复整组唤醒；计入 `n_dormant_*`，由完成率分母排除项覆盖。
+2. **组原子性路径**（调度判定）：本周期候选集或 MUAS 解里只出现组的一部分 ⇒ 已出现成员一并撤下、整组**批次 defer**，留池保持 `PENDING`、不打 `DORMANT`、不计休眠指标，下周期整组重试；完成闸门连坐同属此路径，连坐成员不计废飞，单列 `seq_group_rolled_back_ids`。
+
+### 仍未落实（沿用 2026-11-04 审查结论）
+
+A2/A3/A4–A7（论文声明类）、B2（19 文件全局→per-UAV 替换面）、B5/B6/B7、WP-D 全部（D1–D4）、同构 3-seed 回归对账（D4）。这些不影响本轮三项裁定的代码收口，但**正式实验与论文定稿前须补齐或如实声明**。

@@ -70,9 +70,10 @@ from plot import render_from_results as r; r('task_allocation/experiments/exp01_
   `tasks.domain=dem_extent`（DEM 全域均匀撒点），时间窗周期相关
   （`latest = 到达时刻 + U(4.5,9.0)×600s`，≈2700~5400s）。
 - **到达口径（fixed-60 冒烟）**：`n_cycles: 60` 只是
-  安全上限，`arrivals.mode: fixed, counts: [10, 20]`（初始 30 + 周期 2/3 各
-  10/20 = 共 60 个任务），周期 4 起有意无新到达，靠 `stop_when_stable`
-  （patience=4）早停。
+  安全上限，`arrivals.mode: fixed, counts: [5, 5]`（初始 20 + 周期 2/3 各
+  5/5 = 共 30 个任务，2026-10-26 用户由 20/10/20=50 调整为 20/5/5=30），周期 4 起
+  有意无新到达。收敛早停（2026-11-04 裁定口径）为「池空」自然收敛：实测 3 seed 均于
+  **周期 4** 自然停机（`stop_reason=pool_empty`，详见 config.yaml 注释）。
   长程「持续到达」的吞吐口径由 `exp06_joint_regime`（Poisson 流）承担；
   本实验是「链路正确 + 口径标定 + 回归基线」台，不是吞吐实验台。
   （`fixed` 的 counts 长度必须 = n_cycles−1；本配置故意只给 2 项。）
@@ -317,7 +318,9 @@ DE vs 随机同预算裁决（seed 42，删除前从 trace 提取留档；两臂
 
 **口径边界（论文引用须如实声明）**：**只判同一条航次内**。同一链的任务若被
 拆给不同无人机或不同周期，本模型不判违约——跨机/跨周期须按绝对完成时刻比对，
-尚未实现。
+尚未实现。注意（2026-11-04 用户裁定）「不判违约」不等于「允许拆开完成」：
+滚动调度层另把同一链当不可拆单元，本周期要么整组一起完成、要么整组一起
+暂缓（见 `methods/rolling/sequence_group.py`），两者层次不同、不互相替代。
 
 **开关与数据**：`muas.constraints.sequence`（默认 true）+ `tasks.sequence_chain_ratio`
 （默认 **0.0 = 关闭**，保证既有实验基线逐位不变）。开启后链内成员取「随机种子
