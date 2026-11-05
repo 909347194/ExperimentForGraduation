@@ -296,7 +296,7 @@ DMDE 收敛后对**交付解**做局部搜索(不重开种群);三层邻域互�
 修复链地板 C 为可行性必需、不可归零,单独报告。
 
 结论(pop∈{8,12}、gen∈{25,40}、同几何 + 同求解器种子配对,纯几何随机 SRP 实例;
-详见 `experiments/ab_optimization_attribution/results/ab_attr_report.md`):
+详见 `experiments/ab_optimization_attribution/ab_attr_report.md`):
 
 1. **归属高度体制依赖,非固定比例。**
    - 小批量场景(40:2、20:3,单周期任务少):进化占比 **0%**,全部改进来自精修;
