@@ -66,6 +66,43 @@ def _exp01_shape():
     return metrics, solution
 
 
+def test_cycle_record_activity_parity_with_plot_rule():
+    """吞吐分母判据（CycleRecord 侧）与绘图裁剪判据（dict 侧）必须同则。
+
+    2026-11-05 吞吐分母统一为「运营周期数」后，``metrics.n_oper_cycles``
+    （record 侧 ``cycle_record_has_activity``）与 ``plot._trim_cycles_for_plot``
+    （dict 侧 ``_cycle_has_activity``）各持一份实现（数据形状不同）；两侧
+    一旦漂移，结果总览 (a) 曲线终点与 (d) 表又会吞吐双值。用代表性周期
+    钉住两份实现一致。
+    """
+    from task_allocation.methods.rolling.horizon import (
+        CycleRecord,
+        cycle_record_has_activity,
+    )
+
+    def _rec(cycle, **kw):
+        return CycleRecord(cycle=cycle, current_time=600.0 * cycle, **kw)
+
+    cases = [
+        _rec(1),                                    # 全空：非活动
+        _rec(2, executed_ids=[1], completed_ids=[1]),
+        _rec(3, dormant_ids=[9]),
+        _rec(4, woken_ids=[9]),
+        _rec(5, pool_counts={"n_new": 3}),
+        _rec(6, tours=[{"task_ids": [2]}]),
+        _rec(7, cost_history=[1.0, 0.9]),
+        _rec(8, overdue_ids=[4]),
+        _rec(9, seq_group_rolled_back_ids=[5]),
+        _rec(10, unreachable_ids=[7]),
+        _rec(11, infeasible_ids=[8], late_ids=[8]),
+    ]
+    for rec in cases:
+        m_side = rec.as_dict()
+        s_side = {"tours": rec.tours, "cost_history": rec.cost_history}
+        assert cycle_record_has_activity(rec) == _cycle_has_activity(m_side, s_side), \
+            rec.cycle
+
+
 def test_trims_trailing_convergence_cycle():
     """收敛判定空周期（C4）判为空并裁掉，两份数据都止于 C3。"""
     m, s = _exp01_shape()

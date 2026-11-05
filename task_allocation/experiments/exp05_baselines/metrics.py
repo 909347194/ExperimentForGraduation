@@ -17,6 +17,8 @@ import json
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from task_allocation.methods.rolling.horizon import cycle_record_has_activity
+
 __all__ = [
     "build_summary",
     "aggregate_summaries",
@@ -73,6 +75,7 @@ CSV_COLUMNS = (
     "s_coverage_rate",
     "throughput_per_cycle",
     "n_cycles",
+    "n_oper_cycles",
     "n_active_cycles",
     "solve_time_ms",
     "wall_seconds",
@@ -115,6 +118,13 @@ def build_summary(
     tasks = batch.all_tasks()
     n_arrived = len(tasks)
     n_cycles = len(records) or 1
+    # 运营周期数（2026-11-05 吞吐分母统一，与 exp01 同步）：序号上最后一
+    # 个有活动周期的位置（裁掉尾部收敛空周期）；判据单源
+    # methods/rolling/horizon.cycle_record_has_activity。
+    n_oper_cycles = max(
+        (i for i, r in enumerate(records, 1) if cycle_record_has_activity(r)),
+        default=0,
+    ) or n_cycles
 
     # 三维航程：各周期交付解的 final_path_m 之和（米）
     total_path_m = sum(float(r.muas.get("final_path_m", 0.0) or 0.0) for r in records)
@@ -322,8 +332,10 @@ def build_summary(
         # ── 方法诊断 v2 ──
         "n_hard_violations_total": n_hard_violations_total,
         "s_coverage_rate": round(s_coverage_rate, 6),
-        "throughput_per_cycle": round(len(completed) / n_cycles, 6),
+        # 吞吐（2026-11-05 分母统一）= 完成（含迟到）/ 运营周期数
+        "throughput_per_cycle": round(len(completed) / n_oper_cycles, 6),
         "n_cycles": n_cycles,
+        "n_oper_cycles": n_oper_cycles,
         "n_active_cycles": n_active_cycles,
         "n_zero_reward_delivery": n_zero_reward_delivery,
         "avg_wait_s": round((sum(waits) / len(waits)) if waits else 0.0, 3),

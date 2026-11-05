@@ -12,11 +12,13 @@
 2×2 四联面板：
 
     (a) 每周期执行构成   出动 = 按时交付 + 迟到交付 + 废飞（堆叠柱）；右轴 = 累计
-                         吞吐（累计完成 / 周期数）
-    (b) 任务终局构成     到达任务的最终去向：完成 / 滞留池 / 超期滞留 / 曾被物理拦回
-                         （无超期淘汰，过期任务滞留池中、不出池；超期滞留与物理拦回
-                          均为诊断项、非终局损失；拦回 = 解被判物理不可行、解绑回池
-                          ——迟到交付已计入完成）
+                         吞吐（累计完成 / 运营周期数）
+    (b) 任务终局构成     到达任务的最终去向：完成 / 不可达（出池）/ 服务暂缓 /
+                         滞留池（非暂缓）四段分账（互斥、合计 = 到达），另附
+                         超期滞留 / 物理拦回两段诊断叠层（无超期淘汰，过期任务
+                         滞留不出池；拦回 = 解被判物理不可行、解绑回池——迟到
+                         交付已计入完成；服务暂缓 = 时变能力不足暂缓、等能力恢复
+                         唤醒，图示弃用「休眠」旧称，2026-11-05）
     (c) 双目标值         每周期 F1 收益（迟到折减后）/ F2 代价，不可行周期红字标记
     (d) 关键指标表       summary 全字段 + 单/多 seed 标注
 
@@ -89,9 +91,11 @@ def plot_outcome_summary(
     n_waste = [int(c.get("n_infeasible", 0)) for c in cycles]
     cum_done = np.cumsum(n_done)
     # 累计正确执行吞吐 = 累计完成（含迟到）/ 周期序号（长程协议主指标）。
-    # 2026-11-05：绘图周期轴已在 make_plots 裁到最后一个活动周期（不绘制收敛
-    # 空周期），故此处分母为**绘制周期数**；(d) 表的 throughput_per_cycle 仍按
-    # 落盘全周期数（含收敛判定周期）计算，两者口径不同，不要求数值相等。
+    # 2026-11-05 口径统一：吞吐分母 = 运营周期数（本图周期轴长 = 落盘周期
+    # 裁掉尾部收敛空周期后的数目，绘图裁剪见 plot._trim_cycles_for_plot，
+    # 指标侧见 metrics.summary.n_oper_cycles）。曲线终点、(d) 表与
+    # metrics.json 的 throughput_per_cycle 同源同值（统一前 (a) 按绘制
+    # 周期数、(d) 按落盘全周期数，分母双值、不要求相等——已废）。
     thru_curve = [d / (i + 1) for i, d in enumerate(cum_done)]
     thru_final = thru_curve[-1] if thru_curve else 0.0
 
@@ -105,14 +109,17 @@ def plot_outcome_summary(
     n_arrived = int(summary.get("n_arrived", 0))
     n_done_total = int(summary.get("n_completed", len(done_ids)))
     # 2026-10-24 无超期淘汰：过期任务滞留池中、不出池，不减完成。
-    # 2026-11-04 裁定 A 分账恒等式：arrived = done + unreachable + dormant_end + remain。
-    # n_remaining_pool = len(pool) 含服务休眠 DORMANT（休眠不出池、仍计在池内），
-    # 故本图「滞留池中」= dormant_end + remain 两类合并；静态几何不可达已出池、
-    # 不在池内。下方 fallback 仅在旧记录缺 n_remaining_pool 键时按 arrived−done−
-    # unreachable 反推（不含 dormant_end 拆分），新产物走主分支。
-    n_remain = int(summary.get("n_remaining_pool",
-                               max(n_arrived - n_done_total
-                                   - int(summary.get("n_unreachable", 0)), 0)))
+    # 2026-11-04 裁定 A 分账恒等式：arrived = done + unreachable + 暂缓 + remain。
+    # n_remaining_pool = len(pool) 含服务暂缓 DORMANT（暂缓不出池、仍计在
+    # 池内）；2026-11-05 单列：不可达与服务暂缓各占终局构成一段，「滞留池中」
+    # = remain − 暂缓（非暂缓部分）。静态几何不可达已出池、不在池内。
+    # fallback 仅在旧记录缺 n_remaining_pool 键时按 arrived−done−unreachable
+    # 反推，新产物走主分支。
+    n_dormant_end = int(summary.get("n_dormant_end", 0))
+    n_unreach = int(summary.get("n_unreachable", 0))
+    n_remain_total = int(summary.get("n_remaining_pool",
+                                     max(n_arrived - n_done_total - n_unreach, 0)))
+    n_remain_plain = max(n_remain_total - n_dormant_end, 0)  # 滞留（非暂缓）
     n_overdue = len(overdue_ids)
     n_gated = len(gated_ids - done_ids - overdue_ids)
     n_late_total = int(summary.get("n_late", 0))
@@ -133,7 +140,10 @@ def plot_outcome_summary(
     # （排除静态几何不可达 + 停机时仍服务休眠两类）；自然收敛时 dormant_end=0。
     completion = float(summary.get("completion_rate_final", 0.0))
     correct_rate = float(summary.get("correct_exec_rate", 0.0))
-    throughput = float(summary.get("throughput_per_cycle", 0.0))
+    # 吞吐与 (a) 曲线同源（2026-11-05 统一口径）：分母 = 图上周期轴长
+    # = 运营周期数；新 metrics.json 的 summary.throughput_per_cycle 同值。
+    # 不直读 summary 是为了旧产物（全周期分母）重新出图时仍与曲线自洽。
+    throughput = thru_final
     n_waste_total = int(summary.get("n_infeasible_delivery", 0))
     # B1：废飞已飞航程（与计数同权，防「总航程下降靠废飞换来」）
     waste_path_m = float(summary.get("infeasible_wasted_path_m", 0.0))
@@ -174,21 +184,28 @@ def plot_outcome_summary(
     ax_a.legend(h1 + h2, l1 + l2, loc="upper left", fontsize=FS["legend"])
 
     # ── (b) 任务终局构成 ─────────────────────────────────────────
+    # 终局分账恒等式（2026-11-04 裁定 A）：到达 = 完成 + 不可达 + 服务暂缓
+    # + 滞留（非暂缓），前四段互斥、合计 = 到达；后两段为诊断叠层（可与
+    # 分账重叠、非终局损失）。「服务暂缓」= 时变能力不足暂缓（DORMANT），
+    # 不出池、等能力恢复唤醒；2026-11-05 起图示弃用「休眠」旧称（表意不清）。
     parts = [
-        ("已完成", n_done_total, PALETTE["executed"]),
-        ("滞留池中", n_remain, PALETTE["deferred"]),
-        ("超期滞留", n_overdue, PALETTE["release"]),  # 诊断：超期但仍交付/滞留，非终局损失
-        ("物理拦回", n_gated, "#b279a2"),
+        # (图例名, 柱内短名, 值, 颜色)
+        ("已完成", "已完成", n_done_total, PALETTE["executed"]),
+        ("不可达·出池", "不可达", n_unreach, "#8d99ae"),
+        ("服务暂缓·待恢复", "服务暂缓", n_dormant_end, PALETTE["deferred"]),
+        ("滞留池中·非暂缓", "滞留池中", n_remain_plain, "#4c78a8"),
+        ("超期滞留·诊断", "超期滞留", n_overdue, PALETTE["release"]),
+        ("物理拦回·诊断", "物理拦回", n_gated, "#b279a2"),
     ]
-    parts = [(k, v, c) for k, v, c in parts if v > 0]
+    parts = [p for p in parts if p[2] > 0]
     if not parts:
-        parts = [("无任务", 0, "#c9ced4")]
+        parts = [("无任务", "无任务", 0, "#c9ced4")]
     bottom = 0
-    for lab, v, col in parts:
+    for leg, short, v, col in parts:
         ax_b.bar([0], [v], 0.5, bottom=bottom, color=col, alpha=0.9,
-                 edgecolor="white", linewidth=0.6, label=f"{lab}（{v}）")
+                 edgecolor="white", linewidth=0.6, label=f"{leg}（{v}）")
         if v > 0:
-            ax_b.text(0, bottom + v / 2, f"{lab}\n{v}", ha="center", va="center",
+            ax_b.text(0, bottom + v / 2, f"{short}\n{v}", ha="center", va="center",
                       fontsize=FS["annotation"], color="white")
         bottom += v
     ax_b.set_xlim(-0.6, 0.6)
@@ -217,7 +234,12 @@ def plot_outcome_summary(
     # ── (d) 关键指标表 ───────────────────────────────────────────
     rows = [
         ("到达 / 完成任务", f"{n_arrived} / {n_done_total}"),
-        ("正确执行吞吐（任务/周期）", f"{throughput:.3f}"),
+        ("不可达（geo / service，出池）",
+         f"{n_unreach}（{int(summary.get('n_unreachable_geo', 0))} / "
+         f"{int(summary.get('n_unreachable_service', 0))}）"),
+        ("服务暂缓（停机时未唤醒）", f"{n_dormant_end}"),
+        ("滞留池中（非暂缓）", f"{n_remain_plain}"),
+        ("正确执行吞吐（完成/运营周期）", f"{throughput:.3f}"),
         ("平均正确执行率（逐周期，按时/出动）", f"{correct_rate:.1%}"),
         ("按时率（交付集）/ 迟到交付", f"{on_time_final:.1%} / {n_late_total}"),
         ("平均迟到", f"{avg_late / 60:.1f} min"),
@@ -264,14 +286,20 @@ def plot_outcome_summary(
                  fontsize=FS["suptitle"])
     fig.tight_layout(rect=(0, 0.035, 1, 0.95))
     footnote(fig, "口径（长程协议）：完成率不是目标，主指标 = 吞吐"
-                  "（累计完成/周期）与正确执行率（逐周期均值：按时出动/总出动）；"
+                  "（累计完成/运营周期）与正确执行率（逐周期均值：按时出动/总出动）；"
+                  "吞吐分母 = 运营周期数（有活动的周期，尾部收敛判定空周期不入分母），"
+                  "(a) 曲线终点、(d) 表与 metrics.json 的 throughput_per_cycle 同源"
+                  "同值（2026-11-05 统一，旧口径 (a)/(d) 分母双值已废）；"
                   "迟到不是废飞（2026-10-15）——迟到交付计入完成，有效奖励按迟到"
                   "线性折减（W=600s）；废飞 = 物理不可行（航程/续航/终点机巢违约）"
                   "的弹回交付，UAV 已飞航程（已飞航程列与计数同权报告，防总航程"
                   "下降靠废飞换来）；无超期淘汰，过期任务滞留不出池，淘汰计数为"
-                  "结构性 0、仅作审计断言；滞留 = 实验结束时仍在任务池（含服务休眠）。"
+                  "结构性 0、仅作审计断言；终局分账（b）前四段互斥、合计 = 到达："
+                  "完成 / 不可达（静态几何不可达，出池剔除）/ 服务暂缓（时变能力不足"
+                  "暂缓、不出池、等能力恢复唤醒，图示弃用「休眠」旧称）/ 滞留（非暂缓），"
+                  "超期滞留与物理拦回为诊断叠层（可与分账重叠、非终局损失）。"
                   "完成率只报 η_final（2026-11-04 裁定 A：分母剔除静态几何不可达与"
-                  "停机时仍服务休眠两类；2026-10-24 删除 naive 双键）；按时率为交付集条件率。"
+                  "停机时仍服务暂缓两类；2026-10-24 删除 naive 双键）；按时率为交付集条件率。"
                   "候选池命中率 = Σn_sel/Σn_cand，验证候选池「该富」的设计声明。"
                   "求解耗时仅 MUAS 求解口径（不含选择阶段）。"
                   "F1 = 任务收益和（折减后），F2 = 三维路径代价；红色数值为调试期回归信号。")

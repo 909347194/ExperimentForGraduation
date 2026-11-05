@@ -24,6 +24,7 @@ import numpy as np
 import paths  # noqa: F401  # sys.path 引导：挂载仓库根，供 task_allocation.* 导入
 
 from task_allocation.common.types import Nest, Task, UAV
+from task_allocation.methods.rolling.horizon import cycle_record_has_activity
 
 from build import TaskBatch
 from config import ConfigBundle
@@ -162,9 +163,18 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
     total_reward = sum(float(r.muas.get("f1_reward", 0.0) or 0.0) for r in records)
     solve_ms = sum(float(r.muas.get("solve_seconds", 0.0) or 0.0) for r in records) * 1000.0
     avail_counts = [r.selection.get("n_uav_avail", 0) for r in records]
-    # 实际跑的周期数：收敛早停后可能 < 配置的 n_cycles 安全上限；吞吐/报告
-    # 一律以真实周期数为准（跑满时 len(records) 与配置一致，旧口径不变）。
+    # 实际跑的周期数：收敛早停后可能 < 配置的 n_cycles 安全上限；报告一律
+    # 以真实周期数为准（跑满时 len(records) 与配置一致，旧口径不变）。
     n_cycles = len(records) or int(f.bundle.horizon.n_cycles)
+    # 运营周期数（2026-11-05 吞吐分母统一）：序号上最后一个有活动周期的
+    # 位置 = 绘图周期轴长（plot._trim_cycles_for_plot 同则裁剪）。尾部
+    # 收敛判定空周期不是运营周期，不入吞吐分母——统一前 (a) 曲线
+    # （分母=绘图周期数）与 (d) 表（分母=落盘全周期数）双值误引。判据
+    # 单源见 methods/rolling/horizon.cycle_record_has_activity。
+    n_oper_cycles = max(
+        (i for i, r in enumerate(records, 1) if cycle_record_has_activity(r)),
+        default=0,
+    ) or n_cycles
     # 完成闸门：被判**物理不可行**、未真正交付而回池的任务（不计完成、
     # 不计奖励）。2026-10-15 协议「迟到不是废飞」后，废飞只剩这一类
     # （航程/续航/终点机巢/结构类违约）；迟到交付计入完成。
@@ -270,8 +280,9 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
         if r.muas.get("feasible") is not None
     ]
     cycle_feasible_rate = (sum(feas_flags) / len(feas_flags)) if feas_flags else 0.0
-    # 活跃周期（有出动）计数：吞吐的另一个分母（I6：全周期分母含空转兜底周期，
-    # 跨配置对比会被收敛节奏差异污染）
+    # 活跃周期（有出动）计数：过程诊断计数。2026-11-05 吞吐分母统一为
+    # n_oper_cycles（运营周期数）后不再是吞吐分母；I6 的「全周期分母被
+    # 收敛节奏污染」由 n_oper_cycles 解决（只裁尾部收敛空周期，不改时间基）。
     n_active_cycles = sum(1 for r in records if len(r.executed_ids) > 0)
     # ── 覆盖门禁分账（2026-10-22，合法解 = 物理硬约束 + 覆盖门禁）────
     # voluntary_skip = S 内能装却没装（gate 修复下应恒 0）；
@@ -427,7 +438,10 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
     # 三者近义误引；正确性验证只保留后两个，池化值可由 cycles 复算。
     avg_lateness = (sum(all_lateness) / len(all_lateness)) if all_lateness else 0.0
     max_lateness = max(all_lateness) if all_lateness else 0.0
-    throughput = (len(completed) / n_cycles) if n_cycles else 0.0
+    # 吞吐（2026-11-05 分母统一）= 累计完成（含迟到）/ 运营周期数。
+    # metrics.json 的 throughput_per_cycle、结果总览 (a) 曲线终点与
+    # (d) 表三处同源同值。
+    throughput = (len(completed) / n_oper_cycles) if n_oper_cycles else 0.0
     cycles_payload = [r.as_dict() for r in records]
     for row in cycles_payload:
         rate = per_cycle_correct.get(row.get("cycle"))
@@ -570,11 +584,15 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
             "avg_lateness_s": round(avg_lateness, 3),
             "max_lateness_s": round(max_lateness, 3),
             "correct_exec_rate": round(correct_exec_rate, 6),
+            # 吞吐（2026-11-05 分母统一）：分母 = n_oper_cycles（运营
+            # 周期数，裁掉尾部收敛空周期 = 绘图轴长）。旧双键并存导致
+            # 「吞吐分母双值」：throughput_per_cycle（落盘全周期分母）与
+            # throughput_per_active_cycle（有出动周期分母），按 2026-10-24
+            # A2「近义键只留一个」删除后者，前者改新分母；
+            # n_active_cycles 保留为过程诊断计数。
             "throughput_per_cycle": round(throughput, 6),
+            "n_oper_cycles": n_oper_cycles,
             "n_active_cycles": n_active_cycles,
-            "throughput_per_active_cycle": round(
-                (len(completed) / n_active_cycles) if n_active_cycles else 0.0, 6
-            ),
             # 有效完成口径（I4）：零奖励交付 / 有效完成率 / 奖励产出率
             "n_zero_reward_delivery": n_zero_reward_delivery,
             # ── 2026-10-24 指标体系审查 A3：分母对齐 n_final_denom ──
@@ -719,8 +737,8 @@ _SEED_AGG_KEYS = (
     "avg_lateness_s",
     "correct_exec_rate",
     "throughput_per_cycle",
+    "n_oper_cycles",
     "n_active_cycles",
-    "throughput_per_active_cycle",
     "n_zero_reward_delivery",
     "effective_completion_rate",
     "reward_yield",
@@ -995,7 +1013,7 @@ def print_summary(metrics: dict[str, Any], n_arrived: int, out_dir: Path) -> Non
             f"池内剩余 {sm['n_remaining_pool']}"
         )
         print(
-            f"[exp01] 长程口径：吞吐 {sm['throughput_per_cycle']:.3f}/周期，"
+            f"[exp01] 长程口径：吞吐 {sm['throughput_per_cycle']:.3f}/运营周期，"
             f"正确执行率(逐周期均值) {sm['correct_exec_rate']:.1%}，"
             f"按时率(交付集) {sm['on_time_rate_final']:.1%}，"
             f"迟到交付 {sm.get('n_late', 0)}（平均 {sm.get('avg_lateness_s', 0.0):.0f}s），"

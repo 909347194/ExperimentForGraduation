@@ -206,6 +206,40 @@ def tour_snapshot(tour: UAVTour) -> dict[str, Any]:
     }
 
 
+def cycle_record_has_activity(rec: Any) -> bool:
+    """该周期记录是否有「活动」内容（2026-11-05 运营周期判据 · 单源定义）。
+
+    **运营周期** = 有活动的周期；吞吐分母 = 运营周期数
+    （``metrics.summary.throughput_per_cycle`` / ``n_oper_cycles``），绘图周期
+    轴同则裁剪（``plot._trim_cycles_for_plot`` 的 dict 侧实现
+    ``_cycle_has_activity`` 与本判据保持一致，由
+    ``tests/test_plot_cycle_trim.py`` 一致性测试钉住，防止两侧漂移后
+    结果总览 (a) 曲线终点与 (d) 表再次出现吞吐双值）。
+
+    尾部零活动周期只是收敛判定轮询（如 ``stop_reason=pool_empty`` 的末
+    周期），不是运营周期：不入吞吐分母、不入绘图周期轴——否则分母被停机
+    节奏污染（I6「全周期分母含空转兜底周期」）。
+
+    活动 = 执行 / 完成 / 弹回 / 迟到 / 不可达 / 服务暂缓（DORMANT）转出
+    或唤醒 / 超期 / 顺序组回滚 / 池状态变化（新到·释放·暂缓·唤醒）/
+    航次 / 求解轨迹任一项非空。中间周期即便零出动，只要有状态变化也算
+    活动（时间轴不能断、等待状态要可见），只有**尾部**空周期会被裁。
+    """
+    for key in ("executed_ids", "completed_ids", "infeasible_ids",
+                "late_ids", "unreachable_ids", "dormant_ids", "woken_ids",
+                "overdue_ids", "seq_group_rolled_back_ids"):
+        if getattr(rec, key, None):
+            return True
+    for key in ("n_new", "n_release", "n_dormant", "n_woken"):
+        if int((getattr(rec, "pool_counts", None) or {}).get(key, 0) or 0) > 0:
+            return True
+    if any(t.get("task_ids") for t in (getattr(rec, "tours", None) or [])):
+        return True
+    if getattr(rec, "cost_history", None):
+        return True
+    return False
+
+
 @dataclass
 class CycleRecord:
     """单周期的可机读记录（直接并进 metrics.json）。"""
