@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""绘图周期轴裁剪（2026-11-05 用户裁定）的回归测试。
+"""绘图周期轴裁剪（口径约定）的回归测试。
 
-用户裁定：「哪周期结束就绘制到哪个周期；不要绘制空周期了」。滚动时域收敛
+口径约定：「哪周期结束就绘制到哪个周期；不要绘制空周期了」。滚动时域收敛
 判定会产生零出动的空周期（新「池空」判据下为末周期 ``stop_reason=pool_empty``；
 旧稳态 patience 兜底下为末尾若干个），它们在结果总览里是全零柱、在动画里是
 定格空帧。``plot.make_plots`` 在**分发前**把绘图视图的周期轴裁到最后一个有
@@ -69,7 +69,7 @@ def _exp01_shape():
 def test_cycle_record_activity_parity_with_plot_rule():
     """吞吐分母判据（CycleRecord 侧）与绘图裁剪判据（dict 侧）必须同则。
 
-    2026-11-05 吞吐分母统一为「运营周期数」后，``metrics.n_oper_cycles``
+    吞吐分母统一为「运营周期数」后，``metrics.n_oper_cycles``
     （record 侧 ``cycle_record_has_activity``）与 ``plot._trim_cycles_for_plot``
     （dict 侧 ``_cycle_has_activity``）各持一份实现（数据形状不同）；两侧
     一旦漂移，结果总览 (a) 曲线终点与 (d) 表又会吞吐双值。用代表性周期

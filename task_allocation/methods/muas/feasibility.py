@@ -171,7 +171,7 @@ def check_solution_feasibility(
             report.add_window(
                 w_tags, cons.w_window * w_pen, lateness=w_late
             )
-            # 【任务级时间窗不可行 · 2026-10-12 改造】
+            # 【任务级时间窗不可行 · 改造】
             # 不再把「含迟到任务的整条 tour」置 feasible=False。
             # tw_task_* 标签已写入 violations（add_window），horizon._violated_task_ids
             # 对其走任务级归因（仅迟到任务自身被拦），同 tour 的准时任务照常完成。

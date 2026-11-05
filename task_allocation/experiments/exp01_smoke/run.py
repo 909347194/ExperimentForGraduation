@@ -12,7 +12,7 @@
 多 seed 时另落 ``results/seed_{id}/{metrics,solution}.json``；正确性审计需要
 solution 的 tours / fitness_weights 才能复核 D/J/K/M/N 项，只靠
 ``metrics.json`` 的 ``per_seed[seed]["cycles"]`` 审不了其余 seed
-（2026-10-24 修复，见 docs/exp01_code_audit_2026-10-24.md P0-1）。
+（修复，见 docs/exp01_code_audit_2026-10-24.md P0-1）。
 
 链路（对齐 Chapter3_README §8 技术路线）::
 
@@ -63,7 +63,7 @@ import time
 from pathlib import Path
 
 # 任意调用方式可跑（python -m / 任意 cwd）：脚本目录先入 sys.path，
-# 供 `from paths import` 在非脚本路径调用下也能解析（2026-10-22 修复）。
+# 供 `from paths import` 在非脚本路径调用下也能解析（修复）。
 import sys as _sys
 from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parent))
@@ -101,7 +101,7 @@ def _run_audit(out_dir: Path, *, verbose: bool) -> bool:
 
     从落盘 json 独立复核结构不变量与口径（A~N1/N2, J/K/L/M）。
     多 seed 时审计脚本会遍历 ``results/seed_{id}/`` 逐 seed 复核——早期版本
-    只读顶层产物，3 seed 跑完只有 1/3 被验证（2026-10-24 修复 P0-1）。
+    只读顶层产物，3 seed 跑完只有 1/3 被验证（修复 P0-1）。
     有 FAIL → 返回 False 并在终端醒目报警（主流程不阻断——产物已落盘，
     报警促人核查）；仅 WARN → 返回 True。审计本身异常（缺 json 等）
     不阻断主流程，只警告。
@@ -143,7 +143,7 @@ def _run_once(
     任务批次、机队状态、滚动闭环每次重建以保证相互独立。
     求解器种子同步设为 ``seed``，使每次重复在任务生成与优化两端都不相同。
     """
-    # 墙钟在**本函数内**计时并在 build_metrics 之前写入 RunFacts（2026-10-24
+    # 墙钟在**本函数内**计时并在 build_metrics 之前写入 RunFacts（
     # 修复 P2-1）：旧口径由调用方在 build_metrics 之后回填 summary 字段，
     # build_metrics 读到的恒为 0.0，调用顺序一改就退回历史 bug（I7）。
     t_seed = time.time()
@@ -231,7 +231,7 @@ def _parse_seed_list(tokens: list[str]) -> list[int]:
                     lo, hi = int(lo_s), int(hi_s)
                 except ValueError:
                     # 形如 1-3-5 会被切成 ("1", "3-5")，int 抛裸 ValueError
-                    # 用户只看到 traceback（2026-10-24 修复 P2-3）
+                    # 用户只看到 traceback（修复 P2-3）
                     raise argparse.ArgumentTypeError(
                         f"--seeds 区间格式非法：{part!r}（应为 lo-hi，如 42-46）"
                     ) from None
@@ -262,7 +262,7 @@ def _coerce_set_value(v: str):
     优先级：null/none → None；true/false → bool；``[...]``/``{...}`` 字面量
     走 json（支持 ``[3,4,5]``、``{"a":1}``）；再试 int → float；都不行则原样 str。
     旧实现把 ``[3,4,5]`` 当字符串留着，list/dict 覆盖会被静默吞掉，是 CLI 的
-    主要坑（2026-10-26 修）。
+    主要坑（修）。
     """
     import json
 
@@ -356,9 +356,9 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--group", action="append", dest="groups", metavar="LAYER",
         # 取值必须与 plot/registry.py 里 Figure.group 完全一致
-        # （initial / process / report；2026-10-26 图件裁剪后 setup 层已删，
+        # （initial / process / report；图件裁剪后 setup 层已删，
         # 旧值 "scene" 不存在于图集，而 resolve 对未知分层是抛 ValueError——
-        # 照旧文档执行会在求解完成后崩溃并跳过末尾审计（2026-10-24 修复 P0-3）。
+        # 照旧文档执行会在求解完成后崩溃并跳过末尾审计（修复 P0-3）。
         choices=("initial", "process", "report"),
         help="只出某一层的图：initial=环境初始配置 / "
              "process=运行过程 / report=结论插图；可重复指定，省略则出全部",
@@ -502,12 +502,12 @@ def main(argv: list[str] | None = None) -> int:
         write_json(out_dir / "solution.json", rep_solution)
         # 生效配置（含 --set 覆盖）：审计判据的唯一可信来源。审计若读
         # config.yaml 原文就看不到 --set，判据常数与 run_meta 指纹会分裂
-        # （2026-10-24 修复 P0-2）。
+        # （修复 P0-2）。
         write_json(out_dir / "effective_config.json", raw_cfg)
         if multi:
             # 逐 seed 全量产物：D/J/K/M/N 五项依赖 solution 的 tours 与
             # fitness_weights，metrics.json 的 per_seed[seed]["cycles"]
-            # 不足以审计其余 seed（2026-10-24 修复 P0-1）。目录名约定
+            # 不足以审计其余 seed（修复 P0-1）。目录名约定
             # seed_{id}，audit_correctness.py 据此遍历。
             for seed, _, m, sol in results:
                 sd = out_dir / f"seed_{seed}"
@@ -519,7 +519,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # 多 seed 时各 seed 到达数可能不同（poisson/uniform 到达流）⇒ 报表分母
     # 取三 seed 均值，避免「分子是均值、分母是代表 seed 单值」不同源
-    # （2026-10-24 修复 P1-2）。fixed 到达下均值即该值，逐位不变。
+    # （修复 P1-2）。fixed 到达下均值即该值，逐位不变。
     if multi and final_metrics.get("seed_summary"):
         n_arrived = round(final_metrics["seed_summary"]["n_arrived"]["mean"], 1)
     else:
@@ -539,7 +539,7 @@ def main(argv: list[str] | None = None) -> int:
             formats = (*formats, "pdf")
         # 动画图需 gif/mp4 才出。只要本次图集包含任意 animated 图（默认全部图
         # 即包含 allocation_anim / allocation_status），就自动补 gif——否则 GIF
-        # 会停留在早年一次显式运行，与 json/PNG/表格全部脱节（2026-10-13 审查：
+        # 会停留在早年一次显式运行，与 json/PNG/表格全部脱节（审查：
         # GIF 曾 stale 12 小时）。只想出静态图时用 --groups/--figures 排除动画图即可。
         from task_allocation.experiments.exp01_smoke.plot.registry import resolve as _resolve_figures
         if any(f.animated

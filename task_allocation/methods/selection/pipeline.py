@@ -22,9 +22,9 @@
 名额定义：n_cand = ⌈α·K⌉（能力无关）；n_sel = ⌈max_ratio·K⌉（或 ``max_selected``）。
 cap(t) 已是吞吐上界（⌊Σ remaining_range / 单任务中位代价⌋，见 :mod:`.capability`），
 **仅约束 n_sel**；``capability.fallback_when_disabled=True`` 时即便关闭能力模块
-也按此上界收敛（Fix③）。
+也按此上界收敛（候选规模上界）。
 注意：事件驱动（``forced_task_ids``）与防饥饿（:class:`AntiStarvationConfig`）的
-强制纳入都会**绕过**上述规模上界追加候选，并在终刀获强优先（Fix②，保证不停饿）。
+强制纳入都会**绕过**上述规模上界追加候选，并在终刀获强优先（防饥饿强制，保证不停饿）。
 """
 
 from __future__ import annotations
@@ -59,7 +59,7 @@ from task_allocation.methods.selection.priority import (
 
 @dataclass
 class AntiStarvationConfig:
-    """硬性不停饿兜底（Fix②）。
+    """硬性不停饿兜底（防饥饿强制）。
 
     即便优先级/边际选择因名额或几何代价把某任务反复挤出，只要它等待超过
     ``force_after_seconds`` 或逼近 ``latest`` 时间窗（剩余 ≤ ``deadline_slack``），
@@ -82,12 +82,12 @@ class SelectionConfig:
     # 候选池 n_cand 已与 cap(t) 解耦（见 pipeline 顶部说明）。
     # enabled=False 时 n_sel 退回纯机数名额（消融对比）。
     capability: CapabilityScaleConfig = field(default_factory=CapabilityScaleConfig)
-    # 硬性不停饿兜底（Fix②）：老化/临期任务强制纳入，保证不无限期推迟。
+    # 硬性不停饿兜底（防饥饿强制）：老化/临期任务强制纳入，保证不无限期推迟。
     anti_starvation: AntiStarvationConfig = field(default_factory=AntiStarvationConfig)
     current_time: float = 0.0
     # 事件驱动强制纳入：紧急 / 故障释放的任务绕过 n_cand 预筛（仍过可行性过滤）。
     #
-    # ⚠ 口径（2026-10-30 澄清）：本字段只在**单次直接调用** ``run_selection`` 时生效。
+    # ⚠ 口径（澄清）：本字段只在**单次直接调用** ``run_selection`` 时生效。
     # 走滚动时域时 ``RollingHorizon.run_cycle`` 每周期按当前重规划上下文重建强制集
     # （见 ``horizon.py`` 的 ``forced_ids``）并整体覆盖本字段 —— 即**这里填的值会被静默丢弃**。
     # 这是有意的：滚动场景下"谁该被强制"必须由每周期的真实状态决定，不能被静态配置钉死。
@@ -129,7 +129,7 @@ def run(
         "current_time": cfg.current_time,
     }
 
-    # Fix②：老化 / 临期任务强制纳入集合（与事件驱动的 forced_task_ids 取并），
+    # 防饥饿强制：老化 / 临期任务强制纳入集合（与事件驱动的 forced_task_ids 取并），
     # 绕过 n_cand 预筛，并在终刀获得强优先，保证不会无限期推迟。
     forced_ids = set(cfg.forced_task_ids)
     if cfg.anti_starvation.enabled:
@@ -169,7 +169,7 @@ def run(
         diagnostics["capability_budget"] = round(budget, 3)
         diagnostics["capability_cap"] = capability_cap
     elif cfg.capability.fallback_when_disabled and n_avail > 0:
-        # Fix③：能力模块关闭时，仍按吞吐上界收敛候选规模，
+        # 候选规模上界：能力模块关闭时，仍按吞吐上界收敛候选规模，
         # 避免 "2.5×机数" 永远不瓶颈、aging 排序失效。
         costs = coarse_task_costs(tasks, uavs, cost_hint)
         budget = fleet_range_budget(uavs, 1.0)

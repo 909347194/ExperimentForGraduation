@@ -5,7 +5,7 @@
 （适应度公式）互补，本文件锁**跨层边界**——单层测试各自正确、
 层间接线错误时暴露的那些契约：
 
-1. **权重快照落盘链**（2026-10-18 新增，治 auto big_m 漂移）：
+1. **权重快照落盘链**（新增，治 auto big_m 漂移）：
    ``problem.evaluate → final.meta → stage.diagnostics → record.muas``
    一路透出，且 m/λ 与配置一致——审计 N 项的数据前提；
 2. **边际可行正例**（T105 实证：往返 79,865m 仅剩 135m 余量被完成）：
@@ -147,7 +147,7 @@ def test_fitness_weights_snapshot_matches_scalarization():
 def test_marginal_feasible_round_trip_completed():
     """往返 78km ≤ 满电 80km → 完成；往返 82km > 80km → UNREACHABLE。
 
-    T105 实证（2026-10-15）：往返 79,865m、剩余航程仅剩 135m 余量被
+    T105 实证：往返 79,865m、剩余航程仅剩 135m 余量被
     完成；margin=0.95 曾把它误杀，修正 margin=1.0 后放行。本测试锁
     「恰好可及不被误杀、超限走物理不可达」的双边界。
     """

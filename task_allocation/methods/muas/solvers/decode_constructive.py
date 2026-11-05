@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """decode_constructive.py — 构造式解码（``ConstructiveDecodeMixin``，exp04 B1）。
 
-2026-10-27 自 ``muas_stage.py`` 拆出。``decode_mode="constructive"`` 对照臂：
+自 ``muas_stage.py`` 拆出。``decode_mode="constructive"`` 对照臂：
 把「救援」前置为主解码，逐任务做可行性内联插入；与 repair_chain 共用
 ``tour_cost`` 原语与 ``_choose_end_nests`` / ``_reorder_for_deadlines`` /
 ``_assemble``，口径一致。三条红线见 ``MUASStageConfig.decode_mode`` 注释。
@@ -26,7 +26,7 @@ class ConstructiveDecodeMixin:
         位置按插入代价最小选（归属由基因组定、位置可重算——与 repair_chain
         的 ``_reorder_for_deadlines`` 同性质，是 B1 对照臂的语义差异之一）；
         返航腿按最近巢保守估（终点巢此时未定，实际只会更远或相等）。
-        可行判据 = 航程（窗口是软约束，2026-10-24 口径：迟到计价、计完成，
+        可行判据 = 航程（窗口是软约束，口径：迟到计价、计完成，
         不否决可装性）。
         """
         best_pos: int | None = None
@@ -49,14 +49,14 @@ class ConstructiveDecodeMixin:
         routes: dict[int, list[int]],
         exclude: set[int],
     ) -> bool:
-        """构造式解码的出列任务救援（第3层安全网，Fix⑥ 内化）。
+        """构造式解码的出列任务救援（第3层安全网，全机队 内化）。
 
         顺序即优先级：① 插入其它**非空**航次的最优可行位（代价最小）；
         ② 闲置机开单任务航次——先参与集内、再（``reflow_rescue_scope="fleet"``
         时）全可用机队。可达即执行（存在量化），但不得制造新违约；
         全部不可行返回 False（调用方记 y_j=0 证明性暂缓，不谎报完成）。
         与 ``_reflow_task`` 的区别：本函数只做「插入 + 闲置开单」两级
-        （换机腾位 Fix⑦ 留给 repair_chain 的 _reflow_task，构造式臂不复制
+        （换机腾位 换机 留给 repair_chain 的 _reflow_task，构造式臂不复制
         该补丁——少一层打补丁正是 B1 要检验的假设）。
         """
         # ① 现有非空航次（参与机；exclude 外的）

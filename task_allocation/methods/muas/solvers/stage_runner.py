@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """stage_runner.py — 第二阶段主入口与枚举参照。
 
-2026-10-27 自 ``muas_stage.py`` 拆出：
+自 ``muas_stage.py`` 拆出：
 
 - :class:`MUASStageResult`                     第二阶段输出（含诊断量）
 - :func:`enumerate_reference_participating`    小 N 近精确枚举参照（exp04 B3）
@@ -232,7 +232,7 @@ def run_selective_muas(
         nests=nests,
         fleet_uavs=fleet,
         config=stage_cfg,
-        # Fix⑥：救援池口径为 "fleet" 时， evaluator 需要知道「参与集之外的
+        # 全机队：救援池口径为 "fleet" 时， evaluator 需要知道「参与集之外的
         # 闲置可用机」，才能在航程修复改派时把它们拉进来（可达即执行）。
         available_uavs=avail,
     )
@@ -243,7 +243,7 @@ def run_selective_muas(
     else:
         solver_cfg = DMDEConfig(lamarckian=stage_cfg.lamarckian)
 
-    # memetic M1 精英档案（2026-10-19）：DE 循环内每 memetic_K 代对当代
+    # memetic M1 精英档案：DE 循环内每 memetic_K 代对当代
     # 精英跑一次 polish_assignment，维护 best-polished 档案。轨迹按代记录
     # （长度 == len(cost_history)，gen0 记 +inf 直到首次 polish），供
     # 「搜索期内路由在降」出图。未开启时全零/空、行为逐位等于非 memetic。
@@ -271,7 +271,7 @@ def run_selective_muas(
         )
 
         def _memetic_hook(gen: int, best_ind: Any) -> None:
-            # 审查加固（2026-10-19）：单次精英打磨失败只计数、不得破坏
+            # 审查加固：单次精英打磨失败只计数、不得破坏
             # 「每代必落一档」的对齐不变量（trajectory 长度 ==
             # len(cost_history)），也不得中断后续代的档案维护。
             try:
@@ -319,10 +319,10 @@ def run_selective_muas(
     # （``cost_history[-1] == best_fitness``）；交付解自身的适应度另记
     # ``final_fitness`` 及成分，供审计用快照权重独立重算对账。
     prebuilt = (result.extra or {}).get("solution")
-    # 覆盖优先两段式的终态后处理诊断（2026-10-23）；预构建解通道不走
+    # 覆盖优先两段式的终态后处理诊断；预构建解通道不走
     # 后处理（基线的构造策略即其方法本身），保持空字典。
     mono_stats: dict[str, int] = {}
-    # 交付后成本 polish 诊断（2026-10-24）；预构建解通道不走（基线的
+    # 交付后成本 polish 诊断；预构建解通道不走（基线的
     # 构造策略即其方法本身），保持空字典。
     cost_polish_stats: dict[str, int] = {}
     if isinstance(prebuilt, AllocationSolution):
@@ -346,7 +346,7 @@ def run_selective_muas(
         final_fitness = float(problem.scalar_fitness(final))
         final_n_hard, final_excess_m = problem.hard_stats(final)
 
-        # 解码后局部搜索 polish（2026-10-19）：对 best_assignment 做
+        # 解码后局部搜索 polish：对 best_assignment 做
         # relocate / swap / 插入位，候选过**同一** build_solution 修复链
         # （evaluator.evaluate），仅严格改进才接受。搜索期口径不受影响
         # （cost_history / best_fitness 仍是 DMDE 曲线）；交付解若被打磨
@@ -376,7 +376,7 @@ def run_selective_muas(
             final_fitness = float(problem.scalar_fitness(final))
             final_n_hard, final_excess_m = problem.hard_stats(final)
 
-        # ── 覆盖优先两段式的终态后处理（2026-10-23 用户裁定）────────
+        # ── 覆盖优先两段式的终态后处理（口径约定）────────
         # 对交付解（DMDE 原始 / assignment polish / memetic 档案， whichever
         # 胜出）做：单调成本 polish（relocate/调序，四道门）→ 覆盖优先
         # 装载（补回新可行任务）→ 重排/航程闸/换巢 → 覆盖门禁 → 重装配。
@@ -403,7 +403,7 @@ def run_selective_muas(
                 mono_stats = dict(mono_stats)
                 mono_stats["rejected"] = 1
 
-        # ── 交付后成本 polish（2026-10-24 用户裁定，诊断报告 §9 排序 1+2）
+        # ── 交付后成本 polish（口径约定，诊断报告 §9 排序 1+2）
         # 对最终交付解（DMDE 原始 / assignment polish / memetic 档案 /
         # coverage_first 后处理，whichever 胜出）做「跨机改派（归属）+
         # 组内 2-opt/Or-opt（顺序）」纯成本局部搜索。与解码期
@@ -417,7 +417,7 @@ def run_selective_muas(
             cand, cost_polish_stats = evaluator.post_cost_polish(final)
             cost_polish_stats["path_before_m"] = round(path_before_cp, 3)
             # 诊断口径：零接受/被拒时 path_after 恒等于 path_before（旧代码
-            # 漏初始化，落盘 0.0 会被误读成「航程被清零」——2026-10-24 修复）。
+            # 漏初始化，落盘 0.0 会被误读成「航程被清零」—— 修复）。
             cost_polish_stats.setdefault("path_after_m", round(path_before_cp, 3))
             cost_polish_stats.setdefault("path_gain_m", 0.0)
             if int(cost_polish_stats.get("n_accepted", 0)) > 0:
@@ -472,7 +472,7 @@ def run_selective_muas(
             },
             "n_executed": len(final.executed_task_ids),
             "n_deferred": len(task_list) - len(final.executed_task_ids),
-            # 覆盖门禁分账（2026-10-22）：gate_stats 与 S 内漏装名单。
+            # 覆盖门禁分账：gate_stats 与 S 内漏装名单。
             #   n_skip = voluntary_skip（能装没装；gate 修复下恒 0）
             #   n_shortfall = 一阶检验能力不足（允许不交付）
             "gate_stats": dict(final.meta.get("gate_stats") or {}),
@@ -500,7 +500,7 @@ def run_selective_muas(
             # 消「记录 best_fitness 与重算目标差 6.5~13.6」（auto big_m
             # 漂移）——审计脚本 N 项据此交叉验证。
             "fitness_weights": dict(final.meta.get("fitness_weights") or {}),
-            # 解码后局部搜索 polish 诊断（2026-10-19）。口径三分：
+            # 解码后局部搜索 polish 诊断。口径三分：
             # best_fitness/cost_history = DMDE 搜索期；final_* = 交付解；
             # polish_* = 「DMDE 原始交付解 → 打磨后交付解」的改进量
             # （before=DMDE 解适应度，after=打磨后，gain=严格改进量；
@@ -515,7 +515,7 @@ def run_selective_muas(
             "polish_gain": float(polish.fitness_gain),
             "polish_converged": bool(polish.converged),
             "polish_budget_hit": bool(polish.budget_hit),
-            # 覆盖优先两段式诊断（2026-10-23）：coverage_first 开启时
+            # 覆盖优先两段式诊断：coverage_first 开启时
             # 记录单调成本 polish 的移动数与覆盖补装数；rejected=1 表示
             # 后处理候选未达采纳判据（覆盖减少/硬违约增/适应度未改进），
             # 交付解保持原样。关闭时全 0（逐位等于旧口径）。
@@ -526,7 +526,7 @@ def run_selective_muas(
             "monotone_polish_converged": bool(mono_stats.get("converged", 0)),
             "monotone_polish_reloaded": int(mono_stats.get("n_reloaded", 0)),
             "monotone_polish_rejected": int(mono_stats.get("rejected", 0)),
-            # 交付后成本 polish 诊断（2026-10-24，组内 2-opt/Or-opt）。
+            # 交付后成本 polish 诊断（组内 2-opt/Or-opt）。
             # enabled=False 或预构建解通道 ⇒ 全 0（逐位等于旧口径）；
             # rejected=1 表示候选未达采纳判据（执行集减少/硬违约增/
             # 航程未严格下降），交付解保持原样。path_gain_m = 采纳时
@@ -535,7 +535,7 @@ def run_selective_muas(
             "cost_polish_rounds": int(cost_polish_stats.get("n_rounds", 0)),
             "cost_polish_n_2opt": int(cost_polish_stats.get("n_2opt", 0)),
             "cost_polish_n_oropt": int(cost_polish_stats.get("n_oropt", 0)),
-            # 跨机改派诊断（2026-10-24，归属维度）：n_relocate = 采纳的
+            # 跨机改派诊断（归属维度）：n_relocate = 采纳的
             # 单任务跨机迁移数；blocked_range / blocked_late = 几何上更
             # 便宜但分别被航程门 / 迟到门拦死的改派数——两者均 >0 而
             # n_relocate=0 表示「有余量、被约束堵住」（搜索期/约束口径
@@ -558,7 +558,7 @@ def run_selective_muas(
             "cost_polish_path_gain_m": float(
                 cost_polish_stats.get("path_gain_m", 0.0)
             ),
-            # memetic M1 精英档案诊断（2026-10-19）。enabled=False 时
+            # memetic M1 精英档案诊断。enabled=False 时
             # n_polish/n_accepted=0、final_fitness=None、trajectory=[]，
             # 行为逐位等于非 memetic 基线。trajectory 长度 == len(cost_history)，
             # 与搜索期曲线逐代对齐，供「搜索期内路由在降」出图（+inf 记为 None）。

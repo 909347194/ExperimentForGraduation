@@ -71,7 +71,7 @@ class TaskPoolSnapshot:
         dormant_ids: 服务休眠任务（DORMANT），不参与本周期选择、
             **仍在池中**（条件恢复即唤醒，区别于 UNREACHABLE 出池）
         overdue_ids: 本周期已过 deadline 仍在池中的任务（**无超期淘汰**，
-            2026-10-24 口径：超期任务滞留池中、仍可迟到交付，只作诊断）
+            口径：超期任务滞留池中、仍可迟到交付，只作诊断）
         current_time: 本周期的时间戳
     """
 
@@ -223,7 +223,7 @@ class TaskPool:
         return self._tasks.get(task_id) or self._finished.get(task_id)
 
     def finished_tasks(self) -> list[Task]:
-        """已出池任务（DONE；2026-10-24 起无超期淘汰，不再有 EXPIRED 出池），按出池顺序。"""
+        """已出池任务（DONE；无超期淘汰，不再有 EXPIRED 出池），按出池顺序。"""
         return list(self._finished.values())
 
     def stats(self) -> dict[str, int]:
@@ -272,7 +272,7 @@ class TaskPool:
 
         1. 上周期 ``SELECTED`` 但未进入执行的任务回到 ``PENDING``（算 remain）
         2. 归类来源：新增 -> NEW，上周期释放 -> RELEASE，其余 -> REMAIN
-        3. 超期诊断（**无超期淘汰**，2026-10-24 口径）：只标注已过
+        3. 超期诊断（**无超期淘汰**，口径）：只标注已过
            ``latest`` 的滞留任务，**不出池**——迟到是软约束，超期任务
            仍可交付（计迟到），唯一出池途径是完成（DONE）或静态
            物理不可达（UNREACHABLE）
@@ -442,15 +442,15 @@ class TaskPool:
         """不可达任务出池（UNREACHABLE）——「能力范围外」，非违约。
 
         与 ``overdue_tasks`` 的区别：这里是**能力边界判定**的结果，不是
-        时间管理失败。用户原则（2026-10-15）下这是唯一合法的未完成原因，
+        时间管理失败。用户原则下这是唯一合法的未完成原因，
         故单列计数，不混入「淘汰」。
 
-        两类归因（2026-10-25 口径对齐，完成率分母的合法排除项）：
+        两类归因（口径对齐，完成率分母的合法排除项）：
 
         - ``reason="geo"``：静态几何不可达——对所有机巢的往返航程都超过
           满电可及范围（见 selection.feasibility.static_unreachable）。异构
           机队下按**机队最强满电航程**判定（只有最强机也够不着才叫永久）。
-        - ``reason="service"``：**历史口径**（2026-11-04 起不再使用）——机队
+        - ``reason="service"``：**历史口径**（不再使用）——机队
           服务不可达改走 :meth:`mark_dormant` 休眠唤醒，不再出池；保留
           此分支仅为兼容旧调用/历史数据语义。
 
@@ -478,7 +478,7 @@ class TaskPool:
     ) -> list[Task]:
         """服务不可达任务转休眠（DORMANT）——**不出池**，条件恢复即唤醒。
 
-        2026-11-04 异构化口径：服务可达性是时变条件（可用机集合随换电/
+        异构化口径：服务可达性是时变条件（可用机集合随换电/
         故障恢复/机队拓扑演化而变，异构机队尤甚），「连续 service_patience
         周期够不着」≠「永远够不着」。旧口径直接出池（mark_unreachable
         reason="service"）会在长航程机恰好充电/故障时永久丢失可服务任务，
@@ -520,7 +520,7 @@ class TaskPool:
     def overdue_tasks(self, current_time: float | None = None) -> list[Task]:
         """已过 ``latest`` 仍在池中的任务（纯诊断，**无超期淘汰**）。
 
-        2026-10-24 口径：时间窗是迟到软约束，超期任务**滞留池中、仍可
+        口径：时间窗是迟到软约束，超期任务**滞留池中、仍可
         迟到交付**（计迟到、计完成），不因超期出池、不标终局状态。
         唯一出池途径：``mark_done``（完成）/ ``mark_unreachable``（静态
         物理不可达）。旧 ``expire``（超期出池=淘汰）已废除。

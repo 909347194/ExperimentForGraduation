@@ -30,7 +30,7 @@ from matplotlib.colors import LightSource, LinearSegmentedColormap, Normalize
 
 from ..theme import plt
 
-# 路径/导入兜底与场景数据定位统一由 base/scene.py 承担（2026-10-29 拆分）：
+# 路径/导入兜底与场景数据定位统一由 base/scene.py 承担（拆分）：
 # 建筑底图同样需要它们，各底图层共用一个判定入口才不会各判各的。
 from .scene import ensure_project_root as _ensure_project_root  # noqa: F401
 from .scene import scene_dirs as _scene_dirs
@@ -87,7 +87,7 @@ def _find_dem_tif() -> "Path | None":
 def _legacy_find_dem_tif() -> "Path | None":
     """向上查找 DEM 瓦片（data/<scenario>/Chengguan_DEM.tif 或任意 *_dem.tif）。
 
-    2026-10-27 起 data/ 按场景分目录：优先在**场景子目录**里找
+     data/ 按场景分目录：优先在**场景子目录**里找
     （data/<scenario>/…），兼容旧平铺 data/*.tif。
     """
     base = Path(__file__).resolve()

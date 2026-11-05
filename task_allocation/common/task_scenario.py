@@ -33,7 +33,7 @@
 须落在 ``data.region_geojson``（城关区多边形）内——见
 ``SyntheticTaskConfig.region_geojson``。
 
-约束压力两源（生产口径 ``uav_max_range=20 km``，2026-10-26 起）：
+约束压力两源（生产口径 ``uav_max_range=20 km``）：
 **航程**——区域边缘到最近机巢往返可超 20 km（单程 >10 km 即真几何不可达），
 其比例由机巢布局与 ``uav_max_range`` 决定；**时间窗**——比例由
 ``deadline_cycles_*`` 与 ``problem.uav_speed`` 共同决定，是实验旋钮而非缺陷。
@@ -120,10 +120,10 @@ class SyntheticTaskConfig:
     # ``sequence_chain_ratio``：参与链的任务占比（0 = 关闭，默认）。
     # ``sequence_chain_len``：单链任务数（<2 视为关闭）。
     #
-    # 判定口径（2026-10-29）：同一条航次内，链内序号小的必须先访问；违反
+    # 判定口径：同一条航次内，链内序号小的必须先访问；违反
     # = 硬违约。链被拆到不同无人机 / 不同周期时**不判违约**（跨机跨周期
     # 按绝对完成时刻比对，尚未实现）。
-    # 调度层另受组原子性约束（2026-11-04）：同一链整组同周期完成或整组
+    # 调度层另受组原子性约束：同一链整组同周期完成或整组
     # 暂缓，不允许拆到不同周期分别完成；与上式违约判据不属同一层次。
     #
     # 默认 0.0 = 关闭：既有实验的 ``Task.sequence_group`` 恒为 None，
@@ -631,7 +631,7 @@ def _assign_sequence_chains(
 ) -> int:
     """把一部分任务组织成时序链，返回链数（0 = 未启用）。
 
-    调用方契约（2026-11-05 审查 L3 显式断言）：``tasks`` 必须是**单批次**
+    调用方契约（审查 L3 显式断言）：``tasks`` 必须是**单批次**
     （共享 arrival_time）——链不得跨批到达，滚动层顺序组原子性
     （methods/rolling/sequence_group.py）依赖此不变量：混批成组会让准入
     闸门永久暂缓先到成员。
@@ -654,7 +654,7 @@ def _assign_sequence_chains(
     n_chains = int(n * ratio) // k
     if n_chains <= 0:
         return 0
-    # 不变量（2026-11-05 审查 L3）：链必须单批次成组（组内共享
+    # 不变量（审查 L3）：链必须单批次成组（组内共享
     # arrival_time）；混批列表当场拒绝，不得静默成组。
     assert len({float(t.arrival_time) for t in tasks}) <= 1, (
         "sequence chain 需单批次成组：混入多个 arrival_time"

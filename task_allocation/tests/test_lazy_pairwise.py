@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """惰性 pairwise 代价表（延迟构建优化）的契约与逐位一致性测试。
 
-背景（exp02_selection_scale 结论 1，2026-10-20 修复）：
+背景（exp02_selection_scale 结论 1，修复）：
     ``build_pairwise_costs`` 曾在第一阶段**之前**对全量 T_t 建 O(n²)
     三维矩阵，而任务选择只触碰 O(n·K + k²) 条边；N=200 时全量建矩阵
     占端到端 85.6%。修复 = 一阶段前只建惰性表（按需算 + 缓存），

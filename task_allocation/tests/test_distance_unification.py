@@ -138,7 +138,7 @@ class _AsymEstimator:
 def test_distance_fn_memoizes_repeated_edges():
     """同一条边**同向**重复查询只估算一次（DMDE 上万次评价的性能前提）。
 
-    2026-10-29 修正：记忆化的性能保证只针对**同向**查询。反向是另一个
+    修正：记忆化的性能保证只针对**同向**查询。反向是另一个
     飞行方向、另一个数，必须独立估算（见
     :func:`test_distance_fn_is_direction_aware`）。
     """
@@ -157,7 +157,7 @@ def test_distance_fn_memoizes_repeated_edges():
 def test_distance_fn_is_direction_aware():
     """垂直切面航程方向相关 ⇒ 缓存键必须带方向，不得把 (A,B)/(B,A) 合一。
 
-    守的是 2026-10-29 修掉的缺陷：旧实现把键对称化成
+    守的是 修掉的缺陷：旧实现把键对称化成
     ``(ka,kb) if ka<=kb else (kb,ka)``，反向查询直接命中正向值，于是 ETA /
     航迹时间用的是**错误飞行方向**的航程（审计 M 项「方向不确定带」的真
     正来源）。这里用方向相关估算器替身把该性质钉死。
@@ -328,7 +328,7 @@ def test_insert_delta_cost_fallback_uses_distance_fn():
 def test_prefilter_range_uses_unified_travel():
     """预筛的航程判据走 cost_hint（三维代价）；cost_hint 即统一口径的产物。
 
-    2026-10-15 起按往返口径：2×travel vs margin×remaining_range。
+    按往返口径：2×travel vs margin×remaining_range。
     """
     from task_allocation.methods.selection.feasibility import prefilter
     from task_allocation.common.types import ScoredTask
@@ -350,14 +350,14 @@ def test_prefilter_range_uses_unified_travel():
 
 
 # ---------------------------------------------------------------------------
-# 5. CostProvider 回退口径（2026-10-29 修正）
+# 5. CostProvider 回退口径（修正）
 # ---------------------------------------------------------------------------
 
 
 def test_cost_fallback_does_not_reuse_reverse_value():
     """缺正向键时**不得**拿反向键的值顶替。
 
-    守的是 2026-10-29 修掉的缺陷：旧 ``CostProvider.cost`` 在 ``(a,b)``
+    守的是 修掉的缺陷：旧 ``CostProvider.cost`` 在 ``(a,b)``
     缺失时先查 ``(b,a)`` 直接返回。垂直切面航程方向相关 ⇒ 反向值是另一个
     飞行方向的数，拿它给 ``a→b`` 记账是**口径错误**，且静默无告警，既污染
     上报航程（论文指标）也污染 ``λ·path`` 目标项。

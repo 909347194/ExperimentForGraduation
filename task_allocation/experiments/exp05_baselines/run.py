@@ -42,7 +42,7 @@ from datetime import datetime, timezone
 from typing import Any, Mapping
 
 # 任意调用方式可跑（python -m / 任意 cwd）：脚本目录先入 sys.path，
-# 供 `from paths import` 在非脚本路径调用下也能解析（2026-10-22 修复）。
+# 供 `from paths import` 在非脚本路径调用下也能解析（修复）。
 import sys as _sys
 from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parent))
@@ -184,7 +184,7 @@ def run_once(
         "config_path": str((EXP_DIR / "config.yaml").relative_to(ROOT)),
         "repo_root": str(ROOT),
         # 生效配置指纹（含 --set）：断点续跑复用的判据。换 λ / 代数 / 门禁
-        # 开关必须导致不复用，否则旧口径静默混入论文主表（2026-10-22）。
+        # 开关必须导致不复用，否则旧口径静默混入论文主表。
         "config_fingerprint": _config_fingerprint(bundle.raw, arm),
     }
 
@@ -302,7 +302,7 @@ def _config_fingerprint(raw_cfg: Mapping[str, Any], arm: Any) -> str:
 
     断点续跑的复用判据不能只看 metrics.json 是否存在：换 λ / 代数 / 门禁
     开关后跑进同一 results 目录，会静默混入旧口径结果并直接进论文主表
-    （2026-10-22 修复）。故把生效配置连同对照臂关键参数一起哈希，落盘
+    （修复）。故把生效配置连同对照臂关键参数一起哈希，落盘
     run_meta 并在复用时比对；不匹配即不复用。
     """
     payload = {
@@ -394,7 +394,7 @@ def main(argv: list[str] | None = None) -> int:
             run_dir = out_root / arm.id / f"seed_{seed}"
             # 断点续跑：已有 metrics.json 的组合直接读盘复用（网格中断后
             # 只补缺失组合；--force 强制全量重跑）。
-            # 复用前必须比对配置指纹（2026-10-22）：只判"文件存在"会让换
+            # 复用前必须比对配置指纹：只判"文件存在"会让换
             # λ / 代数 / 门禁开关后的旧口径结果被静默沿用，污染论文主表。
             metrics_path = run_dir / "metrics.json"
             meta_path = run_dir / "run_meta.json"

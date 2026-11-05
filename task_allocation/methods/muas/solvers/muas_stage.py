@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""muas_stage.py — 第二阶段编排门面（兼容层，2026-10-27 拆分）。
+"""muas_stage.py — 第二阶段编排门面（兼容层，拆分）。
 
 职责边界：
 
@@ -26,7 +26,7 @@
     分给多架 UAV）。故参与规划的 UAV 数 K 恒小于任务数 N（即 srp 巡游模型），
     其余可用 UAV 本周期保持空闲 —— 这正是论文允许的 ``U_t^exec ⊆ U_t^avail``。
 
-模块地图（2026-10-27 拆分；本模块保留全部既有导入路径，逐字节兼容）：
+模块地图（拆分；本模块保留全部既有导入路径，逐字节兼容）：
 
     stage_config.py        MUASStageConfig / POLICY_*（编排参数）
     participating.py       select_participating_uavs 及选机策略

@@ -5,7 +5,7 @@
 而不是「实验长什么样（scene）」或「这一轮怎么回事（process）」。
 
 现有图：``outcome_summary``（结果总览：完成率轨迹 / 未完成终局 / 双目标）。
-2026-10-26 图件裁剪后仅保留此图（seed_summary / ab_compare 已移除，
+图件裁剪后仅保留此图（seed_summary / ab_compare 已移除，
 需要时从 git 历史找回）。
 """
 

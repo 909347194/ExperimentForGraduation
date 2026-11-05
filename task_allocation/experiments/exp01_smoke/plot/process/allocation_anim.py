@@ -97,7 +97,7 @@ from ..theme import (
 __all__ = ["plot_allocation_anim"]
 
 
-# ── 私有数据助手（2026-10-26 图件裁剪：随 allocation / allocation_status
+# ── 私有数据助手（图件裁剪：随 allocation / allocation_status
 #    模块一并移入本文件，P06 动画是唯一使用者）────────────────────────
 
 def _arrival_cycle_map(solution: dict[str, Any]) -> dict[int, int]:
@@ -345,7 +345,7 @@ def _draw_one_tour(ax, tour: dict[str, Any], p: float, *,
             drawn.append((mx, my))
             break
     for a, b in zip(drawn, drawn[1:]):
-        _arrow(ax, a, b, color, lw=lw)
+        _arrow(ax, a, b, color, lw=lw, alpha=alpha)
 
     # 无人机头点（终点巢处画小空心环，与 allocation 一致）
     head = drawn[-1]
@@ -605,24 +605,10 @@ def plot_allocation_anim(
     gif_dpi = min(int(dpi), _GIF_DPI_CAP)
 
     # 总标题与口径脚注必须在抓帧/保存之前添加——否则 GIF 与 poster 都没有
-    # 标题和口径说明（曾因顺序错位导致动画产物缺两者，见 2026-10-13 审查）。
+    # 标题和口径说明（曾因顺序错位导致动画产物缺两者，见 审查）。
     fig.suptitle("exp01_smoke：分配过程动画演变（滚动闭环 · 航迹生长 · DMDE 收敛）",
                  fontsize=_F_SUPTITLE)
-    footnote(fig, "口径：航迹按周期逐段生长，任务被航迹扫过即点亮（按承运 UAV 着色，"
-                  "标号 T#·Ck，Ck=到达周期）；任务点于其到达周期才出现，未到达前不绘制，"
-                  "已到达但未执行者显红。地图下方的状态行给出周期 / 已到达 / 已完成"
-                  "百分比 / 累计里程（完成进度只用数字表达，不画进度条；白底随文字"
-                  "自动贴合）——放在图外是因为状态行占地图宽 3/4，图内任何角落都会"
-                  "压住贴顶的任务标号（逐帧自检实测 T10 互压 100%）；"
-                  "右栏 (b) 为「当前周期」DMDE 最优适应度收敛曲线，游标随动画推进。"
-                  "零出动周期（如有）右栏显式标注「无 DMDE 求解」，不接其它周期曲线；"
-                  "绘制周期轴止于最后一个活动周期，尾部收敛空周期不绘制。"
-                  "各机巢三角形下方的「n 架」= 当前驻巢无人机数（逐帧随航迹更新）："
-                  "航次执行期间该 UAV 在空、不计入任何巢，完成航次回到返航巢后计入，"
-                  "与画面上的无人机图标、归巢空心环严格同步；零驻巢置灰。"
-                  "里程 = 各航迹 est_cost 之和（km）。"
-                  "底图地形与机巢为静态层。Ck 标出到达周期，晚到任务（如 T19·C3）"
-                  "无法并入早周期航次。")
+    footnote(fig, "航迹按周期生长，任务扫过即点亮；状态行与驻巢数逐帧更新。完整口径见 figure_notes.md。")
 
     try:
         from PIL import Image
@@ -659,7 +645,7 @@ def plot_allocation_anim(
                 h = int(frames_rgb[0].height * W / frames_rgb[0].width)
                 frames_rgb = [im.resize((W, h), Image.LANCZOS) for im in frames_rgb]
             # 关键语义色显式入调色板：MEDIANCUT 按像素数分箱，DEM 暖色地形会
-            # 把小面积的红点/珊瑚点吞成棕橙（2026-10-13 实测 (165,93,48)）。
+            # 把小面积的红点/珊瑚点吞成棕橙（实测 (165,93,48)）。
             pal_img = build_gif_palette(
                 frames_rgb,
                 extra_colors=[*UAV_PALETTE, _C_PENDING, "#c3cbd4", "#e6e9ed",
@@ -791,7 +777,7 @@ def _draw_conv(ax, solution: dict[str, Any], c: int | None, p: float) -> None:
     col = uav_color(ci)
     # 只画到 visible 窗口：超出 xlim 的部分虽被裁掉看不见，但 Line2D 的 extent
     # 仍按完整数据计入 bbox_inches="tight"，会把 poster 撑成异常宽幅
-    # （2026-10-13 实测 4.77× 画布宽 → poster 7964px）。
+    # （实测 4.77× 画布宽 → poster 7964px）。
     visible = min(n_total, x_max + 1)
     ax.plot(g[:visible], hist[:visible], "-", drawstyle="steps-post",
             color=col, lw=1.0, alpha=0.25, zorder=2)

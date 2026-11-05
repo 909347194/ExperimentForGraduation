@@ -84,7 +84,7 @@ def write_json(path: Path, payload: Any) -> Path:
 
 
 def _nest_rows(nests: Sequence[Nest]) -> list[dict[str, Any]]:
-    # 坐标不做 round：见 horizon._tour_row 的同款说明（2026-10-29）。
+    # 坐标不做 round：见 horizon._tour_row 的同款说明。
     # 建筑障碍包络是离散查询，落盘舍入 0.0004 m 就能让审计端复算的
     # 单腿航程跳变 1.2 m，J 项（容差 1 m）因此假 FAIL。
     return [
@@ -115,7 +115,7 @@ def _task_row(t: Task) -> dict[str, Any]:
         "status": t.status.value,
         "completed_at": t.meta.get("completed_at"),
         # 时序（执行顺序）约束：无链任务恒 null（默认关闭时序链），
-        # 2026-10-29 补——否则链信息不进产物，事后无法审计交付解是否满足时序。
+        # 补——否则链信息不进产物，事后无法审计交付解是否满足时序。
         "sequence_group": t.sequence_group,
         "sequence_order": int(t.sequence_order),
     }
@@ -135,7 +135,7 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
 
     tasks = f.batch.all_tasks()
     n_arrived = len(tasks)
-    # ── 代价口径拆分（2026-10-16 审查 I3）──────────────────────────
+    # ── 代价口径拆分（审查 I3）──────────────────────────
     # f2_cost = 路径(米) + w_penalty·惩罚(秒/单位)：量纲不同不能混加后当
     # 「总路径代价」报。按 w_penalty 反解拆开：total_cost 只留米制路径
     # （与 tables/plot 的「总三维路径代价」标签一致），惩罚单列 total_penalty，
@@ -144,7 +144,7 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
     w_penalty = float(getattr(f.bundle.problem_model, "w_penalty", 1.0) or 0.0)
     total_f2 = sum(float(r.muas.get("f2_cost", 0.0) or 0.0) for r in records)
     total_penalty = sum(float(r.muas.get("penalty", 0.0) or 0.0) for r in records)
-    # ── 纯路径：直读而非反解（2026-10-24 修复 P1-3）────────────────
+    # ── 纯路径：直读而非反解（修复 P1-3）────────────────
     # final_path_m = problem.path_cost(final)，每周期落盘（muas_stage 诊断），
     # 不含惩罚。旧口径从 f2 反解（f2 − w_penalty·penalty），两者实测逐位
     # 相等（三 seed 差 0.000000），但反解依赖「终态 evaluate 以 penalty=None
@@ -166,7 +166,7 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
     # 实际跑的周期数：收敛早停后可能 < 配置的 n_cycles 安全上限；报告一律
     # 以真实周期数为准（跑满时 len(records) 与配置一致，旧口径不变）。
     n_cycles = len(records) or int(f.bundle.horizon.n_cycles)
-    # 运营周期数（2026-11-05 吞吐分母统一）：序号上最后一个有活动周期的
+    # 运营周期数（吞吐分母统一）：序号上最后一个有活动周期的
     # 位置 = 绘图周期轴长（plot._trim_cycles_for_plot 同则裁剪）。尾部
     # 收敛判定空周期不是运营周期，不入吞吐分母——统一前 (a) 曲线
     # （分母=绘图周期数）与 (d) 表（分母=落盘全周期数）双值误引。判据
@@ -176,10 +176,10 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
         default=0,
     ) or n_cycles
     # 完成闸门：被判**物理不可行**、未真正交付而回池的任务（不计完成、
-    # 不计奖励）。2026-10-15 协议「迟到不是废飞」后，废飞只剩这一类
+    # 不计奖励）。 协议「迟到不是废飞」后，废飞只剩这一类
     # （航程/续航/终点机巢/结构类违约）；迟到交付计入完成。
     n_infeasible_delivery = sum(len(r.infeasible_ids) for r in records)
-    # ── 废飞已飞航程（2026-10-24 指标体系审查 B1）────────────────────
+    # ── 废飞已飞航程（指标体系审查 B1）────────────────────
     # 「废飞 = 完成闸门弹回的物理不可行交付」：UAV 已按航次飞行（航程已
     # 消耗、位置已更新到终点巢），任务解绑回池。metrics 口径注释自述
     # 「总航程下降若靠它换来则是净亏损，必须与吞吐同权报告」，但旧口径
@@ -208,14 +208,14 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
     all_lateness = [
         float(v) for r in records for v in r.lateness_by_task.values()
     ]
-    # 淘汰：2026-10-24 口径「无超期淘汰」后**结构性为 0**（TaskPool 不再
+    # 淘汰：口径「无超期淘汰」后**结构性为 0**（TaskPool 不再
     # 超期出池；唯一出池途径 = 完成 / 静态物理不可达）。保留键作审计断言
     # （audit_correctness 终局守恒），n_overdue_ever 为超期滞留诊断。
     n_eliminated = 0
     n_overdue_ever = len(
         {int(i) for r in records for i in getattr(r, "overdue_ids", ())}
     )
-    # ── 有效完成口径（2026-10-16 审查 I4）──────────────────────────
+    # ── 有效完成口径（审查 I4）──────────────────────────
     # 「迟到≠废飞」下迟到交付计完成，但迟到 ≥ W 的交付有效奖励折减为 0。
     # 完成率若不并列这个口径就会虚高（本跑 12 个迟到交付中 7 个实得 0）。
     # 有效奖励 eff = R·max(0, 1−L/W)，迟到秒数取闭环实际交付迟到
@@ -238,10 +238,10 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
         if r_full > 0 and eff <= 0.0:
             n_zero_reward_delivery += 1
     # 静态物理不可达（「过于偏远」）：所有机巢往返航程超过满电可及范围，
-    # 入池判定一次性出池。用户原则（2026-10-15）下唯一合法的未完成原因，
+    # 入池判定一次性出池。用户原则下唯一合法的未完成原因，
     # 与淘汰分列——淘汰对物理可行任务是机制失灵的信号，须恒为 0（非合法失败类）。
     n_unreachable = sum(len(r.unreachable_ids) for r in records)
-    # 不可达归因拆分（2026-10-25 口径对齐，与 exp05 同源）：geo = 静态几何
+    # 不可达归因拆分（口径对齐，与 exp05 同源）：geo = 静态几何
     # 不可达（所有机巢往返超满电航程）；service = 机队服务不可达（几何可达
     # 但连续 service_patience 周期无可用 UAV 在往返航程内，典型为机队漂移
     # 致空巢）。二者同为完成率分母的合法排除项，单列供归因。
@@ -258,7 +258,7 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
         for i in r.unreachable_ids
         if _unreach_reason.get(int(i)) == "service"
     )
-    # 服务休眠/唤醒（2026-11-04 异构化口径：service 不再出池，改休眠）：
+    # 服务休眠/唤醒（异构化口径：service 不再出池，改休眠）：
     # n_dormant_events = 累计休眠次数；n_woken = 累计唤醒次数；
     # n_dormant_end = 末周期仍在休眠的任务数。缺字段（旧记录/测试桩）按 0 计。
     n_dormant_events = sum(len(getattr(r, "dormant_ids", []) or []) for r in records)
@@ -272,7 +272,7 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
         int((getattr(_last, "pool_counts", {}) or {}).get("n_dormant", 0))
         + len(getattr(_last, "dormant_ids", []) or [])
     ) if _last else 0
-    # 只统计真正求解过的周期（2026-10-16 审查 I2：空转周期 muas 无解，
+    # 只统计真正求解过的周期（审查 I2：空转周期 muas 无解，
     # 旧口径把它们当 feasible=False 摊薄，1/4 被记成 1/8）
     feas_flags = [
         bool(r.muas.get("feasible"))
@@ -280,11 +280,11 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
         if r.muas.get("feasible") is not None
     ]
     cycle_feasible_rate = (sum(feas_flags) / len(feas_flags)) if feas_flags else 0.0
-    # 活跃周期（有出动）计数：过程诊断计数。2026-11-05 吞吐分母统一为
+    # 活跃周期（有出动）计数：过程诊断计数。 吞吐分母统一为
     # n_oper_cycles（运营周期数）后不再是吞吐分母；I6 的「全周期分母被
     # 收敛节奏污染」由 n_oper_cycles 解决（只裁尾部收敛空周期，不改时间基）。
     n_active_cycles = sum(1 for r in records if len(r.executed_ids) > 0)
-    # ── 覆盖门禁分账（2026-10-22，合法解 = 物理硬约束 + 覆盖门禁）────
+    # ── 覆盖门禁分账（合法解 = 物理硬约束 + 覆盖门禁）────
     # voluntary_skip = S 内能装却没装（gate 修复下应恒 0）；
     # capacity_shortfall = 一阶检验能力不足（允许不交付）；
     # gate_rescued = 门禁修复救回数。逐周期 gate_stats 累加，
@@ -297,7 +297,7 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
     n_voluntary_skip = _gate_sum("n_skip")
     n_capacity_shortfall = _gate_sum("n_shortfall")
     n_gate_rescued = _gate_sum("n_rescued")
-    # ── 交付后成本 polish 汇总（2026-10-24，组内 2-opt/Or-opt）─────────
+    # ── 交付后成本 polish 汇总（组内 2-opt/Or-opt）─────────
     # gain = 各周期采纳的交付航程下降量合计（米）；移动数/拒绝态同理。
     # 未开启/旧数据缺字段按 0 计（schema 容缺约定）。
     def _cp(key: str) -> float:
@@ -308,7 +308,7 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
     cp_gain_m = _cp("path_gain_m")
     cp_n_2opt = int(_cp("n_2opt"))
     cp_n_oropt = int(_cp("n_oropt"))
-    # 跨机改派（2026-10-24，归属维度）：采纳数 + 被航程门/迟到门拦死的
+    # 跨机改派（归属维度）：采纳数 + 被航程门/迟到门拦死的
     # 几何更优改派数。blocked_*>0 且 n_relocate=0 ⇒ 有余量被约束堵住。
     cp_n_relocate = int(_cp("n_relocate"))
     cp_blocked_range = int(_cp("relocate_blocked_range"))
@@ -316,7 +316,7 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
     cp_rejected = sum(
         int((r.muas or {}).get("cost_polish_rejected", 0) or 0) for r in records
     )
-    # ── 论文主表口径 v3（2026-11-04 用户裁定 A）──────────────────────
+    # ── 论文主表口径 v3（口径约定 A）──────────────────────
     # 「可完成的最终都应完成，只是或早或晚；在此前提下控成本与时效」。
     # η_final 分母排除两类「当前能力范围外」的任务：
     #   ① 静态几何不可达（问题固有、不归算法能力，已出池）；
@@ -364,7 +364,7 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
         for t in ts
     }
     deliver_cycle_of = {tid: r.cycle for r in records for tid in r.executed_ids}
-    # 分子限定为**已完成**任务（2026-10-24 修复 P1-1）：executed_ids ⊋ completed
+    # 分子限定为**已完成**任务（修复 P1-1）：executed_ids ⊋ completed
     # ——废飞回池的任务也在 executed 里（审计 C 项判据即断言
     # infeasible ⊆ executed），全量统计会把废飞算成「跨周期推迟」，而分母是
     # completed ⇒ 废飞非 0 时比率虚高、甚至 >1。本跑废飞恒 0 故未暴露。
@@ -394,7 +394,7 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
         s_cov_rates.append(len(set(r.executed_ids) & sel_ids) / denom)
     s_coverage_rate = (sum(s_cov_rates) / len(s_cov_rates)) if s_cov_rates else 0.0
 
-    # ── 候选池命中率（2026-10-24 指标体系审查 B2）──────────────────
+    # ── 候选池命中率（指标体系审查 B2）──────────────────
     # n_selected / n_cand（池化：Σ入选 / Σ候选上限）。候选池「该富」是
     # 选择层的设计声明（n_cand=⌈αK⌉ 与机巢容量 cap 解耦，P14），命中率
     # 直接验证它是否兑现：接近 1 ⇒ 候选池几乎被选空（名额外推）、选择
@@ -410,7 +410,7 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
     cand_hit_rate = (
         sel_selected_total / sel_cand_total if sel_cand_total else 0.0
     )
-    # ── 长程吞吐协议指标（2026-10-14 用户定口径，2026-10-15 修订）──────
+    # ── 长程吞吐协议指标（用户定口径，修订）──────
     # 完成率不是目标；真实目标 = 持续到达下「尽可能多且正确地完成任务」。
     # 正确执行率 = 当周期按时出动 / 当周期出动（迟到交付与物理不可行交付
     # 都不算「正确」，但迟到仍计入完成与吞吐——迟到不是废飞）；
@@ -418,7 +418,7 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
     # 废飞（n_infeasible_delivery）= 物理不可行的弹回交付：UAV 已飞航程、
     # 位置已更新，但任务解绑回池不计完成——总航程下降若靠它换来则是净
     # 亏损，必须与吞吐同权报告。迟到单独以 n_late / 按时率 / 平均迟到报告。
-    # 每活跃周期正确率，按 cycle 键控（2026-10-16 审查 I1：空转周期不入均值；
+    # 每活跃周期正确率，按 cycle 键控（审查 I1：空转周期不入均值；
     # 同时修复旧口径 zip 对齐错位——列表变短后行与率会配错周期）
     per_cycle_correct: dict[int, float] = {}
     for r in records:
@@ -433,12 +433,12 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
         sum(per_cycle_correct.values()) / len(per_cycle_correct)
         if per_cycle_correct else 0.0
     )
-    # 2026-10-24 A2：删除出动池化的 on_time_rate（(Σexec−Σlate−Σinfeasible)
+    # A2：删除出动池化的 on_time_rate（(Σexec−Σlate−Σinfeasible)
     # /Σexec）——与逐周期 correct_exec_rate、交付集条件率 on_time_rate_final
     # 三者近义误引；正确性验证只保留后两个，池化值可由 cycles 复算。
     avg_lateness = (sum(all_lateness) / len(all_lateness)) if all_lateness else 0.0
     max_lateness = max(all_lateness) if all_lateness else 0.0
-    # 吞吐（2026-11-05 分母统一）= 累计完成（含迟到）/ 运营周期数。
+    # 吞吐（分母统一）= 累计完成（含迟到）/ 运营周期数。
     # metrics.json 的 throughput_per_cycle、结果总览 (a) 曲线终点与
     # (d) 表三处同源同值。
     throughput = (len(completed) / n_oper_cycles) if n_oper_cycles else 0.0
@@ -452,13 +452,16 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
             infeasible_path_by_cycle.get(row.get("cycle"), 0.0), 3
         )
 
-    # 覆盖门禁开关快照（2026-10-24）：problem 段自描述字段与 scalarization
+    # 覆盖门禁开关快照：problem 段自描述字段与 scalarization
     # 标注共用，避免同一文件里两处各读一次 getattr 漂移。
     _gate_cov = bool(
         getattr(getattr(f.bundle, "stage_model", None), "coverage_gate", False)
     )
-    _gate_lex = bool(
-        getattr(f.bundle.problem_model, "lexicographic_coverage", False)
+    _gate_audit = bool(
+        getattr(
+            f.bundle.problem_model, "coverage_audit",
+            getattr(f.bundle.problem_model, "lexicographic_coverage", False),
+        )
     )
 
     return {
@@ -479,22 +482,20 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
             "uav_max_range_km": float(f.bundle.problem.get("uav_max_range", 0.0)) / 1000.0,
             "dmde_population": int(f.bundle.solver.pop_size),
             "dmde_max_iter": int(f.bundle.solver.max_generations),
-            # 适应度口径自描述（2026-10-24 门禁唯一主口径重构）：
-            # 非门禁 big-M 四层路径已从代码移除，problem_model.lexicographic
-            # 字段失效（设任何值不改变行为）——不能再读它标注口径（图/表
-            # 会描述一个不存在的口径）。实际口径由两个门禁开关决定：
-            #   coverage_gate          终态构造性修复（能救必救）
-            #   lexicographic_coverage W_skip 罚层 + 审计分账
+            # 适应度口径自描述（门禁唯一主口径重构）：
+            # 实际口径由两个门禁开关决定：
+            #   coverage_gate   终态构造性修复（能救必救）
+            #   coverage_audit  W_skip 罚层 + 审计分账
             # 两者同开 = 完整门禁口径（当前生产值）。
             "scalarization": (
                 "覆盖门禁口径（f = W_hard·n_hard + w_exc·excess_m + W_skip·n_skip"
                 " + w_late·L + λ·path；F1 退为事后指标）"
-                if _gate_cov and _gate_lex
+                if _gate_cov and _gate_audit
                 else "门禁部分开启（coverage_gate="
-                     f"{_gate_cov}, lexicographic_coverage={_gate_lex}）"
+                     f"{_gate_cov}, coverage_audit={_gate_audit}）"
             ),
             "time_window": bool(f.bundle.problem_model.constraints.time_window),
-            # 罚权自描述（2026-10-24）：口径类数值一律随数据落盘，图/表直读
+            # 罚权自描述：口径类数值一律随数据落盘，图/表直读
             # 而不再回源 config.yaml——否则 --set 改了这些键，算法按新值跑、
             # 图仍按 yaml 原文标注（图会说谎，与 10-23 修的 lexicographic
             # 透传是同一类分裂，当时只修了算法侧）。
@@ -505,10 +506,12 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
               "w_penalty": float(
                   getattr(f.bundle.problem_model, "w_penalty", 1.0) or 0.0
               ),
-              # 覆盖门禁口径自描述（2026-10-22）：审计/跨配置对比直读
-            "lexicographic_coverage": _gate_lex,
+              # 覆盖门禁口径自描述：审计/跨配置对比直读；新名 coverage_audit
+              # 为规范键，旧名 lexicographic_coverage 仅作向后兼容别名。
+            "coverage_audit": _gate_audit,
+            "lexicographic_coverage": _gate_audit,
             "coverage_gate": _gate_cov,
-            # 交付后成本 polish 开关自描述（2026-10-24）：消融对比直读，
+            # 交付后成本 polish 开关自描述：消融对比直读，
             # 不回源 yaml（同 lambda_cost 的自描述理由）
             "cost_polish_enabled": bool(
                 getattr(
@@ -517,7 +520,7 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
                     False,
                 )
             ),
-            # 论文主表必报列序（2026-10-24 口径：本周期覆盖/吞吐、单位完成
+            # 论文主表必报列序（口径：本周期覆盖/吞吐、单位完成
             # 航程、等待时间、耗时）：随数据自描述，表格生成按此序取数，
             # 不靠文档记忆。淘汰率不当主失败指标（无超期淘汰，语义上
             # 不存在）——机制缺陷账单列 paper_mechanism_audit。
@@ -555,7 +558,7 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
         "summary": {
             "n_arrived": n_arrived,
             "n_completed": len(completed),
-            # ── 2026-10-24 指标体系审查 A1：删除 naive 完成率键 ────────
+            # ── 指标体系审查 A1：删除 naive 完成率键 ────────
             # exp01 定位是**正确性验证台**（冒烟 + 口径标定 + 回归基线），
             # 不产出论文主表数值；完成率只保留 canonical 口径
             # completion_rate_final（分母剔除物理不可达）。旧键
@@ -575,7 +578,7 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
             "n_woken": n_woken,
             "n_dormant_end": n_dormant_end,
             "n_late": n_late,
-            # ── 2026-10-24 指标体系审查 A2：删除池化 on_time_rate 键 ───
+            # ── 指标体系审查 A2：删除池化 on_time_rate 键 ───
             # 旧键 on_time_rate（出动池化正确执行率）与 correct_exec_rate
             # （逐周期未加权均值，长程协议主指标）、on_time_rate_final
             # （交付集条件率，论文口径）三者同名近义、最易误引。正确性
@@ -584,10 +587,10 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
             "avg_lateness_s": round(avg_lateness, 3),
             "max_lateness_s": round(max_lateness, 3),
             "correct_exec_rate": round(correct_exec_rate, 6),
-            # 吞吐（2026-11-05 分母统一）：分母 = n_oper_cycles（运营
+            # 吞吐（分母统一）：分母 = n_oper_cycles（运营
             # 周期数，裁掉尾部收敛空周期 = 绘图轴长）。旧双键并存导致
             # 「吞吐分母双值」：throughput_per_cycle（落盘全周期分母）与
-            # throughput_per_active_cycle（有出动周期分母），按 2026-10-24
+            # throughput_per_active_cycle（有出动周期分母），按
             # A2「近义键只留一个」删除后者，前者改新分母；
             # n_active_cycles 保留为过程诊断计数。
             "throughput_per_cycle": round(throughput, 6),
@@ -595,7 +598,7 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
             "n_active_cycles": n_active_cycles,
             # 有效完成口径（I4）：零奖励交付 / 有效完成率 / 奖励产出率
             "n_zero_reward_delivery": n_zero_reward_delivery,
-            # ── 2026-10-24 指标体系审查 A3：分母对齐 n_final_denom ──
+            # ── 指标体系审查 A3：分母对齐 n_final_denom ──
             # 旧口径分母用 n_arrived（未剔物理不可达），与
             # completion_rate_final 不可直接比较——「有效 < 最终」部分
             # 来自分母而非零奖励交付，是对账陷阱。改为同分母后，
@@ -620,17 +623,17 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
             "solve_time_ms": round(solve_ms, 2),
             "K_mean": (sum(avail_counts) / len(avail_counts)) if avail_counts else 0.0,
             "n_deferred_last": records[-1].muas.get("n_deferred", 0) if records else 0,
-            # 覆盖门禁三分账（2026-10-22）：skip 应恒 0（否则门禁未生效/有 bug）
+            # 覆盖门禁三分账：skip 应恒 0（否则门禁未生效/有 bug）
             "n_voluntary_skip": n_voluntary_skip,
             "n_capacity_shortfall": n_capacity_shortfall,
             "n_gate_rescued": n_gate_rescued,
-            # 交付后成本 polish 汇总（2026-10-24）：总航程下降量（米）与
+            # 交付后成本 polish 汇总：总航程下降量（米）与
             # 移动数；rejected>0 表示有周期候选未达采纳判据（执行集减少/
             # 硬违约增/航程未严格降），交付解保持原样。
             "cost_polish_gain_m": round(cp_gain_m, 3),
             "cost_polish_n_2opt": cp_n_2opt,
             "cost_polish_n_oropt": cp_n_oropt,
-            # 跨机改派（归属维度，2026-10-24）：采纳数与被门拦死的几何更优
+            # 跨机改派（归属维度）：采纳数与被门拦死的几何更优
             # 改派数。blocked_*>0 且 n_relocate=0 ⇒ 有余量、被约束堵住。
             "cost_polish_n_relocate": cp_n_relocate,
             "cost_polish_relocate_blocked_range": cp_blocked_range,
@@ -666,13 +669,13 @@ def build_metrics(f: RunFacts) -> dict[str, Any]:
 def config_fingerprint(raw_cfg: Mapping[str, Any]) -> str:
     """当前**生效**配置（含 ``--set`` 覆盖）的稳定指纹。
 
-    与 exp05_baselines 同口径（2026-10-23 移植）：exp01 反复用作「口径
+    与 exp05_baselines 同口径（移植）：exp01 反复用作「口径
     标定台」，换 λ / 代数 / 门禁开关后跑进同一个 ``results/`` 目录会覆盖
     旧口径产物，事后无法区分某份 metrics.json 是哪套配置跑出来的
     （旧数据已因口径不可比被整体清空过一次）。落盘到 run_meta 后可按
     指纹回溯每份产物的生效配置。
 
-    seed 类字段**不进**指纹（2026-10-24 修复 P2-2）：随机种子是重复维度
+    seed 类字段**不进**指纹（修复 P2-2）：随机种子是重复维度
     而非口径维度，同口径换 seed 应得同一指纹，否则无法按指纹把「同口径」
     产物归类（exp05 每 (arm,seed) 单独落盘故无此问题，exp01 只在代表
     seed 上落一个 run_meta，指纹含 seed 就有歧义）。
@@ -715,7 +718,7 @@ def build_run_meta(
 
 
 # 需要跨 seed 聚合的数值型指标键（取自各次运行的 summary）
-# 2026-10-24 指标体系审查（exp01 = 正确性验证台，没用的口径直接删）：
+# 指标体系审查（exp01 = 正确性验证台，没用的口径直接删）：
 #   删除 completion_rate（naive，分母含不可达）——完成率只留 final 口径；
 #   删除 on_time_rate（出动池化正确执行率）——保留逐周期 correct_exec_rate
 #     与交付集条件率 on_time_rate_final，池化值可由 cycles 复算；
@@ -780,7 +783,7 @@ _SEED_AGG_KEYS = (
     "n_arrived",
 )
 
-#: 跨 seed 聚合取**峰值**而非 mean±std 的键（2026-10-24 指标体系审查 D）：
+#: 跨 seed 聚合取**峰值**而非 mean±std 的键（指标体系审查 D）：
 #: max_backlog 的「各 seed 峰值再求 mean±std」没有决策含义（峰值不可平均），
 #: 论文只报峰值 ⇒ 聚合层直接给 max，std 记 0.0 保持 {mean, std} schema 统一。
 _SEED_PEAK_KEYS = ("max_backlog",)
@@ -888,7 +891,7 @@ def build_solution(f: RunFacts) -> dict[str, Any]:
                 "fitness_weights": dict(
                     (r.muas or {}).get("fitness_weights") or {}
                 ),
-                # 覆盖门禁分账（2026-10-22）：W_skip 层的 n_skip 成分与
+                # 覆盖门禁分账：W_skip 层的 n_skip 成分与
                 # 一阶检验归因，供审计 N2 重算与三分账表。
                 "gate_stats": dict((r.muas or {}).get("gate_stats") or {}),
                 # 交付解自身适应度与成分（与搜索期 best_fitness 口径分离：
@@ -900,7 +903,7 @@ def build_solution(f: RunFacts) -> dict[str, Any]:
                 "final_late_s": (r.muas or {}).get("final_late_s"),
                 "final_n_hard": (r.muas or {}).get("final_n_hard"),
                 "final_excess_m": (r.muas or {}).get("final_excess_m"),
-                # 解码后局部搜索 polish 诊断（2026-10-19）：
+                # 解码后局部搜索 polish 诊断：
                 # before=DMDE 交付解适应度，after=打磨后，gain=严格改进量。
                 # 缺省空值（旧数据/空转周期）。
                 "polish_enabled": (r.muas or {}).get("polish_enabled"),
@@ -913,7 +916,7 @@ def build_solution(f: RunFacts) -> dict[str, Any]:
                 "polish_gain": (r.muas or {}).get("polish_gain"),
                 "polish_converged": (r.muas or {}).get("polish_converged"),
                 "polish_budget_hit": (r.muas or {}).get("polish_budget_hit"),
-                # memetic M1 精英档案诊断（2026-10-19）：搜索期内每 K 代
+                # memetic M1 精英档案诊断：搜索期内每 K 代
                 # 对精英 polish，档案轨迹与 cost_history 逐代对齐，供
                 # 「搜索期内路由在降」出图。缺省空值（旧数据/空转周期）。
                 "memetic_enabled": (r.muas or {}).get("memetic_enabled"),
@@ -926,14 +929,14 @@ def build_solution(f: RunFacts) -> dict[str, Any]:
                 "memetic_gain": (r.muas or {}).get("memetic_gain"),
                 "memetic_last_improve_gen": (r.muas or {}).get("memetic_last_improve_gen"),
                 "memetic_trajectory": (r.muas or {}).get("memetic_trajectory"),
-                # 交付后成本 polish 诊断（2026-10-24，组内 2-opt/Or-opt）：
+                # 交付后成本 polish 诊断（组内 2-opt/Or-opt）：
                 # path_gain_m = 本周期交付航程的绝对下降量（米；0 = 无改进/
                 # 未开启/被拒）。缺省空值（旧数据/空转周期）。
                 "cost_polish_enabled": (r.muas or {}).get("cost_polish_enabled"),
                 "cost_polish_rounds": (r.muas or {}).get("cost_polish_rounds"),
                 "cost_polish_n_2opt": (r.muas or {}).get("cost_polish_n_2opt"),
                 "cost_polish_n_oropt": (r.muas or {}).get("cost_polish_n_oropt"),
-                # 跨机改派（归属维度，2026-10-24）：n_relocate = 本周期采纳的
+                # 跨机改派（归属维度）：n_relocate = 本周期采纳的
                 # 跨机单任务迁移数；blocked_* = 几何更优但被航程门/迟到门
                 # 拦死的改派数（均 >0 而 n_relocate=0 ⇒ 余量被约束堵住）。
                 "cost_polish_n_relocate": (r.muas or {}).get(

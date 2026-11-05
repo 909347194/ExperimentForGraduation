@@ -26,7 +26,7 @@
 （``buildings.py`` 的 ``BUILDING_CMAP`` 即如此）。
 """
 
-# 同 plot/__init__.py：包内导入用单点相对（2026-10-23 修正误改的四点导入）。
+# 同 plot/__init__.py：包内导入用单点相对（修正误改的四点导入）。
 from . import scene as _scene  # noqa: F401  （无 matplotlib 依赖，必须最先）
 from . import dem as _dem, geo as _geo
 from . import buildings as _buildings

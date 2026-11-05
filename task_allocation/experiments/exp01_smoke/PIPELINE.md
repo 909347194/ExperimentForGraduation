@@ -25,26 +25,26 @@
 `metrics.json` 的 `cycles` 只装**代表 seed（首个）**；多 seed 运行时才附
 `seed_summary`（mean±std）与 `per_seed`（每 seed 全量 cycles），单 seed 运行
 `seed_summary=None`。因此默认单 seed 运行产 4 张静态图（I01/P03/P04/R01）+ 1 张动图（P06）。
-2026-10-26 图件裁剪到 4 张（gif 只保留 P06、P04 甘特图追加保留）；2026-10-29 P03 `allocation`
+图件裁剪到 4 张（gif 只保留 P06、P04 甘特图追加保留）；P03 `allocation`
 与 P04 并存接入注册表，现共 **5 张**。引用过程图时须注明"代表 seed"。
 
 周期数不固定：`rolling.n_cycles` 只是**硬安全上限**，真实停止由池空自然收敛判据
 决定——到达全部注入后，**池中不存在「能被完成却没被完成」的任务**（静态几何不可达
-已出池标记 `UNREACHABLE`，服务暂缓 `DORMANT`（原称「休眠」，2026-11-05 更名——
+已出池标记 `UNREACHABLE`，服务暂缓 `DORMANT`（原称「休眠」，更名——
 「休眠」表意不清）仍在池中、继续等条件恢复唤醒）即自然
 停机；`stop_when_stable`（patience=4）降为兜底：仅当池非空、池内无服务暂缓任务且连续该数个
 周期零进展（无完成/唤醒/新暂缓/新出池）才提前停。⚠ 兜底只覆盖无服务暂缓任务的
 僵死池（如能力短缺反复装不下）；池内有服务暂缓任务时兜底禁用（正在等条件
 恢复 ≠ 零进展），「时变能力永不恢复」（=永久暂缓）不在兜底覆盖面内，
-由 `n_cycles` 硬上限止损（2026-11-05 审查 M1 如实化）。新判据下真实周期数由本规则决定，与旧「池大小连续不变即稳态」口径
-不同：**2026-11-05 实跑 3 seed 均于周期 4 自然收敛**（`stop_reason=pool_empty`），
+由 `n_cycles` 硬上限止损（审查 M1 如实化）。新判据下真实周期数由本规则决定，与旧「池大小连续不变即稳态」口径
+不同：**实跑 3 seed 均于周期 4 自然收敛**（`stop_reason=pool_empty`），
 旧「约 7 周期」实测值不可引用（见 notes.md / config.yaml）。
 
-绘图周期轴（2026-11-05 用户裁定「哪周期结束就绘制到哪个周期；不要绘制空周期了」）：
+绘图周期轴（口径约定「哪周期结束就绘制到哪个周期；不要绘制空周期了」）：
 周期 4 是零出动的收敛判定周期，`plot.make_plots` 在分发前把**绘图视图**裁到最后一个
 有活动周期（止于 C3），收敛空周期不绘制；落盘 `metrics.json` / `solution.json` 与
 `summary.n_cycles`（=4）保持完整，审计链不丢。故「图上周期数」与「落盘记录周期数」
-可能差 1，属口径约定而非数据不一致。**吞吐分母已统一（2026-11-05）**：=
+可能差 1，属口径约定而非数据不一致。**吞吐分母已统一**：=
 **运营周期数**（有活动的周期数 = 绘图周期轴长，即落盘周期裁掉尾部收敛空周期；
 判据单源 `methods/rolling/horizon.cycle_record_has_activity`，与绘图裁剪同则），
 结果总览 (a) 面板累计吞吐曲线终点、`(d)` 表与 `metrics.json` 的
@@ -133,8 +133,8 @@ render_from_results as r; r('task_allocation/experiments/exp01_smoke/results', \
 groups=['report'])"
 # 或跑实验时限定：python run.py --group report
 #   ⚠️ 分层名必须与 plot/registry.py 的 FigureSpec.group 一致，只有
-#      initial / process / report 三个（2026-10-26 图件裁剪后）。旧文档写的
-#      scene 不存在，resolve 会抛 ValueError（2026-10-24 修复 P0-3）。
+# initial / process / report 三个（图件裁剪后）。旧文档写的
+# scene 不存在，resolve 会抛 ValueError（修复 P0-3）。
 #   单张图：python run.py --figure geo_overview
 ```
 

@@ -7,14 +7,13 @@
 以及这一切发生在哪里。由原 ``allocation_gantt`` + ``assignment_map``
 + ``geo_evolution`` 三者合并而来。
 
-版面（2026-10-12 依「少文字、大地图」重排）：
+版面：
 
     (a) 航迹条：行 = 周期×UAV 航次，一条 UAV 色航线（长度 ∝ 真实航程），
-        任务按真实位置落点画方框（上标号、下收益），两端标起飞/返航巢；
-        替代原「收益着色顺序条」，直接读出谁飞多远、任务沿航线怎么分布。
-    (b) 逐周期空间演化：横排 1×N（N = 有真实航次的周期数，不再是窄列
-        3 行）；收敛判定的空周期不绘制；每图只留「周期 c · 里程」短标题；
-        未执行任务只画空心点、不标号。
+        任务沿航线落点（标号 T#·Ck，Ck=到达周期），两端标起飞/返航巢。
+    (b) 逐周期空间演化：横排 1×N（N = 有真实航次的周期数）；空周期不绘制；
+        每图只留「周期 c · 里程」短标题；每面板只画本周期任务，不画历史/
+        未执行空心点。
 
 数据来源：``solution.json`` 的 ``cycles[].tours``（含 ``est_cost``）+ ``tasks`` /
 ``nests`` / ``dem``。``metrics`` 入参仅为统一签名保留——本图全部读数均取
@@ -156,7 +155,7 @@ def _draw_gantt(ax, rows: list[dict[str, Any]],
         # 总量按 DEM 航程（est_cost，求解器真实代价 = 垂直切面三维航程）标定：
         # 段间距保留三维几何比例，整条缩放到 est_cost，使线长与 metrics 的
         # f2_cost、anim 的里程读数同口径（曾直接用三维直线，总量少报 ~2%，
-        # 与同图 (b) 面板 / allocation_anim 里程对不上——2026-10-13 审查修复）。
+        # 与同图 (b) 面板 / allocation_anim 里程对不上—— 审查修复）。
         est_km = float(r.get("est_cost") or 0.0) / 1000.0
         if est_km > 0.0 and cum_km[-1] > 0.0:
             scale = est_km / cum_km[-1]
@@ -217,8 +216,7 @@ def _draw_gantt(ax, rows: list[dict[str, Any]],
                   fontsize=FS["tick"])
     ax.set_xlim(-max_dist * 0.03, max_dist * 1.06)
     ax.set_ylim(-0.7, n + 0.3)
-    style_axes(ax, title=title or
-               "(a) 分配航迹条：线长 ∝ 真实航程 · 方块=任务 · 两端=起/降巢（按 UAV 着色）")
+    style_axes(ax, title=title or "(a)")
     ax.grid(axis="x", alpha=0.15)
     ax.grid(axis="y", visible=False)
     ax.set_xlabel("累计航程 (km，起飞巢起算；段间距按三维几何比例、总量按 DEM 航程 est_cost 标定)")
@@ -230,7 +228,8 @@ def _draw_cycle_tours(ax, cyc: dict[str, Any],
                       arrival_cycle: dict[int, int] | None = None) -> set[int]:
     """画单周期航次：起点 → 任务 → 终点巢；任务点按承运 UAV 着色。
 
-    未执行任务只画空心灰点（不再逐点标号，文字减半）。
+    每面板只画本周期任务：已到达但不在本周期航次的任务（含早周期已完成者）
+    不画空心点，避免把历史任务误标成「未执行」。
     """
     owner: dict[int, int] = {}
     uavs_used: set[int] = set()
@@ -239,24 +238,6 @@ def _draw_cycle_tours(ax, cyc: dict[str, Any],
         uavs_used.add(u)
         for tid in tour.get("task_ids") or []:
             owner[int(tid)] = u
-
-    # 未执行任务只标「已到达」者：尚未到达（arrival_time 落在本周期之后）的
-    # 任务本周期根本不存在，画成空心点会与动画「未到达不绘制」口径冲突、误导
-    # 读者以为它们是本地待执行任务；与 allocation_anim 保持同一语义。
-    cur_cycle = int(cyc.get("cycle", 1))
-    others = [
-        t for t in task_by_id.values()
-        if int(t["id"]) not in owner
-        and (arrival_cycle is None
-             or arrival_cycle.get(int(t["id"]), 0) <= cur_cycle)
-    ]
-    if others:
-        ax.scatter(
-            [float(t["x"]) for t in others],
-            [float(t["y"]) for t in others],
-            s=[_task_size(t["reward"]) * 0.5 for t in others],
-            facecolors="none", edgecolors="#aab4bf", linewidths=1.0, zorder=2,
-        )
 
     for tour in cyc.get("tours") or []:
         u = int(tour.get("uav_id", -1))
@@ -320,11 +301,11 @@ def plot_allocation(
     arrival_cycle = _arrival_cycle_map(solution)
 
     n_rows = len(rows)
-    gantt_h = max(2.8, 0.42 * n_rows + 1.5)
+    gantt_h = max(2.8, 0.40 * n_rows + 1.5)
 
-    fig = plt.figure(figsize=(11.8, gantt_h + 4.55))
+    fig = plt.figure(figsize=(11.8, gantt_h + 4.5))
     gs = fig.add_gridspec(
-        2, 1, height_ratios=[gantt_h, 4.0], hspace=0.30,
+        2, 1, height_ratios=[gantt_h, 4.5], hspace=0.10,
         left=0.055, right=0.93, top=0.94, bottom=0.105,
     )
     ax_gantt = fig.add_subplot(gs[0])
@@ -334,8 +315,8 @@ def plot_allocation(
     # 只画「有真实航次」的活跃周期。绘图视图已在 make_plots 统一裁掉尾部
     # 收敛空周期（见 plot/__init__._trim_cycles_for_plot，不绘制空周期），此处
     # 再按航次过滤作兜底：若中间存在零出动周期（如休眠等待），一并跳过——否则
-    # 空周期子图会把全部任务渲染成「未执行」空心点，而那些任务早在早周期已
-    # 完成，属错误标绘。与动画 idle_set 口径一致，子图数 = 有真实航次的周期数。
+    # 空周期子图无航次可画，且会把历史任务误纳入本面板，属错误标绘。
+    # 与动画 idle_set 口径一致，子图数 = 有真实航次的周期数。
     active_cycles = [
         c for c in cycles
         if any(t.get("task_ids") for t in (c.get("tours") or []))
@@ -360,7 +341,7 @@ def plot_allocation(
         _draw_nests(ax, nests)
         # 周期里程 = 该周期各航次 est_cost 之和（纯 DEM 航程）。不用 metrics 的
         # f2_cost——它另含 w_penalty×惩罚（量纲不同），曾使 (b) 面板里程与
-        # (a) 甘特条总长、anim 里程读数对不上（2026-10-13 审查统一）。
+        # (a) 甘特条总长、anim 里程读数对不上（审查统一）。
         tours_c = [t for t in (cyc.get("tours") or []) if t.get("task_ids")]
         km = sum(float(t.get("est_cost") or 0.0) for t in tours_c) / 1000.0
         _panel_title(ax, f"周期 {cyc.get('cycle')} · {km:.0f} km")
@@ -370,8 +351,7 @@ def plot_allocation(
                    extent=extent)
     for ax in evo_axes:
         ax.set_aspect("equal", adjustable="box")
-    evo_axes[0].set_title("(b) 逐周期空间演化（背景底图 + 航次回放）",
-                          fontsize=FS["title"], loc="left")
+    evo_axes[0].set_title("(b)", fontsize=FS["title"], loc="left")
 
     # 色条标签随背景切换（建筑高度 / 高程），与 geo_overview 同一口径
     if bd0 is not None and bd0.sm is not None:
@@ -385,7 +365,6 @@ def plot_allocation(
     handles += [
         _IconPatch(_G_HOUSE, fc=PALETTE["nest"], ec="white", lw=1.0,
                    label="机巢（○=返航巢）"),
-        _IconPatch(_G_DOT, fc="none", ec="#aab4bf", lw=1.1, label="未执行任务"),
     ]
     if bd0 is not None and bd0.has_buildings:
         handles.append(_building_legend_patch(bd0.buildings))
@@ -396,13 +375,7 @@ def plot_allocation(
 
     fig.suptitle("exp01_smoke：分配结构与逐周期空间演化",
                  fontsize=FS["suptitle"])
-    footnote(fig, "口径：航迹条（a）行=航次，UAV 色线长 ∝ 真实航程（段间距按三维"
-                  "几何比例、总量按 DEM 航程 est_cost 标定），方框=任务"
-                  "（上标号 T#·Ck，Ck=到达周期；下收益 R_j），两端标起/降巢，"
-                  "琥珀=异巢终止；地图（b）未执行任务仅画空心点，周期标题里程 = "
-                  "该周期各航次 est_cost 之和（纯 DEM 航程，不含约束惩罚）。"
-                  "Ck 标出任务到达周期，区分「到达」与「执行」——在线滚动下"
-                  "晚到任务（如 T19·C3）无法并入早周期航次。")
+    footnote(fig, "线长按真实航程标定；每面板只显本周期任务。口径与符号说明见 figure_notes.md。")
     return save_figure(fig, Path(out_dir) / "P03_allocation", formats, dpi=dpi)
 
 if __name__ == "__main__":

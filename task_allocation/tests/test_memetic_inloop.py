@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""memetic M1 精英档案测试（2026-10-19）。
+"""memetic M1 精英档案测试。
 
 契约：
 
@@ -11,7 +11,7 @@
 3. **档案机制**（run_selective_muas）：开启后 ``memetic_n_polish == G // K``、
    ``memetic_trajectory`` 长度 == ``len(cost_history) == G+1``、与曲线逐代对齐、
    首次 polish 前记 ``None``（+inf）；单次精英打磨失败只计数
-   （``memetic_n_failed``），不得破坏上述对齐（审查加固，2026-10-19）；
+   （``memetic_n_failed``），不得破坏上述对齐（审查加固）；
 4. **择优单调**：交付解取「收敛后 polish」与「档案最优」的更优者，
    ``final_fitness(on) <= final_fitness(off)``，且两口径均零硬违约；
 5. **配置校验**：``memetic_K < 1`` 拒绝。
@@ -116,7 +116,7 @@ def test_gen_callback_exception_swallowed():
 def test_gen_callback_exception_warns_once_and_disables(capsys):
     """回调抛异常：stderr 警告恰好一次、即停不再重试、曲线与无回调一致。
 
-    审查加固（2026-10-19）：裸吞异常违反「回退永不静默」惯例；改为
+    审查加固：裸吞异常违反「回退永不静默」惯例；改为
     warn-once + 停用。本测试锁死「恰好一次警告 + 只尝试一次 + 数值
     确定性不受影响（与无回调同种子曲线逐位相同）」三条不变量。
     """
@@ -236,12 +236,12 @@ def test_memetic_final_never_worse_and_feasible():
 def test_memetic_inloop_failure_keeps_trajectory_aligned(monkeypatch):
     """钩子内 in-loop polish 抛异常：轨迹仍与曲线逐代对齐、失败只计数。
 
-    审查加固（2026-10-19）：修复前钩子内异常会上抛给求解器吞掉，导致
+    审查加固：修复前钩子内异常会上抛给求解器吞掉，导致
     失败代及其后各代不再落档（trajectory 长度 < len(cost_history)），
     且回调停用后档案维护中断。修复后单次失败只计 memetic_n_failed，
     「每代必落一档」对齐不变量与 DMDE 曲线不变性均保持。
     """
-    # 2026-10-27 muas_stage 拆分后，polish_assignment 的**消费方**在
+    # muas_stage 拆分后，polish_assignment 的**消费方**在
     # stage_runner.run_selective_muas（门面只 re-export）；失败注入必须打在
     # 消费方命名空间上才生效（测试意图不变：注入 in-loop 失败验计数与对齐）。
     import task_allocation.methods.muas.solvers.stage_runner as ms

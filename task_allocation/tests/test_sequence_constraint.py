@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""时序（任务执行顺序）约束单元测试（2026-10-29 落地）。
+"""时序（任务执行顺序）约束单元测试（落地）。
 
-背景：``constraints.sequence`` 开关自 2026-10-18 起恒为 True，但 ``Task``
+背景：``constraints.sequence`` 开关自 恒为 True，但 ``Task``
 **从未提供** ``sequence_group`` 字段 ⇒ ``check_sequence_constraint`` 恒
 返回 0，时序约束是**空壳**。本文件锁定补齐后的口径：
 
@@ -232,7 +232,7 @@ def test_chain_generation_off_by_default():
 
 
 def test_chain_generation_requires_single_batch():
-    """不变量钉（2026-11-05 审查 L3）：链必须单批次成组（共享 arrival_time）。
+    """不变量钉（审查 L3）：链必须单批次成组（共享 arrival_time）。
 
     滚动层顺序组原子性依赖该契约（混批成组会让准入闸门永久暂缓先到
     成员）；混批列表必须当场拒绝，不得静默成组。

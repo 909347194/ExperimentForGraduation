@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """participating.py — 参与 UAV 选择（``U_t^exec`` 候选，论文 3.4 选机层）。
 
-2026-10-27 自 ``muas_stage.py`` 拆出：负责「本周期派哪些机进精细规划」。
+自 ``muas_stage.py`` 拆出：负责「本周期派哪些机进精细规划」。
 
 - :func:`select_participating_uavs` 三层裁剪：SRP 不变式（K ≤ N−1）→
   运营预算（sortie_budget / max_participating_uavs）→ 出动经济性；
@@ -79,7 +79,7 @@ def select_participating_uavs(
     if config.participating_policy == POLICY_FIRST or uav_target is None:
         ordered = avail[:k]
     elif config.participating_policy == POLICY_DEMAND:
-        # 需求感知：贪心最大覆盖（Fix④）。保证每个选中任务都有一架可达
+        # 需求感知：贪心最大覆盖（需求感知）。保证每个选中任务都有一架可达
         # 参与机，避免 cheapest 把机堆在稠密区、饿死离群稀疏任务。
         ordered = _greedy_demand_coverage(
             avail, n_tasks, config, uav_target, row_of_uav, k
@@ -152,7 +152,7 @@ def _greedy_demand_coverage(
     row_of_uav: Mapping[int, int] | None,
     k: int,
 ) -> list[UAV]:
-    """需求感知参与：贪心最大覆盖挑选参与机（Fix④）。
+    """需求感知参与：贪心最大覆盖挑选参与机（需求感知）。
 
     每架可用 UAV 覆盖「代价矩阵中代价 ≤ 覆盖半径」的选中任务；依次挑选覆盖
     最多**尚未覆盖**任务的 UAV，直到所有选中任务被覆盖或达 K 上限 ``k``。
@@ -227,7 +227,7 @@ def _greedy_demand_coverage(
         covered_tasks |= cover[best.id]
         pool = [u for u in pool if u.id not in picked_ids]
 
-    # ── Fix⑤：服务能力感知 provisioning ─────────────────────────────
+    # ── 能力感知补机：服务能力感知 provisioning ─────────────────────────────
     # 最小覆盖已保证每任务有「可达」参与机，但一架机的 80km 航程常不足以同时服务
     # 它覆盖的多个远任务（覆盖≠服务）。把过载任务（最近参与机往返代价 > 剩余航程×
     # 裕度）逐个剥给最近的空闲机，拉入参与，直到无过载或达 K 上限。

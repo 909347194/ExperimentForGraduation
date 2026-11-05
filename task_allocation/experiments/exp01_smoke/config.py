@@ -163,18 +163,13 @@ def build_config_bundle(cfg: Mapping[str, Any]) -> ConfigBundle:
     problem_model = MUASProblemConfig(
         allow_unassigned=bool(m.get("allow_unassigned", True)),
         allow_idle_uav=bool(m.get("allow_idle_uav", True)),
-        # 双目标口径（2026-10-23 修复透传）：此前 yaml 的 muas.lexicographic /
-        # muas.big_m 在本装配里被漏掉——算法恒按 dataclass 默认（lexicographic
-        # =True、big_m=None）跑，而绘图层曾直接从 yaml 取值标注「字典序 / 加权和」。即 yaml 改了算法不动、图却跟着变 ⇒ 图会说谎。
-        # 现显式透传：yaml 与算法同源，消融改 false 才真正切到 legacy 加权和。
-        lexicographic=bool(m.get("lexicographic", True)),
         big_m=(None if m.get("big_m") is None else float(m["big_m"])),
         lambda_cost=float(m.get("lambda_cost", 1.0e-2)),
         w_penalty=float(m.get("w_penalty", 1.0)),
         # 惩罚量纲解耦开关：留空/None = 历史口径（惩罚随 F2 一起乘 λ）
         w_violation=(None if m.get("w_violation") is None else float(m["w_violation"])),
         w_nest_capacity=float(m.get("w_nest_capacity", 1.0)),
-        # 2026-10-18 四层准字典序 T0 层：硬违约（物理）支配权重与超程 tie-break。
+        # 四层准字典序 T0 层：硬违约（物理）支配权重与超程 tie-break。
         #   w_hard_violation: None = 自动 κ·m·R_pool（κ=hard_violation_kappa）；
         #     显式值 = 固定权重（0 = 关闭 T0 层，退回旧混合 penalty 口径）。
         #   w_range_excess:   None = 自动 1/m（1km 超程≈1000 单位）。
@@ -195,9 +190,10 @@ def build_config_bundle(cfg: Mapping[str, Any]) -> ConfigBundle:
             if m.get("late_reward_decay_seconds") is None
             else float(m["late_reward_decay_seconds"])
         ),
-        # 覆盖门禁两层适应度（2026-10-22）：True = W_skip 层 + F1 纯完成
-        # 计数 + 拆 1e6 虚构帽；默认 False = 现行四层口径逐位不变。
-        lexicographic_coverage=bool(m.get("lexicographic_coverage", False)),
+        # 覆盖门禁审计分账开关；兼容旧 yaml 键 lexicographic_coverage。
+        coverage_audit=bool(
+            m.get("coverage_audit", m.get("lexicographic_coverage", False))
+        ),
         w_skip_violation=(
             None if m.get("w_skip_violation") is None
             else float(m["w_skip_violation"])
@@ -209,43 +205,43 @@ def build_config_bundle(cfg: Mapping[str, Any]) -> ConfigBundle:
         sortie_budget=(None if m.get("sortie_budget") is None else int(m["sortie_budget"])),
         participation_cost=float(m.get("participation_cost", 0.0)),
         participating_policy=str(m.get("participating_policy", "cheapest")),
-        # Fix④ 需求感知参与：demand 策略的覆盖半径（米）与航程因子
+        # 需求感知 需求感知参与：demand 策略的覆盖半径（米）与航程因子
         demand_coverage_radius=(
             None if m.get("demand_coverage_radius") is None
             else float(m["demand_coverage_radius"])
         ),
         demand_range_factor=float(m.get("demand_range_factor", 0.5)),
-        # Fix⑤ 服务能力感知 provisioning：覆盖后按航程预算补机，救远任务
+        # 能力感知补机 服务能力感知 provisioning：覆盖后按航程预算补机，救远任务
         demand_provision_serving=bool(m.get("demand_provision_serving", True)),
         demand_serve_margin=float(m.get("demand_serve_margin", 0.95)),
         reflow_rescue_scope=str(m.get("reflow_rescue_scope", "fleet")),
-        # 覆盖门禁（2026-10-22）：True = 终态修到不动点（能救必救）；
+        # 覆盖门禁：True = 终态修到不动点（能救必救）；
         # False = 不修复（lexicographic_coverage 时只做纯审计分账）。
         coverage_gate=bool(m.get("coverage_gate", False)),
         coverage_gate_max_rounds=int(m.get("coverage_gate_max_rounds", 8)),
-        # 覆盖优先两段式解码（2026-10-23 用户裁定）：True = 先装到约定
+        # 覆盖优先两段式解码（口径约定）：True = 先装到约定
         # 口径下的最大可行集（EDD 不动点），再在不减少已装集合的约束下
         # 做成本 polish（跨机 relocate / 调序）。False = 现行修复链口径。
         coverage_first=bool(m.get("coverage_first", False)),
         coverage_first_max_rounds=int(m.get("coverage_first_max_rounds", 4)),
         monotone_polish_max_rounds=int(m.get("monotone_polish_max_rounds", 30)),
         monotone_polish_eps=float(m.get("monotone_polish_eps", 1.0e-6)),
-        # 重排期航程优化（2026-10-24 修）：零迟到时仍评估「最近邻」候选，
+        # 重排期航程优化（修）：零迟到时仍评估「最近邻」候选，
         # 仅在「仍零迟到 且 航程严格更短」时采纳 ⇒ 执行集不变（F1 不动）、
         # 只压航程。语义 = 覆盖优先、成本随后，不触碰主适应度阶梯。
         # False = 修复前行为（早退把航程一起退掉）。
-        # ⚠️ 默认 False：2026-10-24 A/B 实测正式配置下净持平且总航程 +4%
+        # ⚠️ 默认 False：A/B 实测正式配置下净持平且总航程 +4%
         # （多出尾巴周期），仅搜索不充分的冒烟档有收益。详见 muas_stage 注释。
         reorder_range_optimize=bool(m.get("reorder_range_optimize", False)),
         reorder_range_eps=float(m.get("reorder_range_eps", 1.0)),
-        # 交付后成本 polish（2026-10-24 用户裁定）：DMDE 收敛后对**交付解**
+        # 交付后成本 polish（口径约定）：DMDE 收敛后对**交付解**
         # 做组内 2-opt/Or-opt 纯成本重排。四道门：航程 / 迟到不增（数+量
         # 逐分量）/ 执行集由构造不变 / 成本严格降。不触碰主适应度阶梯，
         # 可与覆盖门禁 / coverage_first 叠加。默认开；消融显式 False。
         cost_polish_enabled=bool(m.get("cost_polish_enabled", True)),
         cost_polish_max_rounds=int(m.get("cost_polish_max_rounds", 30)),
         cost_polish_eps=float(m.get("cost_polish_eps", 1.0)),
-        # 跨机指派成本 polish（2026-10-24 用户裁定转向）：组内重排之后补
+        # 跨机指派成本 polish（口径约定转向）：组内重排之后补
         # 归属维度——单任务跨机改派（含拉空闲机），四道门同组内口径。
         # 3 seed A/B 钉死组内维度已穷尽（63 周期解 3 次接受、0.014%）
         # 之后转向此维度；默认开，消融显式 False。
@@ -259,12 +255,12 @@ def build_config_bundle(cfg: Mapping[str, Any]) -> ConfigBundle:
         prune_unprofitable=bool(m.get("prune_unprofitable", True)),
         prune_margin=float(m.get("prune_margin", 0.0)),
         prune_max_rounds=int(m.get("prune_max_rounds", 8)),
-        # 2026-10-18 零奖励剔除：ETA ≥ latest+W 的任务暂缓（eff≈0 不降 F1）
+        # 零奖励剔除：ETA ≥ latest+W 的任务暂缓（eff≈0 不降 F1）
         prune_zero_reward=bool(m.get("prune_zero_reward", True)),
         prune_wait_bonus=float(m.get("prune_wait_bonus", 1.0)),
         wait_scale=float(m.get("wait_scale", 3600.0)),
         lamarckian=bool(m.get("lamarckian", True)),
-        # 2026-10-19 解码后局部搜索 polish（relocate/swap/插入位，
+        # 解码后局部搜索 polish（relocate/swap/插入位，
         # 过同一修复链、仅严格改进才接受）；默认开，消融显式关
         polish_enabled=bool(m.get("polish_enabled", True)),
         polish_moves=tuple(
@@ -273,7 +269,7 @@ def build_config_bundle(cfg: Mapping[str, Any]) -> ConfigBundle:
         polish_max_rounds=int(m.get("polish_max_rounds", 30)),
         polish_max_evals=int(m.get("polish_max_evals", 2000)),
         polish_eps=float(m.get("polish_eps", 1e-6)),
-        # 2026-10-19 memetic M1 精英档案：搜索期内每 memetic_K 代对精英
+        # memetic M1 精英档案：搜索期内每 memetic_K 代对精英
         # 跑一次 polish，路由改进前移进搜索期。默认关（基线不动）；
         # exp01 memetic 变体显式开。
         polish_in_loop=bool(m.get("polish_in_loop", False)),

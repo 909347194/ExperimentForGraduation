@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-"""四层准字典序适应度（2026-10-18）与零奖励剔除的常驻回归测试。
+"""四层准字典序适应度与零奖励剔除的常驻回归测试。
 
 背景：旧口径把物理违约（米/1e3）与迟到（秒）混进同一 penalty 桶同乘
 wv=0.01——misc 违约只折 10 单位而单任务收益 m·R≈2.7e5，「纸面可行、
 执行弹回」的幽灵 F1 无人拦截（修 uav_9 前 16 次弹回属此类）；且
 is_feasible 被迟到污染（实测 22423 次评估 penalty=0 仅 4 次）。
 
-新口径（用户裁定：违反物理航程=严重违规；迟到可接受但最好不迟到）::
+新口径（口径约定：违反物理航程=严重违规；迟到可接受但最好不迟到）::
 
     f = W_hard·n_hard + w_exc·excess_m − m·F1_eff + w_late·L_tot + λ·path
 
@@ -142,7 +142,7 @@ def test_t0_excess_tiebreak():
 # ── 3. 门禁口径不含 −m·F1：完成数的差异不进入 f ───────────────────
 
 def test_gate_caliber_excludes_f1_from_fitness():
-    """门禁口径（2026-10-24 唯一主口径）：scalar_fitness 的纯门禁形式
+    """门禁口径（唯一主口径）：scalar_fitness 的纯门禁形式
     （硬违约 + W_skip·n_skip + 迟到 + λ·path）与手工重算完全一致，
     **且不含** −m·F1 项——若把 −m·F1 加回会与真实 f 系统性偏离。
 
@@ -247,7 +247,7 @@ def test_fitness_weights_meta_snapshot():
     assert w["w_late"] == 0.01
     det = sol.meta["feasibility"]
     gs = sol.meta.get("gate_stats") or {}
-    # 门禁口径（2026-10-24 唯一主口径）：f 不含 −m·F1；skip 罚层随 gate_stats 计入
+    # 门禁口径（唯一主口径）：f 不含 −m·F1；skip 罚层随 gate_stats 计入
     manual = (
         w["w_hard"] * det["n_hard"]
         + w["w_excess"] * det["range_excess"]
@@ -279,7 +279,7 @@ def test_prune_zero_reward_keeps_deliverable_late_task():
     """软窗口径（active_completion）：零奖励但航程可行的任务仍被装并交付
     （迟到交付计完成、F1 不减）→ 不暂缓；prune 只针对「不可交付」场景生效。
 
-    2026-10-24 软窗语义：_prune_zero_reward 把零奖励任务 pop 后，_reflow_task
+    软窗语义：_prune_zero_reward 把零奖励任务 pop 后，_reflow_task
     以 active_completion=True 重新落位——可交付（航程可行）的任务被放回航次、
     迟到交付仍计完成，故孤立可交付任务不被暂缓；仅「航程/窗口不可交付」才
     真正剔除。原「defers_unrecoverable」命名基于此前的硬窗假设，软窗下失效。

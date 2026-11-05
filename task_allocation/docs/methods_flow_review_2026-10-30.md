@@ -52,7 +52,7 @@ TaskPool ──► RollingHorizon.run()                      horizon.py:662
 - 我自己在 `experiments/ab_m21_patrol_writeback/run.py` 上踩过这个坑：设了 `forced_task_ids`，覆盖度纹丝不动（0.30）。
 
 **这不是孤例，是复发性缺陷形态**：同一文件里已有三处同类记录——
-Fix① `age_gamma`（`:953`）、Fix② `anti_starvation.enabled`（`:980`）、Fix②b 透传（`:501`），
+防饥饿软加权 `age_gamma`（`:953`）、防饥饿强制 `anti_starvation.enabled`（`:980`）、防饥饿透传（`:501`），
 全是"配置面接了线但中间漏传"。`forced_task_ids` 是第四例，只是这次是**反向**（字段存在但被有意忽略）。
 
 ### S2　M2-1 段内回写：五道闸门串联，前四道全部静默 ★★★（最需要改的）

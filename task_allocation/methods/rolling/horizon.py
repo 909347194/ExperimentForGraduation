@@ -115,7 +115,7 @@ class HorizonConfig:
     # 降落后在机巢换电，剩余航程恢复满值
     recharge_at_nest: bool = True
     # 缺省满电航程（米）：UAV.max_range 为 None 时的回退值（同构退化）。
-    # 异构机队（2026-11-04）：各机自带 max_range / max_time / speed，
+    # 异构机队：各机自带 max_range / max_time / speed，
     # 换电恢复与可达性判定一律经 UAV.full_charge_range(default) 取值，
     # 禁止直接读本字段判定单机能力。
     uav_max_range: float = 60000.0
@@ -137,7 +137,7 @@ class HorizonConfig:
     # 被 ``check_feasible`` 判为物理不可行（航程 / 续航 / 终点机巢不可达 /
     # 结构类）的任务不顺延完成，而是解绑回任务池、下一周期重新纳入选择，
     # 并记入 ``record.infeasible_ids``（废飞指标只统计这一类）。
-    # 2026-10-15 协议纠正「迟到不是废飞」：时间窗违约（tw_task）不再是硬
+    # 协议纠正「迟到不是废飞」：时间窗违约（tw_task）不再是硬
     # 违约——晚到任务正常完成（计入完成/吞吐，有效奖励已在适应度里按
     # 迟到折减），迟到秒数记入 ``record.late_ids`` / ``lateness_by_task``。
     # 置 False 则回到历史行为（一律标完成），用于消融对比。
@@ -146,7 +146,7 @@ class HorizonConfig:
     # 在本周期计划内做反应式调整（强制纳入紧急任务、剔除不可用机巢）。
     # 置 False 则事件仅被记录、不触发本期重规划（供消融对比关停该机制）。
     event_replan: bool = True
-    # 收敛早停（2026-11-04 用户裁定口径）：到达全部注入后，**池空**（不存在
+    # 收敛早停（口径约定口径）：到达全部注入后，**池空**（不存在
     # 「能被完成却没被完成」的任务；静态几何不可达已出池，服务暂缓仍在池中）
     # 即自然收敛停机；否则持续推进，让暂缓任务等条件恢复唤醒——「没服务，
     # 只要能服务，迟早被服务」。stable_patience 降为兜底：仅当池非空、
@@ -154,11 +154,11 @@ class HorizonConfig:
     # 且池大小不变）才提前停。⚠ 兜底只覆盖**无暂缓任务的僵死池**（如能力
     # 短缺反复装不下）；池内有暂缓任务时兜底禁用（正在等条件恢复 ≠ 零进展），
     # 「时变能力永不恢复」正是永久暂缓场景、不被兜底覆盖，由 n_cycles 硬上限
-    # 止损（2026-11-05 审查 M1 如实化）。n_cycles 是硬安全上限，
+    # 止损（审查 M1 如实化）。n_cycles 是硬安全上限，
     # 不是主停机条件（真实周期数由本判据决定）。
     stop_when_stable: bool = False
     stable_patience: int = 4
-    # 服务休眠（2026-11-04 异构化口径；2026-10-25 起归因分离）：任务
+    # 服务休眠（异构化口径；归因分离）：任务
     # **几何可达**（存在机巢使往返 ≤ 机队最强满电航程，static_unreachable
     # 判否）却连续 service_patience 个周期「无可用 UAV 在往返航程内」时，
     # 转**休眠**（DORMANT：不出池、不进候选），条件恢复即唤醒。
@@ -170,7 +170,7 @@ class HorizonConfig:
     # 永久卡死，完成率虚低为 0.950。两把尺子（几何 vs 当前可用机）必须
     # 同源归因。
     #
-    # 为什么休眠而非出池（2026-11-04）：服务可达性是时变条件（可用机集合
+    # 为什么休眠而非出池：服务可达性是时变条件（可用机集合
     # 随换电/故障恢复/机队拓扑演化而变，异构机队尤甚），「连续够不着」≠
     # 「永远够不着」；出池会永久丢失可服务任务，与「暂缓任务回池保留、
     # 持续获得调度机会」矛盾。休眠任务不进候选（同擑 churn 效果）、不入
@@ -190,7 +190,7 @@ def tour_snapshot(tour: UAVTour) -> dict[str, Any]:
             None if tour.start_nest_id is None else int(tour.start_nest_id)
         ),
         "end_nest_id": None if tour.end_nest_id is None else int(tour.end_nest_id),
-        # 【坐标不做 round】2026-10-29 修正：旧实现把起点 round 到 3 位小数，
+        # 【坐标不做 round】 修正：旧实现把起点 round 到 3 位小数，
         # 而运行端 pairwise 用的是**精确**坐标。两者之差只有 0.0002~0.0004 m，
         # 但建筑障碍包络是**离散**查询（采样点是否落在某个建筑多边形内），
         # 微小偏移可让某采样点跨过建筑边界 ⇒ 障碍高度跳变几十米 ⇒ 单腿航程
@@ -210,7 +210,7 @@ def tour_snapshot(tour: UAVTour) -> dict[str, Any]:
 
 
 def cycle_record_has_activity(rec: Any) -> bool:
-    """该周期记录是否有「活动」内容（2026-11-05 运营周期判据 · 单源定义）。
+    """该周期记录是否有「活动」内容（运营周期判据 · 单源定义）。
 
     **运营周期** = 有活动的周期；吞吐分母 = 运营周期数
     （``metrics.summary.throughput_per_cycle`` / ``n_oper_cycles``），绘图周期
@@ -256,7 +256,7 @@ class CycleRecord:
     deferred_ids: list[int] = field(default_factory=list)
     completed_ids: list[int] = field(default_factory=list)
     released_ids: list[int] = field(default_factory=list)
-    # 超期滞留（无超期淘汰，2026-10-24 口径）：已过 latest 仍在池、可迟到交付；
+    # 超期滞留（无超期淘汰，口径）：已过 latest 仍在池、可迟到交付；
     # 旧字段 expired_ids（超期出池=淘汰）已废除。
     overdue_ids: list[int] = field(default_factory=list)
     events: list[dict[str, Any]] = field(default_factory=list)
@@ -270,7 +270,7 @@ class CycleRecord:
     # 完成闸门拦截的违约交付：解被判**物理不可行**（航程/续航/终点机巢/
     # 结构类），本周期未真正交付的任务。不顺延完成，解绑回任务池并在
     # 下一周期重新选择（区别于 completed_ids）。
-    # 2026-10-15 协议纠正：迟到（tw_task）不再是硬违约——晚到任务正常
+    # 协议纠正：迟到（tw_task）不再是硬违约——晚到任务正常
     # 完成（奖励已在适应度里按迟到折减），只有物理不可行才弹回。
     infeasible_ids: list[int] = field(default_factory=list)
     # 违约任务的归因标签：{task_id: [violation_tag, ...]}，供指标与论文取数
@@ -280,21 +280,21 @@ class CycleRecord:
     late_ids: list[int] = field(default_factory=list)
     lateness_by_task: dict[str, float] = field(default_factory=dict)
     # 静态物理不可达（「过于偏远」）：所有机巢往返航程都超过**机队最强**
-    # 满电可及范围（异构口径：最强机也够不着才叫永久，2026-11-04），
-    # 入池判定一次性出池。用户原则（2026-10-15）下唯一合法的
+    # 满电可及范围（异构口径：最强机也够不着才叫永久），
+    # 入池判定一次性出池。用户原则下唯一合法的
     # 未完成原因，单列计数，不混入淘汰。
     unreachable_ids: list[int] = field(default_factory=list)
-    # 服务休眠（2026-11-04 异构化口径）：几何可达但连续 service_patience
+    # 服务休眠（异构化口径）：几何可达但连续 service_patience
     # 周期无可用机在往返航程内 → 休眠（不出池、不进候选），条件恢复
     # 即唤醒。dormant_ids = 本周期新休眠；woken_ids = 本周期唤醒。
     dormant_ids: list[int] = field(default_factory=list)
     woken_ids: list[int] = field(default_factory=list)
-    # 停机原因（2026-11-04）：仅收敛那一周期由 run() 回填。
+    # 停机原因：仅收敛那一周期由 run() 回填。
     # "pool_empty" = 自然收敛（不存在能被完成却没被完成的任务）；
     # "no_progress" = stable_patience 零进展兜底、非自然收敛（须与
     # n_dormant_end 等单列指标并读）；"" = 本周期未发生停机。
     stop_reason: str = ""
-    # 顺序组连坐暂缓（2026-11-04 用户裁定 3）：组内某成员物理不可行被弹回
+    # 顺序组连坐暂缓（口径约定 3）：组内某成员物理不可行被弹回
     # 时，为守住「同周期完成或同时暂缓」，同组其余成员一并撤下、release 回
     # 池、下周期整组重试。它们本身没有物理违约，**不计废飞**
     # （infeasible_ids），单列于此供审计；也不与 deferred_ids 混账（它们
@@ -404,7 +404,7 @@ class RollingHorizon:
         # 「释放任务下周期强制纳入」不因单周期空转而丢失。
         self._pending_forced: set[int] = set()
         self.records: list[CycleRecord] = []
-        # 收敛早停状态（2026-11-04 口径）：主判据 = 池空（不存在「能被完成
+        # 收敛早停状态（口径）：主判据 = 池空（不存在「能被完成
         # 却没被完成」的任务）；stable_patience 降为零进展兜底。到达阶段
         # （cycle <= 最后到达周期）不计数。
         self._conv_enabled = bool(self.hcfg.stop_when_stable)
@@ -414,7 +414,7 @@ class RollingHorizon:
         # 的推进（唤醒/休眠数变化算有进展，不误判死循环）。
         self._conv_last_sig: tuple[int, int] | None = None
         self._conv_reason: str = ""
-        # 服务不可达追踪（2026-10-25 口径对齐）：task_id → 连续「无可用 UAV
+        # 服务不可达追踪（口径对齐）：task_id → 连续「无可用 UAV
         # 在往返航程内」的周期数。达到 hcfg.service_patience 即判机队服务
         # 不可达出池（与静态几何不可达同等对待，单列归因 reason="service"）。
         self._service_stall: dict[int, int] = {}
@@ -447,7 +447,7 @@ class RollingHorizon:
         """机队最强满电航程（异构 per-UAV max_range 优先，回退全局缺省）。
 
         永久性不可达判定（static_unreachable）与预筛归因分界必须用最强机：
-        「永久不可达」只在最强机也够不着时成立（2026-11-04 设计关键点 1）。
+        「永久不可达」只在最强机也够不着时成立（设计关键点 1）。
         """
         return float(
             fleet_max_range(self.fleet.all(), self.hcfg.uav_max_range)
@@ -485,7 +485,7 @@ class RollingHorizon:
         """是否存在可用机可服务它（逐机判定，异构口径；与预筛同判据）。
 
         ∃ 可用机 u：``2·c(task,u) ≤ range_margin · remaining_range(u)``
-        ——与预筛 ``prefilter`` 的 ``served`` 分支逐字同判据（2026-11-05
+        ——与预筛 ``prefilter`` 的 ``served`` 分支逐字同判据（
         审查 M3 对齐：旧实现用**满电**航程、预筛用剩余航程×margin，两者
         只在 margin=1.0 且换电回满时等价；缝隙会造成「唤醒了却永被预筛
         拒」的 PENDING churn，恰是休眠机制要消灭的现象）。异构下短航程机
@@ -506,12 +506,12 @@ class RollingHorizon:
         return False
 
     def _wake_dormant(self) -> list[int]:
-        """服务休眠唤醒（2026-11-04）：本周期有可用机可服务即回 PENDING。
+        """服务休眠唤醒：本周期有可用机可服务即回 PENDING。
 
         在 ``begin_cycle`` 之前调用，唤醒任务立即进入本周期 T_t；年龄
         （arrival_time）累计不中断，唤醒后继续参与优先级/防饥饿排序。
 
-        顺序组原子性（2026-11-04 用户裁定）：带 ``sequence_group`` 的链**整组
+        顺序组原子性（口径约定）：带 ``sequence_group`` 的链**整组
         一起唤醒**——组内只要还有一个成员不可服务，整条链继续休眠，避免
         「组内部分唤醒进 T_t、部分仍休眠」把调度单元拆开。无组任务行为不变。
         """
@@ -532,9 +532,9 @@ class RollingHorizon:
         """机队服务不可达追踪：持续无可用机在往返航程内的任务**转休眠**。
 
         逐机判据 ``_serviceable``（∃ 可用机：2·c ≤ range_margin·该机剩余
-        航程，与预筛 ``no_uav_in_range`` 分支逐字同判据，2026-11-05 审查 M3
+        航程，与预筛 ``no_uav_in_range`` 分支逐字同判据，审查 M3
         对齐）即「本周期选择层会放行它」。连续 ``service_patience`` 个周期不满足 → 休眠（
-        ``mark_dormant``：不出池、不进候选，2026-11-04 起取代旧
+        ``mark_dormant``：不出池、不进候选，取代旧
         ``reason="service"`` 出池口径——服务可达性是时变条件，异构机队下
         「连续够不着」≠「永远够不着」）。条件恢复由 ``_wake_dormant``
         唤醒，年龄累计不中断。
@@ -557,7 +557,7 @@ class RollingHorizon:
                     newly.append(t.id)
         if not newly:
             return []
-        # 顺序组原子性（2026-11-04）：命中组内任一成员 ⇒ **整组一起休眠**，
+        # 顺序组原子性：命中组内任一成员 ⇒ **整组一起休眠**，
         # 避免「组内一个 DORMANT、其余仍 PENDING」把调度单元拆成两半。
         # 组映射取全池（含在途/已出池外的活动成员），mark_dormant 会自行
         # 跳过不在池 / 已在执行 / 已休眠的 id，无需额外过滤。
@@ -569,7 +569,7 @@ class RollingHorizon:
         return marked
 
     # ------------------------------------------------------------------
-    # 顺序约束组原子性（2026-11-04 用户裁定）：带 sequence_group 的链是
+    # 顺序约束组原子性（口径约定）：带 sequence_group 的链是
     # 不可拆的调度单元，本周期要么整组一起完成，要么整组一起暂缓。
     # 所有方法在「无组」时立即旁路，既有实验 sequence_chain_ratio=0.0
     # ⇒ 零行为变化。详见 methods/rolling/sequence_group.py 的口径边界。
@@ -605,7 +605,7 @@ class RollingHorizon:
         在 ``apply_solution`` / ``record.tours`` 生成之前调用，直接修改
         ``tour.task_ids``；撤下的任务自然落入 ``deferred_ids``。est_cost
         按任务数比例收口（kept/before，与废飞航程分摊同源约定：不做逐任务
-        路径析出，2026-11-05 审查 L2）；求解期 ``f2`` / ``final_path_m``
+        路径析出，审查 L2）；求解期 ``f2`` / ``final_path_m``
         仍是**含被撤成员**的规划口径，metrics 取数引用时需知。
         """
         groups = self._seq_groups()
@@ -622,7 +622,7 @@ class RollingHorizon:
             kept = [i for i in before if i not in drop]
             tour.task_ids = kept
             if before and len(kept) != len(before):
-                # est_cost 比例收口（2026-11-05 审查 L2）：撤下成员后不再
+                # est_cost 比例收口（审查 L2）：撤下成员后不再
                 # 沿用原估值，否则航程账把已撤成员的规划航程也算进去
                 tour.est_cost = float(tour.est_cost) * (len(kept) / len(before))
         solution.executed_task_ids = [
@@ -641,7 +641,7 @@ class RollingHorizon:
         if advance:
             self._time += float(cfg.cycle_length)
 
-        # 0) 服务休眠唤醒（2026-11-04）：条件恢复（出现可服务的可用机）
+        # 0) 服务休眠唤醒：条件恢复（出现可服务的可用机）
         #    即唤醒回 PENDING，本周期即重新进入 T_t，年龄累计不中断。
         woken_ids = self._wake_dormant()
 
@@ -657,7 +657,7 @@ class RollingHorizon:
         )
         record.woken_ids = list(woken_ids)
 
-        # 2) 静态物理不可达筛选（用户原则 2026-10-15：任务不被完成
+        # 2) 静态物理不可达筛选（用户原则：任务不被完成
         # 只有物理约束被违反）。任务/巢位固定 + 每周期满电 ⇒ 判定与周期
         # 状态无关：所有机巢往返航程都超过满电可及范围的任务一次性出池
         # （UNREACHABLE），不留在池里空转——否则它每周期进选择、被规划器
@@ -719,7 +719,7 @@ class RollingHorizon:
             self.records.append(record)
             return record
 
-        # 5) 第一阶段前的惰性代价表（延迟构建，2026-10-20）：
+        # 5) 第一阶段前的惰性代价表（延迟构建）：
         # 旧流程在这里对**全量** T_t 建 O(n²) 三维矩阵，而第一阶段只触碰
         # O(n·K + k²) 条边——exp02 实测 N=200 时全量建矩阵占端到端
         # 85.6%（9752/11391 ms），Top-αK 省下的搜索时间被它吃光。
@@ -759,15 +759,15 @@ class RollingHorizon:
             feasibility=self.sel_cfg.feasibility,
             marginal=self.sel_cfg.marginal,
             capability=cap_cfg,
-            # Fix②b：anti_starvation 必须随每周期重建透传——漏传则静默退回
-            # 默认的 enabled=False，yaml 里开了防饥饿也不生效（2026-10-15 长程
+            # 防饥饿透传：anti_starvation 必须随每周期重建透传——漏传则静默退回
+            # 默认的 enabled=False，yaml 里开了防饥饿也不生效（长程
             # 实验发现：24 周期 n_forced_in 全为 0，老化任务直接饿死到超期）。
             anti_starvation=self.sel_cfg.anti_starvation,
             current_time=self._time,
             forced_task_ids=forced_ids,
         )
         cost_hint = self._cost_hint(tasks, avail, lazy)
-        # 6.1) 机队服务不可达转休眠（2026-11-04 异构化口径）：几何可达但
+        # 6.1) 机队服务不可达转休眠（异构化口径）：几何可达但
         # 连续 service_patience 周期无可用机在往返航程内 → 休眠（不出池、
         # 不进候选，擑 churn），条件恢复即唤醒、年龄累计不中断。必须在
         # 选择前转休眠，否则它每周期进候选又被拒，空转 churn。
@@ -776,7 +776,7 @@ class RollingHorizon:
             dorm_ids = {t.id for t in newly_dormant}
             record.dormant_ids = [t.id for t in newly_dormant]
             tasks = [t for t in tasks if t.id not in dorm_ids]
-        # 6.2) 顺序组准入闸门（2026-11-04 用户裁定 3「同周期完成，或同时暂缓」）：
+        # 6.2) 顺序组准入闸门（口径约定 3「同周期完成，或同时暂缓」）：
         # 组内成员不齐（部分休眠/在途）时，把已在 T_t 的成员一并撤下，整组
         # 本周期不进选择层。只收窄**送进选择层的副本**，`tasks` 保持 6.1 后的
         # 候选全集不变，使步骤 8 的 deferred_ids 记账天然包含被暂缓的组，
@@ -801,9 +801,9 @@ class RollingHorizon:
             # 准入门禁整组暂缓的 id：本周期未进选择层，仍留池 PENDING。
             # 单列供审计：它们不在选择层 selected_ids 口径里；record 的
             # deferred_ids 由步骤 8 统一记账（tasks − executed）、天然包含
-            # 它们（2026-11-05 审查 L1：统一两处注释口径）。
+            # 它们（审查 L1：统一两处注释口径）。
             record.selection["seq_group_admission_deferred"] = list(seq_deferred)
-        # S 成员无条件落盘（2026-10-22 覆盖门禁）：一阶检验与三分账的 S 基准，
+        # S 成员无条件落盘（覆盖门禁）：一阶检验与三分账的 S 基准，
         # 供「进过 S 没装」vs「从未进 S」归因；forced_ids 有即落（与 replan
         # 解耦——边沿化后「有强制」与「有新事件」不再同周期出现）。
         record.selection["selected_ids"] = sorted(sel.selected_ids)
@@ -860,7 +860,7 @@ class RollingHorizon:
             solver=(self.solver_factory() if self.solver_factory is not None else None),
         )
         solution = stage.solution
-        # 7.1) 顺序组交付闸门（2026-11-04 用户裁定 3）：MUAS 解里只装载了组的
+        # 7.1) 顺序组交付闸门（口径约定 3）：MUAS 解里只装载了组的
         # 一部分 ⇒ 把已装载成员一并撤下，整组批次 defer（留池 PENDING、下周期
         # 整组重试）。必须在 record.tours / apply_solution / fleet.apply_solution
         # 之前改 tour.task_ids，让任务池回写与机队绑定同步撤下，避免出现
@@ -925,7 +925,7 @@ class RollingHorizon:
     # ------------------------------------------------------------------
 
     def _converged(self, cycle: int, last_arrival_cycle: int) -> bool:
-        """收敛早停判定（2026-11-04 用户裁定口径）。
+        """收敛早停判定（口径约定口径）。
 
         主判据：**不存在「能被完成却没被完成」的任务即停止**。静态几何不可达
         任务已在 ``run_cycle`` 出池，池内留存的未完成任务（含服务休眠）都属
@@ -939,7 +939,7 @@ class RollingHorizon:
         （不在等条件恢复）且连续该数个周期零进展（池大小不变，本周期无完成 /
         唤醒 / 新暂缓 / 新不可达出池）才提前停，覆盖「无暂缓的僵死池」
         （如能力短缺反复装不下）。⚠ 池内有服务暂缓任务时兜底**禁用**：
-        正在等条件恢复 ≠ 零进展（2026-11-05 审查 M1 如实化）；
+        正在等条件恢复 ≠ 零进展（审查 M1 如实化）；
         「时变能力永不恢复」即永久暂缓场景，不被兜底覆盖，由
         ``n_cycles`` 硬安全上限止损。此时记 ``no_progress``，属**非自然收敛**，
         metrics 侧的 ``n_dormant_end`` 等单列指标如实暴露，不粉饰成干净收敛。
@@ -1247,7 +1247,7 @@ class RollingHorizon:
             if nest is not None:
                 self.fleet.update_position(tour.uav_id, nest.x, nest.y, nest.z)
             if cfg.recharge_at_nest:
-                # 换电恢复到**该机**满电航程（异构 per-UAV，2026-11-04）
+                # 换电恢复到**该机**满电航程（异构 per-UAV）
                 uav.remaining_range = float(
                     uav.full_charge_range(cfg.uav_max_range) or 0.0
                 )
@@ -1256,7 +1256,7 @@ class RollingHorizon:
             return
 
         # 完成闸门：仅**物理不可行**的违约任务不顺延完成（默认开启）。
-        # 2026-10-15 协议纠正「迟到不是废飞」：tw_task（迟到）不再是硬
+        # 协议纠正「迟到不是废飞」：tw_task（迟到）不再是硬
         # 违约——晚到任务正常完成、计入吞吐，有效奖励已在适应度里按
         # 迟到折减（late_reward_decay_seconds），此处只把「飞不到」
         # （航程/续航/终点机巢/结构类）解绑弹回。
@@ -1271,7 +1271,7 @@ class RollingHorizon:
             if any(not str(tag).startswith("tw_task_") for tag in tags)
         }
         hard_ids = {int(t) for t in hard_violated}
-        # 顺序组原子性（完成闸门，2026-11-04 用户裁定 3）：组内任一成员被判
+        # 顺序组原子性（完成闸门，口径约定 3）：组内任一成员被判
         # 物理不可行 ⇒ **整组一起暂缓**，避免「组里一个弹回、其余照常完成」
         # 把调度单元拆开。连坐成员本身没有物理违约，故不计废飞
         # （infeasible_ids），单列 seq_group_rolled_back_ids 供审计。
@@ -1362,7 +1362,7 @@ class RollingHorizon:
             # 往返口径的航程裕度：1.0 = 物理上限（与完成闸门同口径）。
             # 旧单程口径的 0.95 不可直接迁移（会把可达半径腰斩）。
             range_margin=float(feas_d.get("range_margin", 1.0)),
-            # 默认 False（2026-10-15 用户原则「任务不被完成只有物理约束被
+            # 默认 False（用户原则「任务不被完成只有物理约束被
             # 违反」）：时间窗不是参选资格，迟到由适应度折减定价。仅消融
             # 对照（验证时间预筛的代价）时显式开启。
             check_time_window=bool(feas_d.get("check_time_window", False)),
@@ -1376,7 +1376,7 @@ class RollingHorizon:
             max_selected=marg_d.get("max_selected", None),
             max_ratio=float(marg_d.get("max_ratio", 2.0)),
             min_marginal_ratio=float(marg_d.get("min_marginal_ratio", 0.0)),
-            # Fix① 防饥饿软加权：等待时长 → 终刀接受判据的乘性加权。
+            # 防饥饿软加权 防饥饿软加权：等待时长 → 终刀接受判据的乘性加权。
             # 此前遗漏接线 → yaml 写了 age_gamma 却静默退回 0.0（机制失效）。
             age_gamma=float(marg_d.get("age_gamma", 0.0)),
             wait_scale=float(marg_d.get("wait_scale", 3600.0)),
@@ -1401,10 +1401,10 @@ class RollingHorizon:
                 if cap_d.get("max_expand_factor") is None
                 else float(cap_d["max_expand_factor"])
             ),
-            # Fix③：即便 enabled=False 也按吞吐上界收敛候选规模（默认关）
+            # 候选规模上界：即便 enabled=False 也按吞吐上界收敛候选规模（默认关）
             fallback_when_disabled=bool(cap_d.get("fallback_when_disabled", False)),
         )
-        # Fix② 硬性不停饿兜底：此前遗漏接线 → yaml 写了 enabled=true 却静默
+        # 防饥饿强制 硬性不停饿兜底：此前遗漏接线 → yaml 写了 enabled=true 却静默
         # 退回 False，防饥饿机制从未真正生效（老化/临期任务拿不到强制优先）。
         asv_d = dict(d.get("anti_starvation", {}) or {})
         anti_starvation = AntiStarvationConfig(

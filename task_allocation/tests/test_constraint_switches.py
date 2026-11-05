@@ -84,7 +84,7 @@ def test_defaults_all_enabled():
 
 
 def test_time_window_switch():
-    # 开启 → 记违约。2026-10-18 硬/软分桶：时间窗迟到是**软**违约——
+    # 开启 → 记违约。 硬/软分桶：时间窗迟到是**软**违约——
     # 物理仍可行（ok=True，与执行闸门 tw_task 不弹回一致），但 violations
     # 记 tw_task_0、soft_violation>0，由适应度 T2 层按秒计价。
     p = _window_problem(ConstraintConfig(time_window=True, endurance=False))

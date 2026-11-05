@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """exp01 方法正确性数据审计：从落盘结果独立复核算法不变量。
 
-定位（2026-10-16 审查）：exp01 是**方法正确性验证**实验——本脚本不评价性能
+定位（审查）：exp01 是**方法正确性验证**实验——本脚本不评价性能
 好坏，只回答「闭环按理论口径执行了吗」：落盘数据是否满足协议与模型的全部
 不变量。任一 FAIL 都意味着实现与理论口径脱节。
 
@@ -28,7 +28,7 @@
   G 选择漏斗   逐级单调不增；n_selected ≤ ⌈max_ratio·K⌉
   H 参与机数   参与机数 ≤ min(K, 任务数 N)（SRP 不变式：实例机数 ≤ N−1）
   I 收敛单调   cost_history（best fitness）非增
-  N 适应度可复算（治 auto big_m 漂移，2026-10-18 拆双口径）：
+  N 适应度可复算（治 auto big_m 漂移，拆双口径）：
                N1 搜索期自洽 cost_history[-1] == muas.best_fitness；
                N2 交付解可复算 final_fitness == 用落盘快照
                   fitness_weights 对 (f1, 迟到秒, 航程, 硬违约,
@@ -39,17 +39,17 @@
                   6.5~13.6，即两类漂移/差异的混合）；无 final_fitness
                   字段的旧数据 N2 SKIP。
   J 航程物理   逐腿有序 estimate 独立重算航程 = 记录 est_cost，且 ≤ 满电航程
-               （2026-10-29：本项由「长期假 FAIL」转为真 PASS——此前差
+               （：本项由「长期假 FAIL」转为真 PASS——此前差
                 1.4~2.5 m 不是物理不确定，而是三处实现缺陷，见 modules
                 docs / 本节末尾「J 项历史 FAIL 的根因」）
   K 起点链     无瞬移：下周期起点 = 上周期终点机巢位置
   L 容量/巢    逐周期机巢占用 ≤ capacity；终点机巢 id 合法
   M 段长口径   ETA（make_distance_fn）与代价矩阵（有序 estimate）段长一致。
-               （2026-10-29 起 ETA 侧也改**有序**缓存，本项从「WARN 级已知
+               （ETA 侧也改**有序**缓存，本项从「WARN 级已知
                  口径差异」升格为**回归守卫**：任何把 ETA 退回对称化近似
                  的改动都会在这里被抓住）
   O 无幻影腿   metrics final_path_m == Σ有任务航次 est_cost（空航次恒 0；
-               2026-10-24 旧实现给闲置机计「机→巢」未飞行的腿，J 项只重算
+               旧实现给闲置机计「机→巢」未飞行的腿，J 项只重算
                dump 内航次故看不见，本项补盲区）
 
 用法（仓库根或本目录）：
@@ -58,13 +58,13 @@
 
 ``--results`` 指定结果目录名（相对实验目录，默认 ``results``）。
 
-**审计覆盖面（2026-10-24 修复 P0-1）**：若该目录下存在 ``seed_{id}/`` 子目录
+**审计覆盖面（修复 P0-1）**：若该目录下存在 ``seed_{id}/`` 子目录
 （多 seed 运行时 run.py 逐 seed 落盘），则**逐 seed 全量复核**再合并同名项
 （同名项须全部 PASS 才 PASS，失败详情标注 seed）；否则只审顶层产物——顶层
 ``solution.json`` 只含代表 seed 的 tours，旧版因此漏审其余全部 seed。
 
 判据常数取 ``results/effective_config.json``（run.py 落盘的生效配置，含
-``--set``），缺该文件时回退 ``config.yaml``（2026-10-24 修复 P0-2）。
+``--set``），缺该文件时回退 ``config.yaml``（修复 P0-2）。
 
 退出码：有 FAIL → 1，仅 WARN → 0。
 run.py / run_chunked.py 每次运行末尾自动调用本审计（持续门禁）。
@@ -79,7 +79,7 @@ from pathlib import Path
 from typing import Any
 
 # 任意调用方式可跑（python -m / 任意 cwd）：脚本目录先入 sys.path，
-# 供 `from paths import` 在非脚本路径调用下也能解析（2026-10-22 修复）。
+# 供 `from paths import` 在非脚本路径调用下也能解析（修复）。
 import sys as _sys
 from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parent))
@@ -119,7 +119,7 @@ def _load_effective_config(results_dir: Path) -> dict:
 
     早期版本直接读 ``config.yaml`` 原文，看不到命令行 ``--set`` 注入的覆盖，
     于是 E/G/D/J 项的判据常数与 run_meta 记录的生效配置指纹分裂——跑
-    ``--set`` 消融时判据按旧常数裁断（2026-10-24 修复 P0-2）。
+    ``--set`` 消融时判据按旧常数裁断（修复 P0-2）。
     旧产物没有该文件时回退 yaml（行为与旧版一致）。
     """
     eff = results_dir / "effective_config.json"
@@ -166,7 +166,7 @@ def _run_checks(
     """对**单个**结果目录（一个 seed 的完整产物）跑全部不变量检查。
 
     多 seed 时 :func:`main` 对每个 ``results/seed_{id}/`` 各调一次，再合并同
-    名项（2026-10-24 修复 P0-1）：早期版本只读顶层产物 ⇒ 3 seed 跑完只有代表
+    名项（修复 P0-1）：早期版本只读顶层产物 ⇒ 3 seed 跑完只有代表
     seed 被验证；而 D/J/K/M/N 五项依赖 solution 的 tours 与 fitness_weights，
     ``metrics.json`` 里的 ``per_seed[seed]["cycles"]`` 不足以补审。
     """
@@ -185,20 +185,23 @@ def _run_checks(
     speed = float(m["problem"]["uav_speed"])
     max_range = float(m["problem"]["uav_max_range_km"]) * 1000.0
     w_decay = cfg["muas"].get("late_reward_decay_seconds")
-    # 覆盖门禁模式（2026-10-22）：F1 回归纯完成计数，不做迟到折减
+    # 覆盖门禁模式：F1 回归纯完成计数，不做迟到折减
     # （迟到单一定价走 w_late·L）——奖励守恒的交付端口径跟着切纯。
     #
-    # 判据**优先取 metrics 的自描述字段**（problem.lexicographic_coverage /
+    # 判据**优先取 metrics 的自描述字段**（problem.coverage_audit /
     # problem.coverage_gate，吃 --set 覆盖）；仅当旧数据没有这两个键时回退
-    # config.yaml。原因：本脚本读的是 yaml 原文，命令行 --set 注入的门禁
-    # 开关它看不到，会导致门禁跑出来的结果被按旧口径审计（E/N2 误报 FAIL）。
+    # config.yaml。旧键 lexicographic_coverage 仅作历史结果回退。
     prob_desc = m.get("problem") or {}
-    if "lexicographic_coverage" in prob_desc or "coverage_gate" in prob_desc:
-        gate_fit = (bool(prob_desc.get("lexicographic_coverage", False))
-                    or bool(prob_desc.get("coverage_gate", False)))
+    if "coverage_audit" in prob_desc or "lexicographic_coverage" in prob_desc or "coverage_gate" in prob_desc:
+        gate_fit = (
+            bool(prob_desc.get(
+                "coverage_audit", prob_desc.get("lexicographic_coverage", False)))
+            or bool(prob_desc.get("coverage_gate", False)))
     else:
-        gate_fit = (bool(cfg["muas"].get("lexicographic_coverage", False))
-                    or bool(cfg["muas"].get("coverage_gate", False)))
+        gate_fit = (
+            bool(cfg["muas"].get(
+                "coverage_audit", cfg["muas"].get("lexicographic_coverage", False)))
+            or bool(cfg["muas"].get("coverage_gate", False)))
     if gate_fit:
         w_decay = None
     max_ratio = float(cfg["selection"]["marginal"]["max_ratio"])
@@ -215,7 +218,7 @@ def _run_checks(
           n_sol_completed == s["n_completed"],
           f"summary={s['n_completed']} 任务表 completed_at 非空={n_sol_completed}")
     # ── A2 淘汰恒为零（结构性保证，非运行时检测）────────────────
-    # 2026-10-24「无超期淘汰」口径落地后，TaskPool 不再超期出池，唯一出池
+    #「无超期淘汰」口径落地后，TaskPool 不再超期出池，唯一出池
     # 途径 = 完成 / 静态物理不可达，故 n_eliminated **结构性恒为 0**。此处
     # 断言已退化为「防御性不变量校验」：它验证落盘 summary 未被错误回填，
     # 但**不再具备运行时缺陷检测能力**（恒真断言）。真正的超期滞留可观测
@@ -308,8 +311,8 @@ def _run_checks(
             continue
         lb = {int(k): float(v) for k, v in (cmeta.get("lateness_by_task") or {}).items()}
         for tour in c["tours"]:
-            # 方向不确定带（M 项口径分裂的定量化，2026-10-19）：
-            # 地形跟随航程方向相关（爬升规则从起点扫描）。2026-10-29 起
+            # 方向不确定带（M 项口径分裂的定量化）：
+            # 地形跟随航程方向相关（爬升规则从起点扫描）。
             # 运行端 ETA 与代价矩阵**都按飞行方向**取有序口径，记账侧已无
             # 不确定；这里仍用两个全新缓存分别查正/反向距离，张成 ETA 区间
             # [eta_lo, eta_hi]，是**保守**做法——latest 落在带内的判定翻转
@@ -414,7 +417,7 @@ def _run_checks(
     for i in range(len(cycles) - 1):
         c, nxt = cycles[i], cycles[i + 1]
         pc, pn = c["pool_counts"], nxt["pool_counts"]
-        # 记账周期口径（2026-10-24 无超期淘汰后简化）：
+        # 记账周期口径（无超期淘汰后简化）：
         #   completed / unreachable：周期 t 解算期出池 ⇒ 影响 t→t+1 水位；
         #   infeasible（废飞回池）：``pool.release`` 进 ``_release_pending``，
         #     下周期 begin_cycle 归类为 RELEASE 来源 ⇒ **已含在
@@ -470,7 +473,7 @@ def _run_checks(
                 break
     check("I DMDE 收敛曲线非增（best fitness）", not mono_bad, str(mono_bad[:3]))
 
-    # ── N 适应度可复算（治 auto big_m 漂移，2026-10-18 拆双口径）───────
+    # ── N 适应度可复算（治 auto big_m 漂移，拆双口径）───────
     # 四层适应度（生产口径；门禁下 f 不含 −m·F1，F1 只作事后指标）：
     #   f = W_hard·n_hard + w_exc·excess_m + W_skip·n_voluntary_skip
     #       − m·F1 + w_late·L_tot + λ·path
@@ -512,7 +515,7 @@ def _run_checks(
         fw_m = float(fw["m"])
         w_hard = float(fw.get("w_hard") or 0.0)
         w_excess = float(fw.get("w_excess") or 0.0)
-        # 覆盖门禁 T0.5 层（2026-10-22）：w_skip 缺省/None = 门禁关闭，计 0
+        # 覆盖门禁 T0.5 层：w_skip 缺省/None = 门禁关闭，计 0
         w_skip = float(fw.get("w_skip") or 0.0)
         n_skip = int((c.get("gate_stats") or {}).get("n_skip", 0) or 0)
         w_late = float(fw.get("w_late") or 0.0)
@@ -549,9 +552,9 @@ def _run_checks(
     # 逐腿用**有序** estimator.estimate(a,b)（与代价矩阵 build_pairwise_costs
     # 同口径；地形跟随航程方向相关，不能用对称化距离），容差 1m。
     #
-    # 【J 项历史 FAIL 的根因（2026-10-29 定位并修复，非放宽判据）】
+    # 【J 项历史 FAIL 的根因（定位并修复，非放宽判据）】
     # 此前 3 seed 恒差 1.4~2.5 m（0.03~0.07%），且**方向不定**（seed_42
-    # 记账偏大、seed_43 偏小），曾被记为「低危口径差异 / 待裁定」。实为三处
+    # 记账偏大、seed_43 偏小），曾被记为「低危口径差异 / 待确认」。实为三处
     # 独立缺陷叠加，均已修复（本项现为严格 PASS，容差一字未动）：
     #   ① provider.CostProvider.cost 缺正向键时**回退到反向键**
     #      （地形航程有向 ⇒ 拿另一个飞行方向的数记账），再缺则**退欧氏
@@ -620,7 +623,7 @@ def _run_checks(
     # 不变量由来：path_cost(final)=Σ_{全部航次} tour_path_cost；空航次恒 0
     # （不起飞不飞行，与 _tour_cost 守卫/_advance_execution 同口径），而
     # dump 过滤器 `if t.task_ids` 只快照有任务航次 ⇒ 两侧必须相等。
-    # 2026-10-24 旧实现给 _assemble 填了 home nest 的闲置机计「机→巢」
+    # 旧实现给 _assemble 填了 home nest 的闲置机计「机→巢」
     # 幻影腿，生产数据三 seed 被虚报 403/1091/388 m（占 0.024~0.065%）
     # 而 J 项（只重算 dump 内的航次）完全看不见——本项补该盲区。
     muas_by_cycle = {int(c["cycle"]): c["muas"] for c in cycles}
@@ -640,7 +643,7 @@ def _run_checks(
     # ── M 段长口径（回归守卫）───────────────────────────────────
     # 原为 WARN 级「已知低危口径差异」：make_distance_fn 记忆化把 (A,B)/(B,A)
     # 当对称存取，而地形跟随航程方向相关 ⇒ ETA/时间模型（对称）与代价矩阵
-    # （有序）段长可差 0.1~0.4%。2026-10-29 把 ETA 侧也改成**有序**缓存后
+    # （有序）段长可差 0.1~0.4%。 把 ETA 侧也改成**有序**缓存后
     # 两侧同源同向，本项恒为 0 段差异，升格为回归守卫：谁再把 ETA 退回
     # 对称化近似，这里立刻红。
     check("M 段长口径：ETA 与代价矩阵（均有序）一致（<0.1%）",

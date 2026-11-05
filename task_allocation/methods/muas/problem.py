@@ -21,7 +21,7 @@
                        :meth:`gate_mode` 与 :meth:`scalar_fitness`）
     F2 = C(x, π, z, y)   （路径代价 + 惩罚）
 
-适应度（DMDE 最小化标量）—— **覆盖门禁口径为唯一主口径（2026-10-24 裁定）**：
+适应度（DMDE 最小化标量）—— **覆盖门禁口径为唯一主口径（口径约定）**：
 
         f(s) = W_hard·n_hard + w_exc·excess_m          # T0 物理违约（硬）
               + W_skip·n_voluntary_skip                # T0.5 覆盖门禁
@@ -140,7 +140,7 @@ class SelectiveMUASProblem(FitnessWeightsMixin):
         """模型形态标签（**诊断用，当前无消费点**）。
 
         返回值必须与 :mod:`representation.encoder` / ``inverse_mapper`` 的
-        词表一致（``balanced`` / ``overloaded`` / ``srp``）。2026-10-29 修：
+        词表一致（``balanced`` / ``overloaded`` / ``srp``）。 修：
         原返回 ``"selective_srp"``，与词表里的 ``"srp"`` 不一致——本属性暂
         无调用点故未暴露，但一旦接到 encoder 的 ``{...}[model_type]`` 查表
         就会 KeyError。统一为词表名。
@@ -268,7 +268,7 @@ class SelectiveMUASProblem(FitnessWeightsMixin):
         # 守卫、_advance_execution 跳过空航次（不更新位置/不耗航程）同口径。
         # 旧实现在 `end_nest_id is not None`（_assemble 给闲置机填 home
         # nest）时仍计「机→巢」幻影腿，**在 exp01 生产数据里一直触发**：
-        # 2026-10-24 量化——seed42 周期1 有 3 架闲置机、周期3 有 2 架，
+        # 量化——seed42 周期1 有 3 架闲置机、周期3 有 2 架，
         # 幻影腿合计 403.2 m（占该 seed 上报总航程 0.026%；seed43/44 分别
         # 1091.1/388.3 m）。注意 solution.json 的 dump 过滤器
         # （`if t.task_ids`）会把闲置航次整条滤掉，**只看 dump 会误判
@@ -360,7 +360,7 @@ class SelectiveMUASProblem(FitnessWeightsMixin):
         solution.f2_cost = self.f2_cost(solution, penalty=pen)
         # 实际计入 F2 的惩罚量（供 w_violation 解耦口径读取，避免重复解析报告）
         solution.meta["penalty"] = pen
-        # 2026-10-18：本次评价实际使用的四层权重快照。记录/重算/绘图共用
+        #：本次评价实际使用的四层权重快照。记录/重算/绘图共用
         # 同一组权重，消灭 auto big_m 逐周期漂移导致的「记录 best_fitness
         # 与重算目标差 6.5~13.6」。
         gate = self.gate_mode(solution)
@@ -394,7 +394,7 @@ class SelectiveMUASProblem(FitnessWeightsMixin):
         return solution
 
     def scalar_fitness(self, solution: AllocationSolution) -> float:
-        """DMDE 最小化的标量适应度（覆盖门禁口径，唯一主口径 2026-10-24）。
+        """DMDE 最小化的标量适应度（覆盖门禁口径，唯一主口径）。
 
         ::
 
@@ -424,7 +424,7 @@ class SelectiveMUASProblem(FitnessWeightsMixin):
         if not solution.meta.get("feasibility"):
             self.evaluate(solution)
         wv = self.config.w_violation
-        # 覆盖门禁口径（2026-10-24 起唯一主口径）：**f 不含 −m·F1，F1 只作事后指标**。
+        # 覆盖门禁口径（唯一主口径）：**f 不含 −m·F1，F1 只作事后指标**。
         # 合法解中 S 内可装载任务已全部交付 ⇒ F1 恒为常数、对解无区分度；覆盖由门禁
         # （构造修复 + W_skip 层）承担，目标层只剩成本 + 迟到 + 硬违约。
         n_hard, excess_m = self.hard_stats(solution)

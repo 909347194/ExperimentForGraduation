@@ -23,12 +23,12 @@
 
 ## 合并与裁剪记录
 
-* 2026-10-12 重组：20 张 → 11 张（四问框架合并，面板信息保留）。
-* 2026-10-26 裁剪：16 张 → **3 张**（用户裁定「图有点过多，只保留必要的：
+* 重组：20 张 → 11 张（四问框架合并，面板信息保留）。
+* 裁剪：16 张 → **3 张**（口径约定「图有点过多，只保留必要的：
   初始环境、过程、结果；gif 只保留 P06_allocation_anim.gif」）::
 
       I01_geo_overview      初始环境
-      P04_allocation_gantt  过程（甘特图，2026-10-26 追加保留「保持原样」）
+      P04_allocation_gantt 过程（甘特图，追加保留「保持原样」）
       P06_allocation_anim   过程（GIF，唯一保留的动图）
       R01_outcome_summary   结果
 
@@ -137,7 +137,7 @@ FIGURES: tuple[Figure, ...] = (
         needs=("metrics", "solution"),
         source="solution.json 的 cycles[].tours（est_cost）+ tasks[] / nests[] / dem"
                "（背景层：有建筑画建筑、只有地形画 DEM；逐周期面板只画有真实航次的"
-               "活跃周期，未执行任务只标已到达者，与 allocation_anim 口径一致）",
+               "活跃周期，且每面板只显本周期任务，与 allocation_anim 口径一致）",
         func=plot_allocation,
     ),
     Figure(

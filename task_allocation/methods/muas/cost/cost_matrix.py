@@ -4,7 +4,7 @@
 对接 problem.CostProvider：pairwise[(id_a,id_b)] = cost
 UAV 起点虚拟键：-(1+uav_id)；机巢键：nest_offset + nest_id
 
-两种建表口径（2026-10-20）：
+两种建表口径：
 
 - **eager（默认）**：对传入的 tasks 全量建 O(n²) 表，适合第二阶段
   （候选集已小）与测试基线；

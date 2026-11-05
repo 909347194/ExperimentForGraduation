@@ -27,8 +27,8 @@ complete_coverage / reorder_for_deadlines / prune_zero_reward / 交付前
 同输入逐位可复现。预算由 ``polish_max_rounds`` / ``polish_max_evals``
 双重封顶（后者按**真实评估数**计，缓存命中不计）。
 
-覆盖守护（2026-10-23 用户裁定「不减少已装集合」）：覆盖盲判据下
-（coverage_first / coverage_gate / lexicographic_coverage 任一开启，
+覆盖守护（口径约定「不减少已装集合」）：覆盖盲判据下
+（coverage_first / coverage_gate / coverage_audit 任一开启，
 此时 ``f`` 不含 ``−m·F1``），候选若经修复链卸掉任务、只降成本，
 会被无守护的 polish 接受 ⇒ 覆盖被 polish 侵蚀（E1E2 实证的缺口之一）。
 守护判据：候选的 executed 任务集必须**包含**当前最优的解集
@@ -205,13 +205,13 @@ def polish_assignment(
     max_rounds = max(1, int(getattr(config, "polish_max_rounds", 30)))
     max_evals = max(1, int(getattr(config, "polish_max_evals", 2000)))
 
-    # 覆盖盲判据检测（2026-10-23）：门禁口径下 f 不含 −m·F1，成本-only
+    # 覆盖盲判据检测：门禁口径下 f 不含 −m·F1，成本-only
     # 适应度会欣然接受「卸任务换成本」的候选。守护 = executed 解集单调。
     problem_cfg = getattr(getattr(evaluator, "problem", None), "config", None)
     coverage_blind = (
         bool(getattr(config, "coverage_first", False))
         or bool(getattr(config, "coverage_gate", False))
-        or bool(getattr(problem_cfg, "lexicographic_coverage", False))
+        or bool(getattr(problem_cfg, "coverage_audit", False))
     )
 
     base = normalize_assignment(assignment, n_uavs, n_tasks)
@@ -252,10 +252,10 @@ def polish_assignment(
                 res = evaluator.evaluate(cand)
                 result.n_evals = int(evaluator.n_evals) - real0
                 if float(res.fitness) < result.best_fitness - eps:
-                    # 覆盖守护（2026-10-23）：门禁/覆盖优先口径下，候选若
+                    # 覆盖守护：门禁/覆盖优先口径下，候选若
                     # 卸掉了已装任务（修复链删任务 → F1 不在适应度里看不
                     # 见），只降成本也拒绝——「不减少已装集合」。
-                    # 修复（2026-10-26）：接受候选后把 best_exec 同步为当前
+                    # 修复：接受候选后把 best_exec 同步为当前
                     # 最优解的 executed 集，使守护升级为「⊇ 当前最优解集」而非
                     # 「⊇ 初始解集」。否则修复链在 polish 期间新增的任务会在
                     # 后续候选中因成本-only 适应度被静默丢弃，违反完成铁律。

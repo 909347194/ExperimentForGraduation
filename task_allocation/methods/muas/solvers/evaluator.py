@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """evaluator.py — ``MUASAssignmentEvaluator``：assignment → 解 → 标量适应度。
 
-2026-10-27 自 ``muas_stage.py`` 拆出。本模块是评价器的**状态与装配核心**：
+自 ``muas_stage.py`` 拆出。本模块是评价器的**状态与装配核心**：
 
 - :meth:`__init__`              实体索引 / 有效收益 / 评估缓存
 - :meth:`_assemble`             routes + end_nests → ``AllocationSolution``
@@ -38,6 +38,7 @@ from task_allocation.methods.muas.representation.repair_rules.terminal_nest impo
 from task_allocation.methods.muas.solvers.decode_constructive import (
     ConstructiveDecodeMixin,
 )
+from task_allocation.methods.muas.solvers.ablation_prune import AblationPruneMixin
 from task_allocation.methods.muas.solvers.decode_repair import DecodeRepairMixin
 from task_allocation.methods.muas.solvers.route_polish import RoutePolishMixin
 from task_allocation.methods.muas.solvers.tour_cost import TourCostMixin
@@ -100,6 +101,7 @@ class MUASAssignmentEvaluator(
     TourCostMixin,
     DecodeRepairMixin,
     ConstructiveDecodeMixin,
+    AblationPruneMixin,
     RoutePolishMixin,
 ):
     """把 DMDE 的 ``assignment`` 翻译成 :class:`AllocationSolution` 并评价。
@@ -120,7 +122,7 @@ class MUASAssignmentEvaluator(
     ) -> None:
         self.problem = problem
         self.participating = list(participating)
-        # Fix⑥ 救援池的「全可用机队」口径：默认退化为参与集（历史行为）
+        # 全机队 救援池的「全可用机队」口径：默认退化为参与集（历史行为）
         self.available_uavs = (
             list(available_uavs) if available_uavs is not None else list(participating)
         )

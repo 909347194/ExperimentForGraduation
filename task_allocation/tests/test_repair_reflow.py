@@ -140,12 +140,12 @@ def test_defers_only_genuinely_infeasible():
 
 
 # ---------------------------------------------------------------------------
-# 4. Fix⑥「可达即执行」：救援池扩到全可用机队
+# 4. 全机队「可达即执行」：救援池扩到全可用机队
 # ---------------------------------------------------------------------------
 
 
 def _evaluator_scoped(tasks, uavs, nests, participating_ids, available, scope):
-    """构造「参与集 ⊂ 可用机队」的 evaluator（Fix⑥ 救援池口径对照）。"""
+    """构造「参与集 ⊂ 可用机队」的 evaluator（全机队 救援池口径对照）。"""
     problem = SelectiveMUASProblem.from_entities(
         tasks, uavs, nests,
         pairwise_cost=_pairwise(tasks, uavs, nests),
@@ -164,7 +164,7 @@ def _evaluator_scoped(tasks, uavs, nests, participating_ids, available, scope):
 
 
 def test_reflow_rescues_with_idle_uav_outside_participating_set():
-    """Fix⑥：参与集外的闲置机应能救援可达任务（可达性＝存在量化）。
+    """全机队：参与集外的闲置机应能救援可达任务（可达性＝存在量化）。
 
     几何：机巢与两架机同在原点；t0/t1 各距原点 30km（单任务航次 60km），
     两任务相距约 42.4km，故合并航次 ≈ 102.4km。
@@ -172,7 +172,7 @@ def test_reflow_rescues_with_idle_uav_outside_participating_set():
                      且它是**唯一**参与机；
       u1 航程 80km → 装得下（60 ≤ 80），但**不在**参与集（闲置可用）。
     历史口径（participating）只在参与集内找闲置机 → 唯一参与机已占用 → 假暂缓；
-    Fix⑥（fleet）扩到全可用机队 → u1 接手 → 两任务均执行。
+    全机队（fleet）扩到全可用机队 → u1 接手 → 两任务均执行。
     这正是 exp01 中 T10 的处境（非参与闲置机 67.3/71.0/76.1km 均 ≤80km）。
     """
     tasks = [_task(0, 30_000.0, 0.0), _task(1, 0.0, 30_000.0)]
@@ -197,7 +197,7 @@ def test_reflow_rescues_with_idle_uav_outside_participating_set():
 
 
 def test_reflow_fleet_scope_still_defers_infeasible():
-    """Fix⑥ 不得把真不可达任务硬塞进来：救援池扩大仍需过航程门。
+    """全机队 不得把真不可达任务硬塞进来：救援池扩大仍需过航程门。
 
     t1 在 400km 外（单任务航次 800km），即便把全机队都当救援池也装不下 →
     应只执行 t0。保证「可达即执行」不会退化成「无条件执行」。

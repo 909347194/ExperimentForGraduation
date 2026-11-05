@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
-"""防饥饿（Fix①②）与配置接线契约测试。
+"""防饥饿（防饥饿软加权②）与配置接线契约测试。
 
 背景：任务只要能力可达、不违反约束就应**最终**被执行（字典序：完成数优先，
 成本次之）。滚动时域下允许跨周期推迟，因此必须有兜底保证任务不会被无限期
 推迟——这正是防饥饿的职责：
 
-  Fix① ``marginal.age_gamma``    ：等待时长对终刀接受判据的乘性软加权
+  防饥饿软加权 ``marginal.age_gamma``    ：等待时长对终刀接受判据的乘性软加权
                                    ``eff = ratio·(1 + gamma·age)``
-  Fix② ``AntiStarvationConfig``  ：等待超 ``force_after_seconds`` 或逼近
+  防饥饿强制 ``AntiStarvationConfig``  ：等待超 ``force_after_seconds`` 或逼近
                                    ``latest``（剩余 ≤ ``deadline_slack``）的
                                    任务**强制纳入**候选并获强优先
 
@@ -88,7 +88,7 @@ def _sel_cfg(
 
 # ── 接线契约（yaml → 配置对象）──────────────────────────────────────
 def test_from_dict_wires_anti_starvation_and_age_gamma():
-    """Fix①② 旋钮必须能从 yaml 段读入 —— 曾因漏接线静默退回默认值。"""
+    """防饥饿软加权② 旋钮必须能从 yaml 段读入 —— 曾因漏接线静默退回默认值。"""
     sc = RollingHorizon.selection_config_from_dict(
         {
             "marginal": {"age_gamma": 1.5, "wait_scale": 600.0, "max_ratio": 2.0},
@@ -116,16 +116,16 @@ def test_from_dict_defaults_keep_mechanism_off():
     assert sc.capability.fallback_when_disabled is False
 
 
-# ── Fix① 等待软加权 ────────────────────────────────────────────────
+# ── 防饥饿软加权 等待软加权 ────────────────────────────────────────────────
 def test_age_gamma_prioritizes_long_waiting_task():
-    """Fix①：等得久的任务在终刀排序中应更靠前（同名额下挤掉「近但新」的任务）。
+    """防饥饿软加权：等得久的任务在终刀排序中应更靠前（同名额下挤掉「近但新」的任务）。
 
     几何：t_near 近(10km)、t_far 较远(20km)，同收益 → 基础 ratio 上 t_near 胜
     （约 2 倍）。t_near 刚到达(waited=0)、t_far 已等 3000s，开启 age_gamma 后
     t_far 的 eff = ratio·(1+γ·age) 被放大，应反超 t_near。
 
     注：age_gamma 是**有界软加权**（age∈[0,1]），几何代价差一个数量级时不足以
-    翻盘——这正是必须再配 Fix② 硬性兜底的原因，本用例只验证「适度差异下生效」。
+    翻盘——这正是必须再配 防饥饿强制 硬性兜底的原因，本用例只验证「适度差异下生效」。
     """
     t_near = _task(0, 10_000.0, 0.0, arrival=3_000.0)         # 刚到
     t_far = _task(1, 20_000.0, 0.0, arrival=0.0)              # 等了 3000s
@@ -141,9 +141,9 @@ def test_age_gamma_prioritizes_long_waiting_task():
     )
 
 
-# ── Fix② 硬性不停饿兜底 ────────────────────────────────────────────
+# ── 防饥饿强制 硬性不停饿兜底 ────────────────────────────────────────────
 def test_anti_starvation_forces_long_waiting_task():
-    """Fix②：等待超阈值的任务被强制纳入，即便几何代价远劣于新任务。"""
+    """防饥饿强制：等待超阈值的任务被强制纳入，即便几何代价远劣于新任务。"""
     t_new = _task(0, 1_000.0, 0.0, arrival=2_000.0)           # 新且近
     t_old = _task(1, 60_000.0, 0.0, arrival=0.0)              # 老且远（waited=2000）
     uavs = [_uav(0)]
@@ -159,7 +159,7 @@ def test_anti_starvation_forces_long_waiting_task():
 
 
 def test_anti_starvation_forces_near_deadline_task():
-    """Fix②：即便等待未达阈值，逼近 latest（剩余 ≤ slack）也应强制纳入。
+    """防饥饿强制：即便等待未达阈值，逼近 latest（剩余 ≤ slack）也应强制纳入。
 
     注意 forced 只绕过 Top-αK **预筛**，仍须过可行性过滤：故 t_urgent 必须是
     时间窗可行的（2km / 10m·s⁻¹ = 200s，1000+200=1200 ≤ latest 1250），否则
@@ -210,10 +210,10 @@ def test_selection_run_does_not_mutate_shared_marginal():
     assert cfg.marginal.wait_scale == before_wait, "run() 不应就地改写 wait_scale"
 
 
-# ── Fix②b 每周期重建透传（滚动层回归）─────────────────────────────
+# ── 防饥饿透传 每周期重建透传（滚动层回归）─────────────────────────────
 def test_run_cycle_rebuild_carries_anti_starvation(monkeypatch):
-    """Fix②b：horizon.run_cycle 每周期重建 SelectionConfig 必须透传
-    anti_starvation —— 2026-10-15 长程实验发现漏传后静默退回
+    """防饥饿透传：horizon.run_cycle 每周期重建 SelectionConfig 必须透传
+    anti_starvation —— 长程实验发现漏传后静默退回
     enabled=False，24 个周期 n_forced_in 全为 0，老化任务直接饿死。
 
     做法：间谍替换 horizon 模块里的 run_selection，捕获其收到的 config；
@@ -268,7 +268,7 @@ def test_run_cycle_rebuild_carries_anti_starvation(monkeypatch):
     assert cfg is not None, "run_selection 未被调用（周期早退？）"
     assert cfg.anti_starvation.enabled is True, (
         "run_cycle 重建 SelectionConfig 时漏传 anti_starvation → "
-        "yaml 开了防饥饿也不生效（Fix②b 回归）"
+        "yaml 开了防饥饿也不生效（防饥饿透传 回归）"
     )
     assert cfg.anti_starvation.force_after_seconds == 777.0
     assert cfg.anti_starvation.deadline_slack == 111.0

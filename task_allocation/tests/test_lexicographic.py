@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """覆盖门禁口径（唯一主口径）+ 解码端合并修复 聚焦测试。
 
-契约（2026-10-24：非门禁 big-M 路径已从代码移除，见
+契约（：非门禁 big-M 路径已从代码移除，见
 ``docs/objective_caliber_two_approaches_archive_2026-10-24.md``）：
 
 1. **可装必须装**：一阶意义下可装载的任务必须交付；能装没装
@@ -293,7 +293,7 @@ def test_gate_caliber_never_prunes_completable_task():
     )
 
 
-# ── 7. 交付解适应度对账（审计 N 项 N2 口径，2026-10-18）──────────────
+# ── 7. 交付解适应度对账（审计 N 项 N2 口径）──────────────
 #
 # muas_stage 落盘的 final_fitness/final_f1/final_path_m/final_late_s/
 # final_n_hard/final_excess_m + fitness_weights 快照，必须能独立重算出

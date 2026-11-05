@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """覆盖门禁（coverage gate）：一阶插入可行性检验 + 终态不动点修复。
 
-合法解定义（用户 2026-10-22 裁定，与物理硬约束等价）：
+合法解定义（口径约定，与物理硬约束等价）：
 
     1. 物理硬约束；
     2. 覆盖门禁：不存在「任务 j∈S 未进入任何 tour，且存在空闲机可开班
@@ -9,7 +9,7 @@
        已选但经一阶检验确无任何可行插入的任务允许不交付，记
        capacity_shortfall（能力不足，不算 voluntary_skip）。
 
-口径（2026-10-24 用户裁定：无超期淘汰、迟到软约束、shortfall 非永久丢失）：
+口径（口径约定：无超期淘汰、迟到软约束、shortfall 非永久丢失）：
 
 - **窗口不否决**（``window_mode="soft"``）：可装判据只剩硬约束
   （航程 / 巢容量等）；deadline 是软偏好，迟到交付合法（计迟到、
@@ -108,7 +108,7 @@ def _task_deadline(problem: Any, tid: int) -> float | None:
 def _window_ok(problem: Any, uav: UAV, seq: Sequence[int], pos: int) -> bool:
     """（已废除的判据，保留为恒真占位）迟到软约束下窗口不否决可装性。
 
-    2026-10-24 口径：deadline 是软偏好，迟到由 ``w_late·L`` 计价；
+    口径：deadline 是软偏好，迟到由 ``w_late·L`` 计价；
     可装判据只剩硬约束（航程 / 巢容量）。函数恒返回 ``True``，保留
     签名是为不破坏既有调用点。
     """

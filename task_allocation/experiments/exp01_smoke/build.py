@@ -76,7 +76,7 @@ class TaskBatch:
 def _scenario_dir(cfg: Mapping[str, Any], data_dir: Path | None = None) -> Path:
     """场景数据目录：显式传入（测试/外部）优先，否则按 ``data.scenario`` 解析。
 
-    2026-10-27 起 data/ 按场景分目录（``data/<scenario>/``），解析统一走
+     data/ 按场景分目录（``data/<scenario>/``），解析统一走
     :mod:`task_allocation.common.scenario_data`。
     """
     if data_dir is not None:

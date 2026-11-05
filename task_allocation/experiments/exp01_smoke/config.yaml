@@ -13,7 +13,7 @@ experiment:
     seed: 42
     # 多 seed 复现：多次随机重复取均值±标准差（论文实验的稳健性证据）。
     # 列表仅 1 个元素时退化为单 seed 运行（= 原 seed）。
-    # 【2026-10-23】正式口径 = 3 seed（42/43/44）：单 seed 只是「代码可跑通」
+    # 正式口径 = 3 seed（42/43/44）：单 seed 只是「代码可跑通」
     # 的冒烟态，稳健性结论（均值±σ）至少要 3 个种子才成立；5 seed 留给
     # 需要更窄置信区间的场合（--seeds 42-46 一行即可，不必改这里）。
     seeds: [42, 43, 44]
@@ -22,12 +22,12 @@ experiment:
 
 # data/<scenario>/ 下的实测与共享数据（跨实验复用，不随实验改）
 data:
-    scenario: guangzhou # 场景数据目录 data/<scenario>/（2026-10-29 城市场景：广州；lasa_chengguan 仍在库中可切回）
+    scenario: guangzhou # 场景数据目录 data/<scenario>/（城市场景：广州；lasa_chengguan 仍在库中可切回）
     source: file
     path: nest_location_data.csv # 相对 data/<scenario>/（3 机巢经纬度）
     dem: dem.tif # 地面基底高程。建筑 Height 相对地面，绝对包络 = 地面 + 建筑高；平地贡献小但保留以统一两场景口径（置 null 则地面按 0 平面）
     buildings: building # 建筑 shapefile 目录（5 类 20670 栋）；垂直切面障碍包络 = max(地面, 地面+建筑高)。无建筑场景（lasa）置 null
-    # （2026-10-29 重组：任务撒点区域多边形 region_geojson 从本段移到
+    #（重组：任务撒点区域多边形 region_geojson 从本段移到
     #   tasks.region_geojson——它是每个实验各自的任务撒点门禁，不是共享实测
     #   数据；build.py 仍兼容 data.region_geojson 旧位置）
     coordinate_column: Coordinate
@@ -43,10 +43,10 @@ problem:
 
 # 合成任务点（暂无实测任务数据；后续换 data/task_location_data.csv 时
 # 只需替换生成函数，本节参数可平移）
-# （2026-10-27 清理：原 tasks.source 键无代码消费，已删——任务是否合成由
+#（清理：原 tasks.source 键无代码消费，已删——任务是否合成由
 #   生成函数与 domain 决定；原 tasks.anchor_to_nests 为遗留别名，仅
 #   domain=nest_anchored 时生效，本实验下不参与，已删）
-# （2026-10-29 重组：撒点域三选一，region 为本实验主口径——任务在
+#（重组：撒点域三选一，region 为本实验主口径——任务在
 #   region_geojson 多边形内均匀撒点，撒点范围由实验者显式给定）
 tasks:
     # 撒点域（domain）三选一：
@@ -60,15 +60,15 @@ tasks:
     region_geojson: region.geojson # 任务撒点区域多边形（广州研究区）
     dem_inset_m: 0.0 # DEM 包络内缩（m）；>0 可避开边缘半像素/插值外推区（仅 domain=dem_extent 生效）
     max_reject_trials: 8 # 落点出多边形时的拒绝采样重试轮数
-    n_tasks: 20 # 第 1 周期到达的初始任务数；后两周期到达 5、5（见 rolling.arrivals），共 30（2026-10-26 用户指定口径）
+    n_tasks: 20 # 第 1 周期到达的初始任务数；后两周期到达 5、5（见 rolling.arrivals），共 30（用户指定口径）
     spread_m: 12000.0 # 相对锚点机巢的散布半径（m）；仅 domain=nest_anchored 生效
-    # ── 时序链（任务执行顺序约束，2026-10-29 落地）──────────────────────
+    # ── 时序链（任务执行顺序约束，落地）──────────────────────
     # 把一部分任务组织成「必须按序执行」的链（业务对应：同一目标的
     # 侦察 → 打击 → 评估）。链内成员空间相邻（种子 + 最近邻），不移动撒点。
     # 判定：同一条航次内，链内序号小的必须先访问，违反 = 硬违约（判废）。
     # 同一链被拆到不同无人机 / 不同周期时**不判违约**（跨机跨周期须按绝对
     # 完成时刻比对，尚未实现——论文引用时须如实声明该口径边界）。
-    # 但调度层另受组原子性约束（2026-11-04 用户裁定）：同一链是不可拆的
+    # 但调度层另受组原子性约束（口径约定）：同一链是不可拆的
     # 调度单元，本周期要么整组一起完成、要么整组一起暂缓，不允许拆到不同
     # 周期分别完成；由滚动层准入/交付/完成闸门保证，不是上式违约判据。
     # 默认 0.0 = 关闭：sequence_group 恒为 None，既有实验基线逐位不变。
@@ -81,7 +81,7 @@ tasks:
     # （不使用周期相关时退回绝对秒数 deadline_min/deadline_max，见 task_scenario.py）。
     # 标定原则：窗口尺度与「典型任务航时」同量级——太紧则时间窗不是筛选而是在
     # 把多数任务判成物理不可能，太松则时间窗失效、失去选择性压力。
-    # 【城关区口径（2026-10-26，当前值）】最大单程 ~12.4 km ≈ 870 s @15 m/s，
+    # 【城关区口径（当前值）】最大单程 ~12.4 km ≈ 870 s @15 m/s，
     #   下界 = (870 s + 服务 300 s) × 1.05 ≈ 1230 s ≈ 2.0 周期；
     #   上界保持 2:1 比例 → 4.0 周期。仍有淘汰 ⇒ 选择性压力保留。
     # 历史多轮标定（大区域时代 + 统一 DEM 三维航程口径重标定）与扫描档位
@@ -89,7 +89,7 @@ tasks:
     deadline_cycles_min: 2.0
     deadline_cycles_max: 4.0
 
-# 技术路线（元信息；2026-10-27 清理：原 method: 段无任何代码消费，已删）：
+# 技术路线（元信息；清理：原 method: 段无任何代码消费，已删）：
 # 选择=边际增益、求解=DMDE、滚动=开启。真正的开关在下方 selection: /
 # muas: / rolling: 各段的对应键（如 muas.decode_mode、selection.marginal）。
 
@@ -110,7 +110,7 @@ selection:
         # 80 km 时代 T105/T119 往返 78.5/77.0 km 单任务航次可服；城关区
         # 20 km 口径下已无此量级航次，1.0 仍取物理上限，语义不变）。
         range_margin: 1.0
-        # 时间窗预筛：默认关闭（2026-10-15 用户原则「任务不被完成只有
+        # 时间窗预筛：默认关闭（用户原则「任务不被完成只有
         # 物理约束被违反」）。迟到是奖励定价问题（适应度按 L/W 折减），
         # 不是参选资格；预筛只拦物理不可达（无机可用/往返超航程）。
         # true = 消融口径（恢复时间窗拒绝，配 late_tolerance_seconds）。
@@ -118,14 +118,14 @@ selection:
         budget_factor: 1.0 # 机群总航程预算系数
         # 消融口径专用（check_time_window=true 时生效）：迟到容忍 W（s）。
         # 0 = 历史口径（直飞到达 > latest 即拒）。
-        # 与 muas.late_reward_decay_seconds 保持同值（2026-10-18 起 1800）。
+        # 与 muas.late_reward_decay_seconds 保持同值（1800）。
         late_tolerance_seconds: 1800.0
     marginal:
         eps: 1.0 # 边际代价地板，与距离同量纲（m）
         max_selected: null # null → 由 max_ratio × K 决定（n_sel = ⌈max_ratio·K⌉）
         max_ratio: 4.0
         min_marginal_ratio: 0.0
-        # Fix① 防饥饿：等待时长对终刀接受判据的乘性软加权（单位无关、有界）。
+        # 防饥饿软加权：等待时长对终刀接受判据的乘性软加权（单位无关、有界）。
         # eff = ratio·(1 + age_gamma·age)，age∈[0,1] 由 waited/wait_scale 得。
         # 与下方 anti_starvation 配合：本项让"刚老了点"的任务在终刀更有机会，
         # 而真正老透/临期的任务由 anti_starvation 强制纳入，保证不停饿。
@@ -142,9 +142,9 @@ selection:
         budget_scale: 1.0 # 预算额外折扣（与 budget_factor 相乘）；<1 给未来紧急任务留余量
         quantile: 0.5 # 粗代价分位数：调低→cap 更宽松，调高→更保守
         min_cap: 1 # cap 下限（保证总能评出一个候选）
-        # Fix③：即便 enabled=false 也按吞吐上界收敛候选规模（默认关，保持消融基线）
+        # 候选规模上界：即便 enabled=false 也按吞吐上界收敛候选规模（默认关，保持消融基线）
         fallback_when_disabled: false
-    # Fix② 硬性不停饿兜底：等待超阈值或逼近 latest 的任务强制纳入候选集
+    # 防饥饿强制：等待超阈值或逼近 latest 的任务强制纳入候选集
     # （绕过 Top-αK 预筛），并在终刀获强优先，保证不无限期推迟。
     anti_starvation:
         enabled: true
@@ -153,29 +153,25 @@ selection:
 
 # ── 第二阶段：选择性多机巢 MUAS（论文 §4-§5）─────────────────────
 muas:
-    # 段内导航（2026-10-27）：①模型开关 ②适应度口径 ③选机/K 决策
+    # 段内导航：①模型开关 ②适应度口径 ③选机/K 决策
     #   ④剔除（当前关闭） ⑤Lamarckian / polish / decode_mode
     #   ⑥覆盖门禁与两段式 ⑦重排期航程优化（默认关） ⑧交付后成本 polish
     #   ⑨memetic（默认关）。消融开关集中在此段，改任何键前先看注释里的
     #   「默认/消融」标注。
     allow_unassigned: true # 允许 y_j = 0（任务保留至下一周期）
     allow_idle_uav: true # 允许 n_u = 0（UAV 本周期空闲）
-    # 适应度口径：覆盖门禁（唯一主口径，2026-10-24）。big_m 仅作为 W_hard/
+    # 适应度口径：覆盖门禁（唯一主口径）。big_m 仅作为 W_hard/
     # W_skip 的推导基数（κ·m·R_pool），不再进 f 的 −m·F1 项；非门禁 big-M
     # 四层路径已从代码移除（见 docs/objective_caliber_two_approaches_archive_2026-10-24.md）。
     # big_m: null → 按问题数据自动推导支配性权重；给数值则显式固定。
-    # lexicographic 字段：非门禁 big-M 四层路径已从代码移除（见
-    # docs/objective_caliber_two_approaches_archive_2026-10-24.md）后，此键的
-    # 唯一残余作用 = 经济剔除的总闸之一（build_solution 的 economic_prune =
-    # prune_unprofitable ∧ ¬coverage_first ∧ ¬lexicographic）。本实验
-    # prune_unprofitable=false ⇒ 此键当前无行为影响；消融用。
-    lexicographic: true
+    # 经济剔除（prune_unprofitable）是消融算子，默认关闭，本实验显式置 false，
+    # 见下方 prune_unprofitable 注释。
     big_m: null
-    # 2026-10-24 用户裁定：1e-2 → 1e-1（本实验口径切换，非全局默认）。
+    # 口径约定：1e-2 → 1e-1（本实验口径切换，非全局默认）。
     lambda_cost: 1.0e-1 # 次目标权重（收益当量/米）；字典序下只裁决收益等价的解
     # λ 扫描结论（experiments/LAMBDA_SCAN_2026-10-22.md，fixed 域 3 seed）：
     #   1e-4 → 1e-2：零完成损失、航程 −1.2%、按时 +1.7pp；
-    #   1e-2 → 1e-1：等完成率下航程 −4.4%、按时 +1.7pp（2026-10-22 记录），
+    # 1e-2 → 1e-1：等完成率下航程 −4.4%、按时 +1.7pp（记录），
     #     但 exp06 积压格配对曾字面触发回退规则 ⇒ 判为敏感性上界而非默认值。
     # ⚠️ 本档为 λ=1e-1 口径，与 1e-2（航程 1672.1±44.1 km / km每完成 27.87）
     # 及更早 1e-4（1693.0±64.4 / 28.22）数据**不可混用**；跨档对比须分列。
@@ -184,9 +180,9 @@ muas:
     # 给数值则惩罚不再乘 λ，直接以「奖励当量 / 惩罚单位」计入适应度。
     # 时间窗违约以秒计，取 0.01~0.02 即「迟到 300 s ≈ 3~6 点奖励」。
     w_violation: 0.01
-    # （2026-10-27 清理：原 muas.w_nest_capacity 键为死字段——巢容量惩罚的
+    #（清理：原 muas.w_nest_capacity 键为死字段——巢容量惩罚的
     #   唯一生效处是 constraints.w_nest_capacity，已删此冗余副本）
-    # ── ②适应度口径（覆盖门禁，唯一主口径，2026-10-24）──────────
+    # ── ②适应度口径（覆盖门禁，唯一主口径）──────────
     # f = W_hard·n_hard + w_exc·excess_m + W_skip·n_skip + w_late·L_tot + λ·path
     #   （固定表述：搜索用 f 不含 −m·F1；F1 只作事后指标）
     #   T0 物理违约（硬）：range/endurance/时序/同步/巢容量/终点不可达/结构。
@@ -200,9 +196,9 @@ muas:
     w_range_excess: null
     hard_violation_kappa: 10.0 # W_hard = κ·m·R_pool 的安全系数
     # 迟到奖励折减容忍 W（s）：晚到任务有效奖励 eff = R × max(0, 1 − L/W)。
-    # 迟到不是废飞（2026-10-15 协议）——晚到仍算完成、计奖励，但按迟到
+    # 迟到不是废飞（协议）——晚到仍算完成、计奖励，但按迟到
     # 时长线性折减，与 w_violation 同向压实「按时服务」。
-    # 【2026-10-18 重新标定】600→1800：实测 12 个迟到任务 145–1475s（中位
+    # 【重新标定】600→1800：实测 12 个迟到任务 145–1475s（中位
     # 838s），W=600 时 7/12 奖励归零（均值保留 27.8%）——与「迟到可以接受」
     # 直接冲突；W=1800 时 0/12 归零、均值保留 61.6%，且 L=1800s 才等价于
     # 丢掉整个任务，「可接受但最好不迟到」的拐点。
@@ -213,7 +209,7 @@ muas:
     # 参与规划的 UAV 上限；null → 自动取 min(K, N-1) 以走 srp 巡游模型
     max_participating_uavs: null
     participating_policy: demand # cheapest | first | marginal | demand
-    # ── Fix④ 需求感知参与（policy=demand）──
+    # ── 需求感知参与（policy=demand）──
     # 贪心最大覆盖选参与机：每架覆盖「代价 ≤ 半径」的选中任务，依次挑覆盖
     # 最多未覆盖任务者，直到全部选中任务被覆盖或达 K 上限。根治 cheapest
     # 把机堆在稠密区、饿死北/西离群稀疏任务（后期 K 收缩致其不可达）。
@@ -222,12 +218,12 @@ muas:
     #                          单任务往返航程 ≤ 剩余航程的保守可达性）
     demand_coverage_radius: null
     demand_range_factor: 0.5
-    # ── Fix⑤ 服务能力感知 provisioning（policy=demand 生效）──
+    # ── 服务能力感知 provisioning（policy=demand 生效）──
     # 最小覆盖后按「航程预算」补机：把过载（最近机往返 > 剩余航程×裕度）任务
     # 剥给最近空闲机，拉入参与，直接救「K 塌缩→远任务未服务」的残余瓶颈。
     demand_provision_serving: true
     demand_serve_margin: 0.95
-    # ── Fix⑥「可达即执行」救援池口径 ──
+    # ──「可达即执行」救援池口径 ──
     # 方法论：任务只要能力可达、不违反约束就应最终被执行，成本最小化是此前提下
     # 的次级目标。「可达」是**存在量化**（∃ 机队中某方案可服务），不是「给定
     # 方案内塞得进」。此前航程修复的改派救援只在参与集内找闲置机，而参与集是按
@@ -263,7 +259,7 @@ muas:
     prune_unprofitable: false # 与「完成是约束」冲突，门禁口径下必须关
     prune_margin: 0.0 # 剔除判据裕度：λ·节省 > R·(1+margin) 才剔除
     prune_max_rounds: 8
-    # 零奖励剔除（2026-10-18 四层适应度配套）：ETA ≥ latest+W 的任务 eff≈0，
+    # 零奖励剔除（四层适应度配套）：ETA ≥ latest+W 的任务 eff≈0，
     # 带着飞只赔迟到惩罚（T2）却按完成计——暂缓把机会留给下周期。字典序下
     # prune_unprofitable 整体关闭（丢正收益任务必降 F1），但零奖励任务不降
     # F1，剔除是严格改进。仅 late_reward_decay_seconds>0 时生效。
@@ -281,7 +277,7 @@ muas:
     # 可行子空间展开。关闭则退化为围绕未修复空间搜索。
     # 注：终点机巢不进编码（方案 A），由解码后内层最小费用流精确求解。
     lamarckian: true
-    # 解码后局部搜索 polish（2026-10-19）：DMDE 收敛后对 best_assignment 做
+    # 解码后局部搜索 polish：DMDE 收敛后对 best_assignment 做
     # relocate / swap / 插入位局部搜索，每个候选都过**同一** build_solution
     # 修复链（evaluator.evaluate），仅严格改进（< 当前 − eps）才接受。
     # 治「收敛曲线第 3 代躺平」的两个根因：① big-M 阶梯适应度下差分算子对
@@ -296,7 +292,7 @@ muas:
     polish_max_rounds: 30 # 无改进即停的轮数上限
     polish_max_evals: 2000 # 真实评估数预算（缓存命中不计；防单周期耗时爆炸）
     polish_eps: 1.0e-6 # 严格改进阈值（绝对；吸收浮点求和噪声）
-    # 解码模式（exp04 B1 对照臂，2026-10-21）：
+    # 解码模式（exp04 B1 对照臂）：
     #   repair_chain（默认，生产口径）= 现状反应式修复链（合并→删→救→重排→
     #     删→闸）；exp01/exp02 既有结果 bit-exact 不变。
     #   constructive = 构造式解码：把「救援」前置为主解码（逐任务可行性内联
@@ -304,26 +300,26 @@ muas:
     #     ≤3 轮小迭代）。仅 exp04 消融显式开启，A/B 后再定是否转正。
     # 详见 experiments/exp04_ablation/notes.md 的 B1 节（三条红线）。
     decode_mode: repair_chain # repair_chain | constructive
-    # ── 覆盖门禁（2026-10-22 落地；2026-10-24 定为唯一主口径）──────────
+    # ── 覆盖门禁（落地；定为唯一主口径）──────────
     # 目标口径是「完成是约束、成本是目标」，门禁即把该约束写成**构造性合法
-    # 条件**（非 big-M 软目标）。两个开关语义不同、但 2026-10-24 起一并开启
+    # 条件**（非 big-M 软目标）。两个开关语义不同、但一并开启
     # 即完整门禁口径（非门禁 big-M 四层路径已从代码移除，见
     # docs/objective_caliber_two_approaches_archive_2026-10-24.md）：
     #   coverage_gate          = 终态构造性修复（能救必救，skip 构造归零）
-    #   lexicographic_coverage = W_skip 罚层 + 审计分账（门禁口径的防御/对账层）
+    #   coverage_audit         = W_skip 罚层 + 审计分账（门禁口径的防御/对账层）
     # 门禁口径下 f 去掉 −m·F1（F1 退为事后指标，砍迟到折减），主适应度只剩
     # f = W_hard·n_hard + w_exc·excess_m + W_skip·n_skip + w_late·L + λ·path。
     coverage_gate: true
     coverage_gate_max_rounds: 8
-    lexicographic_coverage: true
+    coverage_audit: true
     w_skip_violation: null
-    # 覆盖优先两段式解码（2026-10-23 用户裁定）：先装到最大可行集（EDD 不动点），
+    # 覆盖优先两段式解码（口径约定）：先装到最大可行集（EDD 不动点），
     # 再在不减少已装集合的约束下做成本 polish。当前生产未启用（待与门禁联调）。
     coverage_first: false
     coverage_first_max_rounds: 4
     monotone_polish_max_rounds: 30
     monotone_polish_eps: 1.0e-6
-    # ── 重排期航程优化（2026-10-24 修复，默认开）───────────────────────
+    # ── 重排期航程优化（修复，默认开）───────────────────────
     # _best_order 的候选判据是 (迟到数, 迟到量, 航程) 字典序，航程排第 3；
     # 原早退「原序零迟到 → 直接返回原序」使航程**永远进不了比较**，而 exp01
     # 各周期 final_late_s 常态为 0 ⇒ 航程从未被优化。实测 polish 增益 100%
@@ -334,7 +330,7 @@ muas:
     # 语义 = **覆盖优先、成本随后**：执行集不变（F1 不动）、不引入迟到、
     # 不超剩余航程，纯成本改进 ⇒ 不触碰主适应度阶梯，可与任意口径叠加。
     #
-    # ⚠️ 实测结论（2026-10-24，λ=1e-1 3 seed A/B）：**默认关闭**。
+    # ⚠️ 实测结论（λ=1e-1 3 seed A/B）：**默认关闭**。
     #   冒烟档（pop20/gen20 单周期）航程 −16.7% 看似有效，但正式档
     #   （pop50/gen100）主周期 km/任务 27.04 → 27.03 **持平**，且非空周期
     #   10 → 13（多 3 个 1~2 任务的尾巴周期）⇒ 总航程 +4.0%、按时率
@@ -345,7 +341,7 @@ muas:
     # true = 开启（**当前为负优化，仅供对照/复现**）。
     reorder_range_optimize: false
     reorder_range_eps: 1.0 # 采纳航程改进的严格阈值（米，绝对）
-    # ── 交付后成本 polish（2026-10-24 用户裁定，诊断报告 §9 排序 1+2）────
+    # ── 交付后成本 polish（口径约定，诊断报告 §9 排序 1+2）────
     # DMDE 收敛、交付解确定后，对**交付解本身**做组内 2-opt（段反转）/
     # Or-opt（段长 1~3 迁移）纯成本重排。这是「路径优化不足」的正确解法：
     #   · 作用对象是交付解而非解码期——访问顺序本就是 DE 编码的一部分
@@ -360,7 +356,7 @@ muas:
     cost_polish_enabled: true
     cost_polish_max_rounds: 30 # 整轮无改进即停（first-improvement 重启扫描）
     cost_polish_eps: 1.0 # 采纳阈值（米，绝对；吸收浮点求和噪声）
-    # ── 跨机指派成本 polish（2026-10-24 用户裁定，组内维度钉死后的转向）──
+    # ── 跨机指派成本 polish（口径约定，组内维度钉死后的转向）──
     # 组内 2-opt/Or-opt 3 seed A/B 已钉死顺序维度穷尽（63 周期解 3 次接受、
     # 2262 m ≈ 0.014%）⇒ 转归属维度：单任务跨机改派（受体含可用但空闲的
     # 机），四道门同组内口径（两侧航程 / 两侧迟到 / 执行集由构造保持 /
@@ -369,7 +365,7 @@ muas:
     cost_polish_relocate_enabled: true
     # ⚠️ prune_unprofitable 与「完成是约束」冲突（会主动丢可完成任务换成本）；
     # 门禁/覆盖优先口径下必须关（见 muas.prune_unprofitable 处注释）。
-    # memetic M1 精英档案（2026-10-19）：开启后每 memetic_K 代在 DE 进化
+    # memetic M1 精英档案：开启后每 memetic_K 代在 DE 进化
     # 循环内对当代精英跑一次 polish，维护 best-polished 档案，把路由改进
     # 前移进搜索期（治 DMDE 早平后路由优化留到收敛后）。不改基因型、无
     # 反映射；交付解取「收敛后 polish」与「档案最优」的更优者。默认关
@@ -385,7 +381,7 @@ muas:
 # 论文口径取舍（例如「本模型暂不纳入交付时间窗」只需把 time_window 改 false）。
 # 与 selection.feasibility.check_time_window 联动：关闭 time_window 时，
 # 第一阶段的时间窗预筛同步关闭，保证两阶段口径一致。
-# （2026-10-27 清理：巢容量惩罚权重的唯一生效处是下方 w_nest_capacity——
+#（清理：巢容量惩罚权重的唯一生效处是下方 w_nest_capacity——
 #  原 muas.w_nest_capacity 冗余副本已删）
 constraints:
     # 结构类
@@ -417,14 +413,14 @@ constraints:
 # ── DMDE 求解器超参（论文 §5 算法 3.1）────────────────────────────
 solver:
     population: 50 # pop_size（默认：论文实验配置）
-    # max_generations：主口径 **200**（2026-10-28 由 100 上调；500 代仍作敏感性对照上限）。
+    # max_generations：主口径 **200**（由 100 上调；500 代仍作敏感性对照上限）。
     #   为什么不是 500：T9 诊断证明 miss 是编码顺序的人为依赖（SRP 反映射锁
     #   归属 + Lamarckian 只回写起始基因 ⇒ 归属逐代复现），与搜索预算无关；
-    #   100/500 代对照中 100 代占优（500 代收益不稳且单周期耗时约 ×5）；2026-10-28 用户裁定主口径上调至 200（折中探索预算）。
-    #   2026-10-28 三种子对照（seed 42/43/44，smoke 规模；一次性对照脚本已随 git 历史归档）：
+    # 100/500 代对照中 100 代占优（500 代收益不稳且单周期耗时约 ×5）；口径约定主口径上调至 200（折中探索预算）。
+    #   三种子对照（seed 42/43/44，smoke 规模；一次性对照脚本已随 git 历史归档）：
     #   按时率 Δ(200-100) = +16.0pp / 0.0pp / +7.1pp（均值 +7.71pp），航程均值 -3.85%，
     #   墙钟 ×1.90；配对 t 检验（df=2）按时率 t=+1.667、航程 t=-0.941 均**不显著**，
-    #   仅墙钟 t=+7.062 显著 ⇒ 增益方向为正但与噪声不可区分，用户裁定仍**保持 200**。
+    #   仅墙钟 t=+7.062 显著 ⇒ 增益方向为正但与噪声不可区分，口径仍**保持 200**。
     #   机理注记：max_iter 同时是 CR/温度调度分母 S，故 200 代不是「同轨迹延长」，
     #   而是退火更慢的另一条搜索轨迹（gen200@gen100 ≠ gen100 终值），增益不稳定属预期。
     # ⚠️ 论文口径提示：CR 与温度调度都以 S 为分母，S 从原文的 1000 压到 200
@@ -436,7 +432,7 @@ solver:
     # 灭绝门限 δ：留空 = 论文公式 3-12 原式 GMR = 1 - CR（不加门限）。
     # 填一个数值（如 0.3）则附加工程门限 CR>=δ 时不灭绝，把重置推迟到后期。
     delta: null
-    # （2026-10-27 清理：原 solver.seed 键为冗余——run.py 逐 seed 覆盖
+    #（清理：原 solver.seed 键为冗余——run.py 逐 seed 覆盖
     #   solver.seed = experiment.seeds[i]；直接装配时也回退到 experiment.seed）
     verbose: false
     log_interval: 10
@@ -456,15 +452,15 @@ cost:
 
 # ── 动态滚动闭环（论文 §6）───────────────────────────────────────
 rolling:
-    # （2026-10-27 清理：原 enabled: 键无代码消费，已删——滚动闭环是本实验的
+    #（清理：原 enabled: 键无代码消费，已删——滚动闭环是本实验的
     #   唯一运行形态；周期数由 n_cycles 硬安全上限 + 池空自然收敛早停控制）
-    # 长程吞吐协议（2026-10-14 用户定）：完成率不是目标，周期可无限延长，
+    # 长程吞吐协议（用户定）：完成率不是目标，周期可无限延长，
     # 真实目标 = 持续到达下「尽可能多且正确地完成任务」。3 周期窗口的完成率
     # 只是窗口长度产物，无区分度；多周期 + Poisson 到达流下，吞吐 / 正确
     # 执行率 / 违约交付（废飞）/ 淘汰（须为 0）才有统计意义。
-    # 【2026-10-22 用户裁定：本实验保持 fixed 冒烟口径】初始 20 + 周期 2/3 各
-    # 5/5（共 30 个任务，2026-10-26 用户调整为 20/5/5），周期 4 起无新到达，靠
-    # 「池空」自然收敛早停：当前代码（2026-11-04 裁定口径）实测 3 seed 均于
+    # 【口径约定：本实验保持 fixed 冒烟口径】初始 20 + 周期 2/3 各
+    # 5/5（共 30 个任务，用户调整为 20/5/5），周期 4 起无新到达，靠
+    # 「池空」自然收敛早停：当前代码（口径约定）实测 3 seed 均于
     # **周期 4** 自然收敛（20/5/5 到达→周期 1-3 全执行、周期 4 池空停机，
     # stop_reason=pool_empty）；旧稳态口径（池大小连续不变 patience=4）历史记录
     # 约 7 周期，新口径提前停机、不可直接引用旧值。
@@ -493,7 +489,7 @@ rolling:
         # poisson 口径参考（长程吞吐实验用，非本实验默认）：
         # mode: poisson
         # lambda: 5.0
-    # 收敛早停（2026-11-04 用户裁定口径）：主判据是「池空」——到达全部注入后，
+    # 收敛早停（口径约定）：主判据是「池空」——到达全部注入后，
     # 池内不存在「能被完成却没被完成」的任务即自然收敛停机
     # （stop_reason=pool_empty）；静态几何不可达已出池，服务暂缓任务仍在池中
     # 等待条件恢复唤醒，故池非空时持续推进（「没服务，只要能服务，迟早被服务」）。
@@ -501,7 +497,7 @@ rolling:
     # 零进展（无完成/唤醒/新暂缓/新出池且池大小不变）才提前停
     # （stop_reason=no_progress，属非自然收敛，须与 n_dormant_end 等单列指标并读）。
     # 兜底只覆盖无服务暂缓任务的僵死池（如能力短缺反复装不下）；服务暂缓任务
-    # 在池时兜底禁用，由 n_cycles 硬上限止损（2026-11-05 审查 M1 如实化）。
+    # 在池时兜底禁用，由 n_cycles 硬上限止损（审查 M1 如实化）。
     # n_cycles 仅为硬安全上限，不是主停机条件。
     stop_when_stable:
         enabled: true

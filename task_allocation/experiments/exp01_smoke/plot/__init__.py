@@ -53,7 +53,7 @@ import re
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
-# 包内导入一律用单点相对（2026-10-23 修正）：此前被批量替换脚本误改成
+# 包内导入一律用单点相对（修正）：此前被批量替换脚本误改成
 # `from ...plot import ...`（三点），按本包实际层级恒解析不到目标模块，
 # 且以顶层 `plot` 身份导入时直接抛 "attempted relative import beyond
 # top-level package" —— 任何一次出图都会 ImportError（run.py 的出图环节）。
@@ -153,7 +153,7 @@ def _trim_cycles_for_plot(
     metrics: dict[str, Any],
     solution: dict[str, Any],
 ) -> tuple[dict[str, Any], dict[str, Any], int]:
-    """把**绘图视图**的周期轴裁到「最后一个有活动周期」（2026-11-05 用户裁定）。
+    """把**绘图视图**的周期轴裁到「最后一个有活动周期」（口径约定）。
 
     「哪周期结束就绘制到哪个周期；不要绘制空周期了」：滚动时域收敛判定会产生
     零出动的空周期（新「池空」判据下为末周期；旧稳态 patience 兜底下为末尾
@@ -233,7 +233,7 @@ def make_plots(
     figures = resolve(names=names, groups=groups)
     if not figures:
         # 空图集曾静默返回：分组名写错 / 图 id 拼错都表现为「什么都没出」而
-        # 无任何提示（2026-10-24：--group scene 是无效分层名，resolve 抛
+        # 无任何提示（：--group scene 是无效分层名，resolve 抛
         # ValueError 才暴露；但拼错单个图 id 时仍会静默 0 张）。
         print(f"[plot] 警告：图集为空（names={list(names) if names else None} "
               f"groups={list(groups) if groups else None}）——请核对图 id / 分层名")
@@ -243,7 +243,7 @@ def make_plots(
     out_dir.mkdir(parents=True, exist_ok=True)
     font = setup_style()
 
-    # 2026-11-05：绘图周期轴裁到最后一个有活动周期，不绘制收敛空周期。
+    #：绘图周期轴裁到最后一个有活动周期，不绘制收敛空周期。
     # 只作用于绘图视图（浅拷贝），落盘 json 保持完整；见 _trim_cycles_for_plot。
     metrics, solution, n_trim = _trim_cycles_for_plot(metrics, solution)
     if n_trim:

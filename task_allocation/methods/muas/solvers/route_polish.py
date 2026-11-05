@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """route_polish.py — 交付解成本 polish 算子组（``RoutePolishMixin``）。
 
-2026-10-27 自 ``muas_stage.py`` 拆出。三组算子 + 两个编排入口：
+自 ``muas_stage.py`` 拆出。三组算子 + 两个编排入口：
 
 - :func:`_polish_routes_monotone`  覆盖优先口径的单调成本 polish（relocate/调序）
 - :func:`_cost_polish_routes`      组内 2-opt / Or-opt（顺序维度）
@@ -13,7 +13,7 @@
 （不制造新违约、不加深旧违约）、执行集门（覆盖只增不减）、
 成本门（严格下降 > eps）。全程无随机，同输入逐位可复现。
 
-时序交叉（2026-10-30）：``sequence_group`` 激活时另加两道保守门——
+时序交叉：``sequence_group`` 激活时另加两道保守门——
 顺序维度算子加**时序门**（候选同链逆序对不得多于基线，杜绝调序破坏
 ``sequence_order`` 的硬违约）；跨机改派对**链成员整体禁迁**
 （``blocked_seq`` 计数）——跨机顺序比对口径尚未实现（constraints 只判
@@ -42,7 +42,7 @@ class RoutePolishMixin:
     ) -> tuple[dict[int, list[int]], dict[int, int | None], dict[str, int]]:
         """单调成本 polish：跨机 relocate / 调序，**覆盖只增不减**。
 
-        用户 2026-10-23 裁定（解码/repair 第二段）：覆盖优先装载之后，
+        口径约定（解码/repair 第二段）：覆盖优先装载之后，
         成本 polish 必须在不减少已装集合（不增加 shortfall）的约束下
         进行。relocate / 调序移动本身不卸任务（任务集由移动结构保持），
         候选仍须过四道门：
@@ -72,7 +72,7 @@ class RoutePolishMixin:
             return self._tour_cost(uid, tids, ends.get(uid))
 
         def arrivals_of(uid: int, tids: Sequence[int]) -> list[float]:
-            # 2026-10-27 去重：原地一份逐位等价的拷贝已删，统一走 tour_cost
+            # 去重：原地一份逐位等价的拷贝已删，统一走 tour_cost
             # 的 _eta_list（口径唯一，防两处实现漂移；测试锁逐位相等）。
             return self._eta_list(uid, tids)
 
@@ -180,7 +180,7 @@ class RoutePolishMixin:
            不制造新违约、不加深旧违约（⇒ ``soft_violation`` 不增）；
         3. **执行集门**：置换由构造保持任务集（采纳端再复核）；
         4. **成本门**：航程严格下降 > ``cost_polish_eps`` 才采纳；
-        5. **时序门**（2026-10-30）：候选同链逆序对不得多于基线——2-opt 反转/
+        5. **时序门**：候选同链逆序对不得多于基线——2-opt 反转/
            Or-opt 迁移可能破坏 ``sequence_order``，此前缺门会把硬违约当
            “改进”收进来（``sequence_group`` 全空时恒过 ⇒ 零行为变化）。
 
@@ -275,7 +275,7 @@ class RoutePolishMixin:
         routes: Mapping[int, Sequence[int]],
         end_nests: Mapping[int, int | None],
     ) -> tuple[dict[int, list[int]], dict[int, int | None], dict[str, int]]:
-        """交付解的**跨机单任务改派**成本 polish（归属维度，2026-10-24）。
+        """交付解的**跨机单任务改派**成本 polish（归属维度）。
 
         组内 2-opt/Or-opt（:meth:`_cost_polish_routes`）只改访问顺序；
         本算子改**归属**：把单任务从供体机 ``src`` 迁到受体机 ``dst``
@@ -295,7 +295,7 @@ class RoutePolishMixin:
            不制造新违约、不加深旧违约（⇒ ``soft_violation`` 不增）；
         3. **执行集门**：改派保持任务集（采纳端再以 executed ⊇ 旧解复核）；
         4. **成本门**：Δ < −``cost_polish_eps`` 才采纳；
-        5. **时序门（保守）**（2026-10-30）：``sequence_group`` 非空的链成员
+        5. **时序门（保守）**：``sequence_group`` 非空的链成员
            禁止跨机迁移（``blocked_seq`` 计数）——跨机顺序比对口径未实现，
            拆链即进入无人判的盲区；待跨机口径落地后放开。
 
@@ -431,7 +431,7 @@ class RoutePolishMixin:
            改末任务会改插入代价，两维度有二阶交互）；
         4. 全零接受 ⇒ 原样返回（逐位不变，零开销）；
         5. 有改进 ⇒ 与 :meth:`build_solution` 终态同序的下游联合重解：
-           重排（时间窗）→ **时序修复**（2026-10-30 补齐：重排候选按迟到/
+           重排（时间窗）→ **时序修复**（补齐：重排候选按迟到/
            航程挑序，对链序是盲的，原缺此段）→ 航程闸 → 终点巢精确重解
            （改序/改派会改末任务 ⇒ 返航腿与巢容量竞争都变）→ 航程闸 →
            逆序兜底 → 重装配。
@@ -470,7 +470,7 @@ class RoutePolishMixin:
         # ⇒ 返航腿/终点巢竞争变，必须重选终点巢再闸一次航程，否则交付解
         # 的 path_cost 口径与 polish 内的估价脱节。
         routes = self._reorder_for_deadlines(routes)
-        # 时序交叉（2026-10-30）：重排对链序是盲的，与 build_solution 终态
+        # 时序交叉：重排对链序是盲的，与 build_solution 终态
         # 同段补时序修复；末尾再挂逆序兜底（同其终态 _sequence_fix 口径）。
         routes = self._repair_sequence(routes)
         routes, ends = self._repair_range(routes, ends)
@@ -530,7 +530,7 @@ class RoutePolishMixin:
                 max_rounds=int(getattr(self.config, "coverage_gate_max_rounds", 8)),
             )
             gate_stats = gs.to_dict()
-        elif bool(getattr(self.problem.config, "lexicographic_coverage", False)):
+        elif bool(getattr(self.problem.config, "coverage_audit", False)):
             gate_stats = audit_coverage(self.problem, routes, ends).to_dict()
         sol = self._assemble(routes, ends)
         if gate_stats is not None:

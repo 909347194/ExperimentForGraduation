@@ -153,7 +153,7 @@ def aggregate(cfg: dict) -> None:
                         "lambda_cost": lc, "seed": seed,
                         "n_arrived": s.get("n_arrived"),
                         "n_completed": s.get("n_completed"),
-                        # 2026-10-24：exp01 删除 naive completion_rate / 池化
+                        #：exp01 删除 naive completion_rate / 池化
                         # on_time_rate（A1/A2）⇒ 完成率取 final 口径、按时率
                         # 取交付集条件率，与论文主表同源
                         "completion_rate_final": s.get("completion_rate_final"),
@@ -220,7 +220,7 @@ def aggregate(cfg: dict) -> None:
     L.append("> 归因注记：若「完成/配额」接近跑满（≥90%）而完成率仍 <1，未完成根因为"
              "**产能饿死**（到达率 > 选择名额 ⌈max_ratio·K⌉），非适应度用成本换覆盖"
              "（λ·path 仍仅 m·F1 的 ~1e-3）。\n")
-    # 积压格按 λ_cost 配对比较（用户 2026-10-22 判定规则的精化版）
+    # 积压格按 λ_cost 配对比较（判定规则的精化版）
     hi = cfg.get("criteria", {}).get("h1_backlog", {}).get("arrival_lambda")
     L.append("## 3. λ_cost 配对比较（同到达率下 1e-1 vs 1e-4）\n")
     L.append("判据（预注册 paired_lambda_rule）：λ=1e-1 完成率不低于 λ=1e-4 且淘汰不增 "

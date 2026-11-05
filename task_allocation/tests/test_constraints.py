@@ -119,7 +119,7 @@ def test_check_feasible_window_violation():
         tours=[tour], candidate_task_ids=[0], executed_task_ids=[0]
     )
     ok, details = prob.check_feasible(sol)
-    # 2026-10-18 硬/软分桶：时间窗迟到是软违约——物理可行（ok=True），
+    # 硬/软分桶：时间窗迟到是软违约——物理可行（ok=True），
     # 迟到量经 violations / penalty / soft_violation 记录，由 T2 层计价。
     assert ok is True
     assert "tw_task_0" in details["violations"]

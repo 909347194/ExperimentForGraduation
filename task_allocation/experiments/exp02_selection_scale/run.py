@@ -246,7 +246,6 @@ def main(argv: list[str] | None = None) -> int:
             None if m.get("w_violation") is None else float(m["w_violation"])
         ),
         w_nest_capacity=float(m.get("w_nest_capacity", 1.0)),
-        lexicographic=bool(m.get("lexicographic", True)),
         big_m=(None if m.get("big_m") is None else float(m["big_m"])),
         late_reward_decay_seconds=(
             None if m.get("late_reward_decay_seconds") is None
@@ -257,8 +256,10 @@ def main(argv: list[str] | None = None) -> int:
             else float(m["w_hard_violation"])
         ),
         hard_violation_kappa=float(m.get("hard_violation_kappa", 10.0)),
-        # 覆盖门禁两层适应度：默认关，行为逐位不变
-        lexicographic_coverage=bool(m.get("lexicographic_coverage", False)),
+        # 覆盖门禁审计分账开关；兼容旧 yaml 键 lexicographic_coverage
+        coverage_audit=bool(
+            m.get("coverage_audit", m.get("lexicographic_coverage", False))
+        ),
         w_skip_violation=(
             None if m.get("w_skip_violation") is None
             else float(m["w_skip_violation"])

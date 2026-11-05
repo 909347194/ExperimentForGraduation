@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass, field
 from typing import Any, Mapping
 
@@ -85,7 +86,7 @@ class MUASProblemConfig:
     # 取 0.01~0.02 意味着「迟到 300 s ≈ 3~6 点奖励」，足以抵消单任务收益。
     # None = 沿用历史口径 λ·w_penalty（保持旧行为与既有测试不变）。
     w_violation: float | None = None
-    # ── 2026-10-18 四层准字典序：硬违约（物理）的支配权重 ──────────────
+    # ── 四层准字典序：硬违约（物理）的支配权重 ──────────────
     # T0 层 ``W_hard·n_hard + w_exc·excess_m``：任何一次物理违约（航程超限/
     # 续航/时序/同步/机巢容量/终点不可达/结构）压倒任意交付收益，杜绝「纸面
     # 可行、执行弹回」的幽灵 F1——旧口径 misc×1e3×wv 的量级压不住单任务收益。
@@ -108,34 +109,62 @@ class MUASProblemConfig:
     # ----双目标的单标量化口径（评价规则，方案 B 主线）------------------
     # big_m=None → 按问题数据自动推导（1 + 次目标上界 / 最小正收益）；
     #   big_m>0 → 显式给定（测试/消融用）。
-    # 注：big_m 在门禁口径（唯一主口径，2026-10-24）下**只**作为 W_hard/
-    #   W_skip 的推导基数（κ·m·R_pool），不再进 f 的 −m·F1 项。
-    # lexicographic 字段为**历史遗留、已失效**：曾用于切换「字典序 / 历史
-    # 加权和」两种评价路径，门禁口径落地后该路径已从代码移除（见
-    # docs/objective_caliber_two_approaches_archive_2026-10-24.md）。保留仅为
-    # 向后兼容 yaml；设任何值均不改变行为。
-    lexicographic: bool = True
+    # 注：big_m 在门禁口径下**只**作为 W_hard / W_skip 的推导基数
+    # （κ·m·R_pool），不再进 f 的 −m·F1 项。
     big_m: float | None = None
     default_service_time: float = 0.0
     # 迟到奖励折减容忍 W（秒）：晚到任务的有效奖励
     # ``eff = R × max(0, 1 − L/W)``（L = 迟到秒数）。迟到不是废飞
-    # （2026-10-15 协议）：晚到仍算完成并计奖励，但按迟到时长线性折减，
+    # （协议）：晚到仍算完成并计奖励，但按迟到时长线性折减，
     # 与 w_violation 的秒级惩罚同向压实「按时服务」。
     # None / <=0 = 关闭折减（历史口径：F1 全额，迟到只经 w_violation 计价）。
     late_reward_decay_seconds: float | None = None
-    # ── 2026-10-22 覆盖门禁（coverage gate）两层适应度 ───────────────
+    # ── 覆盖门禁（coverage gate）两层适应度 ─────────────────────────
     # True：合法解 = 物理硬约束 + 覆盖门禁（S 内无 voluntary_skip）；
     # f 在 T0 与 T1 之间加 W_skip·n_voluntary_skip 层；
-    # **搜索用 f 不含 −m·F1，F1 只作事后指标**（纯完成计数：砍迟到折减，
-    # 迟到单一定价走 w_late·L，消双计）；
-    # _secondary_upper_bound 拆 1e6 虚构帽、换推导帽。
-    # 注：stage 层 coverage_gate=True（终态构造性修复）也会进入同一口径
-    # ——判据见 SelectiveMUASProblem.gate_mode（meta 带 gate_stats）。
-    # 2026-10-24 起恒为 True：覆盖门禁为唯一主口径，非门禁（big-M 四层
-    # ``−m·F1``）路径已从代码移除。保留字段仅为向后兼容 yaml，不再切换口径。
-    lexicographic_coverage: bool = True
+    # **搜索用 f 不含 −m·F1，F1 只作事后指标**（纯完成计数，砍迟到折减，
+    # 迟到单一定价走 w_late·L，消双计）。
+    # 注：本字段是覆盖门禁的 W_skip 罚层 / 审计分账开关，**不是字典序口径**；
+    # 旧名 ``lexicographic_coverage`` 已废弃，由文末同名 property 垫片兼容。
+    coverage_audit: bool = True
     # W_skip 显式权重；None = 自动同 W_hard（κ·m·R_pool）。
     w_skip_violation: float | None = None
     # 本周期的规划时刻：时间窗游标从它起算，而不是从 0
     # （滚动时域下任务 latest 是绝对时刻，游标起点必须跟着周期走）
     current_time: float = 0.0
+
+    # ── 向后兼容垫片（deprecated）────────────────────────────────────
+    # 旧名仅为兼容历史 yaml / 外部读写，不再承载任何独立语义；后续版本移除。
+    @property
+    def lexicographic_coverage(self) -> bool:
+        warnings.warn(
+            "MUASProblemConfig.lexicographic_coverage 已更名为 coverage_audit；"
+            "旧名将在后续版本移除。",
+            DeprecationWarning, stacklevel=2,
+        )
+        return self.coverage_audit
+
+    @lexicographic_coverage.setter
+    def lexicographic_coverage(self, value: bool) -> None:
+        warnings.warn(
+            "MUASProblemConfig.lexicographic_coverage 已更名为 coverage_audit；"
+            "旧名将在后续版本移除。",
+            DeprecationWarning, stacklevel=2,
+        )
+        self.coverage_audit = bool(value)
+
+    @property
+    def lexicographic(self) -> bool:
+        warnings.warn(
+            "MUASProblemConfig.lexicographic 已失效并移除（该开关从不改变行为）；"
+            "读取恒返回 True。",
+            DeprecationWarning, stacklevel=2,
+        )
+        return True
+
+    @lexicographic.setter
+    def lexicographic(self, value: bool) -> None:
+        warnings.warn(
+            "MUASProblemConfig.lexicographic 已失效并移除（设值不改变行为）。",
+            DeprecationWarning, stacklevel=2,
+        )

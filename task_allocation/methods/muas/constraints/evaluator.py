@@ -7,7 +7,7 @@
     * ``violations``（违规标签列表）与 ``penalty``（标量惩罚）强一致——
       ``total_violation`` 为全部违背量之和；
     * ``is_feasible`` 恒等价于 ``n_hard == 0``（物理可行；迟到是软违约，
-      不判不可行，2026-10-18 硬/软分桶）；
+      不判不可行，硬/软分桶）；
     * 各约束分量可独立归因（:meth:`ConstraintReport.violation_breakdown`）；
     * :meth:`ConstraintReport.as_details` 透出
       ``{violations, penalty, nest_capacity}``，供滚动层 (horizon) 与指标
@@ -30,7 +30,7 @@ class ConstraintReport:
     各分量量纲不同（航程=米、时间=秒、时序=逆序对个数），仅用于惩罚项与
     「违背量/代价」比率，**不可按物理量单独解读**（同参考项目约定）。
 
-    2026-10-18 四层适应度：违约分**硬**（物理不可行：航程/续航/时序/同步/
+    四层适应度：违约分**硬**（物理不可行：航程/续航/时序/同步/
     机巢容量/终点不可达/结构）与**软**（时间窗迟到秒数）两桶——
       * 硬违约进适应度 T0 层，权重 W_hard=κ·m·R_pool（真 big-M）：任何一次
         物理违约压倒任意交付收益，杜绝「纸面可行、执行弹回」的幽灵 F1；
@@ -50,7 +50,7 @@ class ConstraintReport:
     nest_capacity: dict = field(default_factory=dict)
     violations: list[str] = field(default_factory=list)
     # 每任务迟到秒数（tw_task_* 的任务级归因值）：供 F1 奖励折减与
-    # 滚动层记录「迟到交付」（2026-10-15 协议：迟到不是废飞）。
+    # 滚动层记录「迟到交付」（协议：迟到不是废飞）。
     lateness: dict = field(default_factory=dict)
     # 硬违约（物理）：标签列表 + 违约量合计 + 航程超限米数（层内 tie-break）
     hard_tags: list[str] = field(default_factory=list)
@@ -104,7 +104,7 @@ class ConstraintReport:
     def add_seq(self, tags: str | list[str], amount: float) -> None:
         """累加时序违约（进硬桶）。
 
-        2026-10-29 修复：调用方 ``feasibility.check_solution_feasibility``
+        修复：调用方 ``feasibility.check_solution_feasibility``
         传的是**标签列表**（与 add_window / add_sync 同风格），而旧实现按
         单个字符串 ``append`` ⇒ ``violations`` 变成嵌套列表
         ``[['seq_group_7']]``，下游（horizon 按标签前缀归因）解析不到。
@@ -180,7 +180,7 @@ class ConstraintReport:
             "penalty": float(self.total_violation),
             "nest_capacity": self.nest_capacity,
             "lateness": dict(self.lateness),
-            # 2026-10-18 硬/软分解（四层适应度消费；老键保持不变）
+            # 硬/软分解（四层适应度消费；老键保持不变）
             "hard_violation": float(self.hard_violation),
             "soft_violation": float(self.soft_violation),
             "n_hard": int(self.n_hard),

@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-"""exp01 指标汇总口径（2026-10-16 审查 I1/I2/I3/I4；2026-10-24 审查 A1/A2/A3/B1/B2/D）的聚焦测试。
+"""exp01 指标汇总口径（审查 I1/I2/I3/I4；审查 A1/A2/A3/B1/B2/D）的聚焦测试。
 
 背景（审查实证，详见 ``docs/review_exp01_20261016.md``）：
 
   I1  ``correct_exec_rate`` 把空转周期记 0 再平均 → 0.423（真实 0.846），
       与同摘要的出动池化正确执行率互相矛盾；且 ``zip`` 注释在列表变短后
       会把周期行与正确率配错位。修复：空转周期不入均值、按 cycle 键控注释。
-      （该出动池化键 ``on_time_rate`` 已于 2026-10-24 A2 删除，正确执行率
+      （该出动池化键 ``on_time_rate`` 已于 A2 删除，正确执行率
       只保留逐周期均值 ``correct_exec_rate`` 与交付集条件率
       ``on_time_rate_final`` 两个口径。）
   I2  ``cycle_feasible_rate`` 把无解周期当 ``feasible=False`` → 1/8（真实 1/4）。
@@ -117,7 +117,6 @@ def _facts(records, tasks, completed, w_penalty=1.0, decay_w=600.0, arrivals=Non
         problem={"uav_speed": 15.0, "uav_max_range": 80000.0},
         solver=SimpleNamespace(pop_size=50, max_generations=100),
         problem_model=SimpleNamespace(
-            lexicographic=True,
             constraints=SimpleNamespace(time_window=True),
             w_penalty=w_penalty,
             late_reward_decay_seconds=decay_w,
@@ -230,7 +229,7 @@ def test_zero_reward_delivery_accounting():
     ]
     m = exp01_metrics.build_metrics(_facts(records, tasks, tasks, decay_w=600.0))
     s = m["summary"]
-    # A1（2026-10-24）：naive 完成率键已删，完成率只报 final 口径
+    # A1：naive 完成率键已删，完成率只报 final 口径
     assert s["n_completed"] == 2 and abs(s["completion_rate_final"] - 1.0) < 1e-9, s
     assert s["n_zero_reward_delivery"] == 1, s
     assert abs(s["effective_completion_rate"] - 0.5) < 1e-9, s   # 1/2 有效
@@ -253,11 +252,11 @@ def test_zero_reward_accounting_disabled_decay():
 
 
 # ---------------------------------------------------------------------------
-# v2 指标体系（2026-10-22）：主表 / 过程 / 方法诊断
+# v2 指标体系：主表 / 过程 / 方法诊断
 # ---------------------------------------------------------------------------
 
 def test_final_completion_rate_excludes_unreachable():
-    """η_final 分母只排除物理不可达；2026-10-24「无超期淘汰」后淘汰结构性为 0
+    """η_final 分母只排除物理不可达；「无超期淘汰」后淘汰结构性为 0
     （不再进分母作缺陷信号，但 A2 审计铁律仍断言其为 0）；超期滞留改
     overdue_ids 纯诊断（n_overdue_ever 计数，不出池）。按时率按最终交付口径。"""
     t0 = _FakeTask(0, 5.0, 0.0, 6000.0, completed_at=600.0)
@@ -270,17 +269,17 @@ def test_final_completion_rate_excludes_unreachable():
     m = exp01_metrics.build_metrics(_facts(records, [t0, t1, t2], [t0]))
     s = m["summary"]
     assert abs(s["completion_rate_final"] - 0.5) < 1e-5, s   # 1 / (3−1)
-    # A1（2026-10-24）：naive 完成率键已删除（正确性验证台不留双口径），
+    # A1：naive 完成率键已删除（正确性验证台不留双口径），
     # 旧断言 completion_rate == 1/3 随之移除；naive 值可由 n_completed/
     # n_arrived 复算，不进 summary。
-    # 2026-10-24「无超期淘汰」：eliminated 结构性为 0（不再从 expired 累计），
+    #「无超期淘汰」：eliminated 结构性为 0（不再从 expired 累计），
     # 超期任务改 overdue 诊断，n_overdue_ever 计数。
     assert abs(s["elimination_rate"] - 0.0) < 1e-9, s        # 无超期淘汰：结构性 0
     assert s["n_overdue_ever"] == 1, s                       # 超期滞留诊断计数
     assert abs(s["unreachable_rate"] - 1 / 3) < 1e-5, s
     assert abs(s["on_time_rate_final"] - 1.0) < 1e-5, s      # 交付 1、按时 1
     assert abs(s["path_per_completion_m"] - s["total_path_m"]) < 1e-5, s
-    # A2（2026-10-24）：出动池化 on_time_rate 键已删除
+    # A2：出动池化 on_time_rate 键已删除
     assert "on_time_rate" not in s, s
     assert "completion_rate" not in s, s
 
@@ -325,7 +324,7 @@ def test_deferred_delivery_cross_cycle():
 
 
 # ---------------------------------------------------------------------------
-# 2026-10-24 指标体系审查：A3（分母对齐）/ B1（废飞航程）/ B2（命中率）/ D（峰值聚合）
+# 指标体系审查：A3（分母对齐）/ B1（废飞航程）/ B2（命中率）/ D（峰值聚合）
 # ---------------------------------------------------------------------------
 
 def test_effective_completion_rate_denominator_excludes_unreachable():
@@ -413,12 +412,12 @@ def test_max_backlog_peak_aggregation():
 
 
 # ---------------------------------------------------------------------------
-# 2026-11-04 用户裁定 A：休眠列入完成率分母排除项 + 末态休眠真实计数
+#口径约定 A：休眠列入完成率分母排除项 + 末态休眠真实计数
 # ---------------------------------------------------------------------------
 
 
 def test_final_denom_excludes_dormant_end_v3():
-    """裁定 A：η_final 分母排除「停机时仍服务休眠」的任务。
+    """口径 A：η_final 分母排除「停机时仍服务休眠」的任务。
 
     6 个到达：T0/T1/T5 完成，T2 静态几何不可达（出池），T3/T4 停机时仍
     休眠（不出池）。分母 = 6 − 1 − 2 = 3，完成 3 ⇒ η_final = 1.0。
@@ -455,7 +454,7 @@ def test_final_denom_excludes_dormant_end_v3():
     assert s["n_dormant_end"] == 2, s             # 1(周期初) + 1(末周期新增)
     assert s["n_completed"] == 3, s
     assert s["n_unreachable"] == 1, s
-    # 裁定 A 的核心：分母排除休眠 ⇒ 完成率 100%（铁律不被兜底停机打破）
+    # 口径 A 的核心：分母排除休眠 ⇒ 完成率 100%（铁律不被兜底停机打破）
     assert abs(s["completion_rate_final"] - 1.0) < 1e-9, s
     # 分账恒等式（remain=0）：6 = 3 + 1 + 2 + 0
     assert s["n_arrived"] == 6, s
@@ -487,7 +486,7 @@ def test_dormant_end_counts_last_cycle_new_dormant():
 
 def test_dormant_end_zero_on_natural_convergence():
     """自然收敛（stop_reason=pool_empty）时 n_dormant_end 必为 0，
-    裁定 A 的排除项是恒等操作，不靠缩小分母粉饰指标。"""
+    口径 A 的排除项是恒等操作，不靠缩小分母粉饰指标。"""
     t0 = _FakeTask(0, 5.0, 0.0, 6000.0, completed_at=600.0)
     records = [
         _FakeRecord(1, muas={"feasible": True}, executed=[0],

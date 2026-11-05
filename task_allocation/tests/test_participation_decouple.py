@@ -14,7 +14,7 @@
 背景：旧 auto 规则在机队充裕时 K 恒等于 N-1，N-K 塌缩为常数（实测 ≡1），
 巡游顺序搜索维度名存实亡，「顺序随 DMDE 联合优化」的主张失去实例支撑。
 
-2026-10-12 修复（审查报告 docs/review_marginal_sortie_20261012.md）后锁定：
+修复（审查报告 docs/review_marginal_sortie_20261012.md）后锁定：
 - **continue 而非 break**：旧实现在第一个零增益机处停机（docstring 却断言
   gain「单调非减」——est(j) 单调非缩只保证 gain≥0，不保证 gain 单调）；
 - **排序键改为 argmin 份额降序**：旧键 cheapest_cost=min_t C(u,t) 会让
@@ -129,7 +129,7 @@ def test_marginal_always_at_least_one():
 
 
 # ---------------------------------------------------------------------------
-# 2026-10-12 修复回归（审查报告 docs/review_marginal_sortie_20261012.md）
+# 修复回归（审查报告 docs/review_marginal_sortie_20261012.md）
 # ---------------------------------------------------------------------------
 
 
@@ -199,7 +199,7 @@ def test_marginal_tour_cap_validation():
 
 
 # ---------------------------------------------------------------------------
-# Fix④ 需求感知参与（policy="demand"）回归
+# 需求感知 需求感知参与（policy="demand"）回归
 # ---------------------------------------------------------------------------
 
 # 4 机 / 4 任务：t0,t1,t2 在南簇（u0/u1/u2 近），t3 在最北离群、仅 u3 可达。
@@ -304,7 +304,7 @@ def test_demand_explicit_radius_overrides_factor():
 
 
 def test_demand_provision_serving_adds_uav_for_far_task():
-    """Fix⑤：最小覆盖已完成、但单机架航程不足以同时服务多远任务时，补专属机。
+    """能力感知补机：最小覆盖已完成、但单机架航程不足以同时服务多远任务时，补专属机。
 
     3 任务 / 3 机：t0 远北（仅 u0、u2 可达，各 30），t1、t2 居中（u0、u1 各 10）。
     u0 最小覆盖即覆盖全部 3 任务；但其往返代价 100 > 70×0.95=66.5 → 过载，
@@ -337,5 +337,5 @@ def test_demand_provision_serving_adds_uav_for_far_task():
         uavs, n_tasks=3, config=cfg_on, uav_target=m, row_of_uav=rows,
     )
     assert [u.id for u in got_off] == [0]       # 最小覆盖：1 架
-    assert [u.id for u in got_on] == [0, 2]    # Fix⑤：补 1 架专属机（u2）
+    assert [u.id for u in got_on] == [0, 2]    # 能力感知补机：补 1 架专属机（u2）
 

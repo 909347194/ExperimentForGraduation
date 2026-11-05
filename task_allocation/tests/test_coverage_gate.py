@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """覆盖门禁（coverage gate）常驻回归测试。
 
-锁定的契约（2026-10-24 裁定：覆盖门禁为**唯一主口径**，非门禁 big-M 四层
+锁定的契约（口径约定：覆盖门禁为**唯一主口径**，非门禁 big-M 四层
 路径已从代码移除；讨论与理由见
 ``docs/objective_caliber_two_approaches_archive_2026-10-24.md``）：
 
@@ -17,7 +17,7 @@
 6. **搜索用 f 不含 −m·F1（F1 只作指标）**：门禁口径下 f 与 F1 无关，
    仅 = 硬违约 + W_skip·n_skip + 迟到 + λ·path。
 
-夹具口径声明（2026-10-29）：本文件夹具里 UAV 剩余航程一律取 **80 km**，
+夹具口径声明：本文件夹具里 UAV 剩余航程一律取 **80 km**，
 是历史「城关区 80 km」时代的残留自设值，**不是生产口径**（生产见
 ``experiments/exp01_smoke/config.yaml`` 的 ``problem.uav_max_range``，现为
 10 km）。这里保留 80 km 是因为本文件锁的是**相对判据**（任务往返航程 vs
@@ -123,7 +123,7 @@ def test_open_tour_rescuable_must_be_skipped_and_rescued():
 
 
 def test_infeasible_tasks_are_shortfall_not_skip():
-    """2026-10-24 软窗口径：窗口死但航程可行的任务判 voluntary_skip
+    """ 软窗口径：窗口死但航程可行的任务判 voluntary_skip
     （可装没装，软窗不否决可装性）；只有航程死才归 capacity_shortfall。"""
     tasks = [
         _task(0, 10_000.0, 0.0, latest=100.0),   # ETA=1000s > latest=100 → 窗口死但航程可行（20km）
@@ -186,7 +186,7 @@ def test_skip_layer_penalizes_voluntary_skip():
     tasks = [_task(0, 10_000.0, 0.0)]
     nests = [Nest(id=0, x=0.0, y=0.0, z=0.0, capacity=4)]
     uavs = [_uav(0, 30_000.0)]
-    p = _problem(tasks, uavs, nests, lexicographic_coverage=True)
+    p = _problem(tasks, uavs, nests, coverage_audit=True)
 
     sol_done = _sol([UAVTour(uav_id=0, task_ids=[0], end_nest_id=0)], cand=[0])
     sol_empty = _sol([UAVTour(uav_id=0, task_ids=[], end_nest_id=None)], cand=[0])
@@ -267,7 +267,7 @@ def test_stage_hook_gate_stats_and_default_off():
             tasks, uavs, nests, pairwise_cost=_pairwise(tasks, uavs, nests),
             config=MUASProblemConfig(
                 w_violation=0.01, lambda_cost=1.0e-4,
-                lexicographic_coverage=gate_fit,
+                coverage_audit=gate_fit,
             ),
         )
         return MUASAssignmentEvaluator(

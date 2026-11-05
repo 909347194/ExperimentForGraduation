@@ -86,7 +86,7 @@ class DMDEConfig:
     # 围绕修复后的可行子空间展开，而非未修复空间。依赖评估器提供的
     # ``lamarckian_reencode`` 方法；缺失或失败时静默回退到原行为。
     lamarckian: bool = True
-    # 代际回调（memetic M1 精英档案，2026-10-19）：每代收敛记录后调用
+    # 代际回调（memetic M1 精英档案）：每代收敛记录后调用
     # ``gen_callback(gen, best_individual)``，供进化循环内对当代精英做
     # 解码后局部搜索（``run_selective_muas`` 的 M1 档案借此落地）。
     # 默认 ``None`` ⇒ 纯 DMDE 行为逐位不变、零开销。回调一旦抛异常即被

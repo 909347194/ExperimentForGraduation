@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""城关区区域门禁回归测试（2026-10-26）。
+"""城关区区域门禁回归测试。
 
 契约：配置 ``region_geojson``（城关区多边形）后，无论撒点域是
 ``dem_extent`` 还是 ``nest_anchored``，**生成的任务必须全部落在多边形内**——
@@ -33,7 +33,7 @@ from task_allocation.common.task_scenario import (  # noqa: E402
     build_synthetic_tasks,
 )
 
-DATA = ROOT / "data" / "lasa_chengguan"  # 场景数据目录（data/<scenario>/，2026-10-27 起按场景分目录）
+DATA = ROOT / "data" / "lasa_chengguan" # 场景数据目录（data/<scenario>/，按场景分目录）
 DEM = DATA / "Chengguan_DEM.tif"
 NEST_CSV = DATA / "nest_location_data.csv"
 REGION = DATA / "Chengguan_district.geojson"

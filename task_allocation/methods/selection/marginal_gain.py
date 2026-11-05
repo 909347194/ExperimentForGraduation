@@ -19,12 +19,12 @@ class MarginalConfig:
     max_ratio: float = 2.0
     min_marginal_ratio: float = 0.0
     current_time: float = 0.0
-    # Fix① 防饥饿：等待时长对接受判据的软加权（乘性，单位无关）。
+    # 防饥饿软加权 防饥饿：等待时长对接受判据的软加权（乘性，单位无关）。
     # eff = ratio * (1 + age_gamma * age)，age∈[0,1] 由 waited/wait_scale 得。
     # 0 = 关闭（向后兼容）。
     age_gamma: float = 0.0
     wait_scale: float = 3600.0
-    # Fix② 事件/老化强制纳入的任务 id：在终刀获得强优先（forced_bonus），
+    # 防饥饿强制 事件/老化强制纳入的任务 id：在终刀获得强优先（forced_bonus），
     # 保证不会被名额或几何代价无限期挤出。
     forced_task_ids: set[int] = field(default_factory=set)
     forced_bonus: float = 1.0e6
@@ -148,7 +148,7 @@ def select_by_marginal_gain(
             ``capability_cap``。由 :func:`pipeline.run` 传入
             :func:`capability.effective_cap` 合成后的 n_sel；该路径不再与 cap
             取交，且可**超过**机数名额 ⌈max_ratio·K⌉（mode="primary"）。
-        forced_task_ids: 强制纳入的任务 id（Fix②）。非 None 时优先于
+        forced_task_ids: 强制纳入的任务 id（防饥饿强制）。非 None 时优先于
             ``config.forced_task_ids``；命中者在终刀获得 ``forced_bonus`` 强优先，
             保证不被名额/几何代价无限期挤出（不停饿兜底）。
         distance_fn: 统一距离口径（DEM 三维航程）。用于 ``pairwise_cost``
@@ -196,7 +196,7 @@ def select_by_marginal_gain(
             )
             dc_safe = max(float(dc), cfg.eps)
             ratio = db / dc_safe
-            # Fix①：等待时长 -> 接受判据的乘性软加权（单位无关、有界）
+            # 防饥饿软加权：等待时长 -> 接受判据的乘性软加权（单位无关、有界）
             age = 0.0
             if cfg.wait_scale and cfg.wait_scale > 0:
                 waited = max(
@@ -204,7 +204,7 @@ def select_by_marginal_gain(
                 )
                 age = min(max(1.0 - math.exp(-waited / cfg.wait_scale), 0.0), 1.0)
             is_forced = tid in forced
-            # Fix②：强制纳入任务获得强优先，保证不停饿
+            # 防饥饿强制：强制纳入任务获得强优先，保证不停饿
             eff = ratio * (1.0 + cfg.age_gamma * age) + (
                 cfg.forced_bonus if is_forced else 0.0
             )

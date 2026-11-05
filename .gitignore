@@ -11,8 +11,14 @@ logs/
 # 实验结果产物（2026-10-26 起：不推送、不追踪；均可由代码重跑再生成）
 review_2026-10-26/
 task_allocation/experiments/**/results*/
+task_allocation/experiments/**/smoke/
+task_allocation/experiments/**/figs/
 task_allocation/experiments/_archive/
 task_allocation/experiments/report_*/
+# 仓库根的消融实验输出（ab_optimization_attribution 等经 --out-dir 生成）
+/results/
+/smoke*/
+/abom_smoke/
 task_allocation/experiments/exp01_smoke/report.pdf
 task_allocation/data/Chengguan_shp/
 task_allocation/data/shp/

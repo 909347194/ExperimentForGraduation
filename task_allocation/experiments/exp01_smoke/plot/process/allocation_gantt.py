@@ -92,12 +92,7 @@ def plot_allocation_gantt(
                columnspacing=1.1, frameon=False)
 
     fig.suptitle("exp01_smoke：分配航迹条（按周期 × UAV 逐行）", fontsize=FS["suptitle"])
-    footnote(fig, "口径：行 = 航次（周期×UAV）；横向 UAV 色航线长度 ∝ 真实飞行距离"
-                  "（起飞巢→任务→返航巢；段间距按三维几何比例、总量按 DEM 航程"
-                  "est_cost 标定，km）；方框=任务"
-                  "（上标号 T#·Ck，Ck=到达周期；下收益 R_j）；左端实心屋=起飞巢、"
-                  "右端空心圈=返航巢；琥珀色=异巢终止（起飞巢≠返航巢）。"
-                  "Ck 标出任务到达周期，区分「到达」与「执行」。")
+    footnote(fig, "行=航次，线长 ∝ 真实航程；实心屋=起飞巢、空心圈=返航巢。完整口径见 figure_notes.md。")
     return save_figure(fig, Path(out_dir) / "P04_allocation_gantt", formats, dpi=dpi)
 
 if __name__ == "__main__":

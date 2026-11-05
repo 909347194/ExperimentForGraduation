@@ -29,6 +29,8 @@ import numpy as np
 import matplotlib.path as mpath
 import matplotlib.patches as mpatches
 from matplotlib.patches import PathPatch
+from matplotlib.markers import MarkerStyle
+from matplotlib.transforms import Affine2D
 from matplotlib.legend_handler import HandlerBase
 
 from ..theme import PALETTE
@@ -40,6 +42,7 @@ __all__ = [
     "_task_size",
     "_label_offset",
     "_HALO",
+    "ROUTE_LW",
     "_arrow",
     # 图标与图例
     "_G_HOUSE",
@@ -93,12 +96,17 @@ def _label_offset(key: int):
 _HALO = dict(boxstyle="round,pad=0.16", fc="white", ec="none", alpha=0.72)
 
 
-def _arrow(ax, p_from, p_to, color: str, *, lw: float = 2.1) -> None:
-    """画一段有向航段：整条实线 + **线段中点**的三角箭头（表示行进方向）。
+#: 航线统一线宽（生产口径），所有有向航段共用。
+ROUTE_LW = 2.0
 
-    箭头放在线段中点——既标明航向，又不会压住端点处的起点/任务/机巢标记。
-    箭头子段长取段长的 ~24% 并夹在 [800m, 2600m]，避免过短看不见或过长征
-    满整段；极短段（<800m）仍给固定长度，保证方向可读。
+
+def _arrow(ax, p_from, p_to, color: str, *, lw: float = ROUTE_LW,
+           alpha: float = 0.95) -> None:
+    """画一段有向航段：整条实线 + **线段中点**的实心三角（表示行进方向）。
+
+    三角放在线段中点——既标明航向，又不压住端点处的起点/任务/机巢标记。
+    三角为**屏幕定尺寸**（点，不随地图比例尺或段长变化），带细白描边，使它
+    在同色航线上仍清晰可辨；只画一个三角、不再叠加短线，避免中点出现粗段。
     零长航段（起终点重合）直接跳过——否则 ``solid_capstyle="round"`` 会画出
     一个多余的圆点，盖住本来要表达的任务/机巢标记。
     """
@@ -108,24 +116,16 @@ def _arrow(ax, p_from, p_to, color: str, *, lw: float = 2.1) -> None:
     L = math.hypot(dx, dy)
     if L < 1e-6:
         return
-    # 整条线（不带端点箭头）
-    ax.plot([x0, x1], [y0, y1], "-", color=color, lw=lw, alpha=0.95,
+    # 整条实线（不带端点箭头）
+    ax.plot([x0, x1], [y0, y1], "-", color=color, lw=lw, alpha=alpha,
             solid_capstyle="round", zorder=3)
-    ux, uy = dx / L, dy / L
+    # 中点方向三角：屏幕定尺寸，随段向旋转，白描边使其「浮」在航线上
     mx, my = 0.5 * (x0 + x1), 0.5 * (y0 + y1)
-    ah = min(max(L * 0.24, 800.0), 2600.0)   # 箭头子段长（米）
-    s0 = (mx - ux * ah / 2.0, my - uy * ah / 2.0)
-    s1 = (mx + ux * ah / 2.0, my + uy * ah / 2.0)
-    ax.annotate(
-        "", xy=s1, xytext=s0,
-        arrowprops=dict(
-            arrowstyle="-|>", color=color, linewidth=lw,
-            shrinkA=0.0, shrinkB=0.0,
-            mutation_scale=max(12.0, min(22.0, lw * 11.0)),
-            alpha=0.95,
-        ),
-        zorder=4,
-    )
+    angle = math.degrees(math.atan2(dy, dx))
+    head_pt = max(5.5, lw * 3.6 + 1.2)
+    marker = MarkerStyle(">", transform=Affine2D().rotate_deg(angle))
+    ax.scatter([mx], [my], marker=marker, s=head_pt ** 2, color=color,
+               edgecolors="white", linewidths=0.7, alpha=alpha, zorder=4)
 
 
 # ---------------------------------------------------------------------------

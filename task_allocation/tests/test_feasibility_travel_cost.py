@@ -13,7 +13,7 @@
   travel = cost_hint[t.id]（三维代价）优先，缺省回退欧氏距离；
   航程检查按**往返口径**（2×travel vs range_margin×remaining_range）：
   航次必须返航，单程可达 ≠ 可服务。
-  时间窗预筛默认关闭（用户原则 2026-10-15：迟到是奖励定价问题不是参选
+  时间窗预筛默认关闭（用户原则：迟到是奖励定价问题不是参选
   资格），仅在 check_time_window=True 的消融口径保留。
 
 代价语义链：一阶段粗判 ← cost_hint（三维矩阵）→ 二阶段航次评价/执行扣航程。
@@ -63,7 +63,7 @@ def _uav(rng: float, speed: float = 10.0) -> UAV:
 def test_eta_no_longer_rejects_by_default():
     """默认口径：ETA 500s > latest 100s 也放行——迟到由适应度折减定价。
 
-    用户原则（2026-10-15）「任务不被完成只有物理约束被违反」：时间窗
+    用户原则「任务不被完成只有物理约束被违反」：时间窗
     不是物理约束，不能作为预筛拒绝理由。
     """
     uav = _uav(rng=1e5)

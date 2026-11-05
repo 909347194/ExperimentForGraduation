@@ -101,7 +101,7 @@ tasks:
     #   5.0~10.0 周期(3000~6000)  → 66.7%±7.1%（接近锚定机巢基线的 68.2%，此时时间窗基本失效）
     # 锚定机巢基线的 68.2% 是「人为缩小问题」的上限，不作为目标值。
     #
-    # 【统一 DEM 三维航程口径后的重新标定（2026-10-13）】
+    # 【统一 DEM 三维航程口径后的重新标定】
     # 距离口径统一后（评价端/ETA/时间窗全部走 DEM 垂直切面三维航程，见
     # methods/muas/cost/vertical_section.py），旧窗口 3.5~7.0 完成率跌至 75%：
     # 20 个任务直飞全部来得及（物理不可达=0），但 ETA 变长使多任务航次后段
@@ -143,7 +143,7 @@ selection:
         # 旧单程口径的 0.95 等效 76km 单程，直接迁到往返口径会把可达半径
         # 腰斩到 38km 误杀远站任务，故置 1.0；<1 仅消融。
         range_margin: 1.0
-        # 时间窗预筛：默认关闭（2026-10-15 用户原则「任务不被完成只有
+        # 时间窗预筛：默认关闭（用户原则「任务不被完成只有
         # 物理约束被违反」）。迟到是奖励定价问题（适应度按 L/W 折减），
         # 不是参选资格；预筛只拦物理不可达（无机可用/往返超航程）。
         # true = 消融口径（恢复时间窗拒绝，配 late_tolerance_seconds）。
@@ -151,14 +151,14 @@ selection:
         budget_factor: 1.0 # 机群总航程预算系数
         # 消融口径专用（check_time_window=true 时生效）：迟到容忍 W（s）。
         # 0 = 历史口径（直飞到达 > latest 即拒）。
-        # 与 muas.late_reward_decay_seconds 保持同值（2026-10-18 起 1800）。
+        # 与 muas.late_reward_decay_seconds 保持同值（1800）。
         late_tolerance_seconds: 1800.0
     marginal:
         eps: 1.0 # 边际代价地板，与距离同量纲（m）
         max_selected: null # null → 由 max_ratio × K 决定（n_sel = ⌈max_ratio·K⌉）
         max_ratio: 2.0
         min_marginal_ratio: 0.0
-        # Fix① 防饥饿：等待时长对终刀接受判据的乘性软加权（单位无关、有界）。
+        # 防饥饿软加权：等待时长对终刀接受判据的乘性软加权（单位无关、有界）。
         # eff = ratio·(1 + age_gamma·age)，age∈[0,1] 由 waited/wait_scale 得。
         # 与下方 anti_starvation 配合：本项让"刚老了点"的任务在终刀更有机会，
         # 而真正老透/临期的任务由 anti_starvation 强制纳入，保证不停饿。
@@ -175,9 +175,9 @@ selection:
         budget_scale: 1.0 # 预算额外折扣（与 budget_factor 相乘）；<1 给未来紧急任务留余量
         quantile: 0.5 # 粗代价分位数：调低→cap 更宽松，调高→更保守
         min_cap: 1 # cap 下限（保证总能评出一个候选）
-        # Fix③：即便 enabled=false 也按吞吐上界收敛候选规模（默认关，保持消融基线）
+        # 候选规模上界：即便 enabled=false 也按吞吐上界收敛候选规模（默认关，保持消融基线）
         fallback_when_disabled: false
-    # Fix② 硬性不停饿兜底：等待超阈值或逼近 latest 的任务强制纳入候选集
+    # 防饥饿强制：等待超阈值或逼近 latest 的任务强制纳入候选集
     # （绕过 Top-αK 预筛），并在终刀获强优先，保证不无限期推迟。
     anti_starvation:
         enabled: true
@@ -188,24 +188,23 @@ selection:
 muas:
     allow_unassigned: true # 允许 y_j = 0（任务保留至下一周期）
     allow_idle_uav: true # 允许 n_u = 0（UAV 本周期空闲）
-    # 适应度口径：覆盖门禁（唯一主口径，2026-10-24）。big_m 仅作 W_hard/
+    # 适应度口径：覆盖门禁（唯一主口径）。big_m 仅作 W_hard/
     # W_skip 推导基数（κ·m·R_pool），不再进 f 的 −m·F1 项；非门禁 big-M
     # 四层路径已从代码移除（见 docs/objective_caliber_two_approaches_archive_2026-10-24.md）。
     # big_m: null → 按问题数据自动推导；给数值则显式固定。
-    # lexicographic 字段为历史遗留、已失效（保留仅向后兼容 yaml）。
-    lexicographic: true
+    # 经济剔除是消融算子，默认关闭，见下方 prune_unprofitable。
     big_m: null
-    # 【2026-10-24 晚】按用户裁定统一为 1e-1，与 exp01 现行值一致；
+    # 按口径约定统一为 1e-1，与 exp01 现行值一致；
     # 改前为 1e-2（原生产默认）。本轮全实验同口径，结果可进同一张主表。
     lambda_cost: 1.0e-1 # 次目标权重（收益当量/米）；字典序下只裁决收益等价的解
-    # 2026-10-22 用户裁定：生产默认 1e-4 → 1e-2（与 exp01 主口径同步；1e-1 = 敏感性上界）
+    # 口径约定：生产默认 1e-4 → 1e-2（与 exp01 主口径同步；1e-1 = 敏感性上界）
     w_penalty: 1.0 # 约束违反惩罚总权重（历史口径：惩罚随 F2 一起乘 λ）
     # 惩罚量纲解耦：留空 null = 历史口径（惩罚进 F2 再乘 λ，秒级惩罚被压没）；
     # 给数值则惩罚不再乘 λ，直接以「奖励当量 / 惩罚单位」计入适应度。
     # 时间窗违约以秒计，取 0.01~0.02 即「迟到 300 s ≈ 3~6 点奖励」。
     w_violation: 0.01
     w_nest_capacity: 1.0 # 机巢容量违反的惩罚权重
-    # ── 四层准字典序 T0 层（2026-10-18）────────────────────────────
+    # ── 四层准字典序 T0 层────────────────────────────
     # f = W_hard·n_hard + w_exc·excess_m − m·F1_eff + w_late·L_tot + λ·path
     #   T0 物理违约（硬）：range/endurance/时序/同步/巢容量/终点不可达/结构。
     #     任何一次违约压倒任意交付收益——「纸面可行、执行弹回」的幽灵 F1
@@ -218,9 +217,9 @@ muas:
     w_range_excess: null
     hard_violation_kappa: 10.0 # W_hard = κ·m·R_pool 的安全系数
     # 迟到奖励折减容忍 W（s）：晚到任务有效奖励 eff = R × max(0, 1 − L/W)。
-    # 迟到不是废飞（2026-10-15 协议）——晚到仍算完成、计奖励，但按迟到
+    # 迟到不是废飞（协议）——晚到仍算完成、计奖励，但按迟到
     # 时长线性折减，与 w_violation 同向压实「按时服务」。
-    # 【2026-10-18 重新标定】600→1800：实测 12 个迟到任务 145–1475s（中位
+    # 【重新标定】600→1800：实测 12 个迟到任务 145–1475s（中位
     # 838s），W=600 时 7/12 奖励归零（均值保留 27.8%）——与「迟到可以接受」
     # 直接冲突；W=1800 时 0/12 归零、均值保留 61.6%，且 L=1800s 才等价于
     # 丢掉整个任务，「可接受但最好不迟到」的拐点。
@@ -231,7 +230,7 @@ muas:
     # 参与规划的 UAV 上限；null → 自动取 min(K, N-1) 以走 srp 巡游模型
     max_participating_uavs: null
     participating_policy: demand # cheapest | first | marginal | demand
-    # ── Fix④ 需求感知参与（policy=demand）──
+    # ── 需求感知参与（policy=demand）──
     # 贪心最大覆盖选参与机：每架覆盖「代价 ≤ 半径」的选中任务，依次挑覆盖
     # 最多未覆盖任务者，直到全部选中任务被覆盖或达 K 上限。根治 cheapest
     # 把机堆在稠密区、饿死北/西离群稀疏任务（后期 K 收缩致其不可达）。
@@ -240,12 +239,12 @@ muas:
     #                          单任务往返航程 ≤ 剩余航程的保守可达性）
     demand_coverage_radius: null
     demand_range_factor: 0.5
-    # ── Fix⑤ 服务能力感知 provisioning（policy=demand 生效）──
+    # ── 服务能力感知 provisioning（policy=demand 生效）──
     # 最小覆盖后按「航程预算」补机：把过载（最近机往返 > 剩余航程×裕度）任务
     # 剥给最近空闲机，拉入参与，直接救「K 塌缩→远任务未服务」的残余瓶颈。
     demand_provision_serving: true
     demand_serve_margin: 0.95
-    # ── Fix⑥「可达即执行」救援池口径 ──
+    # ──「可达即执行」救援池口径 ──
     # 方法论：任务只要能力可达、不违反约束就应最终被执行，成本最小化是此前提下
     # 的次级目标。「可达」是**存在量化**（∃ 机队中某方案可服务），不是「给定
     # 方案内塞得进」。此前航程修复的改派救援只在参与集内找闲置机，而参与集是按
@@ -277,7 +276,7 @@ muas:
     prune_unprofitable: false # 与「完成是约束」冲突，门禁口径下必须关
     prune_margin: 0.0 # 剔除判据裕度：λ·节省 > R·(1+margin) 才剔除
     prune_max_rounds: 8
-    # 零奖励剔除（2026-10-18 四层适应度配套）：ETA ≥ latest+W 的任务 eff≈0，
+    # 零奖励剔除（四层适应度配套）：ETA ≥ latest+W 的任务 eff≈0，
     # 带着飞只赔迟到惩罚（T2）却按完成计——暂缓把机会留给下周期。字典序下
     # prune_unprofitable 整体关闭（丢正收益任务必降 F1），但零奖励任务不降
     # F1，剔除是严格改进。仅 late_reward_decay_seconds>0 时生效。
@@ -295,7 +294,7 @@ muas:
     # 可行子空间展开。关闭则退化为围绕未修复空间搜索。
     # 注：终点机巢不进编码（方案 A），由解码后内层最小费用流精确求解。
     lamarckian: true
-    # 解码后局部搜索 polish（2026-10-19）：DMDE 收敛后对 best_assignment 做
+    # 解码后局部搜索 polish：DMDE 收敛后对 best_assignment 做
     # relocate / swap / 插入位局部搜索，每个候选都过**同一** build_solution
     # 修复链（evaluator.evaluate），仅严格改进（< 当前 − eps）才接受。
     # 治「收敛曲线第 3 代躺平」的两个根因：① big-M 阶梯适应度下差分算子对
@@ -310,7 +309,7 @@ muas:
     polish_max_rounds: 30   # 无改进即停的轮数上限
     polish_max_evals: 2000  # 真实评估数预算（缓存命中不计；防单周期耗时爆炸）
     polish_eps: 1.0e-6      # 严格改进阈值（绝对；吸收浮点求和噪声）
-    # memetic M1 精英档案（2026-10-19）：开启后每 memetic_K 代在 DE 进化
+    # memetic M1 精英档案：开启后每 memetic_K 代在 DE 进化
     # 循环内对当代精英跑一次 polish，维护 best-polished 档案，把路由改进
     # 前移进搜索期（治 DMDE 早平后路由优化留到收敛后）。不改基因型、无
     # 反映射；交付解取「收敛后 polish」与「档案最优」的更优者。默认关
@@ -356,7 +355,7 @@ constraints:
 # ── DMDE 求解器超参（论文 §5 算法 3.1）────────────────────────────
 solver:
     population: 50 # pop_size（默认：论文实验配置）
-    # max_generations：500（2026-10-14 由 100 上调，依据 Ming et al. 2017 标定）：
+    # max_generations：500（由 100 上调，依据 Ming et al. 2017 标定）：
     #   ① 原文 pop50/gen1000、Fig.10 自述约 150 代收敛；本实现反映射温度
     #      temperature = 1 - gen/Gen，随机匹配预算 = 0.9×Gen，100 代时仅 90 代
     #      （原文 900 代），探索代数差一个量级；
@@ -391,7 +390,7 @@ cost:
 # ── 动态滚动闭环（论文 §6）───────────────────────────────────────
 rolling:
     enabled: true
-    # 长程吞吐协议（2026-10-14 用户定）：完成率不是目标，周期可无限延长，
+    # 长程吞吐协议（用户定）：完成率不是目标，周期可无限延长，
     # 真实目标 = 持续到达下「尽可能多且正确地完成任务」。3 周期窗口的完成率
     # 只是窗口长度产物，无区分度；24 周期 + Poisson 到达流下，吞吐 / 正确
     # 执行率 / 违约交付（废飞）/ 淘汰（须为 0）才有统计意义。
@@ -413,7 +412,7 @@ rolling:
     arrivals:
         mode: fixed # 确定性到达：周期2到达10、周期3到达20（周期1初始=30，共60）；周期4起补0无新到达
         counts: [10, 20]
-    # 收敛早停（2026-11-04 用户裁定口径，与 exp01 同步；2026-11-05 审查 M2
+    # 收敛早停（口径约定，与 exp01 同步；审查 M2
     # 修正旧注释）：主判据是「池空」——到达全部注入后，池内不存在
     # 「能被完成却没被完成」的任务即自然收敛停机（stop_reason=pool_empty）；
     # 静态几何不可达已出池，服务暂缓（DORMANT）任务仍在池中等条件恢复唤醒，

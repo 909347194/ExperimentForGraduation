@@ -74,7 +74,7 @@
 |----|------|------|
 | 第1层 预选 | 设施选址式贪心最大覆盖（`POLICY_DEMAND`）：保证每个选中任务有一架可达参与机 | `_greedy_demand_coverage` |
 | 第2层 精修 | **字典序边际出动**（新策略 `POLICY_DEMAND_MARGINAL`）：边际贡献按 `(Δ可服务任务数, −Δ覆盖代价)` 字典序度量——与四层适应度同构（T1 收益层优先、T3 成本层次之），跳过边际 `≤ (0, γ)` 的机（γ=`participation_cost`）；区别于纯成本边际（`POLICY_MARGINAL`），避免"省一点航程但不多服务任何任务"的机被误派 | `_select_by_lexicographic_marginal` |
-| 第3层 安全网 | "不漏可达任务"由**解码端**保证：repair_chain 模式下 `reflow_rescue_scope="fleet"`（Fix⑥）；constructive 模式下构造式插入原生覆盖全机队。选机层只做**效率预筛**，不承担覆盖正确性 | `_reflow_task` / `_build_constructive` |
+| 第3层 安全网 | "不漏可达任务"由**解码端**保证：repair_chain 模式下 `reflow_rescue_scope="fleet"`（全机队救援口径）；constructive 模式下构造式插入原生覆盖全机队。选机层只做**效率预筛**，不承担覆盖正确性 | `_reflow_task` / `_build_constructive` |
 
 **验证假设 H-B2**：三层架构下 K 可显著小于可用机数（尤其任务少时机多，K≥N 区也能正确工作：N 个任务各派一次、多余机闲置），而完成率不降（安全网兜底）；字典序边际比纯成本边际少派机而不掉完成率。第2层为 gated 消融臂（默认 `demand`），须以第3层安全网为硬约束。
 

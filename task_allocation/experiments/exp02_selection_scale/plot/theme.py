@@ -6,7 +6,7 @@
 
 其余绘图模块统一 ``from ..theme import plt, ...``，不直接 import pyplot。
 
-## 学术绘图口径（2026-10-12 定稿）
+## 学术绘图口径（定稿）
 
 论文版式：A4、左右边距各 3cm → **版心 15 cm ≈ 5.9 in**。因此：
 
@@ -185,7 +185,7 @@ def check_bbox_overflow(fig, label: str = "", *, tol: float = 1.02) -> bool:
     背景：``bbox_inches="tight"`` 按**所有 artist 的包围盒**裁图，而
     ``Line2D`` 的 extent 不受坐标轴裁剪影响（数据画到 xlim 之外照样计入），
     画布级 ``Text``（脚注）也一样。于是「画了但看不见」的内容会把裁切框撑大，
-    出图成为异常宽/高的大幅面、四周大片空白（2026-10-13 实测 P03/P04/P06）。
+    出图成为异常宽/高的大幅面、四周大片空白（实测 P03/P04/P06）。
 
     实现已下沉到 :mod:`plot.base.audit`（那里同时提供「文本越容器 / 文本互压」
     等更细的检查），此处仅保留向后兼容的入口。
@@ -197,7 +197,7 @@ def audit_figure(fig, *, label: str = "", verbose: bool = True):
     """完整版面体检：越界 + 文本越容器 + 文本互压 + 数据越窗 + 子图相叠。
 
     由 :mod:`plot.base.audit` 实现；比 :func:`check_bbox_overflow` 多覆盖
-    「文字虽然还在画布内、却压住了别的文字/容器」这一类（2026-10-13 的
+    「文字虽然还在画布内、却压住了别的文字/容器」这一类（的
     「文字堆叠」事故即属此类）。
     """
     return _audit.audit_figure(fig, label=label, verbose=verbose)
@@ -230,7 +230,7 @@ def save_figure(
     # 出图管线末端统一「排版体检 + 自动修”：两步都做成兜底，各图不用各自 invoked
     # ① 标题折行：防止标题比子图宽、压到相邻面板（见 base.declutter.fit_axis_titles）
     # ② 标注去重叠：防止地图 U#/巢#/T# 互压（同点起飞的两架 UAV 曾 100% 相叠）
-    # ③ 越界自检：tight bbox 被「看不见的 artist」撑大（2026-10-13 P03/P04/P06）
+    # ③ 越界自检：tight bbox 被「看不见的 artist」撑大（P03/P04/P06）
     try:
         _declutter.fit_axis_titles(fig)
         _declutter.declutter_figure(fig, close_draw=True)
@@ -323,7 +323,7 @@ def style_axes(ax, *, title: str | None = None, xlabel: str | None = None,
                ylabel: str | None = None) -> None:
     """统一的坐标轴标注小工具（标题 / 轴标签一次设齐）。
 
-    轴标题总是带 ``wrap=True``：子图标题常常比子图本身还宽（2026-10-13 版面
+    轴标题总是带 ``wrap=True``：子图标题常常比子图本身还宽（版面
     自检实测 P09(a) 达 1.16×、P09(e) 1.19×、P01(d) 1.20×），超出的部分会压到
     相邻子图上。交给 matplotlib 按**实际渲染宽度**自动折行最可靠——自己估算
     字宽会重复踩「估宽偏松」的坑（见 :func:`_wrap_to_width` 的余量说明）。
@@ -345,10 +345,10 @@ def _wrap_to_width(text: str, avail_in: float, fontsize_pt: float) -> str:
 
     存在的理由：脚注是画布级 ``fig.text``，**不会自动换行**——单行过长会溢出
     画布右缘，同时把 ``bbox_inches="tight"`` 的包围盒按超宽文本计算，导致
-    出图被撑成异常宽幅（2026-10-13 实测 P03/P04 宽 1.65×/1.27×、P06 poster
+    出图被撑成异常宽幅（实测 P03/P04 宽 1.65×/1.27×、P06 poster
     宽近 2×，右半张全白）。
     宽度估算取保守值（全角 1 em、半角 0.52 em）后仍须留 ~12% 安全余量：
-    实测（2026-10-13）折到满行时真实宽度约为估算的 **1.13 倍**——字形 advance
+    实测折到满行时真实宽度约为估算的 **1.13 倍**——字形 advance
     与标点回退都会让估算偏松，不留余量就会再次溢出画布右缘。
     """
     em = fontsize_pt / 72.0

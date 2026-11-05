@@ -58,7 +58,7 @@ class ConstructionContext:
         self.nests: list[Nest] = list(evaluator.nests)
         self.nest_by_id: dict[int, Nest] = {n.id: n for n in self.nests}
         self.excluded_nest_ids: set[int] = set(getattr(evaluator, "excluded_nest_ids", ()))
-        # 可路由机队：全可用机队优先（Fix⑥ 口径），退化为参与集
+        # 可路由机队：全可用机队优先（全机队 口径），退化为参与集
         uavs = list(getattr(evaluator, "available_uavs", None) or evaluator.participating)
         self.uavs: list[UAV] = [u for u in uavs if u.is_available]
         self.uav_by_id: dict[int, UAV] = {u.id: u for u in self.uavs}

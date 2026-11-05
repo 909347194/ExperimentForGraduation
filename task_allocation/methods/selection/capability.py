@@ -119,7 +119,7 @@ class CapabilityScaleConfig:
     # 防止机制3 的 O(n_cand·n_sel·insert) 随 ⌈α·K⌉ 失控。None = 不设计算上限
     # （仅受 ⌈α·K⌉ 与任务总数 N 约束）。
     max_candidate_pool: int | None = None
-    # Fix③：即便本模块 ``enabled=False``，也按吞吐上界
+    # 候选规模上界：即便本模块 ``enabled=False``，也按吞吐上界
     #   cap(t)=⌊Σ remaining_range / 单任务中位代价⌋
     # 收敛候选规模，避免 "2.5×机数" 永远不瓶颈、aging 排序失效。
     # 默认 False —— 仅显式开启时改变（关闭能力模块的）消融路径行为。

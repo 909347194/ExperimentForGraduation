@@ -27,7 +27,7 @@ __all__ = [
 ]
 
 #: summary.csv 的列（论文主表数据源；均值行 = 同列 mean）
-# 2026-10-24 指标体系审查（与 exp01 同步，A1/A2）：
+# 指标体系审查（与 exp01 同步，A1/A2）：
 #   删除 completion_rate（naive，分母含不可达）——完成率只留 final 口径，
 #     论文主表直读 completion_rate_final，杜绝「CSV 两列完成率」漂移；
 #   删除 on_time_rate（出动池化正确执行率）——按时率只留交付集条件率
@@ -78,7 +78,7 @@ CSV_COLUMNS = (
     "n_active_cycles",
     "solve_time_ms",
     "wall_seconds",
-    # 2026-11-05 审查 L4：尾插不移位旧列，兼容按列位置解析的下游 CSV 脚本
+    # 审查 L4：尾插不移位旧列，兼容按列位置解析的下游 CSV 脚本
     "n_oper_cycles",
 )
 
@@ -119,7 +119,7 @@ def build_summary(
     tasks = batch.all_tasks()
     n_arrived = len(tasks)
     n_cycles = len(records) or 1
-    # 运营周期数（2026-11-05 吞吐分母统一，与 exp01 同步）：序号上最后一
+    # 运营周期数（吞吐分母统一，与 exp01 同步）：序号上最后一
     # 个有活动周期的位置（裁掉尾部收敛空周期）；判据单源
     # methods/rolling/horizon.cycle_record_has_activity。
     n_oper_cycles = max(
@@ -134,7 +134,7 @@ def build_summary(
     n_infeasible_delivery = sum(len(r.infeasible_ids) for r in records)
     n_late = sum(len(r.late_ids) for r in records)
     all_lateness = [float(v) for r in records for v in r.lateness_by_task.values()]
-    # 淘汰：2026-10-24 口径「无超期淘汰」后结构性为 0（TaskPool 不再
+    # 淘汰：口径「无超期淘汰」后结构性为 0（TaskPool 不再
     # 超期出池；唯一出池途径 = 完成 / 静态物理不可达）。保留键作审计
     # 断言（audit_correctness 终局守恒），n_overdue_ever 为超期滞留诊断。
     # 与 exp01 同口径：过期任务不再出池，故不再从 expired_ids 累计。
@@ -143,7 +143,7 @@ def build_summary(
         {int(i) for r in records for i in getattr(r, "overdue_ids", ())}
     )
     n_unreachable = sum(len(r.unreachable_ids) for r in records)
-    # 不可达归因拆分（2026-10-25 口径对齐）：完成率分母排除的不可达任务分
+    # 不可达归因拆分（口径对齐）：完成率分母排除的不可达任务分
     # 两类——geo（静态几何不可达：所有机巢往返都超满电航程）与 service
     # （机队服务不可达：几何可达但连续 service_patience 周期无可用 UAV 在
     # 往返航程内，典型为机队漂移致空巢）。二者同为「能力范围外」，是分母
@@ -161,7 +161,7 @@ def build_summary(
         for i in r.unreachable_ids
         if _unreach_reason.get(int(i)) == "service"
     )
-    # 服务休眠/唤醒（2026-11-04 异构化口径：service 不再出池，改休眠）；缺字段按 0 计
+    # 服务休眠/唤醒（异构化口径：service 不再出池，改休眠）；缺字段按 0 计
     n_dormant_events = sum(len(getattr(r, "dormant_ids", []) or []) for r in records)
     n_woken = sum(len(getattr(r, "woken_ids", []) or []) for r in records)
     # 末态休眠数 = 周期初快照（唤醒后、新休眠前）+ 本周期新转休眠数，
@@ -173,7 +173,7 @@ def build_summary(
         + len(getattr(_last, "dormant_ids", []) or [])
     ) if _last else 0
     n_capacity_violations = sum(len(r.capacity_violations) for r in records)
-    # 覆盖门禁三分账（2026-10-22）：逐周期 gate_stats 累加；
+    # 覆盖门禁三分账：逐周期 gate_stats 累加；
     # 缺字段 = 未插桩/未开启（schema 容缺）按 0 计。
     def _gate_sum(key: str) -> int:
         return sum(
@@ -183,7 +183,7 @@ def build_summary(
     n_voluntary_skip = _gate_sum("n_skip")
     n_capacity_shortfall = _gate_sum("n_shortfall")
     n_gate_rescued = _gate_sum("n_rescued")
-    # ── 论文主表口径 v3（2026-11-04 用户裁定 A，与 exp01 同源）────────
+    # ── 论文主表口径 v3（口径约定 A，与 exp01 同源）────────
     # 分母排除两类「当前能力范围外」任务：① 静态几何不可达（问题固有）；
     # ② 停机时仍服务休眠（时变能力不足的暂缓，不出池）。休眠不是放弃：
     # 新停机判据保证「不存在能被完成却没被完成的任务」才自然收敛，
@@ -258,7 +258,7 @@ def build_summary(
     ]
     cycle_feasible_rate = (sum(feas_flags) / len(feas_flags)) if feas_flags else 0.0
     n_active_cycles = sum(1 for r in records if len(r.executed_ids) > 0)
-    # 2026-10-24 A2（与 exp01 同步）：删除出动池化 on_time_rate 及其
+    # A2（与 exp01 同步）：删除出动池化 on_time_rate 及其
     # n_executed_total 中间量——按时率只留交付集条件率 on_time_rate_final。
     avg_lateness = (sum(all_lateness) / len(all_lateness)) if all_lateness else 0.0
     max_lateness = max(all_lateness) if all_lateness else 0.0
@@ -286,7 +286,7 @@ def build_summary(
     return {
         "n_arrived": n_arrived,
         "n_completed": len(completed),
-        # A3（2026-10-24，与 exp01 同步）：分母对齐 n_final_denom，与
+        # A3（与 exp01 同步）：分母对齐 n_final_denom，与
         # completion_rate_final 同分母可比——旧口径用 n_arrived 时
         # 「有效 < 最终」部分来自分母而非零奖励交付。
         "effective_completion_rate": round(
@@ -333,7 +333,7 @@ def build_summary(
         # ── 方法诊断 v2 ──
         "n_hard_violations_total": n_hard_violations_total,
         "s_coverage_rate": round(s_coverage_rate, 6),
-        # 吞吐（2026-11-05 分母统一）= 完成（含迟到）/ 运营周期数
+        # 吞吐（分母统一）= 完成（含迟到）/ 运营周期数
         "throughput_per_cycle": round(len(completed) / n_oper_cycles, 6),
         "n_cycles": n_cycles,
         "n_oper_cycles": n_oper_cycles,

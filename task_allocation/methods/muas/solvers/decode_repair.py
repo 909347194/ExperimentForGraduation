@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """decode_repair.py — repair_chain 解码与修复算子组（``DecodeRepairMixin``）。
 
-2026-10-27 自 ``muas_stage.py`` 拆出。对应论文 §5(4) 约束处理：
+自 ``muas_stage.py`` 拆出。对应论文 §5(4) 约束处理：
 :func:`build_solution` 按固定管线调用下列算子、修到不动点后装配交付解。
 算子一览（括号内为管线角色）：
 
@@ -30,6 +30,33 @@ from task_allocation.methods.muas.constraints.nest_capacity import (
     solve_end_nest_assignment,
 )
 from task_allocation.methods.muas.coverage_gate import audit_coverage, repair_coverage
+
+
+# ---------------------------------------------------------------------------
+# 基因顺序胜率记录（ab_order_marginal 消融诊断）：记录 :meth:`_best_order` 最终
+# 采纳的候选名（gene/edd/earliest/slack/nn）。默认关闭，避免污染生产路径。
+# ---------------------------------------------------------------------------
+_ORDER_TRACKING_ENABLED = False
+_ORDER_WINNER_COUNTS: dict[str, int] = {}
+
+
+def enable_order_tracking(flag: bool) -> None:
+    global _ORDER_TRACKING_ENABLED
+    _ORDER_TRACKING_ENABLED = bool(flag)
+
+
+def reset_order_tracking() -> None:
+    global _ORDER_WINNER_COUNTS
+    _ORDER_WINNER_COUNTS = {}
+
+
+def order_winner_counts() -> dict[str, int]:
+    return dict(_ORDER_WINNER_COUNTS)
+
+
+def _record_order_winner(name: str) -> None:
+    if _ORDER_TRACKING_ENABLED:
+        _ORDER_WINNER_COUNTS[name] = _ORDER_WINNER_COUNTS.get(name, 0) + 1
 
 
 class DecodeRepairMixin:
@@ -72,15 +99,12 @@ class DecodeRepairMixin:
         # 航程修复，被清空的航次实际并未起飞，让出的名额是虚的 → 落地期超卖。
         end_nests: dict[int, int | None] = {}
         prev_state = None
-        # 字典序（收益优先）下经济性剔除与目标冲突（丢正收益任务必降 F1），
-        # 自动关闭；任务暂缓仅由可行性修复产生。legacy 加权和保留选择性剔除
-        # （论文 §5(3) y_j=0 的消融对比口径）。coverage_first（覆盖优先解码，
-        # 2026-10-23）下同样强制关闭——「完成是约束」，经济剔除与覆盖目标
-        # 直接冲突。
+        # 经济剔除仅在「非覆盖优先」且显式开启时允许：门禁口径下
+        # prune_unprofitable=false，故生产恒关；任务暂缓仅由可行性修复产生。
+        # _prune 是消融算子，见 ablation_prune.AblationPruneMixin。
         economic_prune = (
             self.config.prune_unprofitable
             and not self.config.coverage_first
-            and not getattr(self.problem.config, "lexicographic", True)
         )
         for _ in range(6):
             # 合并修复：任务少时向更少机合并（闲置合法，U_exec ⊆ U_avail）
@@ -97,12 +121,12 @@ class DecodeRepairMixin:
                 break
             prev_state = state
 
-        # Fix⑥ 覆盖补全：把「可达却被留在解外」的选中任务补进航次。
+        # 全机队 覆盖补全：把「可达却被留在解外」的选中任务补进航次。
         # 注意 _reflow_task 是**被动**救援（仅在航程修复移除任务时触发），
         # 救不了压根没被 DMDE 编入航次的任务——DMDE 的搜索空间锁死在参与集
         # 内，无法自己引入参与集外的可用机（exp01 的 T10 正是此情形）。
         #
-        # coverage_first（2026-10-23 用户裁定，解码/repair 第一段）：改走
+        # coverage_first（口径约定，解码/repair 第一段）：改走
         # **覆盖优先装载**——EDD 升序、修到不动点（装载 → 重排 → 换巢 →
         # 航程修复多轮），把 S 内未交付任务装到约定口径（一阶判据）下的
         # 最大可行集；比 _complete_coverage 单趟多两层：不动点 + EDD。
@@ -119,12 +143,12 @@ class DecodeRepairMixin:
         # 时序修复：同链任务按 sequence_order 升序归位（硬约束，构造性满足）。
         # 必须在航程闸之前 —— 调序会改变航程，后续 _repair_range 按新序再闸。
         routes = self._repair_sequence(routes)
-        # 零奖励剔除：ETA ≥ latest+W 的任务 eff≈0——带着飞只赔迟到惩罚
-        # （T2），暂缓把机会留给下周期（2026-10-18 四层适应度配套）。
-        # coverage_first 下强制跳过：零奖励是**经济**判据，卸任务与
-        # 「完成是约束」冲突；迟交按完成计（w_violation 单一定价），
-        # 是否值得飞由成本目标层裁决，不由解码端预先剔除。
-        if not self.config.coverage_first:
+        # 零奖励剔除（消融算子，默认关）：仅在显式开启且非覆盖优先时进入；
+        # 生产路径不调用，避免在主管线上留幽灵分支。
+        if (
+            not self.config.coverage_first
+            and self.config.prune_zero_reward
+        ):
             routes, end_nests = self._prune_zero_reward(routes, end_nests)
         # 重排按「迟到数, 迟到量, 航程」字典序挑顺序，末任务换人会拉长返航腿，
         # 可能把航次推过剩余航程。先按当前终点闸一次；被移除任务由
@@ -138,7 +162,7 @@ class DecodeRepairMixin:
         # 弹回——航程/位置已更新却解绑回池不计完成（废飞）。
         routes, end_nests = self._repair_range(routes, end_nests)
 
-        # coverage_first（2026-10-23）：终态**再装载一轮**。前面的换巢 /
+        # coverage_first：终态**再装载一轮**。前面的换巢 /
         # 重排 / 航程闸可能释放新的装载空间（终点巢改近、顺序调整腾出
         # 时间），覆盖优先口径要求把「约定口径下的最大可行集」做终——
         # 无新可装任务时一轮集合运算即返回（不动点）。
@@ -147,10 +171,10 @@ class DecodeRepairMixin:
                 routes, end_nests
             )
 
-        # ── 覆盖门禁（2026-10-22）终态挂点：最后一次 _repair_range 之后、
+        # ── 覆盖门禁终态挂点：最后一次 _repair_range 之后、
         # _assemble 之前（其后仅 problem.evaluate 不改 routes，终态安全）。
         #   coverage_gate=True  → 能救必救修到不动点（skip 构造归零）；
-        #   否则 lexicographic_coverage=True → 纯审计分账（W_skip 层消费）。
+        #   否则 coverage_audit=True → 纯审计分账（W_skip 层消费）。
         # coverage_first 下门禁退居**事后校验**：完成语义由覆盖优先装载
         # 承担（E1E2 实证门禁单独上场覆盖指标恒真而完成率 −5pp）。
         gate_stats: dict[str, Any] | None = None
@@ -160,7 +184,7 @@ class DecodeRepairMixin:
                 max_rounds=int(getattr(self.config, "coverage_gate_max_rounds", 8)),
             )
             gate_stats = gs.to_dict()
-        elif bool(getattr(self.problem.config, "lexicographic_coverage", False)):
+        elif bool(getattr(self.problem.config, "coverage_audit", False)):
             gate_stats = audit_coverage(self.problem, routes, end_nests).to_dict()
 
         # 终态兜底：门禁/装载救援往航次里插入任务时只按可达与成本挑位置，
@@ -302,13 +326,20 @@ class DecodeRepairMixin:
             est = getattr(by_id[tid], "earliest", None)
             return float(est) if est is not None else 0.0
 
-        candidates: list[list[int]] = [list(tids)]
-        candidates.append(sorted(tids, key=lambda t: (latest_of(t), earliest_of(t), t)))
-        candidates.append(sorted(tids, key=lambda t: (earliest_of(t), latest_of(t), t)))
+        neutral = str(getattr(self.config, "order_candidate_mode", "gene")).lower() == "neutral"
+
+        # 候选集（命名以便胜率记录）：基因原序 + 几类启发式序。
+        # neutral 模式（基因序边际消融对照）剔除「基因原序」候选。
+        cands: list[tuple[str, list[int]]] = []
+        if not neutral:
+            cands.append(("gene", list(tids)))
+        cands.append(("edd", sorted(tids, key=lambda t: (latest_of(t), earliest_of(t), t))))
+        cands.append(("earliest", sorted(tids, key=lambda t: (earliest_of(t), latest_of(t), t))))
         if any(latest_of(t) != float("inf") for t in tids):
-            candidates.append(
-                sorted(tids, key=lambda t: (latest_of(t) - earliest_of(t), latest_of(t), t))
-            )
+            cands.append((
+                "slack",
+                sorted(tids, key=lambda t: (latest_of(t) - earliest_of(t), latest_of(t), t)),
+            ))
         # 最近邻（从 UAV 起点贪心）：航程最短的候选，成本维度的对照
         remaining = list(tids)
         nn: list[int] = []
@@ -324,16 +355,16 @@ class DecodeRepairMixin:
             nn.append(nxt)
             cur = by_id[nxt].position
             remaining.remove(nxt)
-        candidates.append(nn)
+        cands.append(("nn", nn))
 
         # 时序优先：候选序先剔掉违反同链顺序的（硬约束），让「最优」只在
         # 合法序里挑——先挑后修会把迟到/航程指标算在非法序上，修完又变。
         # 若所有候选都违反（罕见：链内任务被硬塞进同一航次），保留全部候选
         # 交由下游 _repair_sequence 归位，不在此处丢任务。
         if self._sequence_enabled():
-            legal = [c for c in candidates if not self._seq_violation(c)]
+            legal = [c for c in cands if not self._seq_violation(c[1])]
             if legal:
-                candidates = legal
+                cands = legal
 
         def _evaluate(seq: Sequence[int]) -> tuple[int, float, float] | None:
             """返回 ``(迟到数, 迟到量, 航程)``；超剩余航程 → None（不可行）。"""
@@ -372,42 +403,41 @@ class DecodeRepairMixin:
 
         base_key = _evaluate(list(tids))
         if base_key is not None and base_key[0] == 0:
-            # 原早退：零迟到 → 直接返回原序（每代每体都要解码一次，不早退
-            # 会把求解时间从 ~72 s 抬到 ~121 s，见实测）。
-            #
-            # 2026-10-24 修复：早退不能连「航程」一起退掉。候选判据是
-            # ``(迟到数, 迟到量, 航程)`` 字典序，航程排第 3；原序零迟到时
-            # 直接返回 ⇒ 航程永远进不了比较。exp01 各周期 final_late_s 常
-            # 态为 0 ⇒ **航程从未被优化过**，实测 polish 增益 100% 来自 F1
-            # （反证：若来自路径需 Δpath 达 154 万 km，实测 435 km）。
-            # 证据见 docs/fitness_path_optimization_diagnosis_2026-10-24.md §3。
-            #
-            # 改为：零迟到时仍评估「最近邻」这一唯一以航程为目标的候选
-            # （candidates[-1]），仅在「仍零迟到 且 航程严格更短」时采纳。
-            # 语义 = 覆盖优先、成本随后：执行集不变（F1 不动）、不引入迟到、
-            # 不超剩余航程，纯成本改进 ⇒ 不触碰主适应度阶梯。
-            # 性能：只多一次 _evaluate（全候选评估 72→121 s，单候选约其 1/4）。
+            # 零迟到早退：默认直接返回基因原序；若开启 reorder_range_optimize，
+            # 仅在「仍零迟到 且 航程严格更短」时采纳最近邻。
+            # 详见 2026-10-24 修复说明（docs/fitness_path_optimization_diagnosis_*.md）：
+            # 早退不能连航程一起退掉——零迟到时仍评估最近邻这一以航程为目标的候选。
             if not self.config.reorder_range_optimize:
-                return list(tids)
-            nn_seq = candidates[-1]
-            nn_key = _evaluate(nn_seq) if list(nn_seq) != list(tids) else None
+                if neutral:
+                    # 中性对照：基因序不是候选，跳过早退，进入一般锦标赛
+                    pass
+                else:
+                    _record_order_winner("gene")
+                    return list(tids)
+            nn_key = _evaluate(nn) if list(nn) != list(tids) else None
             if (
                 nn_key is not None
                 and nn_key[0] == 0
                 and nn_key[2] < base_key[2] - self.config.reorder_range_eps
             ):
-                return list(nn_seq)
+                _record_order_winner("nn")
+                return list(nn)
+            if not neutral:
+                _record_order_winner("gene")
             return list(tids)
 
-        best_seq = list(tids)
-        best_key = base_key
-        for seq in candidates[1:]:
+        # 一般锦标赛：在所有候选里挑 (迟到数,迟到量,航程) 字典序最优
+        best_name, best_seq = cands[0]
+        best_key = _evaluate(best_seq)
+        for name, seq in cands[1:]:
             key = _evaluate(seq)
             if key is None:
                 continue
             if best_key is None or key < best_key:
                 best_key = key
+                best_name = name
                 best_seq = list(seq)
+        _record_order_winner(best_name)
         return best_seq
 
     def _choose_end_nests(
@@ -471,116 +501,6 @@ class DecodeRepairMixin:
             excluded_nest_ids=excluded,
         )
         return chosen
-
-    def _prune(
-        self,
-        routes: Mapping[int, Sequence[int]],
-        end_nests: Mapping[int, int | None],
-    ) -> tuple[dict[int, list[int]], dict[int, int | None]]:
-        """剔除执行代价高于收益的任务（论文 §4.2 的 ``y_j = 0``）。
-
-        判据：移除任务 j 节省的路径代价 ``saving`` 满足
-
-            λ · saving > R_j^eff · (1 + margin)
-
-        则本周期不执行 j（保留至下一规划周期）。其中 ``R_j^eff`` 是含等待
-        补偿的有效收益（论文 §3.2 的 ``W_i(t)``）：任务滞留越久，补偿越大，
-        越不容易被剔除，从而避免偏远任务永久滞留。
-        """
-        work: dict[int, list[int]] = {k: list(v) for k, v in routes.items()}
-        ends: dict[int, int | None] = dict(end_nests)
-        lam = self._lambda
-        margin = float(self.config.prune_margin)
-
-        for _ in range(max(1, self.config.prune_max_rounds)):
-            removed = False
-            for uav_id in list(work):
-                tids = work[uav_id]
-                if not tids:
-                    continue
-                for pos in range(len(tids)):
-                    tid = tids[pos]
-                    saving = self._removal_saving(uav_id, tids, pos, ends.get(uav_id))
-                    reward = self._eff_reward.get(tid, 0.0)
-                    if saving is None:
-                        continue
-                    if lam * saving > reward * (1.0 + margin) + 1e-9:
-                        tids.pop(pos)
-                        removed = True
-                        break
-                if removed:
-                    break
-            if not removed:
-                break
-
-        # 航次被清空的 UAV 转为空闲，回到原归属机巢（释放名额）
-        for uav_id, tids in work.items():
-            if not tids:
-                ends[uav_id] = None
-
-        return work, ends
-
-    def _prune_zero_reward(
-        self,
-        routes: Mapping[int, Sequence[int]],
-        end_nests: Mapping[int, int | None],
-    ) -> tuple[dict[int, list[int]], dict[int, int | None]]:
-        """剔除「必然零奖励」的任务（ETA ≥ latest + W ⇒ eff≈0，y_j=0 暂缓）。
-
-        动机（2026-10-18）：迟到折减 ``eff = R·max(0, 1 − L/W)`` 下，到达
-        晚于 ``latest + W`` 的任务对 F1 的贡献为 0，却仍占用航次与航程、
-        并计迟到惩罚——经济上等价于废飞，却按「完成」计。字典序下
-        ``_prune``（经济性剔除）整体关闭（丢正收益任务必降 F1），而零奖励
-        任务**不降 F1**：剔除它是严格的适应度改进（省 T2 迟到惩罚），
-        还把机会留给下一周期（可能按时交付）。与「尽可能多且**正确地**
-        完成任务」的长程目标一致。
-
-        做法：逐航次按完成闸门同口径模拟 ETA，对第一个零奖励任务移除并
-        :meth:`_reflow_task`（``full_window``：只接受「整条航次不新增迟到」
-        的落点，不制造新违约；不做换机腾挪——剔除场景下改派不成立就应当暂缓）。移除只会让后续任务更早，迭代至
-        无零奖励任务即终止（每轮至少永久移除一个）。
-        """
-        decay = getattr(self.problem.config, "late_reward_decay_seconds", None)
-        if not decay or float(decay) <= 0.0:
-            return {k: list(v) for k, v in routes.items()}, dict(end_nests)
-        if not self.config.prune_zero_reward or not self._window_enabled():
-            return {k: list(v) for k, v in routes.items()}, dict(end_nests)
-        W = float(decay)
-        work: dict[int, list[int]] = {k: list(v) for k, v in routes.items()}
-        ends: dict[int, int | None] = dict(end_nests)
-
-        # 每轮至少永久移除一个任务，轮数上界 = 任务数 + 4
-        for _ in range(len(self._task_ids) + 4):
-            changed = False
-            for uav_id in sorted(work):
-                tids = work[uav_id]
-                if not tids:
-                    continue
-                for pos in range(len(tids)):
-                    tid = tids[pos]
-                    latest = self._task_latest(tid)
-                    if latest is None:
-                        continue
-                    if self._arrival_time_of(uav_id, tids, pos) < latest + W - 1e-9:
-                        continue
-                    # 零奖励：移除；改派到「整航次不新增迟到」处则保住，否则暂缓
-                    tids.pop(pos)
-                    self._reflow_task(
-                        tid, work, ends,
-                        active_completion=True, full_window=True, allow_evict=False,
-                    )
-                    changed = True
-                    break
-                if changed:
-                    break
-            if not changed:
-                break
-
-        # 航次被清空的 UAV 转为空闲，回到原归属机巢（释放名额）
-        for uav_id, tids in work.items():
-            if not tids:
-                ends[uav_id] = None
-        return work, ends
 
     def _consolidate(
         self,
@@ -707,7 +627,7 @@ class DecodeRepairMixin:
         routes: Mapping[int, Sequence[int]],
         end_nests: Mapping[int, int | None],
     ) -> tuple[dict[int, list[int]], dict[int, int | None]]:
-        """Fix⑥ 覆盖补全：**可达即执行**（存在量化口径）。
+        """全机队 覆盖补全：**可达即执行**（存在量化口径）。
 
         DMDE 只在 ``participating`` 内搜索，参与集外的可用机它无从调度；而
         ``_reflow_task`` 是被动救援（仅在航程修复**移除**任务时触发），对
@@ -721,15 +641,15 @@ class DecodeRepairMixin:
 
         真不可达的任务不会被硬塞：**航程/巢容量等硬约束**不可达（任何机
         单任务航次都超限，如 exp01 的 T19，最小单任务航次 82.4km）时
-        _reflow_task 返回 False，保持 y_j=0。窗口是软约束（2026-10-24
+        _reflow_task 返回 False，保持 y_j=0。窗口是软约束（
         口径：迟到计价、计完成），「飞得到但赶不到 deadline」的任务
         **必须装**（如 exp01 的 T10：迟到交付＝完成，不是白飞）。
         """
-        # 门禁口径（唯一主口径，2026-10-24）下经济性剔除已永久关闭：原 legacy
+        # 门禁口径（唯一主口径）下经济性剔除已永久关闭：原 legacy
         # 加权和（lexicographic=False）路径已从代码移除，而门禁口径「完成是约束」
         # 不容许丢弃可达任务。故强制补全**始终执行**（可达即执行）——这正是本修复
         # 「可达即执行、但不得违反约束」的方法论前提。
-        # （2026-10-27 清理死分支：原 `economic_prune = False` + 恒假 return 已删，
+        # （清理死分支：原 `economic_prune = False` + 恒假 return 已删，
         # 语义逐位不变；build_solution 处的 economic_prune（真开关）不受影响。）
 
         work: dict[int, list[int]] = {k: list(v) for k, v in routes.items()}
@@ -739,7 +659,7 @@ class DecodeRepairMixin:
         for tid in self._task_ids:
             if tid in assigned:
                 continue
-            # 窗口是软约束（2026-10-24：迟到计价、计完成），主动补全不查窗。
+            # 窗口是软约束（：迟到计价、计完成），主动补全不查窗。
             if self._reflow_task(tid, work, ends, active_completion=True):
                 assigned.add(tid)
 
@@ -752,13 +672,13 @@ class DecodeRepairMixin:
     ) -> tuple[dict[int, list[int]], dict[int, int | None], int]:
         """覆盖优先装载：把 S 内未交付任务装到**约定口径下的最大可行集**。
 
-        用户 2026-10-23 裁定（解码/repair 第一段）：先按覆盖目标装，再
+        口径约定（解码/repair 第一段）：先按覆盖目标装，再
         在不减少已装集合的约束下做成本 polish。本函数即第一段。
 
-        约定口径（与覆盖门禁同源，2026-10-24 软窗）：**一阶判据** =
+        约定口径（与覆盖门禁同源，软窗）：**一阶判据** =
         航程（全航程 ≤ 剩余航程）+ 开班机巢容量；窗口不否决（迟到
         软约束，迟到计价、计完成）；救援通道含插入现有航次、闲置机开班
-        （参与集 → 全机队 fleet 口径）、换机腾位（Fix⑦，depth<2，
+        （参与集 → 全机队 fleet 口径）、换机腾位（换机，depth<2，
         迁移任务受全航次单调纪律约束——不制造**新**迟到）。不含
         「两个未覆盖任务拼班才装得下」的组合可行——与 ``gate_stats``
         的 shortfall 声明同边界。
@@ -789,7 +709,7 @@ class DecodeRepairMixin:
             )
             round_loaded = 0
             for tid in deferred:
-                # active_completion=True：主动补全（启用换机腾位 Fix⑦，
+                # active_completion=True：主动补全（启用换机腾位 换机，
                 # 救援强度高于门禁的插入/开班两级）；窗口是软约束，不查窗。
                 if self._reflow_task(tid, work, ends, active_completion=True):
                     round_loaded += 1
@@ -819,8 +739,8 @@ class DecodeRepairMixin:
 
         1. 插入现有航次的最优可行位置（插入后航次 ≤ 该机航程预算）；
         2. 给闲置参与 UAV 开单任务航次（闲置合法，U_exec ⊆ U_avail）；
-        2b. Fix⑥：救援池扩到全可用机队（参与集外的闲置机同样可用）；
-        2c. Fix⑦ 换机：某架机的单任务航次 ``[task_id]`` 可行，但它已被
+        2b. 全机队：救援池扩到全可用机队（参与集外的闲置机同样可用）；
+        2c. 换机 换机：某架机的单任务航次 ``[task_id]`` 可行，但它已被
             占用 → 尝试把它的现有任务整体迁到别处，空出该机飞 ``task_id``。
         （仅 ``active_completion`` 下启用，即主动覆盖补全；被动救援不动别人
         的任务，保持修复链最小干预。）
@@ -855,7 +775,7 @@ class DecodeRepairMixin:
                 c = self._tour_cost(uid, cand, ends.get(uid))
                 if (
                     c <= limit + 1e-6
-                    # 窗口是软约束（2026-10-24 口径：迟到计价、计完成），
+                    # 窗口是软约束（口径：迟到计价、计完成），
                     # 可装判据只查航程——「飞得到但赶不到」的任务必须装
                     # （迟到交付＝完成，不是白飞）。full_window：换机迁移
                     # 保留全航次单调纪律（不得把同航次后续任务搞迟到——
@@ -876,7 +796,7 @@ class DecodeRepairMixin:
             ):
                 work[u.id] = [task_id]
                 return True
-        # 2b) Fix⑥：救援池扩到全可用机队。参与集是按「最小距离覆盖」挑出的子集，
+        # 2b) 全机队：救援池扩到全可用机队。参与集是按「最小距离覆盖」挑出的子集，
         # 它之外的闲置机物理上同样可用；只在参与集内找，会让可达任务因「参与集
         # 恰好全满」被判 y_j=0（假暂缓）。把它们纳入救援池，才真正落实
         # 「可达即执行」——可达性是存在量化，不是方案内判定。
@@ -895,7 +815,7 @@ class DecodeRepairMixin:
                 ):
                     work[u.id] = [task_id]
                     return True
-        # 2c) Fix⑦ 换机：把「能单飞 task_id 但已被占用」的机腾出来。
+        # 2c) 换机 换机：把「能单飞 task_id 但已被占用」的机腾出来。
         # 仅主动补全（active_completion）时启用；迁移允许有限深度递归换机。
         if active_completion and allow_evict and depth < 2:
             for uid in sorted(work):

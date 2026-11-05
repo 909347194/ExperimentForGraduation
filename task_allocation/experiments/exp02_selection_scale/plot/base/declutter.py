@@ -12,7 +12,7 @@ UAV 起飞点 ``U#``、机巢 ``巢#``、任务 ``T#·Ck``（外加甘特里的�
 * UAV 标号落在右上、部分机巢标号也在右上 → 压字 34%；
 * 相邻任务点的任务标号与邻点收益数字 → 压字 56%。
 
-这些都是 2026-10-13 版面自检（``plot.base.audit``）报出来的真实缺陷。靠人手
+这些都是 版面自检（``plot.base.audit``）报出来的真实缺陷。靠人手
 逐个微调偏移治不了根——换一份数据（更多 UAV、更密的巢）又会错开。
 
 做法
@@ -216,7 +216,7 @@ def _wrap(text: str, avail_in: float, fontsize_pt: float) -> str:
     """按可用宽度贪心折行。
 
     断点优先级：**空格 > 逐字符**。公式/守恒式标题里含 ``n_selected`` 这类
-    英文标识符，逐字符断行会把单词拦腰切成 ``n_selecte`` / ``d``（2026-10-13
+    英文标识符，逐字符断行会把单词拦腰切成 ``n_selecte`` / ``d``（
     P01(d) 实测），比不折行更难看；先尝试在最后一个空格处断，整段无空格
     （如纯中文标题）才退回逐字符。
     """
@@ -272,7 +272,7 @@ def fit_axis_titles(fig) -> int:
     for ax in list(getattr(fig, "axes", [])):
         # 三个标题槽都要查：``setup_style`` 设了 ``axes.titlelocation="left"``，
         # 于是 ``set_title`` 写进 ``_left_title`` 而不是 ``title``——只查
-        # ``ax.title`` 会全部漏掉（2026-10-13 调试发现）。
+        # ``ax.title`` 会全部漏掉（调试发现）。
         slots = [getattr(ax, "title", None), getattr(ax, "_left_title", None),
                  getattr(ax, "_right_title", None)]
         for title in slots:

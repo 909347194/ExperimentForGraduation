@@ -7,7 +7,7 @@
 
     lasa_chengguan/   拉萨市城关区（机巢 CSV + ASTER GDEM 瓦片 + 城关区多边形）
 
-加载约定（2026-10-27 由"平铺 data/ 按场景分目录"）：
+加载约定（由"平铺 data/ 按场景分目录"）：
 
     * 实验 config 的 ``data.scenario`` 声明场景名，``data.path`` / ``data.dem`` /
       ``data.region_geojson`` 仍声明**文件名**（相对场景目录）；

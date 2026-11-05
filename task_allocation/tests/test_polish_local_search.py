@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""解码后局部搜索 polish 测试（2026-10-19）。
+"""解码后局部搜索 polish 测试。
 
 契约：
 
@@ -218,7 +218,7 @@ def test_polish_rejects_range_violating_relocate():
 
 
 def test_coverage_guard_tracks_current_best_not_initial():
-    """回归①（2026-10-26）：覆盖守护必须锚定「当前最优解集」而非初始解集。
+    """回归①：覆盖守护必须锚定「当前最优解集」而非初始解集。
 
     场景（2 机 3 任务，脚本化假评价器模拟修复链行为）：
       base   [(0,0),(1,1)]           → exec {0,1},   f=100
@@ -260,7 +260,7 @@ def test_coverage_guard_tracks_current_best_not_initial():
             return _Res(fit, ex)
 
     class _ProblemCfg:
-        lexicographic_coverage = True          # 触发 coverage_blind
+        coverage_audit = True          # 触发 coverage_blind
 
     class _Problem:
         config = _ProblemCfg()
