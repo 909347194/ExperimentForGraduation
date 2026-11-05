@@ -147,11 +147,14 @@ class HorizonConfig:
     # 置 False 则事件仅被记录、不触发本期重规划（供消融对比关停该机制）。
     event_replan: bool = True
     # 收敛早停（2026-11-04 用户裁定口径）：到达全部注入后，**池空**（不存在
-    # 「能被完成却没被完成」的任务；静态几何不可达已出池，服务休眠仍在池中）
-    # 即自然收敛停机；否则持续推进，让休眠任务等条件恢复唤醒——「没服务，
-    # 只要能服务，迟早被服务」。stable_patience 降为兜底：池非空但连续该数
-    # 个周期零进展（无完成/唤醒/新休眠/新出池且池大小不变）才提前停，防止
-    # 时变能力永不恢复时空转到 n_cycles 硬上限。n_cycles 是硬安全上限，
+    # 「能被完成却没被完成」的任务；静态几何不可达已出池，服务暂缓仍在池中）
+    # 即自然收敛停机；否则持续推进，让暂缓任务等条件恢复唤醒——「没服务，
+    # 只要能服务，迟早被服务」。stable_patience 降为兜底：仅当池非空、
+    # **池内无服务暂缓任务**且连续该数个周期零进展（无完成/唤醒/新暂缓/新出池
+    # 且池大小不变）才提前停。⚠ 兜底只覆盖**无暂缓任务的僵死池**（如能力
+    # 短缺反复装不下）；池内有暂缓任务时兜底禁用（正在等条件恢复 ≠ 零进展），
+    # 「时变能力永不恢复」正是永久暂缓场景、不被兜底覆盖，由 n_cycles 硬上限
+    # 止损（2026-11-05 审查 M1 如实化）。n_cycles 是硬安全上限，
     # 不是主停机条件（真实周期数由本判据决定）。
     stop_when_stable: bool = False
     stable_patience: int = 4
@@ -479,21 +482,26 @@ class RollingHorizon:
         return hit
 
     def _serviceable(self, task: Task, uavs: Sequence[UAV]) -> bool:
-        """是否存在可用机在往返航程内（逐机判定，异构口径）。
+        """是否存在可用机可服务它（逐机判定，异构口径；与预筛同判据）。
 
-        ∃ 可用机 u：``2·c(task,u) ≤ u.full_charge_range``。同构等航程时与
-        旧「2·cost_hint ≤ 全局 uav_max_range」逐位一致；异构下短航程机
+        ∃ 可用机 u：``2·c(task,u) ≤ range_margin · remaining_range(u)``
+        ——与预筛 ``prefilter`` 的 ``served`` 分支逐字同判据（2026-11-05
+        审查 M3 对齐：旧实现用**满电**航程、预筛用剩余航程×margin，两者
+        只在 margin=1.0 且换电回满时等价；缝隙会造成「唤醒了却永被预筛
+        拒」的 PENDING churn，恰是休眠机制要消灭的现象）。异构下短航程机
         装不下 ≠ 任务不可服务（更远的长航程机可能装得下）。代价走运行级
-        记忆化的 DEM 三维 ``_distance_fn``（与预筛/静态判定同源同尺）。
+        记忆化的 DEM 三维 ``_distance_fn``（与预筛/静态判定同源同尺）；
+        永久性判定（static_unreachable）仍用满电机队最强航程，与时变
+        判据分工不同。
         """
+        margin = float(
+            getattr(self.sel_cfg.feasibility, "range_margin", 1.0) or 1.0
+        )
         for u in uavs:
             if not u.is_available:
                 continue
-            r = u.full_charge_range(self.hcfg.uav_max_range)
-            if r is None:
-                continue
             c = float(self._distance_fn(u.position, task.position))
-            if 2.0 * c <= r:
+            if 2.0 * c <= margin * max(u.remaining_range, 0.0):
                 return True
         return False
 
@@ -523,9 +531,9 @@ class RollingHorizon:
     def _update_service_stall(self, tasks: Sequence[Task]) -> list[Task]:
         """机队服务不可达追踪：持续无可用机在往返航程内的任务**转休眠**。
 
-        逐机判据 ``_serviceable``（∃ 可用机：2·c ≤ 该机满电航程，异构
-        口径）即「本周期有可用机能服务它」——与预筛 ``no_uav_in_range``
-        同源同尺。连续 ``service_patience`` 个周期不满足 → 休眠（
+        逐机判据 ``_serviceable``（∃ 可用机：2·c ≤ range_margin·该机剩余
+        航程，与预筛 ``no_uav_in_range`` 分支逐字同判据，2026-11-05 审查 M3
+        对齐）即「本周期选择层会放行它」。连续 ``service_patience`` 个周期不满足 → 休眠（
         ``mark_dormant``：不出池、不进候选，2026-11-04 起取代旧
         ``reason="service"`` 出池口径——服务可达性是时变条件，异构机队下
         「连续够不着」≠「永远够不着」）。条件恢复由 ``_wake_dormant``
@@ -918,10 +926,13 @@ class RollingHorizon:
         任务留在池里等条件恢复唤醒时，池大小不变恰恰是「正在等」，不是「没
         进展」。旧口径把这种状态误判稳态、把休眠任务锁死，本次废弃。
 
-        ``stable_patience`` 降为**兜底**：仅当池非空、**池内无休眠任务**（不
-        在等条件恢复）且连续该数个周期零进展（池大小不变，本周期无完成 /
-        唤醒 / 新休眠 / 新不可达出池）才提前停，防止能力范围外的死循环空转到
-        ``n_cycles`` 硬安全上限。此时记 ``no_progress``，属**非自然收敛**，
+        ``stable_patience`` 降为**兜底**：仅当池非空、**池内无服务暂缓任务**
+        （不在等条件恢复）且连续该数个周期零进展（池大小不变，本周期无完成 /
+        唤醒 / 新暂缓 / 新不可达出池）才提前停，覆盖「无暂缓的僵死池」
+        （如能力短缺反复装不下）。⚠ 池内有服务暂缓任务时兜底**禁用**：
+        正在等条件恢复 ≠ 零进展（2026-11-05 审查 M1 如实化）；
+        「时变能力永不恢复」即永久暂缓场景，不被兜底覆盖，由
+        ``n_cycles`` 硬安全上限止损。此时记 ``no_progress``，属**非自然收敛**，
         metrics 侧的 ``n_dormant_end`` 等单列指标如实暴露，不粉饰成干净收敛。
 
         ``stop_when_stable`` 仍是「是否允许早于 n_cycles 停止」的总开关；关闭
