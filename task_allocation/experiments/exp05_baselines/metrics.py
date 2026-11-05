@@ -75,10 +75,11 @@ CSV_COLUMNS = (
     "s_coverage_rate",
     "throughput_per_cycle",
     "n_cycles",
-    "n_oper_cycles",
     "n_active_cycles",
     "solve_time_ms",
     "wall_seconds",
+    # 2026-11-05 审查 L4：尾插不移位旧列，兼容按列位置解析的下游 CSV 脚本
+    "n_oper_cycles",
 )
 
 #: 跨 seed 聚合的数值键（mean±std）

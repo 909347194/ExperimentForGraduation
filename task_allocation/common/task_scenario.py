@@ -631,6 +631,11 @@ def _assign_sequence_chains(
 ) -> int:
     """把一部分任务组织成时序链，返回链数（0 = 未启用）。
 
+    调用方契约（2026-11-05 审查 L3 显式断言）：``tasks`` 必须是**单批次**
+    （共享 arrival_time）——链不得跨批到达，滚动层顺序组原子性
+    （methods/rolling/sequence_group.py）依赖此不变量：混批成组会让准入
+    闸门永久暂缓先到成员。
+
     链内成员取「随机种子 + 其空间最近邻」，保证同一链在地理上成簇（同一
     目标/同一片区域的先后作业），且**不移动任何撒点**——只貼标签，撒点
     分布与关闭时完全一致。
@@ -649,6 +654,11 @@ def _assign_sequence_chains(
     n_chains = int(n * ratio) // k
     if n_chains <= 0:
         return 0
+    # 不变量（2026-11-05 审查 L3）：链必须单批次成组（组内共享
+    # arrival_time）；混批列表当场拒绝，不得静默成组。
+    assert len({float(t.arrival_time) for t in tasks}) <= 1, (
+        "sequence chain 需单批次成组：混入多个 arrival_time"
+    )
 
     remaining = list(range(n))
     chains_built = 0

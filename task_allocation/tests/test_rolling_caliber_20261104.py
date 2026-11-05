@@ -249,23 +249,26 @@ def test_seq_delivery_gate_drops_partial_group():
     h = _make_horizon([_uav(0), _uav(1)], tasks)
     h.pool.begin_cycle(current_time=0.0)
 
-    # 完整组：解里 1、2 都在 ⇒ 不动
+    # 完整组：解里 1、2 都在 ⇒ 不动（est_cost 原样保留）
     complete = AllocationSolution(
-        tours=[UAVTour(uav_id=0, task_ids=[1, 2, 3])],
+        tours=[UAVTour(uav_id=0, task_ids=[1, 2, 3], est_cost=150.0)],
         executed_task_ids=[1, 2, 3],
     )
     assert h._seq_delivery_gate(complete) == []
     assert complete.tours[0].task_ids == [1, 2, 3]
     assert complete.executed_task_ids == [1, 2, 3]
+    assert complete.tours[0].est_cost == 150.0
 
-    # 部分组：只装了 1 ⇒ 撤下 1，tours 与 executed_task_ids 同步收口
+    # 部分组：只装了 1 ⇒ 撤下 1，tours 与 executed_task_ids 同步收口；
+    # est_cost 按任务数比例收口（2026-11-05 审查 L2）：3 个撤 1 ⇒ ×2/3
     partial = AllocationSolution(
-        tours=[UAVTour(uav_id=0, task_ids=[1, 3, 9])],
+        tours=[UAVTour(uav_id=0, task_ids=[1, 3, 9], est_cost=300.0)],
         executed_task_ids=[1, 3, 9],
     )
     assert h._seq_delivery_gate(partial) == [1]
     assert partial.tours[0].task_ids == [3, 9]
     assert partial.executed_task_ids == [3, 9]
+    assert abs(partial.tours[0].est_cost - 200.0) < 1e-9, partial.tours[0].est_cost
 
 
 def test_seq_delivery_gate_no_group_bypass():

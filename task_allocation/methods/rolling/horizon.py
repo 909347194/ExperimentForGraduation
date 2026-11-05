@@ -604,8 +604,9 @@ class RollingHorizon:
 
         在 ``apply_solution`` / ``record.tours`` 生成之前调用，直接修改
         ``tour.task_ids``；撤下的任务自然落入 ``deferred_ids``。est_cost
-        沿用原 tour 估值（偏保守，recharge_at_nest 下会回满），不重算——
-        组原子性优先于航程记账精度，如实声明、不影响完成口径。
+        按任务数比例收口（kept/before，与废飞航程分摊同源约定：不做逐任务
+        路径析出，2026-11-05 审查 L2）；求解期 ``f2`` / ``final_path_m``
+        仍是**含被撤成员**的规划口径，metrics 取数引用时需知。
         """
         groups = self._seq_groups()
         if not groups:
@@ -617,7 +618,13 @@ class RollingHorizon:
         if not drop:
             return []
         for tour in solution.tours:
-            tour.task_ids = [int(i) for i in tour.task_ids if int(i) not in drop]
+            before = [int(i) for i in tour.task_ids]
+            kept = [i for i in before if i not in drop]
+            tour.task_ids = kept
+            if before and len(kept) != len(before):
+                # est_cost 比例收口（2026-11-05 审查 L2）：撤下成员后不再
+                # 沿用原估值，否则航程账把已撤成员的规划航程也算进去
+                tour.est_cost = float(tour.est_cost) * (len(kept) / len(before))
         solution.executed_task_ids = [
             int(i) for i in solution.executed_task_ids if int(i) not in drop
         ]
@@ -792,7 +799,9 @@ class RollingHorizon:
         record.selection["replan"] = replan
         if seq_deferred:
             # 准入门禁整组暂缓的 id：本周期未进选择层，仍留池 PENDING。
-            # 单列供审计（它们不在 selected_ids / deferred_ids 的求解口径里）。
+            # 单列供审计：它们不在选择层 selected_ids 口径里；record 的
+            # deferred_ids 由步骤 8 统一记账（tasks − executed）、天然包含
+            # 它们（2026-11-05 审查 L1：统一两处注释口径）。
             record.selection["seq_group_admission_deferred"] = list(seq_deferred)
         # S 成员无条件落盘（2026-10-22 覆盖门禁）：一阶检验与三分账的 S 基准，
         # 供「进过 S 没装」vs「从未进 S」归因；forced_ids 有即落（与 replan

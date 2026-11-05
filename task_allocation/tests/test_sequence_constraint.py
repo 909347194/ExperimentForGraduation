@@ -231,6 +231,30 @@ def test_chain_generation_off_by_default():
     ) == (0.0, [])
 
 
+def test_chain_generation_requires_single_batch():
+    """不变量钉（2026-11-05 审查 L3）：链必须单批次成组（共享 arrival_time）。
+
+    滚动层顺序组原子性依赖该契约（混批成组会让准入闸门永久暂缓先到
+    成员）；混批列表必须当场拒绝，不得静默成组。
+    """
+    import numpy as np
+
+    from task_allocation.common.task_scenario import _assign_sequence_chains
+
+    tasks = [
+        Task(id=1, x=0.0, y=0.0, z=0.0, reward=5.0, arrival_time=0.0),
+        Task(id=2, x=1.0, y=0.0, z=0.0, reward=5.0, arrival_time=600.0),
+    ]
+    xy = np.array([[0.0, 0.0], [1.0, 0.0]])
+    cfg = SimpleNamespace(sequence_chain_ratio=1.0, sequence_chain_len=2)
+    try:
+        _assign_sequence_chains(tasks, xy, np.random.default_rng(0), cfg)
+    except AssertionError:
+        pass
+    else:
+        raise AssertionError("混批列表应被拒绝（组内成员 arrival_time 不一致）")
+
+
 def test_chain_generation_on():
     """开启后：链数正确、组内序号连续、组 id 唯一。"""
     tasks = _gen(n=12, sequence_chain_ratio=0.5, sequence_chain_len=2)
