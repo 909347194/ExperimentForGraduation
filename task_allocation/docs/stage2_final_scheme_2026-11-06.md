@@ -1,7 +1,8 @@
 # 第二阶段方法定稿：四条边界 × 六要素链条
 
 > 2026-11-06 | **状态：方案与六项默认参数已拍板（回写比例 0 / ε 关 / L3b 关 /
-> 失败 seed 不重采样 / Lagaros 按原文限制引用 / docs 入库）；P0 已开工**
+> 失败 seed 不重采样 / Lagaros 按原文限制引用 / docs 入库）；
+> P0 已落地（同日，见 §11 实施记录）；P1 入口条件已满足**
 > 用户本轮裁定：四条边界（进化搜索 / 可行性保障 / 交付质量 / 评价与遗传传递一致性）
 > + 最终方案「原始候选独立评价 + 可行性优先的 DMDE 竞争 + 可选硬约束修复候选
 > + 可选受限交付精修 + 独立交付验收 + 完整搜索轨迹与消融实验」。
@@ -408,9 +409,10 @@ Zotero 全文 `storage/UEDCMGSJ/…pdf`。页码为**期刊印刷页码**，PDF 
 
 ## 10. 诚实口径与本文不做的事
 
-- 本文是**方案定稿 + 文献核实**，未修改任何生产代码、未跑新实验、未改
-  `Chapter3_README.md`（§4.8/§4.9/§4.10 是 `method-phase1` 的冻结描述，
-  重构未开始不应覆盖）。
+- 本文是**方案定稿 + 文献核实**；定稿当时未修改任何生产代码、未跑新实验、
+  未改 `Chapter3_README.md`（§4.8/§4.9/§4.10 是 `method-phase1` 的冻结描述，
+  重构未开始不应覆盖）。**P0 已于同日实施（§11），行为边界严格限于 §8.1
+  的『允许』清单**。
 - 「精英更新频率上升」「可行率与交付质量同时提升」「修复链更干净 ⇒ 搜索更有效」
   三项均为**待验证假设**，不是本方案保证的结果；P1 前置闸门正是为此。
 - `S_final` 的重放口径仍受 §4.10 的下界限制（未覆盖 `polish_assignment`
@@ -421,3 +423,60 @@ Zotero 全文 `storage/UEDCMGSJ/…pdf`。页码为**期刊印刷页码**，PDF 
   Zhao Ming (2017) **仍为二次引用**，未获取全文，不臆造公式与 DOI。
 - 范围：若沿用 pop8×gen8 冒烟档，结论不可外推正式档；纯几何 SRP 实例结论
   不外推 DEM 有向代价与多周期滚动。
+
+---
+
+## 11. 实施记录
+
+### 11.1 P0 契约与轨迹（2026-11-06，已落地）
+
+状态：**完成**（小步提交，逐个推送）。落地内容与验收如下：
+
+| 步 | 提交 | 内容 |
+|---|---|---|
+| C1 | `feat: P0-a ConstraintSpec 约束注册表 + 四处另写判据收口` | `constraints/spec.py`（注册表 + judge() 全部委托既有实现）+ `constraints/criteria_drift.py`（漂移测量库）；`feasibility.py` / `tour_cost.py` / `coverage_gate.py` 判定接线（现语义原样包一层） |
+| C2 | `feat: P0-b DecisionLedger 决策台账` | `decision_ledger.py`（reason=hard|opt 必填、事件有界、计数全量、外部计数源并账）；`stage_config.ledger_enabled/ledger_max_events`；`evaluator` 挂载台账 + `_ORDER_WINNER_COUNTS`/`_WRITEBACK_STATS` 并账 |
+| C3 | `feat: P0-c 插桩 + 回退不静默` | `decode_repair` 各算子逐动作入台账（`_consolidate` 成本合并记 `reason=opt`、`_best_order` 航程裁决记 `opt`）+ 时序/时间窗判据视图收口；`stage_runner` 四个采纳判据经 `accept_*_view` + 精修采纳事件入台账；`dmde_solver` 选择事件（`selection_object=S_repair` / `inherited_object=g_raw|g_repaired_reencoded`）+ Lamarckian 回写 `except: pass` → 计数+日志（原静默回退已改） |
+| C4 | `test: P0 契约测试` | `tests/test_p0_contracts.py` 19 项：判据委托等价、视图漂移条件锁死、台账纪律、回退计数、选择一致性四元组、台账开/关逐位一致 |
+| C5 | `docs: P0 漂移基线 + 实施记录` | `docs/p0_criteria_drift_baseline_2026-11-06.md` + 本节 |
+
+**验收结果**：
+
+1. **bit-exact**：5 场景探针（默认 repair_chain / coverage_first+gate /
+   constructive / patrol_writeback / no_polish）P0 前后签名**逐位一致**
+   （交付解结构、f1/f2、final/best fitness、n_evals、cost_history、gate_stats、
+   polish/memetic 诊断；浮点 float.hex() 对照）；台账开/关两档求解结果逐位一致；
+2. **全量测试**：与基线完全一致——427 绿 + 6 失败；6 个失败全部是
+   `test_task_region.py` 的 DEM/geojson **数据缺口**（`Chengguan_DEM.tif` 等大
+   文件不在 git，本环境为 fresh clone），非代码回归。P0 新增 19 项全绿；
+3. **台账纪律**：`reason` 覆盖率 100%（非法 reason 拒绝入账且
+   `n_reason_missing` 可见）；事件流有界（`ledger_max_events`，计数恒全量）；
+   历史计数器（order 胜率 / writeback 闸门）已并入 `ledger.snapshot()`；
+4. **四层判据漂移率基线**：已出（
+   `docs/p0_criteria_drift_baseline_2026-11-06.md`）。生产口径下四处漂移实测
+   均为 0，但三条**结构性通道**存在：时间窗元组分叉（100%）、时序 1e-9
+   松弛（边界组 75%）、采纳判据迟到门缺失 + 阈值单位混用（50%~72.5%）。
+   P1/P2/P3 按该报告顺序消解。
+
+**P0 行为边界（§8.1）逐条遵守**：未动任何判定语义、未动 f 公式/权重/门禁/
+距离口径；采纳判据缺陷（`stage_runner` 已算 `cand_fitness` 未进判据）
+**保持原样、仅入台账观测**（修复在 P3）；回写/ε/L3b 均保持现状默认。
+
+**已知环境缺口（诚实声明）**：本环境缺 DEM 场景数据（`guangzhou/dem.tif`、
+`lasa_chengguan/Chengguan_DEM.tif`、`guangzhou/building/`），exp01 生产口径
+实验与 exp01 审计 25/25 无法在此运行；P0 数值验证以合成探针 + 全量单测为准，
+正式档验收（exp01 审计、论文数字对账）须在带数据的环境补跑后回填本节。
+
+### 11.2 P1 原始评价 + 可行性优先竞争（待推进）
+
+入口条件已满足（P0 验收全过）。范围（§8 表）：`projection_only` 剥解码期
+目标改写（`_consolidate` 成本合并 / `_best_order` NN/航程裁决移出每体路径）、
+`CompareSpec`（默认 Deb 三规则，ε/Lagaros 为可选对照档、默认关）、层 1
+MCF 降级为「最近合法巢」确定性投影。验收 = §8 P1 前置闸门（step1 口径
+冻结代占比 < 0.89、精英总增益 > 11.62、改进代数 > 0.2、碰撞率不升、成功
+seed 完成率 100%；未达标停止推进 P2）。
+
+### 11.3 P2–P4（未开始）
+
+按 §8 表推进；P2 开工前须先定义回写对照档取值与闸门、ε 参数（Eq.11/12、
+TC/cp/τ/α）（§9 第 1、2 项）。
