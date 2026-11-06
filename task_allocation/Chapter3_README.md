@@ -369,6 +369,63 @@ monkeypatch,生产代码零改动):
 三步实验的综合报告、各步 CSV 与图见
 `experiments/ab_mechanism_3steps/SYNTHESIS.md`。
 
+### 4.10 搜索口径与交付口径的对齐性(`selection_gap_report.md`)
+
+§4.9 第 2 步的强交互项(158.07)提示一个比「模块职责不清」更根本的问题:
+DE 在搜索期最小化 `f(S_eval(x))`,而最终交付的是 `f(S_final(x))`。两处用的是
+**同一个** `problem.scalar_fitness`(`evaluator.py:199` /
+`stage_runner.py:346`),故差异**全部来自映射 S**,不是目标函数换了权重:
+`S_eval` = `evaluate → build_solution`(`dmde_solver.py:219`),
+`S_final` = 重建 → `polish_assignment` → memetic 档案 → `coverage_first` →
+交付后成本 polish(`stage_runner.py:344-438`)。
+
+**argmin 相等的充分条件**是存在严格递增 `g` 使 `f_final = g∘f_eval`
+(特例:`Δ(x)=f_eval−f_final` 对全体候选为常数)。逐点局部搜索不满足该条件,
+故 `argmin_x f(S_eval(x))` 与 `argmin_x f(S_final(x))` **没有对齐保证**。
+三点必须补上:
+
+1. 交付后优化**只对胜出者执行一次**,DE 是在「未打磨」的候选集上选 ——
+   `select-then-polish` 与 `polish-then-select` 不等价;打磨收益 Δ 依赖候选
+   x 的局部结构,必然改写搜索期的序关系。
+2. Lamarckian 回写把新基因的 fitness **继承**自旧基因
+   (`dmde_solver.py:241-243`),正确性依赖 Q2.1 表型复核;但默认路径
+   `_reencode_start_only`(`evaluator.py:267-273`)只改写起始通道、不跑该复核,
+   异常还被 `except: pass` 静默吞掉(`dmde_solver.py:244-246`) ——
+   属**未加校验的结构性风险**,不是已证实的数值 bug。
+3. DE 是**逐代贪心**,`f_final` 意义下的好个体若在早期因 `f_eval` 略差被淘汰
+   就永不进入最终候选集 —— 两个 `argmin` 的**定义域本就不同**;且 `S_final`
+   在生产链里只在单个点上被求值过,第二个 `argmin` 从未被真正执行。
+   这正是「每项收益可独立验证」在现有耦合下做不到的原因。
+
+零侵入探针 `probe_selection_gap.py` 把本次 run **每个被评价过的基因**离线重放
+交付映射(D1 重解码 / D2 叠加 `post_cost_polish`,四道门与 ε=1.0 同生产),
+实测 top1 重合率、regret、排序反转率、Spearman/Kendall、**并列最优数**与
+「选择价值」(相对随机挑一个候选的收益),并以「关掉交付后成本优化总闸」
+作隔离对照。关键口径:`regret = f_final(x*_eval) − min_x f_final(x)`,
+即现状「先选后打磨」与理论上限「先打磨后选」之差。结论与数值见
+`experiments/ab_mechanism_3steps/selection_gap_report.md`。
+
+实测(40:1 单周期、pop8×gen8、3 seeds、d0/d150 各 6 组;
+`|f_eval−f_redecode|` 全为 0,重放有效性门槛通过):
+
+- **关掉交付后成本优化总闸**:两体制 Spearman 均 **1.000**、反转率 0、
+  top1 重合率 1.000 —— 两口径完全对齐,证明错配由后处理引入而非重解码/随机性。
+- **d0(零迟到、纯航程)**:开启后 Spearman 跌到 **0.059**、排序反转率 **0.477**,
+  89 个候选里平均 **34.3** 个被 polish 压到同一个 `f_final`(并列最优);
+  虽 `regret=0`,但 DE 的「选择价值」(相对随机挑一个候选的收益)从
+  **1984.81 塌到 154.72(−92.2%)** —— 不是选错,而是**选择被后处理架空**。
+- **d150(强截止、迟到主导)**:开启后 top1 重合率仅 **0.333**、平均 regret
+  **49.00**、DE 选中个体在交付口径下平均只排第 **2.7/100** ——
+  `argmin_x f(S_eval(x)) ≠ argmin_x f(S_final(x))` **在数值上被直接坐实**。
+- `corr(Δ, f_eval)=0.991`:越差的候选被打磨得越多,序关系被系统性压缩;
+  `Δ(x)` 非常数,`f_final=g∘f_eval` 充分条件不成立。
+- 最终精英的 `f(build_solution(best_assignment)) − best_fitness` 全为 0,
+  说明回写不变式在最终精英上成立(结构性风险仍在,见上文第 2 点)。
+
+**论文口径**:不能写「DE 搜索并选择最优方案」;应写「DE 在 `f∘S_eval` 上做
+种群搜索并提名精英,交付解经重建与后处理定案;两口径排序一致性由实测给出」,
+并把 `best_fitness` / `final_fitness` 并列报告。
+
 ---
 
 ## 5. 滚动闭环(`methods/rolling/horizon.py`)
@@ -427,7 +484,8 @@ monkeypatch,生产代码零改动):
 (基线对照)、exp06_joint_regime(长程 Poisson 吞吐)、ab_m21_patrol_writeback
 (M2-1 巡游序回写开关对照)、ab_optimization_attribution
 (进化/修复/精修三级嵌套归属)、ab_order_marginal(基因顺序边际贡献)、
-ab_mechanism_3steps(优化器机制三步诊断:基因型→表型 / 进化×精修 2×2 / 模块拆分)。
+ab_mechanism_3steps(优化器机制三步诊断:基因型→表型 / 进化×精修 2×2 / 模块拆分;
+另含 `probe_selection_gap.py` 搜索—交付口径对齐探针,见 §4.10)。
 
 ---
 
