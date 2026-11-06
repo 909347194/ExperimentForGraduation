@@ -29,6 +29,7 @@ import numpy as np
 from task_allocation.methods.muas.constraints.nest_capacity import (
     solve_end_nest_assignment,
 )
+from task_allocation.methods.muas.constraints import spec as constraint_spec
 from task_allocation.methods.muas.coverage_gate import audit_coverage, repair_coverage
 
 
@@ -59,8 +60,63 @@ def _record_order_winner(name: str) -> None:
         _ORDER_WINNER_COUNTS[name] = _ORDER_WINNER_COUNTS.get(name, 0) + 1
 
 
+def _led_state(
+    routes: Mapping[int, Sequence[int]],
+    end_nests: Mapping[int, int | None],
+) -> str:
+    """航线+终点巢的紧凑状态摘要（台账 from/to 用，有界截断）。"""
+    parts: list[str] = []
+    for u in sorted(routes):
+        tids = routes[u]
+        if tids:
+            parts.append(f"{u}:{'>'.join(str(t) for t in tids)}")
+    zs = [f"{u}->{n}" for u, n in sorted(end_nests.items(), key=lambda kv: str(kv[0])) if n is not None]
+    if zs:
+        parts.append("z:" + ",".join(zs))
+    s = ";".join(parts) if parts else "idle"
+    return s if len(s) <= 240 else s[:240] + "…"
+
+
 class DecodeRepairMixin:
     """repair_chain 解码与修复算子组（混入 :class:`MUASAssignmentEvaluator`）。"""
+
+    # ---- 决策台账（P0 契约层，纯观测）--------------------------------
+    def _led(self):
+        return getattr(self, "ledger", None)
+
+    def _led_record(
+        self,
+        operator: str,
+        action: str,
+        reason: str,
+        constraint_id: str,
+        obj: str,
+        *,
+        from_state: str = "",
+        to_state: str = "",
+        accepted: bool = True,
+        gate_reason: str | None = None,
+        delta_f: float | None = None,
+        delta_violation: float | None = None,
+    ) -> None:
+        """追加一条台账记录（ledger 不存在/关闭时零开销短路）。"""
+        lg = self._led()
+        if lg is None or not lg.enabled:
+            return
+        lg.record(
+            layer="decode",
+            operator=operator,
+            action=action,
+            constraint_id=constraint_id,
+            object=obj,
+            from_state=from_state,
+            to_state=to_state,
+            reason=reason,
+            accepted=accepted,
+            gate_reason=gate_reason,
+            delta_f=delta_f,
+            delta_violation=delta_violation,
+        )
 
     def build_solution(
         self,
@@ -108,9 +164,18 @@ class DecodeRepairMixin:
         )
         for _ in range(6):
             # 合并修复：任务少时向更少机合并（闲置合法，U_exec ⊆ U_avail）
+            # 台账：_consolidate 内逐次 merge 记录（reason=opt，接受判据=成本降）
             routes, end_nests = self._consolidate(routes, end_nests)
             if economic_prune:
+                _prune_before = _led_state(routes, end_nests)
                 routes, end_nests = self._prune(routes, end_nests)
+                _prune_after = _led_state(routes, end_nests)
+                if _prune_after != _prune_before:
+                    self._led_record(
+                        "prune", "defer_task", "opt", "objective", "routes",
+                        from_state=_prune_before, to_state=_prune_after,
+                        gate_reason="economic_prune(消融算子,生产恒关)",
+                    )
             routes, end_nests = self._repair_range(routes, end_nests)
             end_nests = self._choose_end_nests(routes)
             state = (
@@ -149,7 +214,15 @@ class DecodeRepairMixin:
             not self.config.coverage_first
             and self.config.prune_zero_reward
         ):
+            _pzr_before = _led_state(routes, end_nests)
             routes, end_nests = self._prune_zero_reward(routes, end_nests)
+            _pzr_after = _led_state(routes, end_nests)
+            if _pzr_after != _pzr_before:
+                self._led_record(
+                    "prune_zero_reward", "defer_task", "opt", "objective", "routes",
+                    from_state=_pzr_before, to_state=_pzr_after,
+                    gate_reason="zero_reward_defer(消融算子,默认关)",
+                )
         # 重排按「迟到数, 迟到量, 航程」字典序挑顺序，末任务换人会拉长返航腿，
         # 可能把航次推过剩余航程。先按当前终点闸一次；被移除任务由
         # _reflow_task 改派（全航程口径校验），全部不可行才证明性暂缓。
@@ -186,15 +259,40 @@ class DecodeRepairMixin:
             gate_stats = gs.to_dict()
         elif bool(getattr(self.problem.config, "coverage_audit", False)):
             gate_stats = audit_coverage(self.problem, routes, end_nests).to_dict()
+        if gate_stats is not None:
+            self._led_record(
+                "coverage_gate",
+                "repair_coverage" if bool(getattr(self.config, "coverage_gate", False)) else "audit",
+                "hard", "coverage", "solution",
+                to_state=str({
+                    k: gate_stats.get(k)
+                    for k in ("n_skip", "n_shortfall", "n_rescued", "rounds")
+                }),
+                gate_reason="constructive_repair_fixed_point",
+            )
 
         # 终态兜底：门禁/装载救援往航次里插入任务时只按可达与成本挑位置，
         # 不会顾及链内顺序。此处**仅在确实存在逆序时**归位（调序会改变航程，
         # 无违规就不动，避免给已完成闸门放行的解引入新的航程风险）。
         if self._sequence_enabled():
-            routes = {
-                uid: (self._sequence_fix(tids) if self._seq_violation(tids) else list(tids))
-                for uid, tids in routes.items()
-            }
+            fixed_routes: dict[int, list[int]] = {}
+            _fix_changed = False
+            for uid, tids in routes.items():
+                if self._seq_violation(tids):
+                    fixed = self._sequence_fix(tids)
+                    if fixed != list(tids):
+                        _fix_changed = True
+                    fixed_routes[uid] = fixed
+                else:
+                    fixed_routes[uid] = list(tids)
+            if _fix_changed:
+                self._led_record(
+                    "sequence_fix", "fix_sequence", "hard", "sequence", "routes",
+                    from_state=_led_state(dict(routes), {}),
+                    to_state=_led_state(fixed_routes, {}),
+                    gate_reason="final_gate_seq_fix(仅存在逆序时归位)",
+                )
+            routes = fixed_routes
 
         sol = self._assemble(routes, end_nests)
         if gate_stats is not None:
@@ -222,17 +320,19 @@ class DecodeRepairMixin:
         return (grp, float(order if order is not None else tid))
 
     def _seq_violation(self, seq: Sequence[int]) -> bool:
-        """该访问序是否违反同链顺序（链内出现「序号下降」即为逆序）。"""
-        seen: dict[Any, float] = {}
+        """该访问序是否违反同链顺序（链内出现「序号下降」即为逆序）。
+
+        P0 契约层：判定委托 ``constraint_spec.sequence_decode_violated``
+        （解码口径视图，现语义原样包一层）；模型口径视图（逆序对计数）见
+        ``constraint_spec.sequence_model_inversions``，两者差异即漂移率测量对象。
+        """
+        pairs: list[tuple[Any, float]] = []
         for tid in seq:
             grp, order = self._seq_order_of(tid)
             if grp is None:
                 continue
-            prev = seen.get(grp)
-            if prev is not None and order < prev - 1e-9:
-                return True
-            seen[grp] = order if prev is None else max(prev, order)
-        return False
+            pairs.append((grp, order))
+        return constraint_spec.sequence_decode_violated(pairs)
 
     def _sequence_fix(self, seq: Sequence[int]) -> list[int]:
         """把一条航次内同链任务按 ``sequence_order`` 升序归位（最小位移重排）。
@@ -273,7 +373,15 @@ class DecodeRepairMixin:
         """
         if not self._sequence_enabled():
             return {uid: list(tids) for uid, tids in routes.items()}
-        return {uid: self._sequence_fix(tids) for uid, tids in routes.items()}
+        out = {uid: self._sequence_fix(tids) for uid, tids in routes.items()}
+        if any(list(routes[uid]) != out[uid] for uid in out):
+            self._led_record(
+                "repair_sequence", "fix_sequence", "hard", "sequence", "routes",
+                from_state=_led_state(dict(routes), {}),
+                to_state=_led_state(out, {}),
+                gate_reason="slotwise_chain_reorder",
+            )
+        return out
 
     def _reorder_for_deadlines(
         self, routes: Mapping[int, Sequence[int]]
@@ -319,7 +427,9 @@ class DecodeRepairMixin:
         )
 
         def latest_of(tid: int) -> float:
-            lst = getattr(by_id[tid], "latest", None)
+            # P0 契约层：解码口径 deadline 视图（现状直读 task.latest，
+            # 漂移测量对象见 constraint_spec.window_deadline_decode）。
+            lst = constraint_spec.window_deadline_decode(by_id[tid])
             return float(lst) if lst is not None else float("inf")
 
         def earliest_of(tid: int) -> float:
@@ -412,7 +522,7 @@ class DecodeRepairMixin:
             # 零迟到快返回等于把基因原序泄漏回对照臂（neutral 的语义是「基因序
             # 不是候选」），统一落入下方一般锦标赛裁决（2026-11-05 审查 P1 修）。
             if not self.config.reorder_range_optimize:
-                _record_order_winner("gene")
+                self._led_order_pick("gene", "hard", "zero_late_early_exit", base_key, base_key)
                 return list(tids)
             nn_key = _evaluate(nn) if list(nn) != list(tids) else None
             if (
@@ -420,24 +530,66 @@ class DecodeRepairMixin:
                 and nn_key[0] == 0
                 and nn_key[2] < base_key[2] - self.config.reorder_range_eps
             ):
-                _record_order_winner("nn")
+                self._led_order_pick("nn", "opt", "zero_late_nn_range_gain", base_key, nn_key)
                 return list(nn)
-            _record_order_winner("gene")
+            # nn 被拒：迟到/不可行判拒 → 迟到键决定（hard）；
+            # 零迟到但航程不优 → 航程键决定（opt）。
+            if nn_key is not None and nn_key[0] == 0:
+                self._led_order_pick("gene", "opt", "zero_late_keep_gene(nn_range_not_better)", base_key, base_key)
+            else:
+                self._led_order_pick("gene", "hard", "zero_late_keep_gene(nn_late_or_infeasible)", base_key, base_key)
             return list(tids)
 
         # 一般锦标赛：在所有候选里挑 (迟到数,迟到量,航程) 字典序最优
         best_name, best_seq = cands[0]
         best_key = _evaluate(best_seq)
+        _evaluated: list[tuple[str, list[int], tuple[int, float, float] | None]] = [
+            (best_name, best_seq, best_key)
+        ]
         for name, seq in cands[1:]:
             key = _evaluate(seq)
+            _evaluated.append((name, seq, key))
             if key is None:
                 continue
             if best_key is None or key < best_key:
                 best_key = key
                 best_name = name
                 best_seq = list(seq)
-        _record_order_winner(best_name)
+        # 台账归因：并列最优靠航程键裁决 → reason=opt（目标动作，P1 移出每体路径）；
+        # 迟到键已分胜负 → reason=hard（软约束可行性）。
+        _range_decided = best_key is not None and any(
+            k is not None and k != best_key and k[:2] == best_key[:2]
+            for _n, _s, k in _evaluated
+        )
+        self._led_order_pick(
+            best_name,
+            "opt" if _range_decided else "hard",
+            "tournament_range_tiebreak" if _range_decided else "tournament_late_key",
+            base_key,
+            best_key,
+        )
         return best_seq
+
+    def _led_order_pick(
+        self,
+        winner: str,
+        reason: str,
+        gate: str,
+        base_key: Any,
+        best_key: Any,
+    ) -> None:
+        """记录 _best_order 的定序决策（顺带并入历史胜率计数）。"""
+        _record_order_winner(winner)
+        self._led_record(
+            "best_order",
+            "pick_order",
+            reason,
+            "time_window",
+            "route",
+            from_state=f"base_key={base_key}",
+            to_state=f"winner={winner},key={best_key}",
+            gate_reason=gate,
+        )
 
     def _choose_end_nests(
         self,
@@ -499,6 +651,14 @@ class DecodeRepairMixin:
             planning_uav_ids=list(last_cost),
             excluded_nest_ids=excluded,
         )
+        self._led_record(
+            "choose_end_nests", "assign_end_nests", "hard", "nest_capacity",
+            "end_nests",
+            to_state=",".join(
+                f"{u}->{n}" for u, n in sorted(chosen.items(), key=lambda kv: str(kv[0]))
+            )[:240],
+            gate_reason="mcf_exact(容量约束下精确求解)",
+        )
         return chosen
 
     def _consolidate(
@@ -552,10 +712,20 @@ class DecodeRepairMixin:
                             best = (gain, dst, merged)
                 if best is not None:
                     _gain, dst, merged = best
+                    _merge_before = _led_state(work, ends)
                     work[dst] = merged
                     work[src] = []
                     ends[src] = None
                     improved = True
+                    self._led_record(
+                        "consolidate", "merge_routes", "opt",
+                        "range+nest_capacity", f"uav:{src}->uav:{dst}",
+                        from_state=_merge_before,
+                        to_state=_led_state(work, ends),
+                        # 混合算子（P1 拆分）：接受判据 = 成本严格下降（目标动作，
+                        # reason=opt）+ 结构性航程门；「闲置合法化」部分属表达能力。
+                        gate_reason=f"cost_strictly_decreases+range_gate,gain={_gain:.6f}",
+                    )
                     break  # 受体已变，重算下一轮
         return work, ends
 
@@ -612,6 +782,12 @@ class DecodeRepairMixin:
                 if best_pos is None:
                     break
                 tid = work[uav_id].pop(best_pos)
+                self._led_record(
+                    "repair_range", "pop_task", "hard", "range", f"task:{tid}",
+                    from_state=f"uav:{uav_id},saving={best_saving:.6f}",
+                    to_state="pending_reflow",
+                    gate_reason="max_removal_saving",
+                )
                 # 只改派不删任务：先回流到其它可行位置（现有航次 / 闲置机
                 # 单任务航次），全部不可行才本轮暂缓（y_j=0，证明性暂缓）。
                 self._reflow_task(tid, work, ends)
@@ -785,6 +961,11 @@ class DecodeRepairMixin:
                     best = (c, uid, cand)
         if best is not None:
             work[best[1]] = best[2]
+            self._led_record(
+                "reflow", "reflow_place", "hard", "range", f"task:{task_id}",
+                to_state=f"uav:{best[1]},inserted",
+                gate_reason="insert",
+            )
             return True
         # 2) 闲置 UAV 单任务航次：先在参与集内找（历史行为，优先保持原解结构）
         for u in sorted(self.participating, key=lambda x: x.id):
@@ -794,6 +975,11 @@ class DecodeRepairMixin:
                 self._tour_cost(u.id, [task_id], ends.get(u.id)) <= self._range_limit(u.id) + 1e-6
             ):
                 work[u.id] = [task_id]
+                self._led_record(
+                    "reflow", "reflow_place", "hard", "range", f"task:{task_id}",
+                    to_state=f"uav:{u.id},single_sortie",
+                    gate_reason="open_sortie_participating",
+                )
                 return True
         # 2b) 全机队：救援池扩到全可用机队。参与集是按「最小距离覆盖」挑出的子集，
         # 它之外的闲置机物理上同样可用；只在参与集内找，会让可达任务因「参与集
@@ -813,6 +999,11 @@ class DecodeRepairMixin:
                     self._tour_cost(u.id, [task_id], ends.get(u.id)) <= self._range_limit(u.id) + 1e-6
                 ):
                     work[u.id] = [task_id]
+                    self._led_record(
+                        "reflow", "reflow_place", "hard", "range", f"task:{task_id}",
+                        to_state=f"uav:{u.id},single_sortie_fleet",
+                        gate_reason="open_sortie_fleet",
+                    )
                     return True
         # 2c) 换机 换机：把「能单飞 task_id 但已被占用」的机腾出来。
         # 仅主动补全（active_completion）时启用；迁移允许有限深度递归换机。
@@ -844,6 +1035,16 @@ class DecodeRepairMixin:
                     trial[uid] = [task_id]
                     work.clear()
                     work.update(trial)
+                    self._led_record(
+                        "reflow", "reflow_place", "hard", "range", f"task:{task_id}",
+                        to_state=f"uav:{uid},evict_swap",
+                        gate_reason="evict_swap",
+                    )
                     return True
+        self._led_record(
+            "reflow", "reflow_fail", "hard", "range", f"task:{task_id}",
+            to_state="deferred(y_j=0)", accepted=False,
+            gate_reason="no_feasible_slot(证明性暂缓)",
+        )
         return False
 

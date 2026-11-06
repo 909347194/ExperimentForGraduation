@@ -52,6 +52,23 @@ class _EvalResult:
 
 
 # ---------------------------------------------------------------------------
+# Lamarckian 回写回退计数（P0：原 ``except: pass`` 静默回退 → 计数 + 日志）
+# ---------------------------------------------------------------------------
+# 纯观测：只累加整数 + stderr 警告（沿用「回退永不静默」惯例），
+# 不改变回退行为本身。
+_LAMARCK_FALLBACKS: dict[str, int] = {"count": 0}
+
+
+def lamarckian_fallback_stats() -> dict[str, int]:
+    """Lamarckian 回写异常回退计数（诊断用）。"""
+    return dict(_LAMARCK_FALLBACKS)
+
+
+def reset_lamarckian_fallback_stats() -> None:
+    _LAMARCK_FALLBACKS["count"] = 0
+
+
+# ---------------------------------------------------------------------------
 # 配置
 # ---------------------------------------------------------------------------
 
@@ -160,6 +177,12 @@ class DMDESolver(BaseOptimizer):
         # 随机数生成器
         rng = np.random.default_rng(cfg.seed)
 
+        # 决策台账（P0 契约层，纯观测）：选择事件 + 代际号。
+        # 评估器自带 ledger；无 ledger（如测试替身）时零开销跳过。
+        ledger = getattr(fitness_evaluator, "ledger", None)
+        if ledger is not None and getattr(ledger, "enabled", False):
+            ledger.set_gen(0)
+
         # 确定模型类型
         if n_uavs == n_targets:
             model_type = "balanced"
@@ -193,6 +216,8 @@ class DMDESolver(BaseOptimizer):
 
         # ---- Step 2: DMDE 进化迭代 (算法 3.1 行 07-32) ----
         for gen in range(1, cfg.max_generations + 1):
+            if ledger is not None and getattr(ledger, "enabled", False):
+                ledger.set_gen(gen)
             # 动态交叉率
             cr = dynamic_crossover_rate(gen, cfg.max_generations, cfg.zeta)
 
@@ -223,6 +248,8 @@ class DMDESolver(BaseOptimizer):
 
                 # 贪婪选择 (算法 3.1 行 28-30)
                 if child.fitness < population[i].fitness:
+                    _parent_f = population[i].fitness
+                    _inherited = "g_raw"
                     # Lamarckian 回写：把修复后的解写回获胜个体基因，
                     # 使下一代差分变异围绕修复后的可行子空间展开。
                     if (
@@ -241,14 +268,60 @@ class DMDESolver(BaseOptimizer):
                             if re_encoded is not None:
                                 re_encoded.fitness = child.fitness
                                 child = re_encoded
-                        except Exception:
-                            # 任何异常（长度/键缺失等）都回退到原 child，保证 DE 矩阵安全
-                            pass
+                                _inherited = "g_repaired_reencoded"
+                        except Exception as exc:
+                            # 任何异常（长度/键缺失等）都回退到原 child，保证 DE 矩阵安全。
+                            # P0：原 except: pass 静默回退 → 计数 + 警告（不静默）。
+                            _LAMARCK_FALLBACKS["count"] += 1
+                            if ledger is not None and getattr(ledger, "enabled", False):
+                                ledger.tick("dmde:lamarck_fallback")
+                            print(
+                                f"[dmde][warn] lamarckian_reencode 异常回退原 child"
+                                f"（累计 {_LAMARCK_FALLBACKS['count']} 次）：{exc!r}",
+                                file=sys.stderr,
+                            )
+
+                    # 台账（P0 纯观测）：选择看见 S_repair（修复后表型的 f），
+                    # 遗传传递的是 _inherited（g_raw / g_repaired_reencoded）——
+                    # §5 一致性契约的四元组追溯。
+                    if ledger is not None and getattr(ledger, "enabled", False):
+                        ledger.record(
+                            layer="select",
+                            operator="dmde_select",
+                            action="replace_parent",
+                            constraint_id="objective",
+                            object=f"pop[{i}]",
+                            from_state=f"f={_parent_f!r}",
+                            to_state=f"f={child.fitness!r}",
+                            reason="opt",
+                            delta_f=float(_parent_f) - float(child.fitness),
+                            accepted=True,
+                            gate_reason="greedy(child_f<parent_f)",
+                            selection_object="S_repair",
+                            inherited_object=_inherited,
+                        )
 
                     population[i] = child
                     if child.fitness < best_individual.fitness:
                         best_individual = child.copy()
                         best_idx = i
+                else:
+                    if ledger is not None and getattr(ledger, "enabled", False):
+                        ledger.record(
+                            layer="select",
+                            operator="dmde_select",
+                            action="keep_parent",
+                            constraint_id="objective",
+                            object=f"pop[{i}]",
+                            from_state=f"f_parent={population[i].fitness!r}",
+                            to_state=f"f_child={child.fitness!r}",
+                            reason="opt",
+                            delta_f=float(population[i].fitness) - float(child.fitness),
+                            accepted=False,
+                            gate_reason="greedy_child_not_better",
+                            selection_object="S_repair",
+                            inherited_object="g_parent",
+                        )
 
             # 代际种群方差回调（M2-1 A/B 多样性监控）：每代选择结束后记录
             # 含 Lamarckian 写回后的当代 gene-space 代价向量矩阵。默认 None

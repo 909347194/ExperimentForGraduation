@@ -19,6 +19,7 @@ import numpy as np
 
 from task_allocation.common.types import AllocationSolution, Nest, Task, UAV
 from task_allocation.methods.muas.base import BaseOptimizer
+from task_allocation.methods.muas.constraints import spec as constraint_spec
 from task_allocation.methods.muas.cost.cost_matrix import CostMatrixBuildResult
 from task_allocation.methods.muas.cost.nest_keys import DEFAULT_NEST_OFFSET
 from task_allocation.methods.muas.problem import (
@@ -53,6 +54,30 @@ class MUASStageResult:
     elapsed_seconds: float = 0.0
 
 # 小 N 近精确枚举参照（exp04 B3）
+
+
+def _led_polish(
+    evaluator: Any,
+    operator: str,
+    accepted: bool,
+    delta_f: float | None,
+    gate_reason: str,
+) -> None:
+    """交付后处理的采纳决策入台账（P0 纯观测）。"""
+    lg = getattr(evaluator, "ledger", None)
+    if lg is None or not lg.enabled:
+        return
+    lg.record(
+        layer="polish",
+        operator=operator,
+        action="accept" if accepted else "reject",
+        constraint_id="objective",
+        object="solution",
+        reason="opt",
+        accepted=accepted,
+        delta_f=delta_f,
+        gate_reason=gate_reason,
+    )
 
 
 def enumerate_reference_participating(
@@ -354,9 +379,12 @@ def run_selective_muas(
         polish = polish_assignment(
             evaluator, list(result.best_assignment), stage_cfg
         )
-        if (
-            polish.n_accepted_total > 0
-            and polish.best_fitness < final_fitness - stage_cfg.polish_eps
+        # P0 契约层：采纳判据经 ConstraintSpec 视图（现语义原样包一层）
+        if constraint_spec.accept_polish_eps_view(
+            int(polish.n_accepted_total),
+            float(polish.best_fitness),
+            float(final_fitness),
+            float(stage_cfg.polish_eps),
         ):
             final = polish.best_solution
             problem.evaluate(final)
@@ -369,7 +397,10 @@ def run_selective_muas(
         # 只降不升；未开启或档案为空时跳过（逐位等于非 memetic）。
         if (
             memetic["solution"] is not None
-            and float(memetic["fitness"]) < final_fitness - stage_cfg.polish_eps
+            and constraint_spec.accept_polish_eps_view(
+                1, float(memetic["fitness"]), float(final_fitness),
+                float(stage_cfg.polish_eps),
+            )
         ):
             final = memetic["solution"]
             problem.evaluate(final)
@@ -392,16 +423,27 @@ def run_selective_muas(
             cand_n_hard, cand_excess = problem.hard_stats(cand)
             old_exec = set(final.executed_task_ids)
             new_exec = set(cand.executed_task_ids)
-            if new_exec >= old_exec and cand_n_hard <= final_n_hard and (
-                len(new_exec) > len(old_exec)
-                or cand_fitness < final_fitness - stage_cfg.monotone_polish_eps
+            # P0 契约层：采纳判据经 ConstraintSpec 视图（现语义原样包一层）
+            if constraint_spec.accept_monotone_view(
+                old_exec, new_exec, int(cand_n_hard), int(final_n_hard),
+                float(cand_fitness), float(final_fitness),
+                float(stage_cfg.monotone_polish_eps),
             ):
+                _led_polish(
+                    evaluator, "post_polish_monotone", True,
+                    float(final_fitness) - float(cand_fitness),
+                    "monotone_accept(覆盖不减+硬违约不增+f严格优)",
+                )
                 final = cand
                 final_fitness = cand_fitness
                 final_n_hard, final_excess_m = cand_n_hard, cand_excess
             else:
                 mono_stats = dict(mono_stats)
                 mono_stats["rejected"] = 1
+                _led_polish(
+                    evaluator, "post_polish_monotone", False, None,
+                    "monotone_reject(单调门未过)",
+                )
 
         # ── 交付后成本 polish（口径约定，诊断报告 §9 排序 1+2）
         # 对最终交付解（DMDE 原始 / assignment polish / memetic 档案 /
@@ -427,12 +469,19 @@ def run_selective_muas(
                 cand_path = float(problem.path_cost(cand))
                 old_exec = set(final.executed_task_ids)
                 new_exec = set(cand.executed_task_ids)
-                if (
-                    new_exec >= old_exec
-                    and cand_n_hard <= final_n_hard
-                    and cand_excess <= final_excess_m + 1e-9
-                    and cand_path < path_before_cp - stage_cfg.cost_polish_eps
+                # P0 契约层：采纳判据经 ConstraintSpec 视图（现语义原样包
+                # 一层；成本门仍按航程分量——漂移测量对象，P3 统一为 f）
+                if constraint_spec.accept_cost_polish_view(
+                    old_exec, new_exec, int(cand_n_hard), int(final_n_hard),
+                    float(cand_excess), float(final_excess_m),
+                    float(cand_path), float(path_before_cp),
+                    float(stage_cfg.cost_polish_eps),
                 ):
+                    _led_polish(
+                        evaluator, "post_cost_polish", True,
+                        float(final_fitness) - float(cand_fitness),
+                        "cost_polish_accept(执行集/硬违约/超限不退化+航程严格降)",
+                    )
                     final = cand
                     final_fitness = cand_fitness
                     final_n_hard, final_excess_m = cand_n_hard, cand_excess
@@ -443,6 +492,10 @@ def run_selective_muas(
                 else:
                     cost_polish_stats = dict(cost_polish_stats)
                     cost_polish_stats["rejected"] = 1
+                    _led_polish(
+                        evaluator, "post_cost_polish", False, None,
+                        "cost_polish_reject(四道门未过)",
+                    )
 
     model_type = (
         "balanced" if len(participating) == len(task_list)
