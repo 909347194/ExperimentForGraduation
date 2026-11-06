@@ -396,14 +396,36 @@ Zotero 全文 `storage/UEDCMGSJ/…pdf`。页码为**期刊印刷页码**，PDF 
 
 | # | 参数 | 拍板值 |
 |---|---|---|
-| 1 | 回写比例 | **默认 0**（纯 Baldwin，即 §5.2 参数点 0）；对照档取值与闸门在 **P2 开工前**定义 |
-| 2 | ε | **默认关闭**；若启用，参数（Eq.11 vs Eq.12、`TC`/`cp`/`τ`/`α`）同样 **P2 开工前**定义 |
+| 1 | 回写比例 | **默认 0**（纯 Baldwin，即 §5.2 参数点 0）。迁移方式：**新参数 `repair_replacement`**（不翻转旧开关默认值）——旧布尔 `lamarckian` 改 None 哨兵作废弃映射：显式 True ≡ `repair_replacement=1.0`、显式 False ≡ 0；`lamarckian_patrol_writeback=True` 且未显式设比例时保义为 1.0（M2-1 借道 M1 调用门的历史语义）；三者均未设 ⇒ 0（拍板默认）。**对照档取值 1.0**（完整 Lamarck，即修好 fitness 重算后的正确版现行行为；中间值 0.5 仅在结果可疑单调时补）。比例取 0/1 时**不消耗 RNG**（逐位可复现），(0,1) 每次替换事件抽签。**对照档闸门（须全过）**：①表型复核——回写基因重解码 fitness 与回写前 `S_repair` fitness 逐位一致，否则该次回写计失败、保留原基因（`lamarckian_reencode` 的 Q2.1/Q3.2 已有）；②fitness 重算——`re_encoded.fitness` 必须重算（bug 修复，无论比例多少）；③种群方差护栏——每代基因型多样性 ≥ 初始代 ×0.2（`diversity_series` 纯观测，跌破记录不中断）；④数值护栏——成功 seed 完成率 100%、`eliminating`=0、f 中位数不劣于 Baldwin 档（劣化如实报告）；⑤报告纪律——Baldwin/Lamarck 两档并列 + Δ 账本，禁只报优胜档 |
+| 2 | ε | **默认关闭**。若启用：**Eq.12（Fan et al. 2018）**，不选 Eq.11——原文 EconstNEW 变体明确采用 Eq.12（"the formulation proposed by Fan et al. (2018) is adopted, as given in Eq. (12)"），且其 rk≥α 放松分支（可行比例过高时主动放松 ε 防塌进可行域）正好对症精英冻结病理；Eq.11 单调收敛无 PFS 反馈。参数（全部取原文区间中值）：**γ=0.5**（θ=γ·Npop，pop50 ⇒ θ=25）、**TC=0.4·maxFEs**（pop50×gen200 ⇒ maxFEs=10000 ⇒ TC=4000 次评价 ≈ 80 代）、**cp=5**（区间 [2,10] 中值）、**τ=0**（放松分支最保守幅度，(1+0)·ϕmax=ϕmax；检验放松效应再对照 τ=0.5）、**α=0.5**（可行比例过半才触发放松分支；敏感性扫 {0.2, 0.8}）。两个落点纪律：**计数口径按 FEs（评价次数）不是代数**（台账按 FEs 计，禁混用 t）；**对照档定位 EconstOR**（原文表格：Eq.10 比较规则 + Eq.12 调度，即 ε 版 Deb 三规则）——Eq.13 四分支（含 Eq.9b 乘性 p_violation）作可选第二档不进默认，引用最省事且与「只动 `F_sel` 不动 `f`」一致 |
 | 3 | L3b（跨机 relocate/swap） | **默认关**，保留显式开关，先做收益拆分再定 |
 | 4 | 失败 seed | **不静默重采样**：如实判失败、单列 `n_seed_failed`（§3.2 完成率口径） |
 | 5 | Lagaros 引用 | **按原文限制引用**：必须带 §7 勘误 10 的两条作者自限；勘误 1–8 同步生效 |
 | 6 | docs 入库 | **入库**：三份 stage2 文档单独提交（2026-11-06） |
 
 实施节奏（用户指令）：**P0 先行**；回写与 ε 对照的参数定义在 P2 前完成。
+**已于 2026-11-06 晚落定**（§9 第 1、2 项），P2 开工。
+
+### 9.1 P2 拍板细则（2026-11-06 晚，用户采信助手建议后开工）
+
+- **迁移方式选「新参数」不选「改默认值」**：拍板的是比例（0.0–1.0 连续语义），
+  Lagaros §2.4 三种回写模式（全部/小比例/逐不可行个体）本身就是比例语义，
+  布尔表达不了中间值；且现行 `lamarckian=True` 捆绑「回写基因 +
+  `re_encoded.fitness = child.fitness` 直接赋值不重算」双重语义，直接翻转
+  默认值会把 bug 一起埋掉并断掉 method-phase1 的 config 复现路径。
+  新参数 + 旧参数映射（True ≡ 1.0）保住旧 config；「fitness 重算」拆成独立
+  修复——**无论比例取多少都必须重算**，这是 bug 修复不是开关选项。
+- **对照档 1.0 的科学问题**：「修复收益能否经基因遗传传递」——0 vs 1.0 是
+  最干净的极端对照；Lagaros 原文也只讨论「全部 vs 小比例」两级，没有扫
+  中间值。
+- **ε 选 Eq.12 的引用纪律**：按拍板 5「按原文限制引用」，EconstNEW 用什么
+  我们就引用什么；Eq.11（Takahama）需另行引用且无 PFS 反馈。
+- **默认档行为变化声明（P2 起生效）**：`repair_replacement` 默认 0 意味着
+  master 默认路径从「每代回写」变为「纯 Baldwin」——这是拍板的方向性变化，
+  不是回归 bug。**凡需复现 method-phase1 数值的运行（含 P1 闸门工具的
+  base 锚点臂）必须显式 `lamarckian=True` 或 `repair_replacement=1.0`**；
+  注意 fitness 重算修复使对照档 ≠ method-phase1 的逐位复现（预期内，
+  method-phase1 逐位复现一律 checkout tag）。
 
 ---
 
@@ -518,7 +540,22 @@ Zotero 全文 `storage/UEDCMGSJ/…pdf`。页码为**期刊印刷页码**，PDF 
 迁移方式需定：改默认 vs 新参数 `repair_replacement`）；② ε 启用时的
 Eq.11 vs Eq.12 与 `TC/cp/τ/α` 参数。定稿前 P2 不开工。
 
-### 11.3 P2–P4（未开始）
+### 11.3 P2 修复候选 + 一致性契约（2026-11-06 晚，开工）
 
-按 §8 表推进；P2 开工前须先定义回写对照档取值与闸门、ε 参数（Eq.11/12、
-TC/cp/τ/α）（§9 第 1、2 项）。
+§9 第 1、2 项已落定（§9.1），P2 按 §8 表开工。实施拆步（小步提交，风格同
+P1 的 C6–C9）：
+
+| 步 | 内容 | 行为变化边界 |
+|---|---|---|
+| P2-0 | §9 两项拍板落定 + 本注记（docs） | 无 |
+| P2-a | `repair_replacement` 参数化（默认 0；`lamarckian` None 哨兵映射；patrol 保义）；`re_encoded.fitness` 重算修复；台账 select 事件补 geno_id（四元组齐）；`diversity_series` 纯观测（方差护栏数据源） | 默认档从每代回写变纯 Baldwin（拍板方向性变化，§9.1）；对照档 ≠ method-phase1 逐位（fitness 重算，预期内） |
+| P2-b | `repair_max_passes`/`constructive_max_passes` 进 config；每轮 violation_vector 快照进台账；快照重复但非零 ⇒ `REPAIR_FAILED`（`solution.meta["repair_status"]` + `n_repair_failed` 计数）；交付拒绝 REPAIR_FAILED（回退 best REPAIRED，全无则显式失败不静默降级） | big-M 下可行恒胜不可行 ⇒ 正常路径逐位不变；仅「全种群不可行」的退化情形从「交付劣解」变「显式失败」 |
+| P2-d | `n_skip^eval`（交付重建后 pre-polish）/`n_skip^final`（终态）分列；`CandidateFeatures.n_skip` + `CompareSpec.lambda_cov`（F_sel 侧，默认关；实例推导 λ_cov > λ·Δpath_max + w_late·ΔL_max）；w_late 显式化（提为带推导的显式量，不改值） | penalty 档逐位不变（λ_cov 仅非 penalty 档生效）；分列只加观测字段 |
+| P2-e | ε 档从占位线性衰减改 Eq.12（Fan 2018）状态机：ε(0)=ϕθ（γ=0.5）；FEs<TC 且 rk<α ⇒ ε(k−1)·(1−FEs/TC)^cp（cp=5）；FEs<TC 且 rk≥α ⇒ (1+τ)·ϕmax（τ=0）；FEs≥TC ⇒ 0；TC=0.4·maxFEs；solver 每代喂 (FEs, rk, ϕmax)，FEs=gen·pop_size 口径显式声明 | ε 默认关 ⇒ 默认档零变化；`epsilon0/epsilon_tc` 占位字段标废弃 |
+
+P2 验收（§8 行 + Task #38）：`regret` / top1 重合率如实并列；三本账对账差额
+可解释；完成率恒 100%、无 `eliminating`；全量测试绿；P1 闸门工具 base 臂
+显式 `repair_replacement=1.0` 保锚点。采纳判据统一为 f（`stage_runner.py:425`
+通道）按定稿 §8 归 **P3**（Task #38 原描述含此项，以定稿为准）。
+
+### 11.4 P3–P4（未开始）
