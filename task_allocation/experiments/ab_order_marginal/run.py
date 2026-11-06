@@ -8,8 +8,11 @@
 - 解码后 build_solution 按基因出现顺序成航线，但随后 _reorder_for_deadlines
   把每段顺序作为「候选集锦标赛」重排：候选 = [原序(基因), EDD, earliest,
   松弛量, 最近邻]，按 (迟到数, 迟到量, 航程) 字典序选最优。
-- 零迟到且 reorder_range_optimize=False（生产默认）时直接早退返回
-  ⇒ 零迟到常态下基因顺序完整决定交付航线序。
+- 零迟到且 reorder_range_optimize=False（生产默认）时 **gene 臂**直接早退
+  返回基因原序 ⇒ 零迟到常态下基因顺序完整决定交付航线序；neutral 臂不走
+  早退（2026-11-05 审查 P1 修复），零迟到同样进一般锦标赛。
+  注意：早退路径同样记「gene 胜出」，故 dl0 制胜率统计含快捷路径、
+  不是纯锦标赛胜利（解读见报告 §3）。
 
 因此基因顺序的贡献 = 「基因原序」作为候选是否频繁胜出锦标赛。本实验用
 order_candidate_mode 控制 _best_order 是否把基因原序纳入候选：
@@ -80,7 +83,6 @@ from task_allocation.methods.muas.solvers.decode_repair import (  # noqa: E402
 from task_allocation.methods.muas.solvers.stage_runner import (  # noqa: E402
     DMDEConfig,
     MUASStageConfig,
-    run_selective_muas,
 )
 from task_allocation.methods.rolling.horizon import (  # noqa: E402
     HorizonConfig,
@@ -100,6 +102,13 @@ ARMS = [
     ("gene", "gene"),        # 生产口径：候选含基因原序
     ("neutral", "neutral"),  # 对照：剔除基因原序候选
 ]
+
+# 锦标赛胜率记录键：必须与 decode_repair._record_order_winner 的 name
+# 完全一致（全小写）。显示名经 WINNER_LABELS 映射，避免大小写不一致导致
+# win_EDD/win_NN 恒为 0（2026-11-05 审查发现的输出层 bug）。
+WINNER_KEYS = ["gene", "edd", "earliest", "slack", "nn"]
+WINNER_LABELS = {"gene": "gene", "edd": "EDD", "earliest": "earliest",
+                 "slack": "slack", "nn": "NN"}
 
 DEFAULTS = dict(
     seeds=[11, 22],          # 求解器种子（同实例各臂共用，构成配对）
@@ -377,14 +386,14 @@ def write_raw_csv(path: Path, rows: list[dict]) -> None:
               "search_best_fitness", "de_best_final", "delivered_fitness",
               "path_cost", "late", "n_hard", "coverage", "n_evals",
               "elapsed_s", "var_collapse_ratio"]
-    winner_keys = ["gene", "EDD", "earliest", "slack", "NN"]
     with open(path, "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=scalar + ["win_" + k for k in winner_keys])
+        w = csv.DictWriter(
+            f, fieldnames=scalar + ["win_" + WINNER_LABELS[k] for k in WINNER_KEYS])
         w.writeheader()
         for r in rows:
             row = {k: r.get(k) for k in scalar}
-            for k in winner_keys:
-                row["win_" + k] = (r.get("winners") or {}).get(k, 0)
+            for k in WINNER_KEYS:
+                row["win_" + WINNER_LABELS[k]] = (r.get("winners") or {}).get(k, 0)
             w.writerow(row)
 
 
@@ -415,9 +424,9 @@ def write_winner_csv(path: Path, agg: dict) -> None:
     with open(path, "w", newline="") as f:
         w = csv.writer(f)
         w.writerow(["candidate", "count", "share"])
-        for k in ["gene", "EDD", "earliest", "slack", "NN"]:
+        for k in WINNER_KEYS:
             c = agg["total"].get(k, 0)
-            w.writerow([k, c, round(agg["dist"].get(k, 0.0), 4)])
+            w.writerow([WINNER_LABELS[k], c, round(agg["dist"].get(k, 0.0), 4)])
 
 
 # ---------------------------------------------------------------------------
@@ -454,10 +463,11 @@ def plot_armcmp(out_png: Path, summ: dict, agg_win: dict,
 
 def plot_winner(out_png: Path, agg_win: dict, params: dict) -> None:
     """gene 臂锦标赛胜率分布柱。"""
-    labels = ["gene", "EDD", "earliest", "slack", "NN"]
-    shares = [agg_win["dist"].get(k, 0.0) for k in labels]
+    keys = WINNER_KEYS
+    labels = [WINNER_LABELS[k] for k in keys]
+    shares = [agg_win["dist"].get(k, 0.0) for k in keys]
     fig, ax = plt.subplots(figsize=(7, 3.6))
-    colors = ["#4c72b0" if k == "gene" else "#55a868" for k in labels]
+    colors = ["#4c72b0" if k == "gene" else "#55a868" for k in keys]
     ax.bar(labels, [s * 100 for s in shares], color=colors, alpha=0.9)
     for i, s in enumerate(shares):
         ax.text(i, s * 100, f"{s*100:.1f}%",
@@ -487,8 +497,9 @@ def build_report(out_dir: Path, all_rows, contrasts, agg_win, params) -> None:
         "基因同时编码「归属 + 段内巡游序」。解码后 `_reorder_for_deadlines` "
         "把每段顺序作为候选集锦标赛重排：候选 = [原序(基因), EDD, earliest, "
         "松弛量, 最近邻]，按 (迟到数, 迟到量, 航程) 字典序选最优。零迟到且 "
-        "`reorder_range_optimize=False`(生产默认) 时直接早退返回基因原序 ⇒ "
-        "零迟到常态下基因顺序完整决定交付航线序。\n"
+        "`reorder_range_optimize=False`(生产默认) 时 **gene 臂**直接早退返回 "
+        "基因原序 ⇒ 零迟到常态下基因顺序完整决定交付航线序；neutral 臂不走 "
+        "早退（2026-11-05 审查 P1 修复），零迟到同样进一般锦标赛。\n"
     )
     lines.append(
         "本实验用 `order_candidate_mode` 控制是否把基因原序纳入候选：\n"
@@ -498,7 +509,9 @@ def build_report(out_dir: Path, all_rows, contrasts, agg_win, params) -> None:
     )
     lines.append(
         "## 2. 配对对照（gene → neutral，delta = neutral − gene，越低越好）\n")
-    lines.append("| 指标 | meanΔ | stdΔ | gene胜(更优) | neutral胜(更差) | 平 |")
+    # 注意列名语义：wins = delta<0 次数 = **neutral 更优**（与 CSV 的
+    # wins_b_better 同义）；勿再标反（2026-11-05 审查修正）。
+    lines.append("| 指标 | meanΔ | stdΔ | neutral胜(Δ<0) | gene胜(Δ>0) | 平 |")
     lines.append("|---|---|---|---|---|---|")
     for c in contrasts:
         for k, d in c["metrics"].items():
@@ -507,13 +520,17 @@ def build_report(out_dir: Path, all_rows, contrasts, agg_win, params) -> None:
                 f"{d['losses']} | {d['ties']} |"
             )
     lines.append("")
-    lines.append("## 3. gene 臂锦标赛胜率分布（基因序在候选集中胜出率）\n")
+    lines.append("## 3. gene 臂胜率分布（基因序在候选集中胜出占比）\n")
+    lines.append(
+        "> 口径注记：零迟到早退路径（生产默认）也记「gene 胜出」——该路径下"
+        "未实际开锦标赛、直接返回基因原序。故 dl0 制的 gene 占比偏高是"
+        "「快捷路径 + 锦标赛胜利」的合并口径，非纯锦标赛胜率。\n")
     lines.append(f"- 总定序决策次数：{agg_win['n_route_decisions']}")
     lines.append("| 候选 | 胜出次数 | 占比 |")
     lines.append("|---|---|---|")
-    for k in ["gene", "EDD", "earliest", "slack", "NN"]:
+    for k in WINNER_KEYS:
         lines.append(
-            f"| {k} | {agg_win['total'].get(k, 0)} | "
+            f"| {WINNER_LABELS[k]} | {agg_win['total'].get(k, 0)} | "
             f"{agg_win['dist'].get(k, 0.0)*100:.1f}% |")
     lines.append("")
     lines.append("## 4. 结论（诚实口径）")
@@ -540,7 +557,8 @@ def build_report(out_dir: Path, all_rows, contrasts, agg_win, params) -> None:
         )
     lines.append(
         "\n**诚实上限说明**：① neutral 对照的代价是「多跑一次全候选评估」"
-        "（零迟到早退被禁用），故 neutral 臂求解略慢；② 本开关只干预 "
+        "（neutral 臂无零迟到早退，2026-11-05 P1 修复后零迟到也进锦标赛），"
+        "故 neutral 臂求解略慢；② 本开关只干预 "
         "`_best_order` 候选集，`_consolidate/_reflow` 等改派算子仍按原逻辑"
         "搬运任务（它们改变任务集、间接影响顺序），不在本开关范围内；"
         "③ 若 gene 胜出率与航程 Δ 都近 0，则「基因顺序」在当前修复强度下"
