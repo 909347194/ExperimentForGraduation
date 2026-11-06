@@ -223,6 +223,14 @@ class MUASStageConfig:
     #   （_tour_cost/_range_limit/_window_ok/_choose_end_nests/
     #   _reorder_for_deadlines/_assemble），口径一致。
     decode_mode: str = "repair_chain"
+    # ── P2-b 修复迭代规则（定稿 §3.1 目标规则 1：max_passes 显式进 config）──
+    # repair_chain 主循环轮数上限（原硬编码 6；改值须开关对照）。
+    # 每轮记 violation_vector 快照进台账；收敛判据 = 向量全零或快照重复；
+    # 快照重复但向量非零 ⇒ 记诊断 tick（终态权威判定在 problem.evaluate
+    # 的 n_hard ⇒ REPAIR_FAILED，见 evaluator P2-b 三分流）。
+    repair_max_passes: int = 6
+    # constructive 解码的耦合迭代轮数上限（原硬编码 3）。
+    constructive_max_passes: int = 3
     # 终点机巢决策的求解方式：master 分支恒为方案 A（分层求解）——
     #   DMDE 只搜任务分配与访问顺序，终点机巢由内层子问题
     #   solve_end_nest_assignment 精确求解（容量约束下最优），返航代价经
@@ -339,6 +347,10 @@ class MUASStageConfig:
                 'decode_mode 必须是 "repair_chain" 或 "constructive"，'
                 f"当前为 {self.decode_mode!r}"
             )
+        if self.repair_max_passes < 1:
+            raise ValueError("repair_max_passes 必须 >= 1")
+        if self.constructive_max_passes < 1:
+            raise ValueError("constructive_max_passes 必须 >= 1")
         if str(self.reflow_rescue_scope).lower() not in ("fleet", "participating"):
             raise ValueError(
                 'reflow_rescue_scope 必须是 "fleet" 或 "participating"，'

@@ -164,7 +164,13 @@ class DecodeRepairMixin:
             self.config.prune_unprofitable
             and not self.config.coverage_first
         )
-        for _ in range(6):
+        # P2-b（定稿 §3.1 目标规则 1–3）：max_passes 显式进 config；每轮记
+        # violation_vector 快照进台账；收敛判据 = 向量全零或快照（state）重复；
+        # 快照重复但向量非零 ⇒ 诊断 tick（不静默轮转）。终态权威判定在
+        # problem.evaluate 的 n_hard（evaluator 三分流），环内非终局——环后
+        # 尚有重排/时序/末闸三段修复。
+        max_passes = int(getattr(self.config, "repair_max_passes", 6))
+        for _pass_idx in range(max_passes):
             # 合并修复：任务少时向更少机合并（闲置合法，U_exec ⊆ U_avail）
             # 台账：_consolidate 内逐次 merge 记录（reason=opt，接受判据=成本降）
             # projection_only：成本合并属目标动作，剥出每体路径（闲置表达升级为
@@ -183,11 +189,27 @@ class DecodeRepairMixin:
                     )
             routes, end_nests = self._repair_range(routes, end_nests)
             end_nests = self._choose_end_nests(routes)
+            # 每轮 violation_vector 快照（纯观测）：(航程违航班次, 巢超容,
+            # 时序逆序班次)，时间窗不进向量（环后专职段处理）。
+            _vec = self._round_violation_vector(routes, end_nests)
+            self._led_record(
+                "repair_pass", "pass_snapshot", "hard",
+                "range+nest_capacity+sequence", "solution",
+                from_state=str(_vec), to_state="",
+                gate_reason=f"pass{_pass_idx + 1}/{max_passes}",
+                delta_violation=float(sum(_vec)),
+            )
             state = (
                 tuple((k, tuple(v)) for k, v in sorted(routes.items())),
                 tuple(sorted(end_nests.items(), key=lambda kv: str(kv[0]))),
             )
             if state == prev_state:
+                if sum(_vec) > 0:
+                    # 快照重复但向量非零：环内不动点仍有违反——禁止静默轮转，
+                    # 记诊断 tick；REPAIR_FAILED 的权威判定在终态 n_hard。
+                    _lg = self._led()
+                    if _lg is not None and _lg.enabled:
+                        _lg.tick("decode:fixpoint_nonzero")
                 break
             prev_state = state
 
@@ -303,6 +325,51 @@ class DecodeRepairMixin:
         if gate_stats is not None:
             sol.meta["gate_stats"] = gate_stats
         return sol
+
+    def _round_violation_vector(
+        self,
+        routes: Mapping[int, Sequence[int]],
+        end_nests: Mapping[int, int | None],
+    ) -> tuple[int, int, int]:
+        """主循环每轮的违反向量快照（P2-b，定稿 §3.1 目标规则 2；纯观测）。
+
+        ``(n_range, n_nest_overflow, n_seq)``：
+
+        · ``n_range``  航程违航班次数（``_tour_cost > _range_limit + 1e-6``）；
+        · ``n_nest_overflow``  终点巢落位超容量的巢数（与
+          ``_choose_end_nests`` / ``check_nest_capacity`` 同源口径：
+          批量起飞让位 → 逐机落位占位）；
+        · ``n_seq``  航次内时序逆序的班次数（``_seq_violation``）。
+
+        时间窗**不进向量**：环后 ``_reorder_for_deadlines`` /
+        ``_repair_sequence`` 专职处理；终态权威违反判定以
+        ``problem.evaluate`` 的 ``n_hard`` 为准（evaluator P2-b 三分流）。
+        """
+        n_range = 0
+        for uid, tids in routes.items():
+            if tids and (
+                self._tour_cost(uid, tids, end_nests.get(uid))
+                > self._range_limit(uid) + 1e-6
+            ):
+                n_range += 1
+        loads: dict[int | None, int] = {}
+        for u in self.fleet_uavs:
+            loads[u.nest_id] = loads.get(u.nest_id, 0) + 1
+        for uid, tids in routes.items():
+            if tids:
+                uav = self._uav_by_id.get(uid)
+                if uav is not None and uav.nest_id is not None:
+                    loads[uav.nest_id] = loads.get(uav.nest_id, 0) - 1
+        nest_cap = {n.id: int(n.capacity) for n in self.nests}
+        n_nest = sum(
+            1
+            for nid, ld in loads.items()
+            if nid is not None and ld > nest_cap.get(nid, 0)
+        )
+        n_seq = sum(
+            1 for tids in routes.values() if tids and self._seq_violation(tids)
+        )
+        return (n_range, n_nest, n_seq)
 
     def _window_enabled(self) -> bool:
         cons = getattr(self.problem.config, "constraints", None)

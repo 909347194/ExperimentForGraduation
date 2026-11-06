@@ -168,6 +168,13 @@ class MUASAssignmentEvaluator(
         # build_solution 中 y_j=0 证明性暂缓的任务 id（供上层对账；
         # repair_chain 模式下恒为空列表）。
         self.last_constructive_deferred: list[int] = []
+        # P2-b 修复三分流（定稿 §3.2）：终态权威判定 + 计数。
+        #   REPAIRED       硬约束向量全零（problem.evaluate 的 n_hard=0）；
+        #   REPAIR_FAILED  非不可达但终态仍有硬违反（不可达两类在任务池层
+        #                  出池，不进解码层）。REPAIR_FAILED 候选保留在种群
+        #                  供诊断（big-M 惩罚使其竞争劣势），交付层拒绝。
+        self.last_repair_status: str | None = None
+        self.n_repair_failed: int = 0
 
     def _assemble(
         self,
@@ -210,6 +217,18 @@ class MUASAssignmentEvaluator(
         self.n_evals += 1
         solution = self.build_solution(assign_key)
         self.problem.evaluate(solution)
+        # P2-b 三分流（定稿 §3.2）：终态权威判定落在被评价解的 meta，
+        # 交付层（stage_runner）与指标层据此拒绝/单列 REPAIR_FAILED。
+        # 纯观测：不改 fitness、不改控制流。
+        _feas = (solution.meta or {}).get("feasibility") or {}
+        _status = (
+            "REPAIRED" if int(_feas.get("n_hard", 0) or 0) == 0 else "REPAIR_FAILED"
+        )
+        solution.meta["repair_status"] = _status
+        self.last_repair_status = _status
+        if _status == "REPAIR_FAILED":
+            self.n_repair_failed += 1
+            self.ledger.tick("decode:repair_failed")
         fitness = float(self.problem.scalar_fitness(solution))
         result = EvalResult(fitness=fitness, solution=solution)
         if self.config.use_cache:

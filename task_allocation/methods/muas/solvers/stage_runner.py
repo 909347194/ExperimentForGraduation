@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import itertools
 import math
+import sys
 from dataclasses import dataclass, field, replace
 from typing import Any, Sequence
 
@@ -525,6 +526,21 @@ def run_selective_muas(
         else "overloaded"
     )
 
+    # P2-b 交付闸（定稿 §3.2）：REPAIR_FAILED 解不得交付。
+    # big-M 下可行恒胜不可行 ⇒ 终态仍含硬违反说明本次搜索无可行交付解：
+    # 如实标记（不静默降级、不换 seed），上层按 n_seed_failed 口径单列
+    # （失败 seed 的指标不并入均值）。正常路径（终态 n_hard=0）零变化。
+    final_repair_status = "REPAIRED" if int(final_n_hard) == 0 else "REPAIR_FAILED"
+    delivery_refused = final_repair_status == "REPAIR_FAILED"
+    if delivery_refused:
+        final.meta["repair_status"] = "REPAIR_FAILED"
+        print(
+            f"[stage][warn] 交付闸：终态硬违反 {int(final_n_hard)} 项，"
+            "标记 REPAIR_FAILED（本周期无可行交付解，不静默交付劣解；"
+            "上层按 n_seed_failed 单列）",
+            file=sys.stderr,
+        )
+
     return MUASStageResult(
         solution=final,
         participating_uav_ids=[u.id for u in participating],
@@ -547,6 +563,15 @@ def run_selective_muas(
             },
             "n_executed": len(final.executed_task_ids),
             "n_deferred": len(task_list) - len(final.executed_task_ids),
+            # P2-b 修复三分流（定稿 §3.2）：终态权威状态 + 计数。
+            #   repair_status   REPAIRED（硬约束向量全零）| REPAIR_FAILED
+            #   delivery_refused=True ⇒ 本周期无可行交付解，上层按
+            #   n_seed_failed 单列（失败 seed 不并入均值、不静默重采样）。
+            #   n_repair_failed = 搜索期内被判 REPAIR_FAILED 的候选评价数
+            #   （诊断口径，含被淘汰候选；交付口径看 repair_status）。
+            "repair_status": final_repair_status,
+            "delivery_refused": bool(delivery_refused),
+            "n_repair_failed": int(getattr(evaluator, "n_repair_failed", 0)),
             # 覆盖门禁分账：gate_stats 与 S 内漏装名单。
             #   n_skip = voluntary_skip（能装没装；gate 修复下恒 0）
             #   n_shortfall = 一阶检验能力不足（允许不交付）
