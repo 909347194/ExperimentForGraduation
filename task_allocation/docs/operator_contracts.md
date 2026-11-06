@@ -172,6 +172,7 @@
 | `_prune_zero_reward`（零奖励剔除） | `prune_zero_reward=true` 且折减窗开启 | 零奖励任务压力场；生产关闭。 |
 | `_load_coverage_fixed_point`（覆盖优先装载） | `coverage_first=true` | 覆盖优先解码两段式对照；生产关闭。 |
 | `_build_constructive`（构造式解码） | `decode_mode=constructive` | 解码方式对照臂；生产为 `repair_chain`。 |
+| `_best_order` 候选集（`order_candidate_mode=neutral`） | `order_candidate_mode="neutral"` | 基因序边际消融（ab_order_marginal）：**基因原序不入候选**，一律走一般锦标赛（edd/earliest/slack/nn）裁决，零迟到早退仅对 gene 臂生效。若 neutral 臂在零迟到走快返回，等于基因序泄漏回对照臂、配对对照失真（2026-11-05 审查 P1）。生产 `order_candidate_mode="gene"`。 |
 
 ---
 

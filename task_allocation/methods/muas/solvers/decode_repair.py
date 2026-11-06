@@ -402,18 +402,18 @@ class DecodeRepairMixin:
             return (n_late, round(late_total, 6), round(length, 6))
 
         base_key = _evaluate(list(tids))
-        if base_key is not None and base_key[0] == 0:
-            # 零迟到早退：默认直接返回基因原序；若开启 reorder_range_optimize，
-            # 仅在「仍零迟到 且 航程严格更短」时采纳最近邻。
+        if base_key is not None and base_key[0] == 0 and not neutral:
+            # 零迟到早退（**仅 gene 臂**）：默认直接返回基因原序；若开启
+            # reorder_range_optimize，仅在「仍零迟到 且 航程严格更短」时采纳最近邻。
             # 详见 2026-10-24 修复说明（docs/fitness_path_optimization_diagnosis_*.md）：
             # 早退不能连航程一起退掉——零迟到时仍评估最近邻这一以航程为目标的候选。
+            #
+            # 中性对照（order_candidate_mode="neutral"）**不得**走本早退：
+            # 零迟到快返回等于把基因原序泄漏回对照臂（neutral 的语义是「基因序
+            # 不是候选」），统一落入下方一般锦标赛裁决（2026-11-05 审查 P1 修）。
             if not self.config.reorder_range_optimize:
-                if neutral:
-                    # 中性对照：基因序不是候选，跳过早退，进入一般锦标赛
-                    pass
-                else:
-                    _record_order_winner("gene")
-                    return list(tids)
+                _record_order_winner("gene")
+                return list(tids)
             nn_key = _evaluate(nn) if list(nn) != list(tids) else None
             if (
                 nn_key is not None
@@ -422,8 +422,7 @@ class DecodeRepairMixin:
             ):
                 _record_order_winner("nn")
                 return list(nn)
-            if not neutral:
-                _record_order_winner("gene")
+            _record_order_winner("gene")
             return list(tids)
 
         # 一般锦标赛：在所有候选里挑 (迟到数,迟到量,航程) 字典序最优
