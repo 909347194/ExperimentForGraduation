@@ -340,7 +340,7 @@ def test_polish_assignment_guard_rejects_coverage_loss_under_gate():
     """覆盖盲判据：卸任务换成本的候选必须被守护拒绝。"""
     ev = _StubEvaluator(base_exec={0, 1}, cand_exec={0},
                         base_fitness=100.0, cand_fitness=50.0)
-    cfg = MUASStageConfig(coverage_first=True)   # 覆盖盲 ⇒ 守护开
+    cfg = MUASStageConfig(coverage_first=True, l3b_enabled=True)  # 覆盖盲 ⇒ 守护开
     pr = _stub_result(ev, [(0, 0), (1, 1)], cfg)
     assert set(pr.best_solution.executed_task_ids) == {0, 1}, (
         f"守护必须拒绝减少已装集合的候选：{pr.best_solution.executed_task_ids}"
@@ -353,7 +353,9 @@ def test_polish_assignment_without_guard_accepts_improvement_when_not_blind():
     """非门禁口径（F1 在适应度里）：守护不生效，行为与历史一致。"""
     ev = _StubEvaluator(base_exec={0, 1}, cand_exec={0},
                         base_fitness=100.0, cand_fitness=50.0)
-    cfg = MUASStageConfig()   # 三个开关全关 ⇒ 非覆盖盲
+    # 三个覆盖开关全关 ⇒ 非覆盖盲；L3b 显式开以产出跨机候选
+    # （统一总闸默认关，否则本用例测不到任何邻域候选）。
+    cfg = MUASStageConfig(l3b_enabled=True)
     pr = _stub_result(ev, [(0, 0), (1, 1)], cfg)
     assert pr.n_accepted_total >= 1, "非门禁口径应按适应度接受改进候选"
     assert pr.best_fitness == 50.0

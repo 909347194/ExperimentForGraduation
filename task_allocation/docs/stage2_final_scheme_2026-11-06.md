@@ -398,7 +398,7 @@ Zotero 全文 `storage/UEDCMGSJ/…pdf`。页码为**期刊印刷页码**，PDF 
 |---|---|---|
 | 1 | 回写比例 | **默认 0**（纯 Baldwin，即 §5.2 参数点 0）。迁移方式：**新参数 `repair_replacement`**（不翻转旧开关默认值）——旧布尔 `lamarckian` 改 None 哨兵作废弃映射：显式 True ≡ `repair_replacement=1.0`、显式 False ≡ 0；`lamarckian_patrol_writeback=True` 且未显式设比例时保义为 1.0（M2-1 借道 M1 调用门的历史语义）；三者均未设 ⇒ 0（拍板默认）。**对照档取值 1.0**（完整 Lamarck，即修好 fitness 重算后的正确版现行行为；中间值 0.5 仅在结果可疑单调时补）。比例取 0/1 时**不消耗 RNG**（逐位可复现），(0,1) 每次替换事件抽签。**对照档闸门（须全过）**：①表型复核——回写基因重解码 fitness 与回写前 `S_repair` fitness 逐位一致，否则该次回写计失败、保留原基因（`lamarckian_reencode` 的 Q2.1/Q3.2 已有）；②fitness 重算——`re_encoded.fitness` 必须重算（bug 修复，无论比例多少）；③种群方差护栏——每代基因型多样性 ≥ 初始代 ×0.2（`diversity_series` 纯观测，跌破记录不中断）；④数值护栏——成功 seed 完成率 100%、`eliminating`=0、f 中位数不劣于 Baldwin 档（劣化如实报告）；⑤报告纪律——Baldwin/Lamarck 两档并列 + Δ 账本，禁只报优胜档 |
 | 2 | ε | **默认关闭**。若启用：**Eq.12（Fan et al. 2018）**，不选 Eq.11——原文 EconstNEW 变体明确采用 Eq.12（"the formulation proposed by Fan et al. (2018) is adopted, as given in Eq. (12)"），且其 rk≥α 放松分支（可行比例过高时主动放松 ε 防塌进可行域）正好对症精英冻结病理；Eq.11 单调收敛无 PFS 反馈。参数（全部取原文区间中值）：**γ=0.5**（θ=γ·Npop，pop50 ⇒ θ=25）、**TC=0.4·maxFEs**（pop50×gen200 ⇒ maxFEs=10000 ⇒ TC=4000 次评价 ≈ 80 代）、**cp=5**（区间 [2,10] 中值）、**τ=0**（放松分支最保守幅度，(1+0)·ϕmax=ϕmax；检验放松效应再对照 τ=0.5）、**α=0.5**（可行比例过半才触发放松分支；敏感性扫 {0.2, 0.8}）。两个落点纪律：**计数口径按 FEs（评价次数）不是代数**（台账按 FEs 计，禁混用 t）；**对照档定位 EconstOR**（原文表格：Eq.10 比较规则 + Eq.12 调度，即 ε 版 Deb 三规则）——Eq.13 四分支（含 Eq.9b 乘性 p_violation）作可选第二档不进默认，引用最省事且与「只动 `F_sel` 不动 `f`」一致 |
-| 3 | L3b（跨机 relocate/swap） | **默认关**，保留显式开关，先做收益拆分再定 |
+| 3 | L3b（跨机 relocate/swap） | **默认关**，保留显式开关，先做收益拆分再定。**已落地（2026-11-06 裁定②）**：统一总闸 `l3b_enabled`（默认 False）同时约束两个通道 + 旧 config 保义映射，见 §11.5；收益拆分仍属 P4 实验层，未预先据此改默认 |
 | 4 | 失败 seed | **不静默重采样**：如实判失败、单列 `n_seed_failed`（§3.2 完成率口径） |
 | 5 | Lagaros 引用 | **按原文限制引用**：必须带 §7 勘误 10 的两条作者自限；勘误 1–8 同步生效 |
 | 6 | docs 入库 | **入库**：三份 stage2 文档单独提交（2026-11-06） |
@@ -593,13 +593,9 @@ pop16×gen20）与 ab_mechanism_3steps 闸门工具均适用此约定。
 
 **P3 未擅自执行的行为变化（必须显式记录）**：
 
-1. **L3b 默认关未落地**。§9 第 3 项同时写「默认关」与「先做收益拆分再定」，
-   而跨机改派实际落在**两个通道**：`polish_assignment` 的
-   `relocate/swap`（`polish_moves`，默认含）与交付后成本 polish 的
-   `_cost_polish_relocate`（`cost_polish_relocate_enabled=True`）。翻转任一默认
-   都会改掉既有基线数值，落点需用户裁定；`l3b_enabled_observed` 字段已如实
-   记录当前两通道仍开。建议二选一：①只关交付后成本 polish 的归属维度；
-   ②新增统一 `l3b_enabled`（默认 False）同时约束两个通道并做旧 config 映射。
+1. **L3b 默认关已落地**（原 §11.4 待裁定项，2026-11-06 用户裁定②：
+   「新增统一 `l3b_enabled`（默认 False）同时约束两通道 + 旧 config 映射」）。
+   实施记录与核验见 **§11.5**；本条不再列为未决。
 2. **`cost_polish_accept_mode` 默认仍 `path`**。定稿 §4.2「迁移须开关对照，
    不得静默替换」；是否翻转为 `f` 由 P4 全量 A/B 决定。
 3. **§4.3 第 2 条与 §3.3 的张力**：第 2 条写「`coverage_gate` /
@@ -618,4 +614,99 @@ pop16×gen20）与 ab_mechanism_3steps 闸门工具均适用此约定。
 - 三级嵌套消融 + 2×2 交互（禁写「独立收益」）、Deb / ε / Lagaros 两类变体
   开关对照、统一事后评价器重评 phase1 与本版交付解；
 - 重跑全部基线 + 配对 t 检验如实声明（不显著就写不显著）；
+- `coverage_first` 单调 polish 的跨机 relocate 是否也纳入总闸（§11.5 第 6 条，
+  当前如实单列、不静默扩权）；
 - 采纳判据默认 `f` 的翻转由上述 A/B 结果决定，不预先改默认。
+
+---
+
+## 11.5 L3b 统一总闸落地（2026-11-06 用户裁定②）
+
+**裁定**：新增统一 `l3b_enabled`（默认 False），**同时约束两个通道**，并做
+**旧 config 映射**（对应 §11.4 原待裁定项第 1 条的选项②，不选①）。
+
+### 1. 范围：两个受控通道
+
+| 通道 | 归属类动作 | 原开关 | 现状 |
+|---|---|---|---|
+| A | `polish_assignment` 的 relocate / swap | `polish_moves`（默认含） | 由总闸过滤为只剩 `position` |
+| B | 交付后成本 polish 的 `_cost_polish_relocate` | `cost_polish_relocate_enabled=True` | 由总闸 AND 旧细粒度键 |
+
+L3a 纯几何（组内 2-opt/Or-opt、终点巢 MCF「给定路径下的条件最优」、
+`polish_assignment` 的 position）**不受总闸约束**。
+
+### 2. 三键设计（None 哨兵 + property 无状态）
+
+`stage_config.py`：`l3b_enabled: bool|None = None`；两个旧键改 None 哨兵
+（`cost_polish_relocate_enabled: bool|None = None`、
+`polish_moves: tuple|None = None`），保留「是否显式设置」的信息。有效值
+一律由 property 计算，`replace()`（`stage_runner` 的 `current_time`、
+memetic 从紧预算）重入幂等，已实测。
+
+优先级规则（诊断 `l3b_source` 留痕）：
+
+| 情形 | 有效总闸 | source |
+|---|---|---|
+| 显式 `l3b_enabled=True/False` | 以新键为准（旧键不能单独开归属维度） | `explicit` |
+| 未设新键 + 旧键显式开启（reloc=True 或 moves 含 relocate/swap） | True（**保义**） | `legacy_on` |
+| 未设新键 + 旧键显式全关 | False | `legacy_off` |
+| 三者均未设（`MUASStageConfig()`） | **False（拍板默认）** | `default` |
+
+显式新键 False 与旧键显式 True 并存 ⇒ 新键优先、不抛错（便于 `--set`
+覆盖旧 yaml），诊断 `l3b_legacy_conflict=True` 留痕。
+两个 `effective_*` property = 「总闸 ∧ 旧细粒度键」：
+`effective_cost_polish_relocate`（通道 B）、`effective_polish_moves`
+（通道 A，总闸关时只保留 `position`；空 tuple 合法，调用方不得
+`or DEFAULT_MOVES` 回退，否则总闸被静默绕过——`local_search.py` 已修）。
+
+### 3. 代码落点
+
+| 文件 | 改动 |
+|---|---|
+| `methods/muas/solvers/stage_config.py` | 三键 + 6 个 property + 校验兼容 None 哨兵 |
+| `methods/muas/solvers/local_search.py` | `polish_assignment` 读 `effective_polish_moves`（修空 tuple 回退坑） |
+| `methods/muas/solvers/route_polish.py` | `post_cost_polish` 读 `effective_cost_polish_relocate` |
+| `methods/muas/solvers/stage_runner.py` | 诊断增 `l3b_enabled` / `l3b_source` / `l3b_legacy_conflict` / `l3b_ungated_monotone_relocate`；`l3b_enabled_observed` 改读总闸 |
+| `experiments/exp01_smoke/config.py` | 透传 `l3b_enabled`（yaml 缺省 None ⇒ 走旧键保义映射，实验数值不变） |
+| `tests/test_l3b_unified_gate.py` | 新增 10 项：解析 / 映射 / 冲突 / 幂等 / 行为 / 逐位保义 |
+| 6 个既有测试文件 | 依赖跨机算子的用例显式 `l3b_enabled=True`；默认断言按新口径更新 |
+
+### 4. 回归与硬核验
+
+- 全量 **526 passed**（P3 结束 516 + 新增 10；8 个旧用例因默认翻转同步更新）。
+- **开关纯度硬核验**：`git archive 010b136`（P2 结束快照）导出到临时目录，
+  与当前 master 同合成场景、同 config、同 seed {7, 11, 23} 各跑一遍：
+  「当前 master 显式 `l3b_enabled=True`」vs「010b136 默认」⇒
+  **66 项公共 diagnostics × 3 seed 全 0 差异**（含 `assignment_pairs()`）。
+  ⇒ 旧 config 映射可逐位复现历史数值，改动是纯开关、无算法副作用。
+- **默认关档与历史默认的差异**：同 3 seed 仅 4 项不同，全部是邻域评估规模
+  （`n_evals` / `polish_candidates` / `polish_evals` / `polish_accepted` 键集合）；
+  `final_fitness` / `final_path_m` / `n_executed` / `best_fitness` /
+  `assignment_pairs()` 等交付质量指标**逐位一致**。该合成场景 L3b 本就零接受
+  （relocate=swap=0）⇒ 关总闸只是省掉无收益的候选评估。
+  ⚠️ **方法论铁律：冒烟/合成场景结论不可外推正式档**；正式档的
+  「几何 vs 救回任务」收益拆分仍属 P4，未预先据此改默认。
+- 完成率铁律复核：默认关档 `final_n_hard=0`、`repair_status=REPAIRED`、
+  `delivery_refused=False`、`n_executed+n_deferred=n_tasks`、
+  `l3b_relocate_actions=0`、`n_task_to_uav_changes=0`。
+
+### 5. 方向性变化（必须随引用一起声明）
+
+默认档（纯 `MUASStageConfig()`）自本步起**不再与 `010b136` / P3 记录逐位一致**，
+也**不等同 `method-phase1`**。复现口径：
+
+- 复现 P2/P3 数值：显式 `l3b_enabled=True`（或写全旧键的历史 config，由映射保义）；
+- 复现第一阶段：checkout tag `method-phase1`（另需 `lamarckian=True` 等口径）。
+
+旧实验脚本（`ab_optimization_attribution`、`ab_m21_patrol_writeback`、
+`ab_mechanism_3steps`、`exp01_smoke/config.py`）均显式写旧键 ⇒ 自动映射为开，
+**数值不被静默改动**；但统一总闸使「旧键只关通道 B」的语义变为「两通道同关」，
+若要逐位复现旧的单通道对照档，须显式 `l3b_enabled=True` 并单独设旧细粒度键。
+
+### 6. 残留：第三来源（不擅自扩权，P4 裁定）
+
+`coverage_first=True` 时 `_polish_routes_monotone` 的跨机 relocate 是
+**第三个**归属类来源，当前**不受总闸约束**（默认 `coverage_first=False`
+⇒ 默认档恒 0）。为免「总闸关却有归属动作」的口径疑点，诊断单列
+`l3b_ungated_monotone_relocate` 如实记账，`l3b_relocate_actions` 仍保持
+P3-b 原有合计口径不变。是否纳入总闸属 P4 待裁定项，本步不擅自扩权。

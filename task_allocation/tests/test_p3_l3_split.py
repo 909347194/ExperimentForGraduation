@@ -9,9 +9,11 @@
    「给定路径下的条件最优」「非全局最优」；
 4. 全部为观测字段：**默认档零行为变化**，不参与任何采纳判定。
 
-⚠️ §9 第 3 项「L3b 默认关」的**默认值翻转不在本步**：同项写明「先做
-收益拆分再定」，且跨机改派实际落在 polish_assignment 与交付后成本
-polish 两个通道，落点需确认后由 P4 实施。本文件只测分账观测。
+ℹ️ §9 第 3 项「L3b 默认关」已由 2026-11-06 裁定②落地：统一总闸
+``l3b_enabled`` 默认 False，同时约束 polish_assignment 与交付后成本
+polish 两个通道，并做旧 config 保义映射（详见 test_l3b_unified_gate.py）。
+本文件仍只测分账观测；观测标记按新默认断言为 False，并附显式开的对照。
+契约第 4 条「默认档零行为变化」记录的是 P3 三步落地当时的状态。
 """
 
 from __future__ import annotations
@@ -105,8 +107,14 @@ def test_l3a_l3b_actions_are_split(monkeypatch):
         + int(d["cost_polish_n_mcf_resolve"])
         + int(d["polish_accepted"].get("position", 0))
     )
-    # 观测标记：当前两个跨机通道仍按历史默认开启（尚未翻转，待确认）
-    assert d["l3b_enabled_observed"] is True
+    # 观测标记：L3b 统一总闸（2026-11-06 裁定②）默认关
+    assert d["l3b_enabled_observed"] is False
+    assert d["l3b_enabled"] is False
+    assert d["l3b_source"] == "default"
+    # 显式开总闸 ⇒ 观测标记翻真（同一场景，开关对照）
+    d_on = _run(MUASStageConfig(l3b_enabled=True)).diagnostics
+    assert d_on["l3b_enabled_observed"] is True
+    assert d_on["l3b_source"] == "explicit"
 
 
 # ---------------------------------------------------------------------------

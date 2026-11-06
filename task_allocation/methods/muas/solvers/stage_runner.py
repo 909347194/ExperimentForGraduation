@@ -738,9 +738,10 @@ def run_selective_muas(
             #     条件最优**，禁写全局最优）+ polish_assignment 的 position；
             #   L3b 跨机改派 = 交付后成本 polish 的 relocate +
             #     polish_assignment / 单调 polish 的 relocate。
-            # ⚠️ 当前只做观测记账、零行为变化。§9 第 3 项「L3b 默认关」
-            # 的默认值翻转须先完成收益拆分（同项「先做收益拆分再定」），
-            # 且跨机改派落在两个通道，落点待确认后由 P4 实施。
+            # P4：§9 第 3 项「L3b 默认关」已落地（用户裁定②）——统一
+            # 总闸 l3b_enabled 默认 False，同时约束通道 A（polish_moves
+            # 的 relocate/swap）与通道 B（_cost_polish_relocate）；旧
+            # config 显式写全旧键时由映射保义为开。L3a 几何动作不受影响。
             "l3a_geometric_actions": (
                 int(cost_polish_stats.get("n_2opt", 0))
                 + int(cost_polish_stats.get("n_oropt", 0))
@@ -754,9 +755,17 @@ def run_selective_muas(
                 + int(polish.n_accepted.get("swap", 0))
                 + int(mono_stats.get("n_relocate", 0))
             ),
-            "l3b_enabled_observed": (
-                bool(stage_cfg.cost_polish_relocate_enabled)
-                or any(m in stage_cfg.polish_moves for m in ("relocate", "swap"))
+            # 总闸有效值（两通道共用）；旧细粒度键不再单独决定观测标记。
+            "l3b_enabled": bool(stage_cfg.effective_l3b_enabled),
+            "l3b_source": str(stage_cfg.l3b_source),
+            "l3b_legacy_conflict": bool(stage_cfg.l3b_legacy_conflict),
+            "l3b_enabled_observed": bool(stage_cfg.effective_l3b_enabled),
+            # 第三来源：coverage_first 单调 polish 的跨机 relocate **不受**
+            # 本总闸约束（默认 coverage_first=False ⇒ 默认档恒 0）。如实
+            # 单列，避免「总闸关却有归属动作」的口径疑点；是否纳入总闸
+            # 属 P4 待裁定项（见定稿 §11.5）。
+            "l3b_ungated_monotone_relocate": int(
+                mono_stats.get("n_relocate", 0)
             ),
             "cost_polish_n_mcf_resolve": int(
                 cost_polish_stats.get("n_mcf_resolve", 0)

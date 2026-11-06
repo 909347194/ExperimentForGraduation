@@ -200,7 +200,15 @@ def polish_assignment(
     """
     n_uavs = len(evaluator.participating)
     n_tasks = len(evaluator.tasks)
-    moves = tuple(getattr(config, "polish_moves", ()) or DEFAULT_MOVES)
+    # P4 L3b 统一总闸：读「有效移动集」（总闸关时只剩 position）。
+    # 兼容非 MUASStageConfig 的替身配置：无 property 时退回旧字段口径。
+    # 注意空 tuple 合法（不做任何邻域），不能再 `or DEFAULT_MOVES` 回退——
+    # 那样总闸关会被静默绕过。
+    eff_moves = getattr(config, "effective_polish_moves", None)
+    if eff_moves is None:
+        raw = getattr(config, "polish_moves", None)
+        eff_moves = DEFAULT_MOVES if raw is None else tuple(raw)
+    moves = tuple(eff_moves)
     eps = float(getattr(config, "polish_eps", 1e-6))
     max_rounds = max(1, int(getattr(config, "polish_max_rounds", 30)))
     max_evals = max(1, int(getattr(config, "polish_max_evals", 2000)))

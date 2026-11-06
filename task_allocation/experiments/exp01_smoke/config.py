@@ -241,10 +241,16 @@ def build_config_bundle(cfg: Mapping[str, Any]) -> ConfigBundle:
         cost_polish_enabled=bool(m.get("cost_polish_enabled", True)),
         cost_polish_max_rounds=int(m.get("cost_polish_max_rounds", 30)),
         cost_polish_eps=float(m.get("cost_polish_eps", 1.0)),
+        # L3b 统一总闸（P4）：None = 未拍板，走下方两个旧键的保义映射
+        # （旧 config 显式写全字段 ⇒ 总闸开，实验数值逐位不变）；
+        # yaml 显式 True/False 时优先（含 --set 覆盖）。
+        l3b_enabled=(
+            None if m.get("l3b_enabled") is None else bool(m["l3b_enabled"])
+        ),
         # 跨机指派成本 polish（口径约定转向）：组内重排之后补
         # 归属维度——单任务跨机改派（含拉空闲机），四道门同组内口径。
         # 3 seed A/B 钉死组内维度已穷尽（63 周期解 3 次接受、0.014%）
-        # 之后转向此维度；默认开，消融显式 False。
+        # 之后转向此维度；旧键显式写入，保义映射据此开启总闸。
         cost_polish_relocate_enabled=bool(
             m.get("cost_polish_relocate_enabled", True)
         ),

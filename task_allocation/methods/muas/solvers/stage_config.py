@@ -173,17 +173,43 @@ class MUASStageConfig:
     # w_late=0.01/s：1 单位 f ≈ 10 m 航程 ≈ 100 s 迟到；故旧
     # cost_polish_eps=1.0（米）≈ 0.1 单位 f，两者不同单位、禁止直接复用。
     cost_polish_eps_f: float = 1e-6
-    # ── 跨机指派成本 polish（口径约定，组内重排之后的转向）───
-    # 组内 2-opt/Or-opt 只改访问顺序；本开关打开**归属维度**：把单任务从
-    # 供体机改派到受体机（含可用但空闲的机），四道门与 _cost_polish_routes
-    # 同构（两侧航程门 / 两侧迟到门 / 执行集由构造保持 / 净航程严格下降）。
+    # ── L3b 统一总闸（2026-11-06 用户裁定②；定稿 §9 第 3 项）──────────
+    # L3b = 一切改变「任务 → UAV 归属」的交付期动作，落在两个受控通道：
+    #   通道 A  polish_assignment 的 relocate / swap（polish_moves）；
+    #   通道 B  交付后成本 polish 的 _cost_polish_relocate。
+    # 拍板：默认关，供「几何(L3a) vs 归属(L3b)」收益拆分做干净的 2×2
+    # 对照；单一显式开关，不做静默降级，两个通道一并通过它约束。
+    #
+    # **None 哨兵**：None = 未显式设置，交由旧 config 映射推导；非 None =
+    # 用户（或 yaml）显式拍板，优先级最高。有效值一律只读 property
+    # ``effective_l3b_enabled``，禁止直接拿本字段做判定。
+    # 旧 config 映射（保义：默认翻转不得静默改掉历史实验数值）：
+    #   1. 显式 ``l3b_enabled`` → 以它为准（旧细粒度键不能单独开归属维度）；
+    #   2. 未设 + 旧键显式开启 → True（``cost_polish_relocate_enabled=True``
+    #      或 ``polish_moves`` 含 relocate/swap；exp01_smoke/config.py 属此类）；
+    #   3. 三者均未设（``MUASStageConfig()``）→ **False（拍板默认）**。
+    # 旧键降级为「通道内细粒度开关」，按「总闸 ∧ 旧键」生效（见两个
+    # ``effective_*`` property）：总闸关时旧键 True 也开不了归属维度。
+    # 显式新键 False 与显式旧键 True 并存 ⇒ 新键优先；不抛错（便于
+    # ``--set`` 覆盖旧 yaml），诊断记 ``l3b_legacy_conflict`` 留痕。
+    # ⚠️ 方向性变化：默认档（纯 MUASStageConfig()）自本步起不再与
+    # ``010b136`` / ``method-phase1`` 逐位一致；复现旧数值须显式
+    # ``l3b_enabled=True``（或保留写全旧键的旧 config，由映射保义）。
+    l3b_enabled: bool | None = None
+    # ── 跨机指派成本 polish（口径约定，组内重排之后的转向）─────
+    # 组内 2-opt/Or-opt 只改访问顺序；本开关打开**归属维度**（通道 B）：
+    # 把单任务从供体机改派到受体机（含可用但空闲的机），四道门与
+    # _cost_polish_routes 同构（两侧航程门 / 两侧迟到门 / 执行集由构造
+    # 保持 / 净航程严格下降）。
     # 背景：3 seed A/B 钉死组内维度已穷尽——63 个周期解仅 3 次接受、
     # 总增益 2262 m（占四 seed 总航程 0.014%），覆盖/按时逐位不变。
     # 若本维度同样零接受 ⇒ exp01 交付解的航程在「顺序 × 归属」两个后处理
     # 维度均已局部最优，残余差距只能来自搜索期目标权重（λ 弱杠杆），
-    # 为「不再拧适应度」提供实证边界。默认开启（与 cost_polish_enabled
-    # 同生产口径）；消融对照显式 False。
-    cost_polish_relocate_enabled: bool = True
+    # 为「不再拧适应度」提供实证边界。
+    # **P4 起降级为遗留细粒度键**：默认 None = 跟随统一总闸；显式
+    # True/False 仅在 ``effective_l3b_enabled=True`` 时有意义。历史
+    # 「默认开启（与 cost_polish_enabled 同生产口径）」口径已作废。
+    cost_polish_relocate_enabled: bool | None = None
     # 剔除判据的裕度：仅当 λ·节省 > 收益 × (1 + margin) 时才剔除
     prune_margin: float = 0.0
     # 等待补偿（论文 §3.2 的 W_i(t)）：任务滞留越久越不容易被剔除，
@@ -298,8 +324,12 @@ class MUASStageConfig:
     # 直接在解空间操作，绕过编码—回写冻结构悟。
     # 默认开启（生产口径）；消融对照显式传 False。
     polish_enabled: bool = True
-    # 启用的移动类型（顺序即扫描优先级；relocate 结构性收益最大排首）
-    polish_moves: tuple[str, ...] = DEFAULT_MOVES
+    # 启用的移动类型（顺序即扫描优先级；relocate 结构性收益最大排首）。
+    # **P4 起改为 None 哨兵**：None = 未设置（走 DEFAULT_MOVES，再由
+    # L3b 总闸过滤 relocate/swap）；显式 tuple = 旧 config 保义输入
+    # （含归属类动作时映射为总闸开）。有效值只读 property
+    # ``effective_polish_moves``；空 tuple 合法 = 不做任何邻域移动。
+    polish_moves: tuple[str, ...] | None = None
     polish_max_rounds: int = 30     # 无改进即停的轮数上限
     polish_max_evals: int = 2000    # 真实评估数预算（缓存命中不计）
     polish_eps: float = 1e-6        # 严格改进阈值（绝对；吸收浮点求和噪声）
@@ -359,6 +389,17 @@ class MUASStageConfig:
     _repair_replacement_eff: float = field(init=False, default=0.0)
 
     def __post_init__(self) -> None:
+        # P4 L3b 三键规整：None 哨兵保留「是否显式设置」的信息；显式传入
+        # 的 bool/int/tuple 统一成 bool/tuple。``replace()`` 重入时结果
+        # 幂等（有效值全由 property 计算，不写任何派生状态）。
+        if self.l3b_enabled is not None:
+            self.l3b_enabled = bool(self.l3b_enabled)
+        if self.cost_polish_relocate_enabled is not None:
+            self.cost_polish_relocate_enabled = bool(
+                self.cost_polish_relocate_enabled
+            )
+        if self.polish_moves is not None:
+            self.polish_moves = tuple(self.polish_moves)
         if self.max_participating_uavs is not None and self.max_participating_uavs < 1:
             raise ValueError("max_participating_uavs 必须 >= 1 或为 None")
         if self.marginal_tour_cap is not None and self.marginal_tour_cap < 1:
@@ -386,7 +427,7 @@ class MUASStageConfig:
             raise ValueError("coverage_first_max_rounds 必须 >= 1")
         if self.monotone_polish_max_rounds < 1:
             raise ValueError("monotone_polish_max_rounds 必须 >= 1")
-        bad = [m for m in self.polish_moves
+        bad = [m for m in (self.polish_moves or ())
                if m not in (MOVE_RELOCATE, MOVE_SWAP, MOVE_POSITION)]
         if bad:
             raise ValueError(
@@ -463,4 +504,59 @@ class MUASStageConfig:
     def effective_repair_replacement(self) -> float:
         """有效回写比例（0=纯 Baldwin 拍板默认；1=完整 Lamarck 对照档）。"""
         return float(self._repair_replacement_eff)
+
+    # ── L3b 有效口径（唯一判定入口；property 无状态 ⇒ replace() 幂等）──
+    @property
+    def _l3b_legacy_on(self) -> bool:
+        """旧 config 是否显式开启了任一归属类通道（保义映射用）。"""
+        reloc = self.cost_polish_relocate_enabled is True
+        moves = self.polish_moves
+        has_cross = moves is not None and any(
+            m in (MOVE_RELOCATE, MOVE_SWAP) for m in moves
+        )
+        return bool(reloc or has_cross)
+
+    @property
+    def effective_l3b_enabled(self) -> bool:
+        """L3b 统一总闸有效值（False = 拍板默认，两通道同时禁归属动作）。"""
+        if self.l3b_enabled is not None:
+            return bool(self.l3b_enabled)
+        return bool(self._l3b_legacy_on)
+
+    @property
+    def l3b_source(self) -> str:
+        """总闸来源（诊断留痕）：explicit / legacy_on / legacy_off / default。"""
+        if self.l3b_enabled is not None:
+            return "explicit"
+        if (self.cost_polish_relocate_enabled is not None
+                or self.polish_moves is not None):
+            return "legacy_on" if self._l3b_legacy_on else "legacy_off"
+        return "default"
+
+    @property
+    def l3b_legacy_conflict(self) -> bool:
+        """显式新键关 + 旧键显式开（新键优先，留痕但不抛错）。"""
+        return bool(self.l3b_enabled is False and self._l3b_legacy_on)
+
+    @property
+    def effective_cost_polish_relocate(self) -> bool:
+        """通道 B 有效开关 = 总闸 ∧ 旧细粒度键（旧键 None ⇒ 视为 True）。"""
+        if not self.effective_l3b_enabled:
+            return False
+        old = self.cost_polish_relocate_enabled
+        return True if old is None else bool(old)
+
+    @property
+    def effective_polish_moves(self) -> tuple[str, ...]:
+        """通道 A 有效移动集 = 旧 moves（None ⇒ DEFAULT_MOVES）过滤归属类。
+
+        总闸关时只保留 ``position``（L3a 纯几何：组内改序，不改归属）；
+        总闸开时原样返回（含 relocate/swap 的旧 config 逐位保义）。
+        空 tuple 合法（不做任何邻域移动）；调用方**不得**再
+        ``or DEFAULT_MOVES`` 回退——那会让「总闸关」静默失效。
+        """
+        raw = DEFAULT_MOVES if self.polish_moves is None else self.polish_moves
+        if self.effective_l3b_enabled:
+            return tuple(raw)
+        return tuple(m for m in raw if m == MOVE_POSITION)
 

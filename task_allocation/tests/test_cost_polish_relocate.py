@@ -142,7 +142,11 @@ def test_relocate_end_to_end_via_post_cost_polish():
     nests = [Nest(id=0, x=0.0, y=0.0, z=0.0, capacity=10, available=True)]
     uavs = [_uav(0, 0.0), _uav(1, 250.0)]
     tasks = [_task(0, 0.0), _task(1, 300.0)]
-    prob, ev = _mk(tasks, uavs, nests)
+    # L3b 总闸默认关；本用例验证通道 B 的端到端改派，显式开总闸。
+    prob, ev = _mk(
+        tasks, uavs, nests,
+        stage_cfg=MUASStageConfig(l3b_enabled=True),
+    )
 
     sol_before = _handbuilt_solution(ev, {0: [0, 1]}, {0: 0, 1: 0})
     path_before = prob.path_cost(sol_before)
@@ -259,9 +263,22 @@ def test_relocate_switch_off_skips_dimension():
     assert sol_after is sol_before, "关闭时必须原样返回"
 
 
-def test_relocate_default_on():
+def test_l3b_gate_default_off_and_legacy_mapping():
+    """L3b 统一总闸默认关；显式开 / 旧键映射各自恢复两个通道。"""
     cfg = MUASStageConfig()
-    assert cfg.cost_polish_relocate_enabled is True, "生产口径默认开启"
+    assert cfg.effective_l3b_enabled is False, "拍板默认：L3b 关"
+    assert cfg.effective_cost_polish_relocate is False
+    assert cfg.effective_polish_moves == ("position",)
+    assert cfg.l3b_source == "default"
+    # 显式新键开 ⇒ 通道 A（moves）+ 通道 B（relocate）同时恢复
+    on = MUASStageConfig(l3b_enabled=True)
+    assert on.effective_l3b_enabled is True
+    assert on.effective_cost_polish_relocate is True
+    assert on.effective_polish_moves == ("relocate", "swap", "position")
+    # 旧 config 只写旧键 ⇒ 映射保义为开（不静默改掉历史实验数值）
+    legacy = MUASStageConfig(cost_polish_relocate_enabled=True)
+    assert legacy.effective_l3b_enabled is True
+    assert legacy.l3b_source == "legacy_on"
 
 
 # ---------------------------------------------------------------------------

@@ -328,7 +328,12 @@ def test_post_cost_polish_repairs_sequence_downstream():
         Task(id=2, x=520.0, y=0.0, z=0.0, reward=5.0, earliest=0.0,
              latest=1e6, arrival_time=0.0),
     ]
-    prob, ev = _mk(tasks, uavs, nests)
+    # 本测试依赖跨机改派触发下游重解：L3b 总闸默认关，须显式开
+    # （算子本身的行为未改，只是不再默认启用）。
+    prob, ev = _mk(
+        tasks, uavs, nests,
+        stage_cfg=MUASStageConfig(l3b_enabled=True),
+    )
     tours = [
         UAVTour.from_uav(uavs[0], task_ids=[0, 1, 2], end_nest_id=0),
         UAVTour.from_uav(uavs[1], task_ids=[], end_nest_id=0),

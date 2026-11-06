@@ -424,7 +424,8 @@ class RoutePolishMixin:
 
         1. :meth:`_cost_polish_relocate`——跨机单任务改派（归属维度），
            四道门（两侧航程 / 两侧迟到 / 执行集由构造保持 / 净航程严格
-           下降）；``cost_polish_relocate_enabled=False`` 时整段跳过；
+           下降）；L3b 总闸关或 ``cost_polish_relocate_enabled=False`` 时整段
+           跳过（判定读 ``effective_cost_polish_relocate``）；
         2. :meth:`_cost_polish_routes`——组内 2-opt/Or-opt（顺序维度），
            四道门，执行集与迟到不劣化，只压航程；
         3. ①→② 交替至一个联合轮次零接受（上限 3 轮：改派会改末任务、
@@ -452,7 +453,15 @@ class RoutePolishMixin:
         # 轮即收敛；上限只是防御性边界。
         for joint in range(3):
             before = n_accepted
-            if self.config.cost_polish_relocate_enabled:
+            # P4 L3b 统一总闸：通道 B 与通道 A（polish_moves）共用同一
+            # 有效开关；兼容非 MUASStageConfig 的替身配置。
+            reloc_on = getattr(
+                self.config, "effective_cost_polish_relocate", None
+            )
+            if reloc_on is None:
+                raw = getattr(self.config, "cost_polish_relocate_enabled", True)
+                reloc_on = True if raw is None else bool(raw)
+            if reloc_on:
                 routes, ends, rstats = self._cost_polish_relocate(routes, ends)
                 for k in ("n_relocate", "blocked_range", "blocked_late", "blocked_seq"):
                     stats[k] = int(stats.get(k, 0)) + int(rstats.get(k, 0))

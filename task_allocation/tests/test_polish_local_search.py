@@ -154,7 +154,8 @@ def test_relocate_rescues_misassigned_task():
 
     base = [(0, 0), (0, 1)]                      # 全压给 uav0（远）
     r_base = ev.evaluate(base)
-    res = polish_assignment(ev, base, MUASStageConfig())
+    # L3b 总闸默认关；本用例验证 relocate 算子本身，显式开总闸。
+    res = polish_assignment(ev, base, MUASStageConfig(l3b_enabled=True))
 
     assert res.n_accepted.get("relocate", 0) >= 1, (
         f"未接受任何 relocate：{res.n_accepted}"
@@ -268,7 +269,9 @@ def test_coverage_guard_tracks_current_best_not_initial():
     ev = _Eval()
     ev.problem = _Problem()
     res = polish_assignment(
-        ev, [(0, 0), (1, 1)], MUASStageConfig(polish_enabled=True)
+        ev, [(0, 0), (1, 1)],
+        # 需跨机候选才能触发守护回归；L3b 总闸默认关，显式开。
+        MUASStageConfig(polish_enabled=True, l3b_enabled=True),
     )
     # 守护必须守住修复链新增的完成量：交付解仍含任务2。
     assert set(res.best_solution.executed_task_ids) == {0, 1, 2}, (
@@ -329,6 +332,15 @@ def test_stage_config_validates_polish_fields():
         MUASStageConfig(polish_max_evals=0)
     with pytest.raises(ValueError, match="polish_eps"):
         MUASStageConfig(polish_eps=-1.0)
-    # 默认三移动齐全
+    # 默认档：旧键为 None 哨兵，L3b 总闸关 ⇒ 有效移动集只剩 L3a 的 position
     assert set(DEFAULT_MOVES) == {"relocate", "swap", "position"}
-    assert set(MUASStageConfig().polish_moves) == set(DEFAULT_MOVES)
+    base = MUASStageConfig()
+    assert base.polish_moves is None
+    assert base.effective_polish_moves == ("position",)
+    # 显式开总闸 ⇒ 三移动齐全（旧 config 逐位保义）
+    assert (
+        MUASStageConfig(l3b_enabled=True).effective_polish_moves
+        == DEFAULT_MOVES
+    )
+    # 空 tuple 合法（不做任何邻域），不得被 `or DEFAULT_MOVES` 静默回退
+    assert MUASStageConfig(polish_moves=()).effective_polish_moves == ()
