@@ -710,3 +710,84 @@ memetic 从紧预算）重入幂等，已实测。
 ⇒ 默认档恒 0）。为免「总闸关却有归属动作」的口径疑点，诊断单列
 `l3b_ungated_monotone_relocate` 如实记账，`l3b_relocate_actions` 仍保持
 P3-b 原有合计口径不变。是否纳入总闸属 P4 待裁定项，本步不擅自扩权。
+
+---
+
+## 11.6 P4 首个实验脚手架与冒烟档（2026-11-06）
+
+**授权边界**：用户「继续推进」后从四个方向中选定「建脚手架 + 冒烟档」。
+本轮**未改任何代码默认值**、**未启动其它实验**（严格串行单实验）、
+**未渲图**、**未覆盖任何既有结果**。数值产物落在被 `.gitignore` 忽略的
+`results/` 下，只在本机留存，不进仓库。
+
+### 1. 新增实验 `exp07_polish_accept`
+
+自持 `config.yaml / config.py / build.py / paths.py / metrics.py / run.py /
+plot/compare.py / notes.md`（遵守「实验独立性」约定：不建 `_shared/`、
+不抽公共绘图包、不跨实验 import）。
+
+| 档 | 判据 | 阈值 |
+|---|---|---|
+| `path` | `accept_cost_polish_view`（航程分量门，当前默认） | `cost_polish_eps=1.0` 米 |
+| `f` | `accept_f_view`（f 严格改进 + 约束向量不退化） | `cost_polish_eps_f=1e-6` f 单位 |
+
+唯一差异由 `dataclasses.replace(stage_model, cost_polish_accept_mode=...)`
+锁定，`summary.json` 落盘两档配置对象 diff 并断言
+`only_accept_mode_differs=True`。同 seed 配对 `[7, 11, 23]`，
+每 seed 先跑完两档再进下一个；`l3b_enabled: false` 显式关总闸
+（否则历史 yaml 的 `cost_polish_relocate_enabled: true` 会经保义映射
+把两通道偷偷打开，§11.5）。`--profile formal` 会拒绝在冒烟参数未被
+`--set` 覆盖时运行，防止冒烟结论外推。
+
+### 2. 冒烟结果（2 档 × 3 seed = 6 次运行）
+
+| 项目 | 结果 |
+|---|---|
+| 场景 / 收敛 | 3 机巢 + DEM + 20685 栋建筑；3 seed 均于周期 4 池空自然收敛 |
+| 配置纯度 | `n_differing_fields=1`，仅 `cost_polish_accept_mode` |
+| 完成率 / 按时率 | 两档逐 seed 均 1.000；`n_hard=0`；各项检查全过 |
+| 航程（7/11/23） | 27.27 / 28.01 / 20.71 km，两档逐位相同 |
+| `final_fitness_sum` | 2726.901 / 2801.242 / 2070.883，两档逐位相同 |
+| 采纳候选 / 漂移 | 3 seed 合计仅 1 次采纳（seed 11，两档都采纳、两视图都 True）；漂移全 0 |
+
+**verdict（如实写入 `summary.json`）**：两档在所有质量指标上逐 seed
+完全一致；本冒烟档**无法区分** `path` 与 `f`，既不能据此翻转默认，
+也不能写成「两档等价」。原因是冒烟规模下交付后成本 polish 几乎无候选。
+⇒ 本轮验证的是**实验设计与统计链路可用**，**没有回答**「默认是否翻 f」。
+全量回归 **526 passed**（与 §11.5 持平，未破坏既有测试）。
+
+### 3. 统计口径的三处如实修正（本轮实测暴露）
+
+1. **venv 未装 scipy**。不擅自加依赖，改为在 `metrics.py` 内用正则化
+   不完全 β 精确计算 Student t 双尾 p（`p = I_{df/(df+t²)}(df/2, 1/2)`），
+   已用 `t(1)=1→0.5`、`t(2)=2.228→0.0500` 等临界值校验；**未用正态近似
+   冒充精确检验**。墙钟配对 `t=−1.596, p=0.251`（不显著，且非质量指标）。
+2. **零方差 ≠ 不显著**。所有质量指标差值为常数 0 ⇒ 配对 t 检验不适用，
+   报告 `p_reason=zero_variance_no_test`，不得写成「p 缺失」或「不显著」。
+3. **`n_eliminating` 不是 diagnostics 字段**（它只是 `independent_audit`
+   的入参）。本实验的 0 是「TaskPool 已无超期出池路径」的**结构性事实**，
+   非独立测量；落盘 `n_eliminating_basis=structural_zero_unverified`、
+   `eliminating_independently_verified=False`，并在 `invariants_scope`
+   注明未接入独立事后评价器。
+
+另有一条口径局限：`cost_polish_accept` 是每周期**最后一次**候选的快照，
+不是全候选累计 ⇒ 低频候选场景会低估判据分歧次数。要精确统计须扩展
+`stage_runner` 落盘累计计数（属代码改动，本轮未做），已写入
+`summary.json.caveats`。
+
+### 4. 本轮新发现（第四项待裁定，未擅改）
+
+复制骨架时核对到**代码默认** `projection_only=False` /
+`compare_mode="penalty"`，而定稿 §6 表格写 `projection_only=True` /
+`compare_mode="deb"`。本实验如实沿用代码默认，并在 `run_meta.json` 的
+`stage_effective` 逐项留痕；**未改代码、未改文档表格**，列为待用户裁定项。
+
+### 5. 仍未回答 / 下一步（均需单独发话，严禁并行）
+
+- **默认翻 `f` 仍未回答**：需正式档配对 A/B（`--profile formal` + 显式
+  覆盖 `n_tasks/population/max_iter/n_cycles/arrivals`）；冒烟零差异不构成依据。
+- 原三项待裁定仍在：§4.3 第 2 条覆盖门禁双开口径（§11.4 第 3 条）、
+  第三来源是否纳入 `l3b_enabled` 总闸（§11.5 第 6 条）、上述第 4 节新发现。
+- P4 其余实验**未启动**：「几何 vs 救回任务」收益拆分、MCF 层 1/层 3 对照、
+  三级嵌套消融 + 2×2 交互、重跑全部基线配对 t 检验、`method-phase1` 同 seed 对照。
+
