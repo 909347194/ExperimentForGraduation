@@ -155,6 +155,8 @@ class DecodeRepairMixin:
         # 航程修复，被清空的航次实际并未起飞，让出的名额是虚的 → 落地期超卖。
         end_nests: dict[int, int | None] = {}
         prev_state = None
+        # P1 projection_only：剥掉每代每体的解码期目标改写（定稿 §6 要素 1）
+        projection_only = bool(getattr(self.config, "projection_only", False))
         # 经济剔除仅在「非覆盖优先」且显式开启时允许：门禁口径下
         # prune_unprofitable=false，故生产恒关；任务暂缓仅由可行性修复产生。
         # _prune 是消融算子，见 ablation_prune.AblationPruneMixin。
@@ -165,7 +167,10 @@ class DecodeRepairMixin:
         for _ in range(6):
             # 合并修复：任务少时向更少机合并（闲置合法，U_exec ⊆ U_avail）
             # 台账：_consolidate 内逐次 merge 记录（reason=opt，接受判据=成本降）
-            routes, end_nests = self._consolidate(routes, end_nests)
+            # projection_only：成本合并属目标动作，剥出每体路径（闲置表达升级为
+            # 基因级一等选项属 P2，此处跳过整段合并）。
+            if not projection_only:
+                routes, end_nests = self._consolidate(routes, end_nests)
             if economic_prune:
                 _prune_before = _led_state(routes, end_nests)
                 routes, end_nests = self._prune(routes, end_nests)
@@ -437,6 +442,8 @@ class DecodeRepairMixin:
             return float(est) if est is not None else 0.0
 
         neutral = str(getattr(self.config, "order_candidate_mode", "gene")).lower() == "neutral"
+        # P1 projection_only：NN 候选与航程裁决属目标动作，移出每体路径
+        proj = bool(getattr(self.config, "projection_only", False))
 
         # 候选集（命名以便胜率记录）：基因原序 + 几类启发式序。
         # neutral 模式（基因序边际消融对照）剔除「基因原序」候选。
@@ -451,21 +458,23 @@ class DecodeRepairMixin:
                 sorted(tids, key=lambda t: (latest_of(t) - earliest_of(t), latest_of(t), t)),
             ))
         # 最近邻（从 UAV 起点贪心）：航程最短的候选，成本维度的对照
-        remaining = list(tids)
+        # projection_only：剔除（目标动作，移出每体路径；交付期 cost_polish 承接）
         nn: list[int] = []
-        cur = start
-        while remaining:
-            nxt = min(
-                remaining,
-                key=lambda t: (
-                    self.problem.costs.travel(cur, by_id[t].position),
-                    t,
-                ),
-            )
-            nn.append(nxt)
-            cur = by_id[nxt].position
-            remaining.remove(nxt)
-        cands.append(("nn", nn))
+        if not proj:
+            remaining = list(tids)
+            cur = start
+            while remaining:
+                nxt = min(
+                    remaining,
+                    key=lambda t: (
+                        self.problem.costs.travel(cur, by_id[t].position),
+                        t,
+                    ),
+                )
+                nn.append(nxt)
+                cur = by_id[nxt].position
+                remaining.remove(nxt)
+            cands.append(("nn", nn))
 
         # 时序优先：候选序先剔掉违反同链顺序的（硬约束），让「最优」只在
         # 合法序里挑——先挑后修会把迟到/航程指标算在非法序上，修完又变。
@@ -521,8 +530,12 @@ class DecodeRepairMixin:
             # 中性对照（order_candidate_mode="neutral"）**不得**走本早退：
             # 零迟到快返回等于把基因原序泄漏回对照臂（neutral 的语义是「基因序
             # 不是候选」），统一落入下方一般锦标赛裁决（2026-11-05 审查 P1 修）。
-            if not self.config.reorder_range_optimize:
-                self._led_order_pick("gene", "hard", "zero_late_early_exit", base_key, base_key)
+            if proj or not self.config.reorder_range_optimize:
+                self._led_order_pick(
+                    "gene", "hard",
+                    "zero_late_early_exit(projection_only)" if proj else "zero_late_early_exit",
+                    base_key, base_key,
+                )
                 return list(tids)
             nn_key = _evaluate(nn) if list(nn) != list(tids) else None
             if (
@@ -551,20 +564,27 @@ class DecodeRepairMixin:
             _evaluated.append((name, seq, key))
             if key is None:
                 continue
-            if best_key is None or key < best_key:
+            # projection_only：选择键退为 (迟到数, 迟到量)（航程键 = 目标动作，
+            # 移出每体路径）；同键并列取先候选（gene 优先，确定性）。
+            _better = (
+                key[:2] < best_key[:2] if proj else key < best_key
+            ) if best_key is not None else True
+            if _better:
                 best_key = key
                 best_name = name
                 best_seq = list(seq)
         # 台账归因：并列最优靠航程键裁决 → reason=opt（目标动作，P1 移出每体路径）；
         # 迟到键已分胜负 → reason=hard（软约束可行性）。
-        _range_decided = best_key is not None and any(
+        _range_decided = (not proj) and best_key is not None and any(
             k is not None and k != best_key and k[:2] == best_key[:2]
             for _n, _s, k in _evaluated
         )
         self._led_order_pick(
             best_name,
             "opt" if _range_decided else "hard",
-            "tournament_range_tiebreak" if _range_decided else "tournament_late_key",
+            "tournament_range_tiebreak"
+            if _range_decided
+            else ("tournament_late_key(projection_only)" if proj else "tournament_late_key"),
             base_key,
             best_key,
         )
@@ -604,7 +624,12 @@ class DecodeRepairMixin:
 
         「终点进编码」的联合变体（编码终点优先、精确分配兜底）已从 master
         移除，在 pro 分支实现。
+
+        P1 projection_only：层 1 降级为「最近合法巢」确定性投影
+        （:meth:`_choose_end_nests_projection`，零联合优化）。
         """
+        if bool(getattr(self.config, "projection_only", False)):
+            return self._choose_end_nests_projection(routes)
         if not self.nests:
             return {uid: None for uid in routes}
 
@@ -659,6 +684,82 @@ class DecodeRepairMixin:
             )[:240],
             gate_reason="mcf_exact(容量约束下精确求解)",
         )
+        return chosen
+
+    def _choose_end_nests_projection(
+        self,
+        routes: Mapping[int, Sequence[int]],
+    ) -> dict[int, int | None]:
+        """P1 层 1 确定性投影：每机「最近合法巢」（零联合优化）。
+
+        定稿 §4.1 MCF 对照方案的「层 1 最近合法巢」臂：不跑最小费用流，
+        逐机（id 升序）取返航代价最小且有泊位的巢。容量账与
+        :func:`check_nest_capacity` 同口径（批量起飞让位 + 落地占位），
+        经 ``constraint_spec.nest_capacity_gate_slot_ok`` 判落位（home=None
+        语义 = 纯落地 +1 检查，因让位已批量完成）。无合法巢（全超容）时
+        回退最近巢，由模型判据计违约——投影不制造静默降级。
+
+        与 MCF 的差异（收益归因记账用）：层 1 投影与 MCF 的返航差异单独
+        列示（定稿 §4.1「层 3 的 MCF 收益记 Δ_polish；层 1 的投影与 MCF
+        差异单独列示」）。
+        """
+        if not self.nests:
+            return {uid: None for uid in routes}
+        excluded = self.excluded_nest_ids
+        cand_nests = [n for n in self.nests if n.id not in excluded]
+        if not cand_nests:
+            return {uid: None for uid in routes}
+        active = [uid for uid, tids in routes.items() if tids]
+        if not active:
+            return {}
+        # 容量账（与 check_nest_capacity / 门禁账同源口径）：
+        # 批量起飞让位 → 逐机落位占位
+        loads: dict[int | None, int] = {}
+        for u in self.fleet_uavs:
+            loads[u.nest_id] = loads.get(u.nest_id, 0) + 1
+        for uid in active:
+            uav = self._uav_by_id.get(uid)
+            if uav is not None and uav.nest_id is not None:
+                loads[uav.nest_id] = loads.get(uav.nest_id, 0) - 1
+        chosen: dict[int, int | None] = {}
+        for uid in sorted(active):
+            last_node = routes[uid][-1]
+            best_id: int | None = None
+            best_cost = float("inf")
+            fallback_id: int | None = None
+            fallback_cost = float("inf")
+            for nest in cand_nests:
+                if not nest.available or nest.capacity <= 0:
+                    continue
+                c = float(
+                    self.problem.costs.cost(
+                        last_node, self.problem.costs.nest_key(nest.id)
+                    )
+                )
+                if not np.isfinite(c):
+                    continue  # 末任务→巢不可达：排除（与 MCF 候选过滤一致）
+                if c < fallback_cost:
+                    fallback_id, fallback_cost = nest.id, c
+                if (
+                    c < best_cost
+                    and constraint_spec.nest_capacity_gate_slot_ok(
+                        self.problem, loads, nest.id, None
+                    )
+                ):
+                    best_id, best_cost = nest.id, c
+            pick = best_id if best_id is not None else fallback_id
+            if pick is not None:
+                loads[pick] = loads.get(pick, 0) + 1
+            chosen[uid] = pick
+            self._led_record(
+                "choose_end_nests", "assign_end_nests", "hard", "nest_capacity",
+                f"uav:{uid}", to_state=f"nest:{pick}",
+                gate_reason=(
+                    "nearest_legal_nest_projection(P1)"
+                    if best_id is not None
+                    else "nearest_nest_fallback(无合法泊位,模型判据计违约)"
+                ),
+            )
         return chosen
 
     def _consolidate(
