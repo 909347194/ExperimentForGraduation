@@ -532,8 +532,8 @@ Zotero 全文 `storage/UEDCMGSJ/…pdf`。页码为**期刊印刷页码**，PDF 
    A/B 决定**；当前默认 False（与 method-phase1 逐位可比），臂开关供对照。
 2. **deb 档在全可行合成场景与 penalty 同效**（逐指标同值）：其价值只在
    含不可行个体的场景显现（合成档 n_hard 恒 0，无可区分样本）；
-   ε / lagaros 档为占位实现（ε 调度、8b–d 近似口径见 compare_spec
-   docstring），**不得用于正式实验**，参数待 P2 前拍板。
+   ε / lagaros 档为可选 A/B 实现（ε 调度 Eq.12 已由 P2-e 实装、8b–d
+   近似口径见 compare_spec docstring），**非默认档**，参数见 §9 第 2 项。
 
 **P2 入场条件**：闸门✅；尚缺用户拍板（§9 第 1、2 项）：① 回写比例对照档
 取值与闸门（现默认 0=Baldwin；现行代码 `lamarckian=True` 与拍板默认值的
@@ -553,9 +553,17 @@ P1 的 C6–C9）：
 | P2-d | `n_skip^eval`（交付重建后 pre-polish）/`n_skip^final`（终态）分列；`CandidateFeatures.n_skip` + `CompareSpec.lambda_cov`（F_sel 侧，默认关；实例推导 λ_cov > λ·Δpath_max + w_late·ΔL_max）；w_late 显式化（提为带推导的显式量，不改值） | penalty 档逐位不变（λ_cov 仅非 penalty 档生效）；分列只加观测字段 |
 | P2-e | ε 档从占位线性衰减改 Eq.12（Fan 2018）状态机：ε(0)=ϕθ（γ=0.5）；FEs<TC 且 rk<α ⇒ ε(k−1)·(1−FEs/TC)^cp（cp=5）；FEs<TC 且 rk≥α ⇒ (1+τ)·ϕmax（τ=0）；FEs≥TC ⇒ 0；TC=0.4·maxFEs；solver 每代喂 (FEs, rk, ϕmax)，FEs=gen·pop_size 口径显式声明 | ε 默认关 ⇒ 默认档零变化；`epsilon0/epsilon_tc` 占位字段标废弃 |
 
-P2 验收（§8 行 + Task #38）：`regret` / top1 重合率如实并列；三本账对账差额
-可解释；完成率恒 100%、无 `eliminating`；全量测试绿；P1 闸门工具 base 臂
-显式 `repair_replacement=1.0` 保锚点。采纳判据统一为 f（`stage_runner.py:425`
-通道）按定稿 §8 归 **P3**（Task #38 原描述含此项，以定稿为准）。
+**P2 状态（2026-11-06 晚全部落地）**：P2-a `a662fe9`、P2-b `de49925`、
+P2-d `d3b06c9`、P2-e `841d391`；全量回归 **498 passed**（P2 前 488 → +10：
+λ_cov 7 + ε 3）。验收口径（§8 + Task #38）：完成率恒 100%、无 `eliminating`、
+默认档行为边界逐条守住（penalty/λ_cov 关/ε 关均零变化）、三本账差额可解释
+（台账四元组 + n_skip 分列 + 方差护栏序列齐备）；采纳判据统一为 f 的修复
+归 **P3**（`stage_runner.py:425` 通道，未在本阶段触碰）。
+
+**P1 闸门 base 臂锚点（重新运行闸门时必须）**：master 默认路径自 P2-a 起为
+纯 Baldwin（回写比例 0）；重跑 §11.2 闸门以对比「旧 method-phase1（每代
+Lamarckian 回写）vs 新默认」时，base 臂须显式 `repair_replacement=1.0` 保锚点，
+否则闸门会静默比较 Baldwin-vs-Baldwin。perturbed 探针场景（12 任务、
+pop16×gen20）与 ab_mechanism_3steps 闸门工具均适用此约定。
 
 ### 11.4 P3–P4（未开始）
