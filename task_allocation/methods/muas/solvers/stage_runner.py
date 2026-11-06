@@ -339,6 +339,7 @@ def run_selective_muas(
             epsilon_tc=int(stage_cfg.epsilon_tc),
             lagaros_variant=str(stage_cfg.lagaros_variant),
             n_constraints=stage_cfg.n_constraints,
+            lambda_cov=stage_cfg.lambda_cov,
         ),
     )
 
@@ -381,6 +382,8 @@ def run_selective_muas(
         problem.evaluate(final)
         final_fitness = float(problem.scalar_fitness(final))
         final_n_hard, final_excess_m = problem.hard_stats(final)
+        # 预构建通道无「重建 → polish」两段分离：eval 与 final 同源。
+        n_skip_eval = int((final.meta.get("gate_stats") or {}).get("n_skip", 0) or 0)
         polish = PolishResult(
             best_assignment=[],
             base_fitness=final_fitness,
@@ -393,6 +396,10 @@ def run_selective_muas(
         problem.evaluate(final)
         final_fitness = float(problem.scalar_fitness(final))
         final_n_hard, final_excess_m = problem.hard_stats(final)
+        # P2-d：交付重建后、polish 前记 n_skip_eval（覆盖门禁口径的
+        # voluntary_skip；gate 修复下恒 0）。终态 n_skip_final 在 return 前
+        # 按最终 final 重取，二者分列、禁混用（诊断口径见定稿 §9）。
+        n_skip_eval = int((final.meta.get("gate_stats") or {}).get("n_skip", 0) or 0)
 
         # 解码后局部搜索 polish：对 best_assignment 做
         # relocate / swap / 插入位，候选过**同一** build_solution 修复链
@@ -541,6 +548,10 @@ def run_selective_muas(
             file=sys.stderr,
         )
 
+    # P2-d：终态 n_skip_final（polish/coverage 后最终交付解），与 n_skip_eval
+    # 分列（定稿 §9）。覆盖门禁口径 voluntary_skip；gate 修复下恒 0。
+    n_skip_final = int((final.meta.get("gate_stats") or {}).get("n_skip", 0) or 0)
+
     return MUASStageResult(
         solution=final,
         participating_uav_ids=[u.id for u in participating],
@@ -576,6 +587,13 @@ def run_selective_muas(
             #   n_skip = voluntary_skip（能装没装；gate 修复下恒 0）
             #   n_shortfall = 一阶检验能力不足（允许不交付）
             "gate_stats": dict(final.meta.get("gate_stats") or {}),
+            # P2-d 覆盖分账（定稿 §9）：n_skip 在「交付重建(polish 前)」与
+            # 「终态(polish/coverage 后)」两处分别记，禁混用。
+            #   n_skip_eval  = 重建后、polish 前的 voluntary_skip 数
+            #   n_skip_final = 最终交付解的 voluntary_skip 数
+            # 两者均来自 meta["gate_stats"]["n_skip"]（覆盖门禁口径）。
+            "n_skip_eval": int(n_skip_eval),
+            "n_skip_final": int(n_skip_final),
             "deferred_ids": sorted(
                 t.id for t in task_list
                 if t.id not in set(final.executed_task_ids)

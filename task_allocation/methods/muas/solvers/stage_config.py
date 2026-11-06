@@ -329,6 +329,11 @@ class MUASStageConfig:
     # lagaros FeasRulesNEW 变体（8a 默认；8b/8c/8d 需 n_constraints，近似口径见 compare_spec）
     lagaros_variant: str = "8a"
     n_constraints: int | None = None
+    # P2-d 覆盖保护系数 λ_cov（compare_spec.CompareSpec.lambda_cov）。
+    #   None/0 = 关（默认）；非 None 仅作用于 deb/epsilon/lagaros（非 penalty）；
+    #   两可行比较有效标量 = f + λ_cov·n_skip。penalty 档恒不作用（逐位等价）。
+    #   建议取值经 calibrate_lambda_cov 推导（λ·Δpath_max + w_late·ΔL_max 上界）。
+    lambda_cov: float | None = None
     # P2-a：解析后的有效回写比例（__post_init__ 填充，勿手工设置）
     _repair_replacement_eff: float = field(init=False, default=0.0)
 

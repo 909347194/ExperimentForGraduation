@@ -423,7 +423,7 @@ class SelectiveMUASProblem(FitnessWeightsMixin):
         """
         if not solution.meta.get("feasibility"):
             self.evaluate(solution)
-        wv = self.config.w_violation
+        wv = self.late_weight()
         # 覆盖门禁口径（唯一主口径）：**f 不含 −m·F1，F1 只作事后指标**。
         # 合法解中 S 内可装载任务已全部交付 ⇒ F1 恒为常数、对解无区分度；覆盖由门禁
         # （构造修复 + W_skip 层）承担，目标层只剩成本 + 迟到 + 硬违约。
@@ -444,6 +444,18 @@ class SelectiveMUASProblem(FitnessWeightsMixin):
     #   gate_mode / hard_weight / skip_weight / range_excess_weight /
     #   hard_stats / soft_violation / f1_weight / _auto_big_m /
     #   _secondary_upper_bound / _max_edge_cost
+
+    def late_weight(self) -> float | None:
+        """迟到权重 ``w_late``（T2 软计价，config.w_violation）。
+
+        P2-d 显式化（定稿 §9）：设计率 **0.01/s**，与航程权重 ``λ=0.1``
+        构成统一 f-单位汇率——``λ·10 m ≈ 0.1·10 = 1.0`` 点 ≈ ``w_late·100 s
+        ≈ 0.01·100 = 1.0`` 点，故「10 m 航程 ≈ 100 s 迟到」等价计价
+        （config.py 注释：迟到 300 s ≈ 3~6 点奖励，足以抵消单任务收益）。
+        值为 None ⇒ 迟到不计入（默认配置路径）；本方法仅做显式命名入口，
+        **不改任何取值**。
+        """
+        return self.config.w_violation
 
     def check_feasible(
         self, solution: AllocationSolution

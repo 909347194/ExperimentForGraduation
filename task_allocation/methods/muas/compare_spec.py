@@ -35,6 +35,7 @@ from typing import Any
 __all__ = [
     "CandidateFeatures",
     "CompareSpec",
+    "calibrate_lambda_cov",
     "extract_features",
     "make_compare_spec",
 ]
@@ -48,19 +49,28 @@ _VALID_MODES = (MODE_PENALTY, MODE_DEB, MODE_EPSILON, MODE_LAGAROS)
 
 @dataclass(frozen=True)
 class CandidateFeatures:
-    """比较所需的特征三元组（f 恒为问题目标标量，绝不被重标定）。"""
+    """比较所需的特征（f 恒为问题目标标量，绝不被重标定）。
+
+    ``n_skip`` 是覆盖保护项（P2-d）：可行解比较时若 `CompareSpec.lambda_cov`
+    非 None，则有效标量为 ``f + λ_cov·n_skip``——保证搜索不靠「少做任务」
+    换取边际成本下降（定稿 §9 / P2-d）。
+    """
 
     fitness: float                  # f（问题目标，搜索适应度）
     n_hard: int = 0                 # 硬违约条数
     violation: float = 0.0          # 违背量合计（hard_violation）
     n_violations: int = 0           # 违背标签条数（p_violation 的条数项）
+    n_skip: int = 0                 # voluntary_skip 数（覆盖门禁口径；gate 修复下恒 0）
 
 
 def extract_features(fitness: float, solution: Any) -> CandidateFeatures:
-    """从被评价解的 ``meta["feasibility"]`` 提取比较特征。
+    """从被评价解的 ``meta`` 提取比较特征。
 
-    ``solution is None`` 或缺 meta 时退化为 (fitness, 0, 0, 0)——
+    ``solution is None`` 或缺 meta 时退化为 (fitness, 0, 0, 0, 0)——
     deb/epsilon/lagaros 退化为纯 f 比较（与 penalty 同判）。
+
+    ``n_skip`` 来自 ``meta["gate_stats"]["n_skip"]``（覆盖门禁口径的
+    voluntary_skip 计数，见 problem.py scalar_fitness）；缺省 0。
     """
     if solution is None:
         return CandidateFeatures(fitness=float(fitness))
@@ -69,11 +79,14 @@ def extract_features(fitness: float, solution: Any) -> CandidateFeatures:
     n_hard = int(feas.get("n_hard", 0) or 0)
     violation = float(feas.get("hard_violation", 0.0) or 0.0)
     tags = feas.get("violations") or []
+    gate = meta.get("gate_stats") or {}
+    n_skip = int(gate.get("n_skip", 0) or 0)
     return CandidateFeatures(
         fitness=float(fitness),
         n_hard=n_hard,
         violation=violation,
         n_violations=len(tags),
+        n_skip=n_skip,
     )
 
 
@@ -87,6 +100,9 @@ class CompareSpec:
         epsilon_tc: ε 衰减到 0 的代数（epsilon 模式）。
         lagaros_variant: 8a | 8b | 8c | 8d（lagaros 模式）。
         n_constraints: 约束总数（8b/8c/8d 的条数项必需；缺省用 8a）。
+        lambda_cov: 覆盖保护系数（P2-d；**仅非 penalty 档生效**）。None/0 = 关。
+            两可行候选比较有效标量 ``f + λ_cov·n_skip``；保证搜索不靠少做任务
+            换边际成本。penalty 档恒不作用（与 method-phase1 逐位等价）。
     """
 
     mode: str = MODE_PENALTY
@@ -94,6 +110,7 @@ class CompareSpec:
     epsilon_tc: int = 1
     lagaros_variant: str = "8a"
     n_constraints: int | None = None
+    lambda_cov: float | None = None
     # lagaros Eq. 9b 的 f_best_feasible 参照（求解器喂入；未喂时退化 max(f_cand,f_cur)）
     _f_best_feasible: float | None = None
 
@@ -106,6 +123,8 @@ class CompareSpec:
             raise ValueError("epsilon_tc 必须 >= 1")
         if self.lagaros_variant not in ("8a", "8b", "8c", "8d"):
             raise ValueError("lagaros_variant 必须是 8a/8b/8c/8d")
+        if self.lambda_cov is not None and self.lambda_cov < 0:
+            raise ValueError("lambda_cov 不能为负")
 
     # ---- 参照喂入（lagaros Eq. 9b）----
 
@@ -143,11 +162,29 @@ class CompareSpec:
 
     def f_sel(self, feat: CandidateFeatures) -> float:
         if self.mode != MODE_LAGAROS or (feat.violation <= 0.0 and feat.n_violations == 0):
-            return feat.fitness
+            # 可行（或 penalty 模式）：覆盖保护只在可行侧生效（P2-d）
+            return feat.fitness + self._cov_shift(feat)
         ref = self._f_best_feasible
         if ref is None:
             ref = feat.fitness
-        return max(float(ref), feat.fitness) * self.p_violation(feat)
+        return max(float(ref), feat.fitness + self._cov_shift(feat)) * self.p_violation(feat)
+
+    # ---- 覆盖保护（P2-d）----
+
+    def _cov_shift(self, feat: CandidateFeatures) -> float:
+        """覆盖保护位移：``λ_cov·n_skip``（仅当 ``lambda_cov`` 非 None）。
+
+        penalty 档不调用本方法（should_replace 走纯 f 分支），故 penalty
+        路径仍与 method-phase1 逐位等价；λ_cov 的生效面严格限定在
+        deb/epsilon/lagaros（定稿 §9 / P2-d）。
+        """
+        if self.lambda_cov is None:
+            return 0.0
+        return float(self.lambda_cov) * int(feat.n_skip)
+
+    def _eff(self, feat: CandidateFeatures) -> float:
+        """可行比较有效标量：``f + λ_cov·n_skip``。"""
+        return feat.fitness + self._cov_shift(feat)
 
     # ---- 比较 ----
 
@@ -167,7 +204,7 @@ class CompareSpec:
             if c_ok != r_ok:
                 return c_ok                       # 可行优于不可行
             if c_ok:
-                return cand.fitness < cur.fitness  # 两可行比目标
+                return self._eff(cand) < self._eff(cur)  # 两可行比目标(+覆盖保护)
             if cand.violation != cur.violation:    # 两不可行比违反量
                 return cand.violation < cur.violation
             if cand.n_hard != cur.n_hard:
@@ -183,7 +220,7 @@ class CompareSpec:
             cv, rv = eff(cand.violation), eff(cur.violation)
             if cv != rv:
                 return cv < rv
-            return cand.fitness < cur.fitness
+            return self._eff(cand) < self._eff(cur)
 
         # lagaros：F_sel 乘积式重标定后按标量比较（可行时 F_sel = f）
         return self.f_sel(cand) < self.f_sel(cur)
@@ -196,6 +233,7 @@ def make_compare_spec(
     epsilon_tc: int = 1,
     lagaros_variant: str = "8a",
     n_constraints: int | None = None,
+    lambda_cov: float | None = None,
 ) -> CompareSpec:
     return CompareSpec(
         mode=mode,
@@ -203,4 +241,35 @@ def make_compare_spec(
         epsilon_tc=epsilon_tc,
         lagaros_variant=lagaros_variant,
         n_constraints=n_constraints,
+        lambda_cov=lambda_cov,
     )
+
+
+def calibrate_lambda_cov(
+    lambda_cost: float,
+    w_late: float,
+    max_path_delta: float,
+    max_late_delta: float,
+    margin: float = 1.1,
+) -> float:
+    """推导 ``λ_cov`` 的严格下界（定稿 §9 / P2-d）。
+
+    少做一个任务的收益上界 = ``λ·Δpath_max + w_late·ΔL_max``（省下的航程
+    计价 + 省下的迟到计价）。``λ_cov`` 须**严格**超过此上界，才能使「两可行
+    比较」恒不奖励跳过任务（``f + λ_cov·n_skip`` 对 ``n_skip ≥ 1`` 的惩罚
+    大于单任务边际收益）。
+
+    Args:
+        lambda_cost: 问题目标中的航程权重 ``λ``（config.lambda_cost，默认 0.1）。
+        w_late: 迟到权重 ``w_late``（config.w_violation，设计率 0.01/s）。
+        max_path_delta: 单任务最大可能航程增量（米；取代价矩阵最大边）。
+        max_late_delta: 单任务最大可能迟到增量（秒；取时间窗跨度上限）。
+        margin: 安全裕度。``<=1`` 返回裸上界；``>1`` 返回带裕度的可配置值。
+
+    Returns:
+        建议配置的 ``λ_cov``（≥ 上界 × margin）。
+    """
+    bound = float(lambda_cost) * float(max_path_delta) + float(w_late) * float(max_late_delta)
+    if margin <= 1.0:
+        return bound
+    return bound * float(margin)
