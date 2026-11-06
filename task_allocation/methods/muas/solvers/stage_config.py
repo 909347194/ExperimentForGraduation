@@ -229,11 +229,22 @@ class MUASStageConfig:
     #   完整成本评价间接影响进化搜索。
     #   「终点机巢进编码」的联合变体（方案 B，编码优先、精确分配兜底）已从
     #   master 移除，在 pro 分支实现。
-    # Lamarckian 回写：把修复后的解（经 _prune / _repair_range /
-    # _choose_end_nests）的「起始任务归属」编码回获胜个体的基因，使后继代际的
-    # 差分变异围绕**修复后的可行子空间**展开（默认开启）。
-    # 关闭后退化为当前行为：进化搜索的是未修复空间。
-    lamarckian: bool = True
+    # Lamarckian 回写（**P2-a 起废弃为 None 哨兵**，定稿 §9.1 迁移口径）：
+    # 回写语义由连续参数 ``repair_replacement``（0.0–1.0）承担——
+    #   · ``repair_replacement`` 显式设置 → 用它（0 = 纯 Baldwin **拍板默认**，
+    #     Lagaros §2.4 *"used solely for fitness function evaluation purposes"*）；
+    #   · 否则 ``lamarckian=True`` ≡ 1.0、``False`` ≡ 0.0（旧 config 兼容）；
+    #   · 否则 ``lamarckian_patrol_writeback=True`` 保义为 1.0（M2-1 借道 M1
+    #     调用门的历史语义，不因默认翻转而静默失效）；
+    #   · 三者均未设 → 0.0。**方向性变化**：master 自 P2 起默认纯 Baldwin；
+    #     复现 method-phase1 数值须 checkout tag，或显式 ``lamarckian=True`` /
+    #     ``repair_replacement=1.0``（注意 fitness 重算修复使对照档与
+    #     method-phase1 非逐位一致，属预期内 bug 修复）。
+    # 比例 0/1 不消耗 RNG；(0,1) 每次替换事件用求解器 rng 抽签。
+    # 回写采纳须过表型复核（重解码 fitness 与 S_repair 逐位一致，否则保留
+    # 原基因）+ fitness 重算（双重错配修复），见 dmde_solver P2-a 注记。
+    lamarckian: bool | None = None
+    repair_replacement: float | None = None
     # M2-1 段内巡游序回写（设计稿）：在 lamarckian 基础上，把修复解
     # 的**段内访问顺序**也写回巡游基因通道（起始通道回写由 lamarckian 承担），
     # 把顺序自由度纳入可遗传空间，治 T9「基因型坍缩后无梯度可爬」。
@@ -310,6 +321,8 @@ class MUASStageConfig:
     # lagaros FeasRulesNEW 变体（8a 默认；8b/8c/8d 需 n_constraints，近似口径见 compare_spec）
     lagaros_variant: str = "8a"
     n_constraints: int | None = None
+    # P2-a：解析后的有效回写比例（__post_init__ 填充，勿手工设置）
+    _repair_replacement_eff: float = field(init=False, default=0.0)
 
     def __post_init__(self) -> None:
         if self.max_participating_uavs is not None and self.max_participating_uavs < 1:
@@ -376,4 +389,23 @@ class MUASStageConfig:
             raise ValueError("epsilon_tc 必须 >= 1")
         if self.lagaros_variant not in ("8a", "8b", "8c", "8d"):
             raise ValueError("lagaros_variant 必须是 8a/8b/8c/8d")
+        # P2-a：有效回写比例解析（定稿 §9.1 迁移口径，含 patrol 保义）
+        if self.repair_replacement is not None:
+            r = float(self.repair_replacement)
+            if not (0.0 <= r <= 1.0):
+                raise ValueError(
+                    f"repair_replacement 必须在 [0,1]，当前 {self.repair_replacement!r}"
+                )
+            self._repair_replacement_eff = r
+        elif self.lamarckian is not None:
+            self._repair_replacement_eff = 1.0 if self.lamarckian else 0.0
+        elif self.lamarckian_patrol_writeback:
+            self._repair_replacement_eff = 1.0
+        else:
+            self._repair_replacement_eff = 0.0
+
+    @property
+    def effective_repair_replacement(self) -> float:
+        """有效回写比例（0=纯 Baldwin 拍板默认；1=完整 Lamarck 对照档）。"""
+        return float(self._repair_replacement_eff)
 

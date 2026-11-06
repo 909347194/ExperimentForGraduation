@@ -23,6 +23,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import sys
 import time
 from dataclasses import dataclass
@@ -58,6 +59,28 @@ class _EvalResult:
 # 纯观测：只累加整数 + stderr 警告（沿用「回退永不静默」惯例），
 # 不改变回退行为本身。
 _LAMARCK_FALLBACKS: dict[str, int] = {"count": 0}
+
+
+def _geno_id(ind: Any) -> str:
+    """候选基因的稳定身份散列（P2-a 四元组 g_raw 项）。
+
+    身份 = **基因三元组序列** ``(uav_id, target_id)``（基因型本身），
+    不是 ``cost_vector``——后者只编码代价值、丢弃归属信息，不同
+    assignment 可能碰撞出同一向量。纯观测，不影响控制流；
+    取不到 genes 时退回 cost_vector，再不行返回 ``"na"``（不抛异常，
+    保证台账插桩永不破坏求解）。
+    """
+    try:
+        genes = getattr(ind, "genes", None)
+        if genes:
+            h = hashlib.sha1()
+            for g in genes:
+                h.update(f"{int(g.uav_id)}:{int(g.target_id)};".encode())
+            return h.hexdigest()[:12]
+        cv = np.ascontiguousarray(ind.cost_vector, dtype=np.float64)
+        return hashlib.sha1(cv.tobytes()).hexdigest()[:12]
+    except Exception:
+        return "na"
 
 
 def lamarckian_fallback_stats() -> dict[str, int]:
@@ -99,11 +122,21 @@ class DMDEConfig:
     seed: int | None = None
     verbose: bool = False
     log_interval: int = 100
-    # Lamarckian 回写：获胜个体在评价中被修复（_prune /
-    # _repair_range）后，把修复结果写回其基因，使后继代际的差分变异
-    # 围绕修复后的可行子空间展开，而非未修复空间。依赖评估器提供的
-    # ``lamarckian_reencode`` 方法；缺失或失败时静默回退到原行为。
-    lamarckian: bool = True
+    # Lamarckian 回写（**P2-a 起废弃为哨兵**，定稿 §9.1）：获胜个体在评价中
+    # 被修复（_prune / _repair_range）后，把修复结果写回其基因，使后继代际的
+    # 差分变异围绕修复后的可行子空间展开，而非未修复空间。依赖评估器提供的
+    # ``lamarckian_reencode`` 方法；缺失或失败时回退到原行为（计数 + 警告）。
+    # ── 迁移口径（定稿 §9 第 1 项拍板）────────────────────────────
+    # 回写语义由 ``repair_replacement``（0.0–1.0 连续比例）承担：
+    #   · ``repair_replacement`` 显式设置 → 用它（默认拍板值 0 = 纯 Baldwin）；
+    #   · 否则 ``lamarckian=True`` ≡ 1.0、``False`` ≡ 0.0（旧 config 兼容）；
+    #   · 两者都未设 → 0.0（P2 方向性默认翻转：master 自 P2 起纯 Baldwin；
+    #     复现 method-phase1 数值须 checkout tag，或显式 lamarckian=True /
+    #     repair_replacement=1.0——注意 P2-a 的 fitness 重算修复使对照档
+    #     与 method-phase1 非逐位一致，属预期内 bug 修复）。
+    # 比例取 0/1 不消耗 RNG（逐位可复现）；(0,1) 每次替换事件用 rng 抽签。
+    lamarckian: bool | None = None
+    repair_replacement: float | None = None
     # 代际回调（memetic M1 精英档案）：每代收敛记录后调用
     # ``gen_callback(gen, best_individual)``，供进化循环内对当代精英做
     # 解码后局部搜索（``run_selective_muas`` 的 M1 档案借此落地）。
@@ -124,6 +157,28 @@ class DMDEConfig:
     # A/B 臂（构造与参数见 compare_spec.CompareSpec，只作用于内部选择标量，
     # 问题目标 f 不动）。DE 变异/交叉/反映射一律不由此开关影响。
     compare_spec: Any = None
+
+    def __post_init__(self) -> None:
+        # P2-a：解析有效回写比例（定稿 §9.1 迁移口径）。求解器层无 patrol
+        # 字段——patrol 保义在 MUASStageConfig 层解析后经 repair_replacement
+        # 透传（stage_runner 转发解析值）。
+        if self.repair_replacement is not None:
+            r = float(self.repair_replacement)
+            if not (0.0 <= r <= 1.0):
+                raise ValueError(
+                    f"repair_replacement 必须在 [0,1]，当前 {self.repair_replacement!r}"
+                )
+            self._repair_replacement_eff = r
+        elif self.lamarckian is not None:
+            self._repair_replacement_eff = 1.0 if self.lamarckian else 0.0
+        else:
+            self._repair_replacement_eff = 0.0
+
+    @property
+    def effective_repair_replacement(self) -> float:
+        """有效回写比例（0=纯 Baldwin 默认；1=完整 Lamarck 对照档）。"""
+        return float(self._repair_replacement_eff)
+
 
 
 # ---------------------------------------------------------------------------
@@ -235,6 +290,11 @@ class DMDESolver(BaseOptimizer):
         best_individual = population[best_idx].copy()
         cost_history = [best_individual.fitness]
 
+        # P2-a 方差护栏基线：初始种群（gen 0）的基因型多样性。
+        if ledger is not None and getattr(ledger, "enabled", False):
+            _cv0 = np.array([ind.cost_vector for ind in population])
+            ledger.set_diversity(0, float(np.mean(np.std(_cv0, axis=0))))
+
         # 代际回调保险：钩子一旦抛异常即吞并停用（见下方），此标记保证
         # 「每次 solve 最多警告一次」且不再重试已失败的回调。
         callback_failed = False
@@ -253,6 +313,12 @@ class DMDESolver(BaseOptimizer):
 
             # 提取代价值矩阵
             cost_vectors = np.array([ind.cost_vector for ind in population])
+            # P2-a 种群方差护栏数据源（纯观测，定稿 §9.1 闸门③）：
+            # mean per-gene std —— 基因型多样性逐代曲线，护栏判定在分析侧。
+            if ledger is not None and getattr(ledger, "enabled", False):
+                ledger.set_diversity(
+                    gen, float(np.mean(np.std(cost_vectors, axis=0)))
+                )
 
             # 混合变异产生试验向量
             trial_vectors = mutate_population(
@@ -300,13 +366,22 @@ class DMDESolver(BaseOptimizer):
                 if _replace:
                     _parent_f = population[i].fitness
                     _inherited = "g_raw"
-                    # Lamarckian 回写：把修复后的解写回获胜个体基因，
-                    # 使下一代差分变异围绕修复后的可行子空间展开。
-                    if (
-                        cfg.lamarckian
+                    # P2-a 四元组 (g_raw, S_eval_used, inherited_g, ledger_id)：
+                    # g_raw 身份 = 候选基因 cost_vector 的稳定散列。
+                    _geno = _geno_id(child)
+                    # Lamarckian 回写（P2-a：回写比例化，定稿 §9.1）：
+                    # 把修复后的解写回获胜个体基因，使下一代差分变异围绕
+                    # 修复后的可行子空间展开。比例 0/1 不消耗 RNG（逐位可
+                    # 复现）；(0,1) 每次替换事件用 rng 抽签。
+                    _ratio = float(cfg.effective_repair_replacement)
+                    _do_wb = (
+                        _ratio > 0.0
                         and hasattr(fitness_evaluator, "lamarckian_reencode")
                         and eval_result.solution is not None
-                    ):
+                    )
+                    if _do_wb and 0.0 < _ratio < 1.0:
+                        _do_wb = bool(rng.random() < _ratio)
+                    if _do_wb:
                         try:
                             re_encoded = fitness_evaluator.lamarckian_reencode(
                                 child,
@@ -316,9 +391,61 @@ class DMDESolver(BaseOptimizer):
                                 n_targets,
                             )
                             if re_encoded is not None:
-                                re_encoded.fitness = child.fitness
-                                child = re_encoded
-                                _inherited = "g_repaired_reencoded"
+                                # P2-a fitness 重算（修双重错配，定稿 §5.1）：
+                                # 回写基因必须按**自身解码**重评，不得沿用
+                                # S_repair 的适应度直接赋值。
+                                _re_eval = self._evaluate_result(
+                                    re_encoded, fitness_evaluator, cost_matrix,
+                                    n_uavs=n_uavs,
+                                )
+                                if _re_eval.fitness == child.fitness:
+                                    # 表型复核通过（§9.1 闸门①）：重解码
+                                    # fitness 与 S_repair 逐位一致 ⇒ 采纳回写。
+                                    re_encoded.fitness = _re_eval.fitness
+                                    child = re_encoded
+                                    _inherited = "g_repaired_reencoded"
+                                    if ledger is not None and getattr(ledger, "enabled", False):
+                                        ledger.record(
+                                            layer="select",
+                                            operator="dmde_select",
+                                            action="lamarck_writeback",
+                                            constraint_id="consistency_contract",
+                                            object=f"pop[{i}]",
+                                            from_state=f"f_S_repair={_re_eval.fitness!r}",
+                                            to_state=f"f_reencoded={_re_eval.fitness!r}",
+                                            reason="hard",
+                                            delta_f=0.0,
+                                            accepted=True,
+                                            gate_reason=(
+                                                "phenotype_recheck(Q2.1/Q3.2)"
+                                                "+fitness_recompute(P2-a)"
+                                            ),
+                                            selection_object="S_repair",
+                                            inherited_object="g_repaired_reencoded",
+                                            geno_id=_geno,
+                                        )
+                                else:
+                                    # 表型复核失败：该次回写计失败、保留原基因
+                                    # （Baldwin 兜底），差额记台账（不静默）。
+                                    _inherited = "g_raw"
+                                    if ledger is not None and getattr(ledger, "enabled", False):
+                                        ledger.record(
+                                            layer="select",
+                                            operator="dmde_select",
+                                            action="lamarck_writeback",
+                                            constraint_id="consistency_contract",
+                                            object=f"pop[{i}]",
+                                            from_state=f"f_S_repair={child.fitness!r}",
+                                            to_state=f"f_reencoded={_re_eval.fitness!r}",
+                                            reason="hard",
+                                            delta_f=float(child.fitness)
+                                            - float(_re_eval.fitness),
+                                            accepted=False,
+                                            gate_reason="phenotype_recheck_failed(revert_to_g_raw)",
+                                            selection_object="S_repair",
+                                            inherited_object="g_raw",
+                                            geno_id=_geno,
+                                        )
                         except Exception as exc:
                             # 任何异常（长度/键缺失等）都回退到原 child，保证 DE 矩阵安全。
                             # P0：原 except: pass 静默回退 → 计数 + 警告（不静默）。
@@ -333,7 +460,7 @@ class DMDESolver(BaseOptimizer):
 
                     # 台账（P0 纯观测）：选择看见 S_repair（修复后表型的 f），
                     # 遗传传递的是 _inherited（g_raw / g_repaired_reencoded）——
-                    # §5 一致性契约的四元组追溯。
+                    # §5 一致性契约的四元组追溯（P2-a 补 geno_id）。
                     if ledger is not None and getattr(ledger, "enabled", False):
                         ledger.record(
                             layer="select",
@@ -349,6 +476,7 @@ class DMDESolver(BaseOptimizer):
                             gate_reason="greedy(child_f<parent_f)",
                             selection_object="S_repair",
                             inherited_object=_inherited,
+                            geno_id=_geno,
                         )
 
                     population[i] = child
@@ -373,6 +501,7 @@ class DMDESolver(BaseOptimizer):
                             gate_reason="greedy_child_not_better",
                             selection_object="S_repair",
                             inherited_object="g_parent",
+                            geno_id=_geno_id(child),
                         )
 
             # 代际种群方差回调（M2-1 A/B 多样性监控）：每代选择结束后记录

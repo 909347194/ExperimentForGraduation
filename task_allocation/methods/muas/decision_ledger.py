@@ -66,6 +66,9 @@ class DecisionEvent:
     gate_reason: str | None = None
     selection_object: str | None = None
     inherited_object: str | None = None
+    # P2-a 四元组 (g_raw, S_eval_used, inherited_g, ledger_id) 的 g_raw 身份：
+    # 候选基因 cost_vector 的稳定散列（12 hex），由求解器在 select 事件喂入。
+    geno_id: str | None = None
     gen: int | None = None
 
 
@@ -93,6 +96,10 @@ class DecisionLedger:
     family_counters: dict[str, int] = field(default_factory=dict, init=False)
     # 当前代际号（dmde_solver 每代 set_gen；record 的 gen=None 时取此值）
     current_gen: int | None = field(default=None, init=False)
+    # P2-a 种群方差护栏（定稿 §9.1 闸门③）数据源：{gen: 基因型多样性值}。
+    # 纯观测时间序列（dmde_solver 每代喂入 mean per-gene std），
+    # 护栏判定（≥ 初始代 ×0.2）由分析侧消费，不参与控制流。
+    diversity_series: dict[int, float] = field(default_factory=dict, init=False)
 
     def __post_init__(self) -> None:
         self._events: deque = deque(
@@ -102,6 +109,12 @@ class DecisionLedger:
     def set_gen(self, gen: int | None) -> None:
         """设置当前代际号（纯观测元数据）。"""
         self.current_gen = None if gen is None else int(gen)
+
+    def set_diversity(self, gen: int, value: float) -> None:
+        """记录一代的基因型多样性（纯观测，P2-a 方差护栏数据源）。"""
+        if not self.enabled:
+            return
+        self.diversity_series[int(gen)] = float(value)
 
     # ---- 记录 ----
 
@@ -122,6 +135,7 @@ class DecisionLedger:
         gate_reason: str | None = None,
         selection_object: str | None = None,
         inherited_object: str | None = None,
+        geno_id: str | None = None,
         gen: int | None = None,
     ) -> DecisionEvent | None:
         """追加一条决策记录。``reason`` 必须是 hard|opt（缺失即计数并拒绝入账）。"""
@@ -148,6 +162,7 @@ class DecisionLedger:
             gate_reason=gate_reason,
             selection_object=selection_object,
             inherited_object=inherited_object,
+            geno_id=geno_id,
             gen=(self.current_gen if gen is None else gen),
         )
         self._next_id += 1
@@ -205,6 +220,16 @@ class DecisionLedger:
             "n_reason_missing": int(self.n_reason_missing),
             "family_counters": dict(self.family_counters),
             "counters": merged,
+            # P2-a 方差护栏：初始值 / 最小比值（序列为空时 None）
+            "diversity_initial": (
+                self.diversity_series[0] if 0 in self.diversity_series else None
+            ),
+            "diversity_min_ratio": (
+                min(v / self.diversity_series[0] for v in self.diversity_series.values())
+                if self.diversity_series and self.diversity_series.get(0, 0.0) > 0.0
+                else None
+            ),
+            "diversity_series_len": len(self.diversity_series),
         }
 
 

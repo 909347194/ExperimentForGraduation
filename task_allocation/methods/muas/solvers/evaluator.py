@@ -68,7 +68,8 @@ class EvalResult:
 _WRITEBACK_STATS: dict[str, int] = {}
 
 # 键口径（与 lamarckian_reencode 的五道闸门一一对应）：
-#   called        进入回写（dmde_solver 的调用门 cfg.lamarckian 已放行）
+#   called        进入回写（dmde_solver 的调用门 cfg.effective_repair_replacement
+#                 > 0 已放行；P2-a 起由 repair_replacement 连续比例承担，§9.1）
 #   m1_start      走起始通道写法（M1），含 M2-1 各道闸门失败后的回退
 #   patrol_off    闸门② :attr:`lamarckian_patrol_writeback` 未开 → 走 M1
 #   non_srp       闸门③ model_type != "srp" → 走 M1
@@ -274,8 +275,9 @@ class MUASAssignmentEvaluator(
 
         # M2-1 主开关（默认关 ⇒ 行为与历史逐位等价；见测试第 5 条）。
         # 组合语义（整理注记）：M2-1 借道 M1 的调用门（dmde_solver 中
-        # ``if cfg.lamarckian and ...``），故 **lamarckian=False 时 M2-1 永不触发**——
-        # 它不能脱离 M1 单独开启，是 M1 同一回写调用的扩展（同时改写起始+巡游通道）。
+        # ``if cfg.effective_repair_replacement > 0 and ...``，P2-a 起为连续
+        # 比例），故 **有效回写比例为 0 时 M2-1 永不触发**——它不能脱离 M1
+        # 单独开启，是 M1 同一回写调用的扩展（同时改写起始+巡游通道）。
         patrol_on = bool(getattr(self.config, "lamarckian_patrol_writeback", False))
         if not patrol_on or child.model_type != "srp":
             # ── 历史行为（M1 起始通道回写，逐位不变）─────────────────

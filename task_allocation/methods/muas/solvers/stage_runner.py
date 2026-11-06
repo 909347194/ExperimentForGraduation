@@ -262,11 +262,17 @@ def run_selective_muas(
         available_uavs=avail,
     )
 
-    # 把编排层的 lamarckian 开关并入求解器配置
+    # 把编排层的回写口径并入求解器配置（P2-a：转发**解析后的有效比例**，
+    # 定稿 §9.1——stage 层已含 patrol 保义，求解器层直接消费连续比例）。
+    _wb_ratio = float(stage_cfg.effective_repair_replacement)
     if solver_config is not None:
-        solver_cfg = replace(solver_config, lamarckian=stage_cfg.lamarckian)
+        solver_cfg = replace(
+            solver_config,
+            lamarckian=None,
+            repair_replacement=_wb_ratio,
+        )
     else:
-        solver_cfg = DMDEConfig(lamarckian=stage_cfg.lamarckian)
+        solver_cfg = DMDEConfig(repair_replacement=_wb_ratio)
 
     # memetic M1 精英档案：DE 循环内每 memetic_K 代对当代
     # 精英跑一次 polish_assignment，维护 best-polished 档案。轨迹按代记录
