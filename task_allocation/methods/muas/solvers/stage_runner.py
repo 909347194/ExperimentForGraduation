@@ -319,6 +319,22 @@ def run_selective_muas(
 
         solver_cfg.gen_callback = _memetic_hook
 
+    # P1：CompareSpec（DE 替换比较算子，定稿 §6 要素 2）注入。penalty（默认）
+    # = 现行硬贪婪逐位不变；deb/epsilon/lagaros 为 A/B 臂。只作用于内部选择，
+    # DE 变异/交叉/反映射与问题目标 f 一律不动。
+    from task_allocation.methods.muas.compare_spec import make_compare_spec
+
+    solver_cfg = replace(
+        solver_cfg,
+        compare_spec=make_compare_spec(
+            mode=str(stage_cfg.compare_mode),
+            epsilon0=float(stage_cfg.epsilon0),
+            epsilon_tc=int(stage_cfg.epsilon_tc),
+            lagaros_variant=str(stage_cfg.lagaros_variant),
+            n_constraints=stage_cfg.n_constraints,
+        ),
+    )
+
     # 求解器装配：solver=None（默认）= DMDE 主算法；注入对比求解器时
     # 直接用之（上方 lamarckian 并入 / memetic 钩子是 DMDE 搜索机制的
     # 一部分，构造式基线不消费——DMDEConfig 仅供 DMDESolver 读取）。

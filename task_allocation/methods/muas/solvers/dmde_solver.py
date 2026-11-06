@@ -31,6 +31,7 @@ from typing import Any, Callable
 import numpy as np
 
 from ..base.base_optimizer import BaseOptimizer, SolverResult
+from ..compare_spec import CandidateFeatures, extract_features
 from ..representation.encoder import PopulationEncoder, Individual
 from ..representation.inverse_mapper import inverse_phi
 from ..operators.crossover import dynamic_crossover_rate
@@ -118,6 +119,11 @@ class DMDEConfig:
     # （stderr 警告一次，不静默），且独立标记、绝不连坐停用 ``gen_callback``
     # （memetic 钩子是生产行为，不得被诊断钩子连坐）。
     population_callback: Callable[[int, np.ndarray, int], None] | None = None
+    # P1 CompareSpec（定稿 §6 要素 2）：DE 替换的统一比较算子。
+    # None / mode="penalty" = 现行硬贪婪（逐位不变）；deb/epsilon/lagaros 为
+    # A/B 臂（构造与参数见 compare_spec.CompareSpec，只作用于内部选择标量，
+    # 问题目标 f 不动）。DE 变异/交叉/反映射一律不由此开关影响。
+    compare_spec: Any = None
 
 
 # ---------------------------------------------------------------------------
@@ -177,6 +183,15 @@ class DMDESolver(BaseOptimizer):
         # 随机数生成器
         rng = np.random.default_rng(cfg.seed)
 
+        # P1 CompareSpec：非 penalty 模式才启用特征追踪（penalty 逐位不变）
+        compare = cfg.compare_spec
+        use_compare = (
+            compare is not None
+            and str(getattr(compare, "mode", "penalty")) != "penalty"
+        )
+        pop_features: list[Any] = [None] * cfg.pop_size
+        f_best_feasible: float | None = None
+
         # 决策台账（P0 契约层，纯观测）：选择事件 + 代际号。
         # 评估器自带 ledger；无 ledger（如测试替身）时零开销跳过。
         ledger = getattr(fitness_evaluator, "ledger", None)
@@ -198,7 +213,22 @@ class DMDESolver(BaseOptimizer):
         # 评估初始种群
         best_idx = 0
         for i, ind in enumerate(population):
-            ind.fitness = self._evaluate(ind, fitness_evaluator, cost_matrix, n_uavs=n_uavs)
+            if use_compare:
+                _er0 = self._evaluate_result(
+                    ind, fitness_evaluator, cost_matrix, n_uavs=n_uavs
+                )
+                ind.fitness = _er0.fitness
+                pop_features[i] = extract_features(_er0.fitness, _er0.solution)
+                if pop_features[i].n_hard == 0:
+                    f_best_feasible = (
+                        _er0.fitness
+                        if f_best_feasible is None
+                        else min(f_best_feasible, _er0.fitness)
+                    )
+            else:
+                ind.fitness = self._evaluate(
+                    ind, fitness_evaluator, cost_matrix, n_uavs=n_uavs
+                )
             if ind.fitness < population[best_idx].fitness:
                 best_idx = i
 
@@ -247,7 +277,27 @@ class DMDESolver(BaseOptimizer):
                 child.fitness = eval_result.fitness
 
                 # 贪婪选择 (算法 3.1 行 28-30)
-                if child.fitness < population[i].fitness:
+                # P1：CompareSpec 统一比较（penalty 模式 = 原硬贪婪逐位不变）
+                if use_compare:
+                    cand_feat = extract_features(eval_result.fitness, eval_result.solution)
+                    if cand_feat.n_hard == 0:
+                        f_best_feasible = (
+                            child.fitness
+                            if f_best_feasible is None
+                            else min(f_best_feasible, child.fitness)
+                        )
+                    if str(getattr(compare, "mode", "")) == "lagaros":
+                        compare.set_best_feasible(f_best_feasible)
+                    cur_feat = pop_features[i]
+                    if cur_feat is None:
+                        cur_feat = CandidateFeatures(fitness=float(population[i].fitness))
+                    _replace = bool(
+                        compare.should_replace(cand_feat, cur_feat, gen=gen)
+                    )
+                else:
+                    cand_feat = None
+                    _replace = child.fitness < population[i].fitness
+                if _replace:
                     _parent_f = population[i].fitness
                     _inherited = "g_raw"
                     # Lamarckian 回写：把修复后的解写回获胜个体基因，
@@ -302,6 +352,8 @@ class DMDESolver(BaseOptimizer):
                         )
 
                     population[i] = child
+                    if use_compare:
+                        pop_features[i] = cand_feat
                     if child.fitness < best_individual.fitness:
                         best_individual = child.copy()
                         best_idx = i
@@ -362,9 +414,19 @@ class DMDESolver(BaseOptimizer):
                             model_type,
                             rng=rng,
                         )
-                        population[i].fitness = self._evaluate(
-                            population[i], fitness_evaluator, cost_matrix, n_uavs=n_uavs
-                        )
+                        if use_compare:
+                            _erx = self._evaluate_result(
+                                population[i], fitness_evaluator, cost_matrix,
+                                n_uavs=n_uavs,
+                            )
+                            population[i].fitness = _erx.fitness
+                            pop_features[i] = extract_features(
+                                _erx.fitness, _erx.solution
+                            )
+                        else:
+                            population[i].fitness = self._evaluate(
+                                population[i], fitness_evaluator, cost_matrix, n_uavs=n_uavs
+                            )
 
             # 记录收敛曲线
             cost_history.append(best_individual.fitness)

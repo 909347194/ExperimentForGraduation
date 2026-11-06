@@ -290,6 +290,26 @@ class MUASStageConfig:
     # 默认开；事件流有界（只丢最旧事件，计数恒全量），落盘/诊断可关。
     ledger_enabled: bool = True
     ledger_max_events: int = 200_000
+    # ── P1：原始评价 + 可行性优先竞争（定稿 §8 P1，开关门控）────────
+    # projection_only：剥掉每代每体的解码期目标改写（定稿 §6 要素 1）：
+    #   · _consolidate 成本合并跳过（闲置表达升级为基因级选项属 P2）；
+    #   · _best_order 剔除 NN 候选、选择键退为 (迟到数, 迟到量)（航程裁决移出
+    #     每体路径；交付期 cost_polish 承接目标优化）；
+    #   · 终点机巢降级为「最近合法巢」确定性投影（零联合优化；MCF 移交付付层）。
+    # 验收量：解码层台账 reason=opt 动作数 = 0。默认 False（与 method-phase1
+    # 逐位可比；A/B 臂显式开启）。
+    projection_only: bool = False
+    # compare_mode：DE 替换的比较算子（compare_spec.CompareSpec，要素 2）。
+    #   penalty（默认，= 现行硬贪婪，逐位可比）| deb | epsilon | lagaros。
+    # 定稿 §6 拟将 deb 作为默认档；P1 闸门实测前默认 penalty 保持 A/B 可比性，
+    # 实测达标后切 deb（§11 实施记录）。
+    compare_mode: str = "penalty"
+    # ε 调度（epsilon 模式；占位线性衰减，正式参数 P2 开工前定稿，§9 第 2 项）
+    epsilon0: float = 0.0
+    epsilon_tc: int = 1
+    # lagaros FeasRulesNEW 变体（8a 默认；8b/8c/8d 需 n_constraints，近似口径见 compare_spec）
+    lagaros_variant: str = "8a"
+    n_constraints: int | None = None
 
     def __post_init__(self) -> None:
         if self.max_participating_uavs is not None and self.max_participating_uavs < 1:
@@ -345,4 +365,15 @@ class MUASStageConfig:
             )
         if self.ledger_max_events < 1:
             raise ValueError("ledger_max_events 必须 >= 1")
+        if self.compare_mode not in ("penalty", "deb", "epsilon", "lagaros"):
+            raise ValueError(
+                'compare_mode 必须是 "penalty"/"deb"/"epsilon"/"lagaros"，'
+                f"当前为 {self.compare_mode!r}"
+            )
+        if self.epsilon0 < 0:
+            raise ValueError("epsilon0 不能为负")
+        if self.epsilon_tc < 1:
+            raise ValueError("epsilon_tc 必须 >= 1")
+        if self.lagaros_variant not in ("8a", "8b", "8c", "8d"):
+            raise ValueError("lagaros_variant 必须是 8a/8b/8c/8d")
 
