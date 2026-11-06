@@ -18,17 +18,23 @@ from task_allocation.methods.muas.constraints.coop_constraints import (
     arrival_times,
     task_window,
 )
+from task_allocation.methods.muas.constraints import spec as constraint_spec
 
 
 class TourCostMixin:
     """航次代价 / ETA / 时间窗原语（混入 :class:`MUASAssignmentEvaluator`）。"""
 
     def _task_latest(self, tid: int) -> float | None:
-        """任务的 deadline：经 ``coop_constraints.task_window`` 读取（唯一字段口径）。"""
+        """任务的 deadline：经 ``constraint_spec.window_deadline_model`` 读取
+        （唯一字段口径，委托 ``coop_constraints.task_window``）。
+
+        P0 契约层：判据收口到 ConstraintSpec 视图（现语义原样包一层）；
+        解码侧的另读口径见 ``window_deadline_decode``（漂移测量用）。
+        """
         task = self._task_by_id.get(tid)
         if task is None:
             return None
-        return task_window(task)[1]
+        return constraint_spec.window_deadline_model(task)
 
     def _nearest_nest_cost(self, node_id: int) -> float:
         """到最近可用机巢的代价；终点尚未定稿时用于保守估计返航段。"""
@@ -117,11 +123,14 @@ class TourCostMixin:
         return arrivals[last_real] + service
 
     def _window_ok(self, uav_id: int, tids: Sequence[int], pos: int) -> bool:
-        """第 ``pos`` 个任务能否在其时间窗内到达（True=不违反约束）。"""
+        """第 ``pos`` 个任务能否在其时间窗内到达（True=不违反约束）。
+
+        判据经 ``constraint_spec.window_deadline_model``（唯一字段口径）。
+        """
         task = self._task_by_id.get(tids[pos]) if pos < len(tids) else None
         if task is None:
             return True
-        latest = task_window(task)[1]
+        latest = constraint_spec.window_deadline_model(task)
         if latest is None:
             return True
         return self._arrival_time_of(uav_id, tids, pos) <= float(latest) + 1e-6

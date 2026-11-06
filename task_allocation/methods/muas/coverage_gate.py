@@ -49,6 +49,7 @@ from dataclasses import dataclass, field
 from typing import Any, Mapping, Sequence
 
 from task_allocation.common.types import UAV, UAVTour
+from task_allocation.methods.muas.constraints import spec as constraint_spec
 
 WINDOW_MODE = "soft"
 _EPS = 1e-6
@@ -148,7 +149,9 @@ def _best_end_nest(
 
 
 def _range_ok(cost: float, uav: UAV) -> bool:
-    return cost <= float(getattr(uav, "remaining_range", float("inf"))) + _EPS
+    """门禁航程判据（P0 契约层：委托 ``constraint_spec.range_gate_ok``，
+    现语义原样包一层；与 ``judge_range(margin=1.0)`` 通过/违约判定等价）。"""
+    return constraint_spec.range_gate_ok(cost, uav, eps=_EPS)
 
 
 def _time_ok(cost: float, uav: UAV) -> bool:
@@ -173,20 +176,9 @@ def _nest_loads(
     routes: Mapping[int, Sequence[int]],
     end_nests: Mapping[int, int | None],
 ) -> dict[int | None, int]:
-    fleet = problem.fleet_uavs or problem.uavs
-    loads: dict[int | None, int] = {}
-    for u in fleet:
-        loads[u.nest_id] = loads.get(u.nest_id, 0) + 1
-    for uid, seq in routes.items():
-        if not seq:
-            continue
-        u = problem.uav_by_id.get(uid)
-        if u is None:
-            continue
-        loads[u.nest_id] = loads.get(u.nest_id, 0) - 1
-        e = end_nests.get(uid, u.nest_id)
-        loads[e] = loads.get(e, 0) + 1
-    return loads
+    """门禁口径容量账（P0 契约层：委托
+    ``constraint_spec.nest_capacity_gate_loads``，现语义原样包一层）。"""
+    return constraint_spec.nest_capacity_gate_loads(problem, routes, end_nests)
 
 
 def _capacity_enabled(problem: Any) -> bool:
@@ -215,11 +207,8 @@ def _check_open(
     def cap_ok(nid: int) -> bool:
         if not cap_on:
             return True
-        n = problem.nest_by_id.get(nid)
-        if n is None or not bool(getattr(n, "available", True)):
-            return False
-        delta = 1 - (1 if nid == home else 0)  # 起飞释放原巢名额
-        return loads.get(nid, 0) + delta <= int(n.capacity)
+        # P0 契约层：委托 constraint_spec（现语义原样包一层）
+        return constraint_spec.nest_capacity_gate_slot_ok(problem, loads, nid, home)
 
     nid, cost = _best_end_nest(
         problem, uav, [tid],
@@ -412,11 +401,8 @@ def _best_insert_plan(
         def cap_ok(nid: int, _home: int | None = home) -> bool:
             if not cap_on:
                 return True
-            n = problem.nest_by_id.get(nid)
-            if n is None or not bool(getattr(n, "available", True)):
-                return False
-            delta = 1 - (1 if nid == _home else 0)
-            return loads.get(nid, 0) + delta <= int(n.capacity)
+            # P0 契约层：委托 constraint_spec（现语义原样包一层）
+            return constraint_spec.nest_capacity_gate_slot_ok(problem, loads, nid, _home)
 
         nid, cost = _best_end_nest(
             problem, u, [tid], cap_ok=(cap_ok if cap_on else None)

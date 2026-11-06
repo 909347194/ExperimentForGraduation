@@ -64,3 +64,6 @@ task_allocation/data/*.tif
 
 # 其他实验产物（动画等）
 path_planning/experiments/**/*.gif
+
+# Python 虚拟环境（本机 uv/venv）
+.venv/

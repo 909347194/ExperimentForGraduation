@@ -13,17 +13,11 @@ import math
 from typing import TYPE_CHECKING, Any
 
 from task_allocation.common.types import AllocationSolution
+from task_allocation.methods.muas.constraints import spec as constraint_spec
 from task_allocation.methods.muas.constraints.coop_constraints import (
-    check_sequence_constraint,
     check_sync_constraint,
-    check_time_window_constraint,
 )
 from task_allocation.methods.muas.constraints.evaluator import ConstraintReport
-from task_allocation.methods.muas.constraints.nest_capacity import check_nest_capacity
-from task_allocation.methods.muas.constraints.single_constraints import (
-    check_range_constraint,
-    check_time_constraint,
-)
 
 if TYPE_CHECKING:
     from task_allocation.methods.muas.problem import SelectiveMUASProblem
@@ -80,7 +74,9 @@ def check_solution_feasibility(
         pc = problem.tour_path_cost(tour)
         tour_ok = True
         if cons.range:
-            rv = check_range_constraint(u, pc, margin=1.0)
+            # P0 契约层：判定经 ConstraintSpec（委托 check_range_constraint，
+            # 现语义逐位不变）
+            rv = constraint_spec.judge_range(u, pc).amount
             if rv > 0:
                 # excess=rv：超限米数单独进 T0 层内 tie-break（不受
                 # w_range 缩放影响），使不可行解之间也有「少超一点
@@ -90,7 +86,8 @@ def check_solution_feasibility(
                 )
                 tour_ok = False
         if cons.endurance:
-            tv = check_time_constraint(u, pc)
+            # P0 契约层：判定经 ConstraintSpec（委托 check_time_constraint）
+            tv = constraint_spec.judge_endurance(u, pc).amount
             if tv > 0:
                 report.add_time(
                     f"time_uav_{tour.uav_id}", cons.w_endurance * tv
@@ -145,21 +142,19 @@ def check_solution_feasibility(
     if cons.nest_capacity and problem.nests:
         assignments = {t.uav_id: t.end_nest_id for t in solution.tours}
         fleet = problem.fleet_uavs if problem.fleet_uavs is not None else problem.uavs
-        cap_report = check_nest_capacity(fleet, problem.nests, assignments)
-        nest_tags = [
-            f"nest_capacity_{nid}"
-            for nid in cap_report.violations
-            if cap_report.per_nest[nid]["overflow"] > 0
-        ]
+        # P0 契约层：判定经 ConstraintSpec（委托 check_nest_capacity）
+        cap_jr = constraint_spec.judge_nest_capacity(fleet, problem.nests, assignments)
+        cap_report = cap_jr.raw
         report.add_nest(
-            nest_tags,
+            list(cap_jr.tags),
             cons.w_nest_capacity * cap_report.penalty,
             capacity=cap_report.as_dict(),
         )
 
     # ---- 协同约束（coop_constraints）----
     if cons.time_window:
-        w_pen, w_tags, w_late = check_time_window_constraint(
+        # P0 契约层：判定经 ConstraintSpec（委托 check_time_window_constraint）
+        w_jr = constraint_spec.judge_time_window(
             solution.tours,
             problem.task_by_id,
             problem.uav_by_id,
@@ -167,9 +162,10 @@ def check_solution_feasibility(
             service_time=float(problem.config.default_service_time),
             distance_fn=problem.costs.travel,
         )
+        w_pen, w_tags, w_late = w_jr.raw
         if w_pen > 0:
             report.add_window(
-                w_tags, cons.w_window * w_pen, lateness=w_late
+                list(w_tags), cons.w_window * w_pen, lateness=w_late
             )
             # 【任务级时间窗不可行 · 改造】
             # 不再把「含迟到任务的整条 tour」置 feasible=False。
@@ -178,9 +174,11 @@ def check_solution_feasibility(
             # 整 tour 兜底（horizon 中 tour.feasible==False 分支）仅对 range/endurance/
             # 终点机巢等真正「飞行不可行」的情形触发，时间窗违约只影响迟到任务本身。
     if cons.sequence:
-        s_pen, s_tags = check_sequence_constraint(solution.tours, problem.task_by_id)
+        # P0 契约层：判定经 ConstraintSpec（委托 check_sequence_constraint）
+        s_jr = constraint_spec.judge_sequence(solution.tours, problem.task_by_id)
+        s_pen, s_tags = s_jr.raw
         if s_pen > 0:
-            report.add_seq(s_tags, cons.w_seq * s_pen)
+            report.add_seq(list(s_tags), cons.w_seq * s_pen)
     if cons.sync:
         sy_pen, sy_tags = check_sync_constraint(solution.tours, problem.task_by_id)
         if sy_pen > 0:
