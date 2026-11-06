@@ -284,6 +284,12 @@ class MUASStageConfig:
     # 的终打磨。控住单周期耗时（每 K 代一次、每次封顶，避免 10× 全量 polish）。
     memetic_max_rounds: int = 6
     memetic_max_evals: int = 500
+    # ── 决策台账（第二阶段 P0 契约层，定稿 §6 要素 6）────────────
+    # 统一记录每次 (算子, 动作) 的决策轨迹：reason=hard|opt 必填、逐体可归因。
+    # 纯观测：不参与控制流、不改判定、不消耗 RNG（bit-exact 探针逐位对照）。
+    # 默认开；事件流有界（只丢最旧事件，计数恒全量），落盘/诊断可关。
+    ledger_enabled: bool = True
+    ledger_max_events: int = 200_000
 
     def __post_init__(self) -> None:
         if self.max_participating_uavs is not None and self.max_participating_uavs < 1:
@@ -337,4 +343,6 @@ class MUASStageConfig:
                 'order_candidate_mode 必须是 "gene" 或 "neutral"，'
                 f"当前为 {self.order_candidate_mode!r}"
             )
+        if self.ledger_max_events < 1:
+            raise ValueError("ledger_max_events 必须 >= 1")
 

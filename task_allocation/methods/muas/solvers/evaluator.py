@@ -29,6 +29,7 @@ from typing import Any, Iterable, Mapping, Sequence
 import numpy as np
 
 from task_allocation.common.types import AllocationSolution, UAVTour
+from task_allocation.methods.muas.decision_ledger import DecisionLedger
 from task_allocation.methods.muas.representation.encoder import Gene, Individual
 from task_allocation.methods.muas.representation.inverse_mapper import inverse_phi
 from task_allocation.methods.muas.representation.repair_rules.terminal_nest import (
@@ -39,7 +40,10 @@ from task_allocation.methods.muas.solvers.decode_constructive import (
     ConstructiveDecodeMixin,
 )
 from task_allocation.methods.muas.solvers.ablation_prune import AblationPruneMixin
-from task_allocation.methods.muas.solvers.decode_repair import DecodeRepairMixin
+from task_allocation.methods.muas.solvers.decode_repair import (
+    DecodeRepairMixin,
+    order_winner_counts,
+)
 from task_allocation.methods.muas.solvers.route_polish import RoutePolishMixin
 from task_allocation.methods.muas.solvers.tour_cost import TourCostMixin
 
@@ -150,6 +154,15 @@ class MUASAssignmentEvaluator(
         self._lambda = float(problem.config.lambda_cost)
         self._cache: dict[tuple, EvalResult] = {}
         self.n_evals = 0
+        # 决策台账（P0 契约层，纯观测）：逐算子决策轨迹，reason=hard|opt 必填。
+        # 默认开（定稿 §6 要素 6）；纯观测 ⇒ 无条件 bit-exact。
+        self.ledger = DecisionLedger(
+            enabled=bool(getattr(self.config, "ledger_enabled", True)),
+            max_events=int(getattr(self.config, "ledger_max_events", 200_000)),
+        )
+        # 历史计数器并入台账（定稿 §8 P0）：order 胜率 / Lamarckian 回写闸门计数。
+        self.ledger.counter_sources["order_winners"] = order_winner_counts
+        self.ledger.counter_sources["writeback"] = writeback_stats
         # 构造式解码（decode_mode="constructive"）的诊断出口：上一轮
         # build_solution 中 y_j=0 证明性暂缓的任务 id（供上层对账；
         # repair_chain 模式下恒为空列表）。
