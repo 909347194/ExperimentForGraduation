@@ -566,4 +566,56 @@ Lamarckian 回写）vs 新默认」时，base 臂须显式 `repair_replacement=1
 否则闸门会静默比较 Baldwin-vs-Baldwin。perturbed 探针场景（12 任务、
 pop16×gen20）与 ab_mechanism_3steps 闸门工具均适用此约定。
 
-### 11.4 P3–P4（未开始）
+### 11.4 P3 实施记录（2026-11-06 晚）+ P4 待办
+
+**状态**：P3 代码三步全部落地并提交，全量回归 **516 passed**（P2 结束 498
+→ +18：P3-a 6 + P3-b 5 + P3-c 7）。**默认档零行为变化**——三步均为
+「新增开关 / 纯观测字段 / 独立模块」，没有翻转任何生产默认值。
+
+| 步 | commit | 落地 | 测试 |
+|---|---|---|---|
+| **P3-a** | `61eef97` | 采纳判据双视图：`cost_polish_accept_mode`（默认 `path`＝旧航程门，与 method-phase1 逐位可比；`f`＝`accept_f_view`）与 `cost_polish_eps_f=1e-6`（**f 单位**，1 f ≈ 10 m ≈ 100 s，与 `cost_polish_eps=1.0` 米不同单位、禁止复用）；修掉「已算 `cand_fitness` 却不进判据、只看航程分量」的缺陷通道；`accept_f_view` 约束向量补齐第 4 分量（航程超限，兼容 `criteria_drift` 旧调用）；两视图结果 + `drift` 落 `diagnostics["cost_polish_accept"]` 并 tick 台账 | 6 |
+| **P3-b** | `9dd99ab` | L3a/L3b 分账：`l3a_geometric_actions`（2-opt / Or-opt / 终点巢 MCF / position）与 `l3b_relocate_actions`（relocate / swap）分列；`n_task_to_uav_changes`（重建解→终态解的归属映射差异，新增/删除/换机各记 1）；终点巢 MCF 在交付层台账登记 `reason=opt`，措辞「**给定路径下的条件最优（非全局最优）**」（不改解码层 `reason`，避免扰动 P1 闸门的 `reason=opt` 计数） | 5 |
+| **P3-c** | `68cc418` | 新增 `methods/muas/independent_audit.py`：从 `S_final` 的 tours 几何重建新解（丢弃全部派生 meta、重汇总执行集），只经 `problem` 公开评价入口重算，不读 evaluator 缓存 / `cost_history` / `best_fitness`；实现 §4.3 前三条门槛（完成率 + 恒等式 + eliminating=0；`gate_mode` 恒 True + `coverage_audit` 开；重建重评与 `diagnostics` 逐位一致），提供 `assert_audit_passed()` | 7 |
+
+**默认档 bit-exact 硬核验（2026-11-06 晚）**：把 `010b136`（P2 结束快照）
+用 `git archive` 导出到临时目录，与当前 master 用**同一合成场景、同 config、
+同 seed {7, 11, 23}** 各跑一遍（`PYTHONPATH` 切换包根、同一 `.venv`
+解释器、两进程互不污染），逐字段 diff 14 项 `diagnostics` +
+`assignment_pairs()` ⇒ **完全一致**。⇒ P3 三步确实没有改变默认路径的
+任何数字，「零行为变化」不是靠断言自证，而是与上一阶段快照实测对齐。
+
+**验收口径核对**：§8 表 P3 的「§4.3 五条门槛」中第 1–3 条已由
+`independent_audit` 代码断言、第 4 条由全量 pytest（516 passed）覆盖；
+第 5 条（与 `method-phase1` 同场景/同 seed/同预算对照 + 配对 t 检验）
+属正式实验，本轮**未跑**。合成场景已实测正常路径逐位一致
+（`consistency` 全 True）、`passed=True`。
+
+**P3 未擅自执行的行为变化（必须显式记录）**：
+
+1. **L3b 默认关未落地**。§9 第 3 项同时写「默认关」与「先做收益拆分再定」，
+   而跨机改派实际落在**两个通道**：`polish_assignment` 的
+   `relocate/swap`（`polish_moves`，默认含）与交付后成本 polish 的
+   `_cost_polish_relocate`（`cost_polish_relocate_enabled=True`）。翻转任一默认
+   都会改掉既有基线数值，落点需用户裁定；`l3b_enabled_observed` 字段已如实
+   记录当前两通道仍开。建议二选一：①只关交付后成本 polish 的归属维度；
+   ②新增统一 `l3b_enabled`（默认 False）同时约束两个通道并做旧 config 映射。
+2. **`cost_polish_accept_mode` 默认仍 `path`**。定稿 §4.2「迁移须开关对照，
+   不得静默替换」；是否翻转为 `f` 由 P4 全量 A/B 决定。
+3. **§4.3 第 2 条与 §3.3 的张力**：第 2 条写「`coverage_gate` /
+   `lexicographic_coverage` 双开」，但 §3.3 明确门禁只作终态校验、生产默认
+   `coverage_gate=False`，且 `lexicographic_coverage` 已更名 `coverage_audit`
+   （旧名垫片会告警）。独立验收器默认只强制 `gate_mode()` 恒 True 与
+   `coverage_audit` 开，`coverage_gate` 留作 `require_coverage_gate=True`
+   可选严格档；该条口径待用户裁定后再统一。
+
+**P4 / 实验层待办（均需单独发话，严禁多实验并行）**：
+
+- 「几何 vs 救回任务」收益拆分：用 P3-b 的 `l3a_*` / `l3b_*` /
+  `n_task_to_uav_changes` 三本账，配合同 seed 配对留档；
+- MCF 对照方案（§4.1）：层 1「最近合法巢」确定性投影 vs 层 3 MCF，
+  两层 × 四档同 seed 配对，指标＝返航段航程 / overflow / 墙钟；
+- 三级嵌套消融 + 2×2 交互（禁写「独立收益」）、Deb / ε / Lagaros 两类变体
+  开关对照、统一事后评价器重评 phase1 与本版交付解；
+- 重跑全部基线 + 配对 t 检验如实声明（不显著就写不显著）；
+- 采纳判据默认 `f` 的翻转由上述 A/B 结果决定，不预先改默认。
