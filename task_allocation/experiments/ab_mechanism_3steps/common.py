@@ -122,12 +122,16 @@ def parse_csv_ints(s: str):
 def build_configs(*, deadline_s, n_tasks, refine, gens_override,
                   pop_size, max_generations, seed,
                   population_callback=None, lamarckian=True,
-                  order_mode="gene", relocate=None):
+                  order_mode="gene", relocate=None,
+                  projection_only=False, compare_mode="penalty",
+                  epsilon0=0.0, epsilon_tc=1):
     """构造本实验一次 run 的四个 config。
 
     refine           : 三个精修总闸（cost_polish / relocate / polish）
     gens_override    : 0 = 无进化（repair_only 地板）；None = 正常 --gens
     relocate         : 单独覆盖 cost_polish_relocate_enabled（第三步冻结归属用）
+    projection_only  : P1 臂（剥解码期目标改写，定稿 §6 要素 1；默认关）
+    compare_mode     : P1 臂（CompareSpec，定稿 §6 要素 2；默认 penalty 逐位不变）
     """
     prob_cfg = (MUASProblemConfig() if deadline_s <= 0 else
                 MUASProblemConfig(w_violation=0.01,
@@ -144,6 +148,10 @@ def build_configs(*, deadline_s, n_tasks, refine, gens_override,
         polish_enabled=refine,
         polish_in_loop=False,
         order_candidate_mode=order_mode,
+        projection_only=bool(projection_only),
+        compare_mode=str(compare_mode),
+        epsilon0=float(epsilon0),
+        epsilon_tc=int(epsilon_tc),
     )
     solver_cfg = DMDEConfig(
         pop_size=pop_size,
@@ -177,6 +185,10 @@ def run_rolling(tasks, uavs, nests, *, params, arm_cfg, recorder=None):
         lamarckian=arm_cfg.get("lamarckian", True),
         order_mode=arm_cfg.get("order_mode", "gene"),
         relocate=arm_cfg.get("relocate", None),
+        projection_only=arm_cfg.get("projection_only", False),
+        compare_mode=arm_cfg.get("compare_mode", "penalty"),
+        epsilon0=arm_cfg.get("epsilon0", 0.0),
+        epsilon_tc=arm_cfg.get("epsilon_tc", 1),
     )
     tasks = copy.deepcopy(list(tasks))
     uavs = copy.deepcopy(list(uavs))

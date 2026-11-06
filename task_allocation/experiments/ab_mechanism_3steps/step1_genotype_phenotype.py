@@ -47,6 +47,14 @@ def attach(args, ap):
     ap.add_argument("--area", type=float, default=1000.0)
     ap.add_argument("--cycles", type=int, default=1)
     ap.add_argument("--out-dir", default="results")
+    # P1 闸门臂（定稿 §8 P1；默认值 = 历史基线行为，逐位不变）
+    ap.add_argument("--projection-only", action="store_true",
+                    help="P1 臂：剥解码期目标改写（要素 1）")
+    ap.add_argument("--compare-mode", default="penalty",
+                    choices=("penalty", "deb", "epsilon", "lagaros"),
+                    help="P1 臂：CompareSpec 比较算子（要素 2）")
+    ap.add_argument("--arm-label", default=None,
+                    help="输出臂标签；缺省按开关自动推导")
     return ap
 
 
@@ -80,12 +88,20 @@ def main():
                 for sd in seeds:
                     rec = C.TrialRecorder()
                     rec.install()
+                    _label = args.arm_label or (
+                        "evo"
+                        if (not args.projection_only and args.compare_mode == "penalty")
+                        else f"p1[{args.compare_mode}"
+                             f"{'+proj' if args.projection_only else ''}]"
+                    )
                     try:
                         row = C.run_rolling(
                             tasks, uavs, nests, params=params,
-                            arm_cfg=dict(_label="evo", refine=False,
+                            arm_cfg=dict(_label=_label, refine=False,
                                          gens_override=None, seed=sd,
-                                         instance=inst),
+                                         instance=inst,
+                                         projection_only=args.projection_only,
+                                         compare_mode=args.compare_mode),
                             recorder=rec,
                         )
                     finally:
