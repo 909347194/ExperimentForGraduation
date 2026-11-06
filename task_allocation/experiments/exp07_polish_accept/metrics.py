@@ -35,18 +35,33 @@ __all__ = [
     "write_summary_csv",
 ]
 
-#: 参与配对差值 / t 检验的指标键（f 档 − path 档）
-PAIR_METRIC_KEYS = (
+#: 交付解**质量**指标：只有这些能进 all_quality_identical 与 verdict。
+#: 过程计数不同 ≠ 解不同，禁止混入（审查 B1）。
+QUALITY_METRIC_KEYS = (
     "completion_rate_final",
     "on_time_rate_final",
     "total_path_m",
     "total_lateness_s",
     "n_hard_violations_total",
     "final_fitness_sum",
-    "wall_seconds",
+)
+
+#: 过程/诊断量：照常配对落盘，但不参与「解是否相同」的判定。
+DIAGNOSTIC_METRIC_KEYS = (
     "cost_polish_n_accepted",
     "cost_polish_n_drift",
+    "cost_polish_n_f_only_gain",
 )
+
+#: 纯观测量（墙钟含缓存预热，不作判据效应证据，见审查 B4）。
+OBSERVATION_KEYS = ("wall_seconds",)
+
+#: 参与配对差值 / t 检验的全部指标键（f 档 − path 档）
+PAIR_METRIC_KEYS = QUALITY_METRIC_KEYS + DIAGNOSTIC_METRIC_KEYS + OBSERVATION_KEYS
+
+#: 「逐 seed 相同」的容差：主指标落盘已 round 到 1e-3~1e-6，
+#: 这里显式声明为绝对容差，不再对已 round 的列表用 1e-12 伪装精确零。
+ZERO_DIFF_TOL = 1e-9
 
 
 def write_json(path: Path, payload: Any) -> Path:
@@ -82,8 +97,16 @@ def collect_run_metrics(
     seed: int,
     mode: str,
     wall_seconds: float,
+    expected_accept_mode: str | None = None,
 ) -> dict[str, Any]:
-    """汇总一次（档 × seed）滚动运行的指标、漂移计数与铁律检查。"""
+    """汇总一次（档 × seed）滚动运行的指标、漂移计数与铁律检查。
+
+    ``mode`` 是本次运行的**对照档标签**（采纳判据对照里是 path/f，L3b
+    对照里是 off/on）；``expected_accept_mode`` 才是 diagnostics 里
+    ``cost_polish_accept_mode`` 的期望值。两者默认相同，L3b 对照须显式
+    传 ``"path"``，否则「生效 mode 一致」检查会拿错对象误报（本轮修复）。
+    """
+    expect_accept = str(expected_accept_mode) if expected_accept_mode is not None else str(mode)
     muas = [(r.muas or {}) for r in records]
     finished = pool.finished_tasks()
     completed = [t for t in finished if t.meta.get("completed_at") is not None]
@@ -97,7 +120,9 @@ def collect_run_metrics(
         int((getattr(_last, "pool_counts", {}) or {}).get("n_dormant", 0))
         + len(getattr(_last, "dormant_ids", []) or [])
     ) if _last else 0
-    n_remain = max(0, n_arrived - n_completed - n_unreachable - n_dormant_end)
+    # 恒等式残差：**不钳位**。旧版 max(0, …) 会把「分子大于分母」这类
+    # 审计失配悄悄抹平；负值必须原样暴露并触发硬失败（审查 A3）。
+    n_remain_raw = n_arrived - n_completed - n_unreachable - n_dormant_end
 
     # 主指标口径（与 exp01/exp05 同源）
     n_final_denom = max(0, n_arrived - n_unreachable - n_dormant_end)
@@ -128,8 +153,15 @@ def collect_run_metrics(
         if m.get("cost_polish_accept_mode") is not None
     }
     drift_modes = {str(d.get("mode")) for d in drift_rows if d.get("mode") is not None}
+    # A1 修复证据：f 档局部搜索里「f 更优、但航程未下降」的移动数。
+    # >0 说明候选域里确实存在只有 f 判据会采纳的解（旧实现恒 0）。
+    n_f_only_gain = sum(
+        int(m.get("cost_polish_n_f_only_gain", 0) or 0) for m in muas
+    )
 
-    # ── 铁律检查（区分「硬失败」与「如实记录」）───────────────────
+    # ── 铁律检查（硬断言口径，定稿 §4.3 第 1 条）────────────────
+    # 完成率（分母排除 UNREACHABLE / 停机休眠）必须恒 1；恒等式残差必须
+    # 非负；eliminating 必须 0。旧版只观察不判定，等于自己给自己打分。
     has_elim_probe = any("n_eliminating" in m for m in muas)
     n_eliminating = sum(int(m.get("n_eliminating", 0) or 0) for m in muas)
     # diagnostics 里没有 n_eliminating 字段（该字段只是 independent_audit 的
@@ -139,10 +171,25 @@ def collect_run_metrics(
     violations: list[str] = []
     if n_eliminating != 0:
         violations.append(f"eliminating（非不可达）= {n_eliminating}，须为 0")
-    if mode_values and mode_values != {mode}:
-        violations.append(f"生效 mode 不一致：{sorted(mode_values)} != [{mode}]")
-    if drift_modes and drift_modes != {mode}:
-        violations.append(f"drift 记录的 mode 不一致：{sorted(drift_modes)} != [{mode}]")
+    if n_final_denom > 0 and abs(completion_rate_final - 1.0) > 1e-9:
+        violations.append(
+            f"完成率 {completion_rate_final:.6f} != 1（分母 {n_final_denom}"
+            " 已排除不可达/休眠）——完成是约束，此为该次运行的硬失败"
+        )
+    if n_remain_raw < 0:
+        violations.append(
+            "arrived 恒等式破缺："
+            f"{n_arrived} < {n_completed}+{n_unreachable}+{n_dormant_end}"
+            "（旧版 max(0,…) 钳位会掩盖此失配）"
+        )
+    if mode_values and mode_values != {expect_accept}:
+        violations.append(
+            f"生效采纳判据不一致：{sorted(mode_values)} != [{expect_accept}]"
+        )
+    if drift_modes and drift_modes != {expect_accept}:
+        violations.append(
+            f"drift 记录的采纳判据不一致：{sorted(drift_modes)} != [{expect_accept}]"
+        )
     if n_hard_violations_total != 0:
         violations.append(f"硬违约累计 {n_hard_violations_total} != 0")
 
@@ -155,7 +202,8 @@ def collect_run_metrics(
         "n_completed": n_completed,
         "n_unreachable": n_unreachable,
         "n_dormant_end": n_dormant_end,
-        "n_remain": n_remain,
+        "n_remain": n_remain_raw,
+        "identity_residual": n_remain_raw,
         "n_final_denom": n_final_denom,
         "completion_rate_final": round(completion_rate_final, 6),
         "on_time_rate_final": round(on_time_rate_final, 6),
@@ -172,7 +220,7 @@ def collect_run_metrics(
         ),
         "wall_seconds": round(float(wall_seconds), 3),
         # ── 采纳判据对账 ──
-        "cost_polish_accept_mode": str(mode),
+        "cost_polish_accept_mode": str(expect_accept),
         "cost_polish_eps_f": next(
             (m.get("cost_polish_eps_f") for m in muas
              if m.get("cost_polish_eps_f") is not None), None
@@ -180,6 +228,7 @@ def collect_run_metrics(
         "cost_polish_n_candidates_observed": len(drift_rows),
         "cost_polish_n_accepted": n_accepted,
         "cost_polish_n_drift": n_drift,
+        "cost_polish_n_f_only_gain": n_f_only_gain,
         "cost_polish_n_path_view_true": n_path_view_true,
         "cost_polish_n_f_view_true": n_f_view_true,
         "cost_polish_mode_values": sorted(mode_values),
@@ -200,8 +249,10 @@ def collect_run_metrics(
         "invariant_violations": violations,
         "invariants_passed": not violations,
         "invariants_scope": (
-            "已查：n_hard=0、生效 mode 一致、eliminating 结构性为 0；"
-            "未查：independent_audit 的独立重建重评（本实验未接入，见 caveats）"
+            "硬断言：完成率=1（分母排除不可达/休眠）、arrived 恒等式残差>=0、"
+            "n_eliminating=0、n_hard=0、生效 mode 一致。"
+            "未接入：independent_audit 的几何重建重评（problem 实例属核心层"
+            "局部对象，实验层无法取得；见 caveats 技术债）。"
         ),
     }
 
@@ -287,19 +338,29 @@ def build_pair_report(
     seeds: Sequence[int],
     profile: str,
     config_diff: Mapping[str, Any] | None = None,
+    modes: tuple[str, str] = ("path", "f"),
+    caveats: Sequence[str] | None = None,
+    subject: str = "path 与 f",
 ) -> dict[str, Any]:
-    """两档同 seed 配对差值 + 配对 t 检验（禁写「独立收益」）。"""
-    path_rows = {int(r["seed"]): r for r in per_mode.get("path", [])}
-    f_rows = {int(r["seed"]): r for r in per_mode.get("f", [])}
+    """同 seed 配对差值 + 配对 t 检验（禁写「独立收益」）。
+
+    ``modes`` / ``caveats`` / ``subject`` 供同一实验内的第二组对照
+    （L3b 开/关）复用统计链路，默认仍为采纳判据对照、逐字不变。
+    """
+    a_label, b_label = modes
+    path_rows = {int(r["seed"]): r for r in per_mode.get(a_label, [])}
+    f_rows = {int(r["seed"]): r for r in per_mode.get(b_label, [])}
     paired_seeds = [s for s in seeds if s in path_rows and s in f_rows]
     missing = [s for s in seeds if s not in paired_seeds]
 
     metrics: dict[str, Any] = {}
+    raw_diffs: dict[str, list[float]] = {}
     for key in PAIR_METRIC_KEYS:
         diffs = [
             float(f_rows[s].get(key, 0.0) or 0.0) - float(path_rows[s].get(key, 0.0) or 0.0)
             for s in paired_seeds
         ]
+        raw_diffs[key] = diffs  # 未 round 的原始差值，供零差判定（审查 B2）
         n = len(diffs)
         mean_d = _mean(diffs)
         sd_d = _std(diffs)
@@ -330,17 +391,21 @@ def build_pair_report(
             "significant_at_0_05": (bool(p_val < 0.05) if p_val is not None else None),
         }
 
-    quality_keys = [k for k in PAIR_METRIC_KEYS if k != "wall_seconds"]
+    # 只用质量指标、只用未 round 的原始差值、显式容差（审查 B1/B2）。
+    quality_keys = list(QUALITY_METRIC_KEYS)
     all_quality_identical = all(
-        all(abs(d) < 1e-12 for d in metrics[k]["per_seed_diff_f_minus_path"])
+        all(abs(d) < ZERO_DIFF_TOL for d in raw_diffs[k])
         for k in quality_keys
     )
     verdict = (
-        "两档在所有质量指标上逐 seed 完全一致；本冒烟档无法区分 path 与 f，"
+        f"两档在所有质量指标上逐 seed 完全一致；本次跑批无法区分 {subject}，"
         "既不能据此翻转默认，也不能写成「两档等价」。"
+        "须同时检查 cost_polish_n_f_only_gain：若恒 0，说明候选域里本就没有"
+        "判据分歧解（不是样本量问题）。"
         if all_quality_identical else
-        "两档存在逐 seed 差异；须结合 effect size 与配对 p 值判读，"
-        "主效应与交互项并列，禁写「独立收益」。"
+        "两档存在逐 seed 质量差异；须结合 effect size 与配对 p 值判读，"
+        "配对差值不得写成「独立收益」。本实验是两档单因素设计，没有 2×2，"
+        "因此没有交互项可算。"
     )
 
     invariant_failures = [
@@ -355,25 +420,41 @@ def build_pair_report(
         "seeds": list(seeds),
         "paired_seeds": paired_seeds,
         "unpaired_seeds": missing,
-        "direction": "diff = f 档 − path 档（f 档 = 按完整目标 f 裁决）",
+        "direction": (
+            "diff = f 档 − path 档（f 档 = 按完整目标 f 裁决）"
+            if modes == ("path", "f")
+            else f"diff = {b_label} 档 − {a_label} 档"
+        ),
+        "modes": list(modes),
         "config_diff_between_modes": config_diff or {},
         "metrics": metrics,
         "verdict": verdict,
         "all_quality_metrics_identical": all_quality_identical,
+        "quality_metric_keys": quality_keys,
+        "zero_diff_tolerance": ZERO_DIFF_TOL,
         "invariant_failures": invariant_failures,
         "all_invariants_passed": not invariant_failures,
-        "caveats": [
+        "caveats": list(caveats) if caveats is not None else [
             "本环境 venv 未装 scipy；p 值由正则化不完全 beta 精确计算 Student t 双尾分布，"
             "没有用正态近似冒充精确检验，也没有把 p 不可用写成「不显著」。",
-            "cost_polish_accept 是每周期**最后一次**候选的快照，不是全候选累计；"
-            "低频候选场景会低估判据分歧次数。要精确统计须扩展 stage_runner 落盘累计计数"
-            "（属代码改动，本轮未做）。",
+            "A1 修复（本轮）：f 档局部搜索改用 λ·航程 + w_late·迟到 作目标，"
+            "不再被「航程必须严格下降」的成本门截断；path 档走原代码路径、"
+            "与改动前逐位一致。cost_polish_n_f_only_gain 是该修复是否生效的直接证据。",
+            "cost_polish_accept 有三重截断：① 只在 post_cost_polish 有采纳时产生；"
+            "② 一周期内多次局部移动被聚合成**一个**最终候选，中间移动的两视图"
+            "分歧不可见；③ 每周期只留最后一个候选快照。"
+            "cost_polish_n_candidates_observed 实为「有候选的周期数」而非候选数，"
+            "低频场景会低估判据分歧次数。",
+            "两档执行顺序按 seed 交替，以抵消 estimator/场景缓存预热；但 wall_seconds "
+            "仍非纯判据效应，只作观测、不参与质量判定（审查 B4）。",
             "n_eliminating 不是 diagnostics 字段：0 是「TaskPool 已无超期出池路径」的"
-            "结构性事实，非独立测量；独立验收须走 methods/muas/independent_audit.py。",
+            "结构性事实，非独立测量；实验层已把完成率/恒等式/eliminating 改为硬断言，"
+            "但 independent_audit 的几何重建重评仍未接入——problem 实例是核心层局部"
+            "对象，须由 RollingHorizon 暴露审计钩子后才能调用（技术债，未擅自改核心）。",
             "冒烟档只验证实验设计与统计口径，结论不可外推正式档。",
         ],
         "notes": [
-            "配对差值与交互项并列报告，禁写「独立收益」。",
+            "配对差值不得写成「独立收益」；两档单因素设计没有 2×2 交互项。",
             "n=3 时配对 t 检验 df=2，检验效能极低；不显著必须如实写不显著，不得表述为「无差异」。",
             "零方差时 t 检验不适用（p_reason=zero_variance_no_test），不是 p 值缺失。",
         ],
@@ -392,7 +473,8 @@ def write_summary_csv(
         "n_remain", "completion_rate_final", "on_time_rate_final",
         "total_path_m", "total_lateness_s", "final_fitness_sum",
         "n_hard_violations_total", "cost_polish_n_accepted",
-        "cost_polish_n_drift", "l3a_geometric_actions",
+        "cost_polish_n_drift", "cost_polish_n_f_only_gain",
+        "l3a_geometric_actions",
         "l3b_relocate_actions", "wall_seconds", "invariants_passed",
     )
     with path.open("w", encoding="utf-8-sig", newline="") as f:

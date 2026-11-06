@@ -724,8 +724,9 @@ def run_selective_muas(
             # 交付后成本 polish 诊断（组内 2-opt/Or-opt）。
             # enabled=False 或预构建解通道 ⇒ 全 0（逐位等于旧口径）；
             # rejected=1 表示候选未达采纳判据（执行集减少/硬违约增/
-            # 航程未严格下降），交付解保持原样。path_gain_m = 采纳时
-            # 交付航程的绝对下降量（米）。
+            # 本档目标未严格改进），交付解保持原样。path_gain_m = 采纳时
+            # 交付航程的下降量（米）；f 档可为负（航程增加但迟到降更多，
+            # 综合 f 更优）——这是 A1 修复后的真实行为，非异常。
             "cost_polish_enabled": bool(stage_cfg.cost_polish_enabled),
             # P3-a 采纳判据统一（定稿 §4.2）：mode="path" 默认与
             # method-phase1 逐位可比；"f" 走 accept_f_view。两视图结果
@@ -733,6 +734,12 @@ def run_selective_muas(
             "cost_polish_accept_mode": str(stage_cfg.cost_polish_accept_mode),
             "cost_polish_eps_f": float(stage_cfg.cost_polish_eps_f),
             "cost_polish_accept": dict(cost_polish_accept),
+            # A1 修复证据：f 档局部搜索中「按 f 改进、但航程未下降」的
+            # 移动数（只有 accept_f_view 会采纳，accept_cost_polish_view
+            # 必然拒绝）。恒 0 ⇒ 本周期候选域里不存在判据分歧解。
+            "cost_polish_n_f_only_gain": int(
+                cost_polish_stats.get("n_f_only_gain", 0)
+            ),
             # P3-b L3a/L3b 分账（定稿 §4.1 / §6 要素 4）：
             #   L3a 纯几何 = 组内 2-opt/Or-opt + 终点巢 MCF（**给定路径下的
             #     条件最优**，禁写全局最优）+ polish_assignment 的 position；
