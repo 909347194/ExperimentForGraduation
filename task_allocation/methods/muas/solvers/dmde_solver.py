@@ -295,6 +295,18 @@ class DMDESolver(BaseOptimizer):
             _cv0 = np.array([ind.cost_vector for ind in population])
             ledger.set_diversity(0, float(np.mean(np.std(_cv0, axis=0))))
 
+        # P2-e ε 调度（Eq.12）初始化：注入 maxFEs，ε(0)=ϕ_θ
+        # （θ=γ·Npop 第 θ 大违反量）。仅 epsilon 模式、use_compare 时驱动。
+        if use_compare and str(getattr(compare, "mode", "")) == "epsilon":
+            compare.set_epsilon_max_fes(cfg.max_generations * cfg.pop_size)
+            _viol = sorted(
+                (float(pf.violation) for pf in pop_features if pf is not None),
+                reverse=True,
+            )
+            _theta = max(1, int(round(float(compare.epsilon_gamma) * cfg.pop_size)))
+            _phi_theta = _viol[_theta - 1] if len(_viol) >= _theta else (_viol[-1] if _viol else 0.0)
+            compare.reset_epsilon(_phi_theta)
+
         # 代际回调保险：钩子一旦抛异常即吞并停用（见下方），此标记保证
         # 「每次 solve 最多警告一次」且不再重试已失败的回调。
         callback_failed = False
@@ -308,6 +320,19 @@ class DMDESolver(BaseOptimizer):
         for gen in range(1, cfg.max_generations + 1):
             if ledger is not None and getattr(ledger, "enabled", False):
                 ledger.set_gen(gen)
+            # P2-e ε 调度推进（Eq.12 状态机）：FEs=gen·Npop，rk=可行比例，
+            # ϕ_max=种群最大违反量。仅 epsilon 模式驱动；penalty/deb/lagaros
+            # 走各自逻辑、ε 恒 0（与 method-phase1 逐位等价）。
+            if use_compare and str(getattr(compare, "mode", "")) == "epsilon":
+                _fes = gen * cfg.pop_size
+                _rk = sum(
+                    1 for pf in pop_features if pf is not None and pf.n_hard == 0
+                ) / max(1, cfg.pop_size)
+                _phi_max = max(
+                    (float(pf.violation) for pf in pop_features if pf is not None),
+                    default=0.0,
+                )
+                compare.tick_epsilon(_fes, _rk, _phi_max)
             # 动态交叉率
             cr = dynamic_crossover_rate(gen, cfg.max_generations, cfg.zeta)
 

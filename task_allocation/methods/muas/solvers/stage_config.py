@@ -323,9 +323,16 @@ class MUASStageConfig:
     # 定稿 §6 拟将 deb 作为默认档；P1 闸门实测前默认 penalty 保持 A/B 可比性，
     # 实测达标后切 deb（§11 实施记录）。
     compare_mode: str = "penalty"
-    # ε 调度（epsilon 模式；占位线性衰减，正式参数 P2 开工前定稿，§9 第 2 项）
+    # ε 调度（epsilon 模式；P2-e 起实装 Eq.12 状态机，参数见 compare_spec）
+    # 废弃占位字段（保留以兼容旧 config）：
     epsilon0: float = 0.0
     epsilon_tc: int = 1
+    # Eq.12（Fan 2018）调度参数（定稿 §9 第 2 项拍板值）
+    epsilon_gamma: float = 0.5
+    epsilon_tc_frac: float = 0.4
+    epsilon_cp: float = 5.0
+    epsilon_tau: float = 0.0
+    epsilon_alpha: float = 0.5
     # lagaros FeasRulesNEW 变体（8a 默认；8b/8c/8d 需 n_constraints，近似口径见 compare_spec）
     lagaros_variant: str = "8a"
     n_constraints: int | None = None
@@ -401,9 +408,19 @@ class MUASStageConfig:
                 f"当前为 {self.compare_mode!r}"
             )
         if self.epsilon0 < 0:
-            raise ValueError("epsilon0 不能为负")
+            raise ValueError("epsilon0 不能为负（已废弃字段，仅作兼容校验）")
         if self.epsilon_tc < 1:
-            raise ValueError("epsilon_tc 必须 >= 1")
+            raise ValueError("epsilon_tc 必须 >= 1（已废弃字段，仅作兼容校验）")
+        if not (0.0 < self.epsilon_gamma <= 1.0):
+            raise ValueError("epsilon_gamma 必须 ∈ (0, 1]")
+        if not (0.0 < self.epsilon_tc_frac <= 1.0):
+            raise ValueError("epsilon_tc_frac 必须 ∈ (0, 1]")
+        if self.epsilon_cp <= 0:
+            raise ValueError("epsilon_cp 必须 > 0")
+        if self.epsilon_tau < 0:
+            raise ValueError("epsilon_tau 不能为负")
+        if not (0.0 <= self.epsilon_alpha <= 1.0):
+            raise ValueError("epsilon_alpha 必须 ∈ [0, 1]")
         if self.lagaros_variant not in ("8a", "8b", "8c", "8d"):
             raise ValueError("lagaros_variant 必须是 8a/8b/8c/8d")
         # P2-a：有效回写比例解析（定稿 §9.1 迁移口径，含 patrol 保义）

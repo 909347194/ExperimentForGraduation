@@ -12,10 +12,12 @@ DE 替换 / 邻域接受 / 档案择优最终全部走同一比较算子。P1 �
   与 `method-phase1` 逐位可比；big-M 标定下可行优于不可行自动成立；
 - ``deb``：Deb 三规则——可行优于不可行 / 两可行比 f / 两不可行比违反量
   （违反量同则比违约条数、再比 f）。定稿 §6 要素 2 的候选默认档；
-- ``epsilon``：ε-constrained（Lagaros §3.3；原始调度 Takahama & Sakai
-  Eq.11，新变体 Fan et al. 2018 Eq.12）。⚠️ 当前实现为**线性衰减占位**
-  （``eps0 → 0`` 于 ``tc`` 代内），Eq.12 的 ``rk/TC/cp/τ/α`` 参数
-  **P2 开工前定稿**（§9 第 2 项），占位实现不得用于正式实验；
+- ``epsilon``：ε-constrained（Lagaros §3.3，新变体 EconstNEW 采用
+  Fan et al. 2018 **Eq.12** 调度，定稿 §9 第 2 项拍板）。P2-e 已实装为
+  状态机：``ε(0)=ϕ_θ``（θ=γ·Npop 第 θ 大违反量），``FEs<TC`` 且 ``rk<α``
+  时 ``ε(k)=ε(k-1)·(1−FEs/TC)^cp`` 收紧、``rk≥α`` 时 ``ε(k)=(1+τ)·ϕ_max``
+  放松反馈、``FEs≥TC`` 归 0。对照档定位 **EconstOR**（Eq.10 比较规则 +
+  Eq.12 调度）。默认参数 γ=0.5 / TC=0.4·maxFEs / cp=5 / τ=0 / α=0.5。
 - ``lagaros``：FeasRulesNEW 乘积式 F_sel 重标定（Eq. 9b：
   ``F_sel(x) = max(f_best_feasible, f(x)) × p_violation``；可行时 F_sel=f）。
   ``p_violation`` 默认 Eq. 8a（最大违反量，原文不含违反条数）；
@@ -29,7 +31,7 @@ DE 替换 / 邻域接受 / 档案择优最终全部走同一比较算子。P1 �
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 __all__ = [
@@ -96,8 +98,11 @@ class CompareSpec:
 
     Attributes:
         mode: penalty | deb | epsilon | lagaros。
-        epsilon0: ε 初值（epsilon 模式；占位线性衰减）。
-        epsilon_tc: ε 衰减到 0 的代数（epsilon 模式）。
+        epsilon0 / epsilon_tc:**废弃**（P2-e 前的占位线性衰减）；
+            Eq.12 状态机改用 epsilon_gamma/tc_frac/cp/tau/alpha。
+        epsilon_gamma / epsilon_tc_frac / epsilon_cp / epsilon_tau /
+        epsilon_alpha: Eq.12（Fan 2018）调度参数。
+        epsilon_max_fes: maxFEs（求解器注入；None 时 TC 退化为 1）。
         lagaros_variant: 8a | 8b | 8c | 8d（lagaros 模式）。
         n_constraints: 约束总数（8b/8c/8d 的条数项必需；缺省用 8a）。
         lambda_cov: 覆盖保护系数（P2-d；**仅非 penalty 档生效**）。None/0 = 关。
@@ -106,21 +111,42 @@ class CompareSpec:
     """
 
     mode: str = MODE_PENALTY
+    # 废弃：占位线性衰减（P2-e 起由 Eq.12 取代；保留字段以维持旧 config 兼容）
     epsilon0: float = 0.0
     epsilon_tc: int = 1
+    # Eq.12（Fan et al. 2018）调度参数（定稿 §9 第 2 项拍板值）
+    epsilon_gamma: float = 0.5       # θ = γ·Npop（θ 大违反量取 ε(0)）
+    epsilon_tc_frac: float = 0.4     # TC = tc_frac · maxFEs
+    epsilon_cp: float = 5.0          # 衰减曲率
+    epsilon_tau: float = 0.0         # 放松分支幅度 (1+τ)
+    epsilon_alpha: float = 0.5       # 可行比例阈值 α（rk ≥ α 触发放松）
+    epsilon_max_fes: int | None = None  # maxFEs（求解器注入；None ⇒ TC=1）
     lagaros_variant: str = "8a"
     n_constraints: int | None = None
     lambda_cov: float | None = None
     # lagaros Eq. 9b 的 f_best_feasible 参照（求解器喂入；未喂时退化 max(f_cand,f_cur)）
     _f_best_feasible: float | None = None
+    # Eq.12 内部状态（非 init，可变）
+    _eps: float | None = field(default=None, init=False, repr=False)
+    _eps_gen: int = field(default=-1, init=False, repr=False)
 
     def __post_init__(self) -> None:
         if self.mode not in _VALID_MODES:
             raise ValueError(f"compare mode 必须是 {_VALID_MODES}，当前 {self.mode!r}")
-        if self.mode == MODE_EPSILON and self.epsilon0 < 0:
-            raise ValueError("epsilon0 不能为负")
+        if self.epsilon0 < 0:
+            raise ValueError("epsilon0 不能为负（已废弃字段，仅作兼容校验）")
         if self.epsilon_tc < 1:
-            raise ValueError("epsilon_tc 必须 >= 1")
+            raise ValueError("epsilon_tc 必须 >= 1（已废弃字段，仅作兼容校验）")
+        if not (0.0 < self.epsilon_gamma <= 1.0):
+            raise ValueError("epsilon_gamma 必须 ∈ (0, 1]")
+        if not (0.0 < self.epsilon_tc_frac <= 1.0):
+            raise ValueError("epsilon_tc_frac 必须 ∈ (0, 1]")
+        if self.epsilon_cp <= 0:
+            raise ValueError("epsilon_cp 必须 > 0")
+        if self.epsilon_tau < 0:
+            raise ValueError("epsilon_tau 不能为负")
+        if not (0.0 <= self.epsilon_alpha <= 1.0):
+            raise ValueError("epsilon_alpha 必须 ∈ [0, 1]")
         if self.lagaros_variant not in ("8a", "8b", "8c", "8d"):
             raise ValueError("lagaros_variant 必须是 8a/8b/8c/8d")
         if self.lambda_cov is not None and self.lambda_cov < 0:
@@ -131,14 +157,56 @@ class CompareSpec:
     def set_best_feasible(self, f: float | None) -> None:
         self._f_best_feasible = None if f is None else float(f)
 
-    # ---- ε 调度（占位：线性衰减；正式参数 P2 定稿）----
+    # ---- ε 调度（Eq.12，Fan et al. 2018，P2-e 实装）----
 
-    def epsilon_at(self, gen: int) -> float:
-        if self.mode != MODE_EPSILON or self.epsilon0 <= 0.0:
+    def set_epsilon_max_fes(self, n: int) -> None:
+        """注入 maxFEs（求解器：``max_generations · pop_size``）。"""
+        self.epsilon_max_fes = int(n) if n else None
+
+    def reset_epsilon(self, phi_theta: float) -> None:
+        """Eq.12 初始化：``ε(0) = ϕ_θ``（θ = γ·Npop 第 θ 大违反量）。
+
+        仅 ``epsilon`` 模式生效；非 epsilon 模式为 no-op（保留调用安全）。
+        """
+        if self.mode != MODE_EPSILON:
+            return
+        self._eps = float(phi_theta)
+        self._eps_gen = 0
+
+    def tick_epsilon(self, fes: int, rk: float, phi_max: float) -> float:
+        """Eq.12 状态机：推进到当前代 ``ε(k)`` 并返回。
+
+        FEs 计数口径（定稿 §9 第 2 项）：``fes = gen · Npop``（本代替换决策
+        前的累计函数评价数；gen 为 1-based 进化代数）。
+
+        - ``FEs < TC`` 且 ``rk < α``：``ε(k) = ε(k-1)·(1 − FEs/TC)^cp``（收紧）
+        - ``FEs < TC`` 且 ``rk ≥ α``：``ε(k) = (1+τ)·ϕ_max``（放松反馈，
+          防搜索塌进可行域——对症精英冻结病理）
+        - ``FEs ≥ TC``：``ε(k) = 0``
+
+        其中 ``TC = epsilon_tc_frac · maxFEs``。未 reset（直接调用）或非
+        epsilon 模式返回 0.0（与占位行为一致，保证旧调用不崩）。
+        """
+        if self.mode != MODE_EPSILON or self._eps is None:
             return 0.0
-        g = max(0, int(gen))
-        tc = max(1, int(self.epsilon_tc))
-        return float(self.epsilon0) * max(0.0, 1.0 - g / tc)
+        tc = max(1, int(round(self.epsilon_tc_frac * (self.epsilon_max_fes or 1))))
+        fes = max(0, int(fes))
+        if fes < tc:
+            if float(rk) < self.epsilon_alpha:
+                decay = max(0.0, 1.0 - fes / tc) ** self.epsilon_cp
+                self._eps = self._eps * decay
+            else:
+                self._eps = (1.0 + self.epsilon_tau) * max(0.0, float(phi_max))
+        else:
+            self._eps = 0.0
+        self._eps_gen += 1
+        return self._eps
+
+    def epsilon_at(self, gen: int = 0) -> float:
+        """返回当前 ε（Eq.12 状态机内部值；``gen`` 参数保留兼容，不再驱动衰减）。"""
+        if self.mode != MODE_EPSILON:
+            return 0.0
+        return float(self._eps) if self._eps is not None else 0.0
 
     # ---- p_violation（Lagaros Eq. 8a–d）----
 
@@ -231,6 +299,11 @@ def make_compare_spec(
     mode: str = MODE_PENALTY,
     epsilon0: float = 0.0,
     epsilon_tc: int = 1,
+    epsilon_gamma: float = 0.5,
+    epsilon_tc_frac: float = 0.4,
+    epsilon_cp: float = 5.0,
+    epsilon_tau: float = 0.0,
+    epsilon_alpha: float = 0.5,
     lagaros_variant: str = "8a",
     n_constraints: int | None = None,
     lambda_cov: float | None = None,
@@ -239,6 +312,11 @@ def make_compare_spec(
         mode=mode,
         epsilon0=epsilon0,
         epsilon_tc=epsilon_tc,
+        epsilon_gamma=epsilon_gamma,
+        epsilon_tc_frac=epsilon_tc_frac,
+        epsilon_cp=epsilon_cp,
+        epsilon_tau=epsilon_tau,
+        epsilon_alpha=epsilon_alpha,
         lagaros_variant=lagaros_variant,
         n_constraints=n_constraints,
         lambda_cov=lambda_cov,

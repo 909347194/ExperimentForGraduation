@@ -92,17 +92,36 @@ def test_deb_three_rules():
     assert s.should_replace(_feat(1.0, n_hard=1, viol=1.0), _feat(2.0, n_hard=1, viol=1.0))
 
 
-def test_epsilon_tolerance_compare():
-    s = CompareSpec(mode="epsilon", epsilon0=1.0, epsilon_tc=10)
-    assert s.epsilon_at(0) == 1.0
-    assert s.epsilon_at(5) == 0.5
-    assert s.epsilon_at(10) == 0.0
-    # 违背量在容忍档内 → 按 f 比较
-    assert s.should_replace(_feat(1.0, n_hard=1, viol=0.5), _feat(2.0, n_hard=1, viol=0.5), gen=0)
-    # 超出容忍档 → 按违反量比较（即使 f 更差）
-    assert s.should_replace(_feat(99.0, n_hard=1, viol=0.5), _feat(1.0, n_hard=1, viol=5.0), gen=0)
-    # gen ≥ tc：eps=0，退化为违反量比较
-    assert s.should_replace(_feat(99.0, n_hard=1, viol=1.0), _feat(1.0, n_hard=1, viol=2.0), gen=10)
+def test_epsilon_eq12_state_machine():
+    """P2-e：ε 调度实装 Eq.12（Fan 2018）状态机。"""
+    s = CompareSpec(mode="epsilon")
+    s.set_epsilon_max_fes(1000)  # TC = 0.4·1000 = 400
+    # 未 reset：epsilon_at 返回 0（与占位兼容，不崩）
+    assert s.epsilon_at(0) == 0.0
+    # ε(0) = ϕ_θ
+    s.reset_epsilon(10.0)
+    assert s.epsilon_at() == 10.0
+    # FEs=100 (< TC), rk=0 (< α): 收紧 ε = 10·(1 − 100/400)^5
+    v = s.tick_epsilon(100, 0.0, 5.0)
+    assert v == pytest.approx(10.0 * (0.75 ** 5))
+    # FEs=300 (< TC), rk=0.8 (≥ α): 放松到 (1+τ)·ϕ_max = ϕ_max
+    v2 = s.tick_epsilon(300, 0.8, 7.0)
+    assert v2 == pytest.approx(7.0)
+    # FEs=500 (≥ TC=400): 归 0
+    v3 = s.tick_epsilon(500, 0.0, 9.0)
+    assert v3 == 0.0
+    assert s.epsilon_at() == 0.0
+
+
+def test_epsilon_should_replace_respects_state():
+    """epsilon 模式：should_replace 用当前 ε 状态判定容忍档。"""
+    s = CompareSpec(mode="epsilon")
+    s.set_epsilon_max_fes(10000)
+    s.reset_epsilon(3.0)  # ε = 3
+    # 两者违反量均 ≤ ε ⇒ 视为可行，按 f 比较（cand 更优 ⇒ 替换）
+    assert s.should_replace(_feat(1.0, n_hard=1, viol=2.0), _feat(2.0, n_hard=1, viol=2.0), gen=0)
+    # 候选违反量 5 > ε=3 ⇒ 按违反量比较（候选违反更大 ⇒ 不替换）
+    assert not s.should_replace(_feat(1.0, n_hard=1, viol=5.0), _feat(2.0, n_hard=1, viol=2.0), gen=0)
 
 
 def test_lagaros_fsel_product_rescaling():
