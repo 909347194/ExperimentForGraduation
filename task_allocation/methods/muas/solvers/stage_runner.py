@@ -54,6 +54,22 @@ class MUASStageResult:
     cost_history: list[float] = field(default_factory=list)
     elapsed_seconds: float = 0.0
 
+def _assignment_change_count(
+    old: AllocationSolution, new: AllocationSolution
+) -> int:
+    """L3b 归属变动计数（定稿 §4.1/§6 要素 4）。
+
+    逐任务比较 ``task_id → uav_id`` 映射：新增、删除、换机各记 1 条。
+    纯观测，用于把「跨机改派」与 L3a 纯几何动作分账，不改变任何判定。
+    """
+
+    def _amap(sol: AllocationSolution) -> dict[int, int]:
+        return {int(tid): int(t.uav_id) for t in sol.tours for tid in t.task_ids}
+
+    a, b = _amap(old), _amap(new)
+    return sum(1 for tid in set(a) | set(b) if a.get(tid) != b.get(tid))
+
+
 # 小 N 近精确枚举参照（exp04 B3）
 
 
@@ -382,11 +398,15 @@ def run_selective_muas(
     # P3-a 采纳判据双视图对照（定稿 §4.2）：path=旧航程门、f=统一目标
     # 判据。纯观测，进 diagnostics 供 P4 开关对照；默认不静默替换。
     cost_polish_accept: dict[str, Any] = {}
+    # P3-b L3b 归属变动基准：交付重建解（或预构建解）。与终态解比较
+    # task→uav 映射差异，把「跨机改派」与 L3a 纯几何动作分账（纯观测）。
+    initial_solution: AllocationSolution | None = None
     if isinstance(prebuilt, AllocationSolution):
         # 预构建解通道（构造式基线，exp05_baselines）：extra["solution"] 即
         # 交付解——不走 assignment 解码修复链 / polish / memetic 档案，
         # 基线的构造策略就是其方法本身；约束评价仍统一走 problem.evaluate。
         final = prebuilt
+        initial_solution = final  # P3-b 归属变动基准（此通道 eval 与 final 同源）
         problem.evaluate(final)
         final_fitness = float(problem.scalar_fitness(final))
         final_n_hard, final_excess_m = problem.hard_stats(final)
@@ -401,6 +421,7 @@ def run_selective_muas(
         )
     else:
         final = evaluator.build_solution(result.best_assignment)
+        initial_solution = final  # P3-b 归属变动基准（polish 前的重建解）
         problem.evaluate(final)
         final_fitness = float(problem.scalar_fitness(final))
         final_n_hard, final_excess_m = problem.hard_stats(final)
@@ -501,6 +522,14 @@ def run_selective_muas(
             cost_polish_stats.setdefault("path_after_m", round(path_before_cp, 3))
             cost_polish_stats.setdefault("path_gain_m", 0.0)
             if int(cost_polish_stats.get("n_accepted", 0)) > 0:
+                # P3-b L3a 分账：终点机巢 MCF 是「给定路径下的条件最优」
+                # （定稿 §4.1，禁写「全局最优」）；作为交付层几何动作
+                # 登记 reason=opt（_led_polish 的 reason 恒为 opt）。
+                if int(cost_polish_stats.get("n_mcf_resolve", 0)) > 0:
+                    _led_polish(
+                        evaluator, "end_nest_mcf", True, None,
+                        "L3a:给定路径下终点机巢条件最优(非全局最优)",
+                    )
                 problem.evaluate(cand)
                 cand_fitness = float(problem.scalar_fitness(cand))
                 cand_n_hard, cand_excess = problem.hard_stats(cand)
@@ -591,6 +620,14 @@ def run_selective_muas(
     # P2-d：终态 n_skip_final（polish/coverage 后最终交付解），与 n_skip_eval
     # 分列（定稿 §9）。覆盖门禁口径 voluntary_skip；gate 修复下恒 0。
     n_skip_final = int((final.meta.get("gate_stats") or {}).get("n_skip", 0) or 0)
+
+    # P3-b L3b 归属变动：重建解 → 终态解的 task→uav 映射差异条数。
+    # 涵盖 polish_assignment 的 relocate/swap 与交付后成本 polish 的
+    # _cost_polish_relocate；纯观测，不参与任何采纳判定。
+    n_task_to_uav_changes = (
+        _assignment_change_count(initial_solution, final)
+        if initial_solution is not None else 0
+    )
 
     return MUASStageResult(
         solution=final,
@@ -696,6 +733,35 @@ def run_selective_muas(
             "cost_polish_accept_mode": str(stage_cfg.cost_polish_accept_mode),
             "cost_polish_eps_f": float(stage_cfg.cost_polish_eps_f),
             "cost_polish_accept": dict(cost_polish_accept),
+            # P3-b L3a/L3b 分账（定稿 §4.1 / §6 要素 4）：
+            #   L3a 纯几何 = 组内 2-opt/Or-opt + 终点巢 MCF（**给定路径下的
+            #     条件最优**，禁写全局最优）+ polish_assignment 的 position；
+            #   L3b 跨机改派 = 交付后成本 polish 的 relocate +
+            #     polish_assignment / 单调 polish 的 relocate。
+            # ⚠️ 当前只做观测记账、零行为变化。§9 第 3 项「L3b 默认关」
+            # 的默认值翻转须先完成收益拆分（同项「先做收益拆分再定」），
+            # 且跨机改派落在两个通道，落点待确认后由 P4 实施。
+            "l3a_geometric_actions": (
+                int(cost_polish_stats.get("n_2opt", 0))
+                + int(cost_polish_stats.get("n_oropt", 0))
+                + int(cost_polish_stats.get("n_mcf_resolve", 0))
+                + int(mono_stats.get("n_mcf_resolve", 0))
+                + int(polish.n_accepted.get("position", 0))
+            ),
+            "l3b_relocate_actions": (
+                int(cost_polish_stats.get("n_relocate", 0))
+                + int(polish.n_accepted.get("relocate", 0))
+                + int(polish.n_accepted.get("swap", 0))
+                + int(mono_stats.get("n_relocate", 0))
+            ),
+            "l3b_enabled_observed": (
+                bool(stage_cfg.cost_polish_relocate_enabled)
+                or any(m in stage_cfg.polish_moves for m in ("relocate", "swap"))
+            ),
+            "cost_polish_n_mcf_resolve": int(
+                cost_polish_stats.get("n_mcf_resolve", 0)
+            ),
+            "n_task_to_uav_changes": int(n_task_to_uav_changes),
             "cost_polish_rounds": int(cost_polish_stats.get("n_rounds", 0)),
             "cost_polish_n_2opt": int(cost_polish_stats.get("n_2opt", 0)),
             "cost_polish_n_oropt": int(cost_polish_stats.get("n_oropt", 0)),
