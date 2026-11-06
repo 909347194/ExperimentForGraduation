@@ -379,6 +379,9 @@ def run_selective_muas(
     # 交付后成本 polish 诊断；预构建解通道不走（基线的
     # 构造策略即其方法本身），保持空字典。
     cost_polish_stats: dict[str, int] = {}
+    # P3-a 采纳判据双视图对照（定稿 §4.2）：path=旧航程门、f=统一目标
+    # 判据。纯观测，进 diagnostics 供 P4 开关对照；默认不静默替换。
+    cost_polish_accept: dict[str, Any] = {}
     if isinstance(prebuilt, AllocationSolution):
         # 预构建解通道（构造式基线，exp05_baselines）：extra["solution"] 即
         # 交付解——不走 assignment 解码修复链 / polish / memetic 档案，
@@ -504,18 +507,49 @@ def run_selective_muas(
                 cand_path = float(problem.path_cost(cand))
                 old_exec = set(final.executed_task_ids)
                 new_exec = set(cand.executed_task_ids)
-                # P0 契约层：采纳判据经 ConstraintSpec 视图（现语义原样包
-                # 一层；成本门仍按航程分量——漂移测量对象，P3 统一为 f）
-                if constraint_spec.accept_cost_polish_view(
+                cand_late = float(problem.soft_violation(cand))
+                cur_late = float(problem.soft_violation(final))
+                # P3-a 双判据对照（定稿 §4.2）：path 视图 = 旧语义（航程
+                # 分量门，与 method-phase1 逐位可比）；f 视图 = 统一目标
+                # 判据（f(cand)<f(cur)−ε 且 n_hard/执行集/迟到/超限逐分量
+                # 不退化）。两视图都算，mode 决定采纳哪一个；差异进
+                # diagnostics 供 P4 开关对照，禁止静默替换。
+                accept_path = constraint_spec.accept_cost_polish_view(
                     old_exec, new_exec, int(cand_n_hard), int(final_n_hard),
                     float(cand_excess), float(final_excess_m),
                     float(cand_path), float(path_before_cp),
                     float(stage_cfg.cost_polish_eps),
-                ):
+                )
+                accept_f = constraint_spec.accept_f_view(
+                    cand_fitness, float(final_fitness),
+                    float(stage_cfg.cost_polish_eps_f),
+                    cand_n_hard=int(cand_n_hard), cur_n_hard=int(final_n_hard),
+                    cand_exec=new_exec, cur_exec=old_exec,
+                    cand_late=cand_late, cur_late=cur_late,
+                    cand_excess=float(cand_excess),
+                    cur_excess=float(final_excess_m),
+                )
+                accept_mode = str(stage_cfg.cost_polish_accept_mode).lower()
+                accepted = accept_f if accept_mode == "f" else accept_path
+                cost_polish_accept.update({
+                    "mode": accept_mode,
+                    "path_view": bool(accept_path),
+                    "f_view": bool(accept_f),
+                    "drift": bool(accept_path != accept_f),
+                    "accepted": bool(accepted),
+                    "delta_f": float(final_fitness) - float(cand_fitness),
+                    "delta_path_m": float(path_before_cp) - float(cand_path),
+                })
+                if accept_path != accept_f:
+                    lg = getattr(evaluator, "ledger", None)
+                    if lg is not None and getattr(lg, "enabled", False):
+                        lg.tick("polish:acceptance_drift")
+                if accepted:
                     _led_polish(
                         evaluator, "post_cost_polish", True,
                         float(final_fitness) - float(cand_fitness),
-                        "cost_polish_accept(执行集/硬违约/超限不退化+航程严格降)",
+                        f"cost_polish_accept(mode={accept_mode},"
+                        f"path={int(accept_path)},f={int(accept_f)})",
                     )
                     final = cand
                     final_fitness = cand_fitness
@@ -529,7 +563,8 @@ def run_selective_muas(
                     cost_polish_stats["rejected"] = 1
                     _led_polish(
                         evaluator, "post_cost_polish", False, None,
-                        "cost_polish_reject(四道门未过)",
+                        f"cost_polish_reject(mode={accept_mode},"
+                        f"path={int(accept_path)},f={int(accept_f)})",
                     )
 
     model_type = (
@@ -655,6 +690,12 @@ def run_selective_muas(
             # 航程未严格下降），交付解保持原样。path_gain_m = 采纳时
             # 交付航程的绝对下降量（米）。
             "cost_polish_enabled": bool(stage_cfg.cost_polish_enabled),
+            # P3-a 采纳判据统一（定稿 §4.2）：mode="path" 默认与
+            # method-phase1 逐位可比；"f" 走 accept_f_view。两视图结果
+            # 与漂移同时落盘，供 P4 开关对照，禁静默替换。
+            "cost_polish_accept_mode": str(stage_cfg.cost_polish_accept_mode),
+            "cost_polish_eps_f": float(stage_cfg.cost_polish_eps_f),
+            "cost_polish_accept": dict(cost_polish_accept),
             "cost_polish_rounds": int(cost_polish_stats.get("n_rounds", 0)),
             "cost_polish_n_2opt": int(cost_polish_stats.get("n_2opt", 0)),
             "cost_polish_n_oropt": int(cost_polish_stats.get("n_oropt", 0)),

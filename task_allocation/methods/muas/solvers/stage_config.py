@@ -159,6 +159,20 @@ class MUASStageConfig:
     cost_polish_max_rounds: int = 30
     # 采纳阈值（米，绝对；吸收浮点求和噪声）。
     cost_polish_eps: float = 1.0
+    # ── P3-a 采纳判据统一（定稿 §4.2，开关对照、不静默替换）──────────
+    # "path"（默认）= 旧语义：航程分量严格下降 > cost_polish_eps（米），
+    #   与 method-phase1 逐位可比；缺陷是允许「航程降但 f 变差」被采纳
+    #   （stage_runner 已算 cand_fitness 却不进判据）。
+    # "f" = 统一判据：f(cand) < f(cur) − ε_f 且约束向量逐分量不退化
+    #   （constraints.spec.accept_f_view；向量 = n_hard / 执行集 / 迟到秒
+    #   / 航程超限）。f 是唯一货币，禁止只按单一分量裁决的旁路。
+    # 默认仍取 "path"；是否翻转由 P4 全量 A/B 决定（定稿 §4.2「迁移须
+    # 开关对照，不得静默替换」）。
+    cost_polish_accept_mode: str = "path"
+    # f 档阈值（**f 单位**，吸收浮点求和噪声）。换算基准 λ=0.1、
+    # w_late=0.01/s：1 单位 f ≈ 10 m 航程 ≈ 100 s 迟到；故旧
+    # cost_polish_eps=1.0（米）≈ 0.1 单位 f，两者不同单位、禁止直接复用。
+    cost_polish_eps_f: float = 1e-6
     # ── 跨机指派成本 polish（口径约定，组内重排之后的转向）───
     # 组内 2-opt/Or-opt 只改访问顺序；本开关打开**归属维度**：把单任务从
     # 供体机改派到受体机（含可用但空闲的机），四道门与 _cost_polish_routes
@@ -395,6 +409,13 @@ class MUASStageConfig:
             raise ValueError("cost_polish_max_rounds 必须 >= 1")
         if self.cost_polish_eps < 0:
             raise ValueError("cost_polish_eps 不能为负")
+        if self.cost_polish_accept_mode not in ("path", "f"):
+            raise ValueError(
+                'cost_polish_accept_mode 必须是 "path"/"f"，'
+                f"当前为 {self.cost_polish_accept_mode!r}"
+            )
+        if self.cost_polish_eps_f < 0:
+            raise ValueError("cost_polish_eps_f 不能为负")
         if str(self.order_candidate_mode).lower() not in ("gene", "neutral"):
             raise ValueError(
                 'order_candidate_mode 必须是 "gene" 或 "neutral"，'

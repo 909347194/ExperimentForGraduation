@@ -414,16 +414,26 @@ def accept_f_view(
     cur_exec: set | None = None,
     cand_late: float = 0.0,
     cur_late: float = 0.0,
+    cand_excess: float | None = None,
+    cur_excess: float | None = None,
 ) -> bool:
     """目标统一采纳判据（定稿 §4.2：``f(cand) < f(cur) − ε`` 且约束向量不退化）。
 
-    P3 接线；现仅用于漂移测量（与 accept_cost_polish_view 对照）。
-    约束向量 = (n_hard, 未交付集, 迟到秒) 逐分量不退化。
+    P3 接线；默认参数下仅用于漂移测量（与 accept_cost_polish_view 对照）。
+    约束向量 = (n_hard, 未交付集, 迟到秒, 航程超限) 逐分量不退化；
+    ``cand_excess/cur_excess`` 传 None 时跳过超限分量（兼容
+    criteria_drift 的旧调用口径）。
     """
     if cand_n_hard > cur_n_hard:
         return False
     if cand_late > cur_late + 1e-9:
         return False
     if cand_exec is not None and cur_exec is not None and not cand_exec >= cur_exec:
+        return False
+    if (
+        cand_excess is not None
+        and cur_excess is not None
+        and cand_excess > cur_excess + 1e-9
+    ):
         return False
     return cand_f < cur_f - eps
