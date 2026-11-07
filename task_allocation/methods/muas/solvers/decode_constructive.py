@@ -166,7 +166,7 @@ class ConstructiveDecodeMixin:
         # 4) 巢 + 时间窗小迭代（耦合子问题；不动点即收敛）。
         # P2-b：轮数上限显式进 config（原硬编码 3，定稿 §3.1 目标规则 1）。
         ends: dict[int, int | None] = (
-            self._choose_end_nests(routes) if routes else {}
+            self._choose_end_nests(routes, phase="l1") if routes else {}
         )
         prev_state: tuple | None = None
         for _ in range(int(getattr(self.config, "constructive_max_passes", 3))):
@@ -193,7 +193,7 @@ class ConstructiveDecodeMixin:
                     if not self._rescue_task(tid, routes, exclude={uid}):
                         deferred.append(tid)
             routes = self._reorder_for_deadlines(routes)
-            ends = self._choose_end_nests(routes) if routes else {}
+            ends = self._choose_end_nests(routes, phase="l1") if routes else {}
             state = (
                 tuple((k, tuple(v)) for k, v in sorted(routes.items())),
                 tuple(sorted((k, str(v)) for k, v in ends.items())),

@@ -188,7 +188,7 @@ class DecodeRepairMixin:
                         gate_reason="economic_prune(消融算子,生产恒关)",
                     )
             routes, end_nests = self._repair_range(routes, end_nests)
-            end_nests = self._choose_end_nests(routes)
+            end_nests = self._choose_end_nests(routes, phase="l1")
             # 每轮 violation_vector 快照（纯观测）：(航程违航班次, 巢超容,
             # 时序逆序班次)，时间窗不进向量（环后专职段处理）。
             _vec = self._round_violation_vector(routes, end_nests)
@@ -256,7 +256,7 @@ class DecodeRepairMixin:
         routes, end_nests = self._repair_range(routes, end_nests)
         if routes:
             # 新增航次后终点机巢需重新联合分配（容量约束下精确求解）
-            end_nests = self._choose_end_nests(routes)
+            end_nests = self._choose_end_nests(routes, phase="l1")
         # 终点机巢在容量竞争下未必是最近巢，改派会再次拉长航程。交付前最后
         # 闸一次：否则完成闸门按「起点→任务→终点巢」全航程判 range_uav_*
         # 弹回——航程/位置已更新却解绑回池不计完成（废飞）。
@@ -678,24 +678,48 @@ class DecodeRepairMixin:
             gate_reason=gate,
         )
 
+    def _end_nest_mode_for_phase(self, phase: str | None) -> str | None:
+        """P4 exp09：按调用阶段解析实验显式终点巢策略。
+
+        ``"auto"``（默认）或阶段未标注 ⇒ 返回 ``None``，即完全沿用
+        既有口径（``projection_only`` 决定层 1、交付期恒 MCF），
+        **零行为变化**。只有实验显式写 ``nearest`` / ``mcf`` 才分流。
+        """
+        key = {"l1": "end_nest_l1_mode", "l3": "end_nest_l3_mode"}.get(phase)
+        if key is None:
+            return None
+        mode = str(getattr(self.config, key, "auto"))
+        return None if mode == "auto" else mode
+
     def _choose_end_nests(
         self,
         routes: Mapping[int, Sequence[int]],
+        *,
+        phase: str | None = None,
     ) -> dict[int, int | None]:
         """为有航次的 UAV 选终点机巢（含飞行中也要占名额）。
 
         方案 A（master 主线）：终点机巢由内层子问题
-        :func:`solve_end_nest_assignment` 在末态容量约束下**精确求解**，
-        联合考虑所有 UAV 的终点竞争（不是各抢最近巢、先到先得）；返航代价
-        进入 F2 完整评价，间接作用于进化方向。
+        :func:`solve_end_nest_assignment` 在末态容量约束下**给定路径下
+        条件最优**地求解（非全局最优），联合考虑所有 UAV 的终点竞争
+        （不是各抢最近巢、先到先得）；返航代价进入 F2 完整评价，
+        间接作用于进化方向。
 
         「终点进编码」的联合变体（编码终点优先、精确分配兜底）已从 master
         移除，在 pro 分支实现。
 
         P1 projection_only：层 1 降级为「最近合法巢」确定性投影
         （:meth:`_choose_end_nests_projection`，零联合优化）。
+
+        P4 exp09 ``phase``：``"l1"``＝解码期、``"l3"``＝交付期；实验可用
+        ``end_nest_l1_mode`` / ``end_nest_l3_mode`` 精确切换两层策略，
+        以做定稿 §4.1 的两层 × 四档同 seed 配对。诊断性调用（如
+        subset-optimality proxy）不传 phase，恒走 auto。
         """
-        if bool(getattr(self.config, "projection_only", False)):
+        mode = self._end_nest_mode_for_phase(phase)
+        if mode == "nearest":
+            return self._choose_end_nests_projection(routes)
+        if mode is None and bool(getattr(self.config, "projection_only", False)):
             return self._choose_end_nests_projection(routes)
         if not self.nests:
             return {uid: None for uid in routes}
@@ -1062,7 +1086,7 @@ class DecodeRepairMixin:
             # 装载改变了航次结构 → 重排 + 重选终点巢 + 航程闸，可能释放
             # 新的装载空间（也可能把某航次推超航程 → 修复时改派）。
             work = self._reorder_for_deadlines(work)
-            ends = self._choose_end_nests(work) if work else {}
+            ends = self._choose_end_nests(work, phase="l1") if work else {}
             work, ends = self._repair_range(work, ends)
         return work, ends, loaded
 

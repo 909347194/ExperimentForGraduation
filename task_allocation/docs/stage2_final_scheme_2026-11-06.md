@@ -1166,5 +1166,114 @@ L3b 在 `g0b1` 为 5/1/2、`g1b1` 为 6/1/4 ⇒ **B 因子在 G=0 档
 **待办不变**：MCF 层 1 / 层 3 对照、三级嵌套消融、Deb / ε / Lagaros
 开关对照、统一事后评价器重评 phase1、重跑全部基线，仍严格串行。
 
+---
+
+## 11.11 P4 第 2 项：终点机巢分层开关与 exp09 设计（2026-11-07 深夜）
+
+### 1. `projection_only` 不能做 MCF 对照（设计审查结论）
+
+§4.1 要求「层 1 最近合法巢投影 vs 层 3 MCF，两层 × 四档同 seed 配对」。
+落地前核对到 `projection_only` 是 **P1 复合档**，一次同时剥掉三处解码期
+目标改写：`_consolidate` 成本合并跳过、`_best_order` 剔 NN 候选且选择键
+退为 `(迟到数, 迟到量)`、终点巢降级为最近合法巢。用它做 MCF 对照会把
+三处改动一起归因到 MCF，口径不纯 ⇒ 必须新增**只作用于终点巢**的分层开关。
+
+### 2. 新增分层开关（零默认行为变化）
+
+* `MUASStageConfig` 新增 `end_nest_l1_mode` / `end_nest_l3_mode`，
+  取值 `auto`（默认）/ `nearest` / `mcf`，非法取值在 `__post_init__` 拒绝。
+* `DecodeRepairMixin._choose_end_nests(routes, *, phase=None)`：
+  `phase="l1"` = 解码期（`decode_repair.py` 3 处 + `decode_constructive.py`
+  2 处），`phase="l3"` = 交付期（`route_polish.py` 的
+  `post_cost_polish` / `post_polish` 2 处）；不传 phase 的诊断性调用
+  （`stage_runner` 的 subset-optimality proxy）恒走 auto。
+  `auto` ⇒ `_end_nest_mode_for_phase` 返回 None ⇒ 完全沿用既有分支
+  （含 `projection_only` 兼容语义），**零行为变化**；显式 `mcf` 可覆盖
+  `projection_only`，显式 `nearest` 走 `_choose_end_nests_projection`。
+* 新增两项**纯观测**诊断（`stage_runner.diagnostics`，不参与任何判定）：
+  `return_leg_m` = Σ(末任务→终点巢的**有向**三维 DEM 代价，与
+  `tour_path_cost` 末段同口径)、`nest_overflow` =
+  `check_nest_capacity` 逐巢 `overflow` 之和。对应 §4.1 要求的
+  「返航段航程 / 可行率（overflow）」指标。
+
+### 3. 验证
+
+* 新增 `tests/test_p4_end_nest_phase.py`（7 项）：配置默认/校验、
+  `replace()` 幂等、阶段解析、nearest→投影 / mcf→求解器分流、
+  `projection_only` 兼容、解码期调用点全部标注 `l1`、
+  默认 auto 与显式双层 `mcf` 逐位一致。全量 **538 passed**（531 + 7）。
+* **bit-exact 核验**：exp07 两组 mid 各 3 seed 重跑，与改动前
+  `results/_baseline/exp09_pre/` 逐字段比对 **26 份 JSON
+  （2 summary + 12 metrics + 12 run_meta）零差异**，仅
+  `wall_seconds` / `timestamp_utc` 不同。第一组曾误用 `run.py` 的空 mid
+  预设（沿用冒烟参数）导致假差异，按 `12/25/60/20 + [3,3]` 正确参数
+  重跑后归零；该次失误只影响核验过程，未改动任何生产数值。
+
+### 4. exp09 2×2 设计（自持实验目录 `exp09_mcf_layers`）
+
+|  | 层 3 投影 | 层 3 MCF |
+|---|---|---|
+| **层 1 投影** | `nn` | `nm` |
+| **层 1 MCF** | `mn` | `mm`（当前生产口径） |
+
+四档用 `dataclasses.replace` 只改两个字段 + 统一 `cost_polish_accept_mode="f"`
+（§11.9）；逐 seed 验配置纯度、按 seed 交替档序、严格串行。
+报告主效应 + 交互 `(nn−nm)−(mn−mm)` 并列、精确配对 t 检验，
+指标含 `total_return_leg_m` / `nest_overflow_total` / 墙钟 + 常规质量与
+`cost_polish_n_mcf_resolve`。**禁写「独立收益」「协同效应」**。
+
+口径限制：① 层 1 作用于每个候选个体的解码 ⇒ 改变整条 DE 搜索轨迹，
+层 1 主效应是端到端效应，不是「同一解上换巢」的局部收益；
+② 层 3 只在 `post_cost_polish` / `post_polish` 真正被调用的周期生效，
+零精修周期两档相同（算子可得性差异，交互项不纯）；
+③ overflow 若恒 0，说明两策略都满足容量约束，不得写「可行率提升」；
+④ MCF 是**给定路径下的条件最优（非全局最优）**；
+⑤ 冒烟 / mid 不可外推正式档，3 seed / df=2 的 p 不显著须如实声明。
+
+### 5. 冒烟档（1 seed，仅设计自检，不可外推）
+
+`SMOKE_RC=0`，配置纯度 True（差异字段=2）、铁律全过、`run_meta` 四档
+`end_nest_l1_mode` / `end_nest_l3_mode` 逐档正确、`projection_only` 全 False。
+
+| 档 | f 之和 | 总航程 | 返航段 | overflow | 完成率 |
+|---|---|---|---|---|---|
+| `nn` | 1913.736 | 19.14 km | 5.62 km | 0 | 1.000 |
+| `nm` | 1913.736 | 19.14 km | 5.62 km | 0 | 1.000 |
+| `mn` | 1852.743 | 18.53 km | 7.43 km | 0 | 1.000 |
+| `mm` | 1852.743 | 18.53 km | 7.43 km | 0 | 1.000 |
+
+**层 3 主效应与交互项全 0**（`nn≡nm`、`mn≡mm`），四档 `MCF重解=2`
+且 overflow 恒 0 ⇒ 本场景终点机巢无容量竞争，投影与 MCF 退化为同一
+分配；这是**场景限制**，不是开关失效（生效配置已逐档核验）。
+层 1 换到 MCF 使总航程 −0.61 km 但**返航段 +1.81 km**，方向相反
+正是「整条搜索轨迹被改写」的证据，不得解释为局部换巢收益。
+
+### 6. mid 档（3 seed，不可外推正式档）
+
+`MID_RC=0`，配置纯度 True（差异字段=2）、铁律全过、配对完整。
+逐 seed 逐位 `nn≡nm`、`mn≡mm`：层 3 主效应与交互项在 f / 总航程 /
+返航段 / overflow 上**全 0**（零方差不检验）；`nest_overflow_total`
+12 次运行恒 0。层 1 配对主效应：f −11.759004 (p=0.373722)、
+总航程 −113.928 m (p=0.367874)、返航段 −404.722 m (p=0.427883)，
+**均未达统计显著**，df=2 效能极低，不得写成「无差异」。
+
+**机制诊断**：`end_nests_signature`（逐周期 `uav>巢` 串）逐 seed
+逐位 `nn≡nm`、`mn≡mm`，且 `cost_polish_n_mcf_resolve` 四档相同
+⇒ 层 3 的 `_choose_end_nests` 确实被调用，但本场景（3 机巢、
+容量充足）没有终点巢容量竞争，「最近合法巢」与 MCF 返回同一分配，
+层 3 因子完全退化。这是**场景限制**而非开关失效（生效配置逐档核验 +
+7 项单测证明分流）。结论只能写「当前场景 / 机巢规模下 MCF 与
+最近合法巢等价」，**禁写「MCF 无用」「可删」**，也不得外推到
+容量竞争场景。
+
+### 7. 待回填与后续
+
+正式档 3 seed × 4 档严格串行跑批中，结果按 §11.10 同等纪律回填
+`exp09/notes.md §7.5` 与本节。若要回答「容量竞争下 MCF 解决什么
+问题」，须另设容量压力场景（减小机巢泊位 / 提高并发架次）并重新
+核对铁律口径，本轮未擅自改动场景，单列为后续待办。
+`coverage_first` 第三来源、§4.3 双开张力、`projection_only` 与
+`compare_mode` 默认值不一致等仍未裁定。
+
 
 

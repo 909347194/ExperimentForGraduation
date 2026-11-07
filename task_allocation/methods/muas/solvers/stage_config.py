@@ -368,6 +368,17 @@ class MUASStageConfig:
     # 验收量：解码层台账 reason=opt 动作数 = 0。默认 False（与 method-phase1
     # 逐位可比；A/B 臂显式开启）。
     projection_only: bool = False
+    # ── P4 exp09：终点机巢策略的**分层**对照（定稿 §4.1 MCF 对照方案）──
+    # 默认 "auto" ⇒ 完全沿用既有口径（projection_only 决定层 1、层 3 恒 MCF），
+    # **零行为变化**；实验显式设值时按调用阶段精确分流：
+    #   phase="l1" 解码期（decode_repair / decode_constructive）
+    #   phase="l3" 交付期（route_polish.post_cost_polish / post_polish）
+    # 取值："nearest"＝最近合法巢确定性投影（零费用比较，_choose_end_nests_
+    # projection）；"mcf"＝给定路径下终点机巢的条件最优分配（非全局最优）。
+    # 为什么不能拿 projection_only 做 MCF 对照：它同时剥掉 _consolidate
+    # 成本合并、_best_order 的 NN / 航程裁决，是复合档，归因不纯。
+    end_nest_l1_mode: str = "auto"
+    end_nest_l3_mode: str = "auto"
     # compare_mode：DE 替换的比较算子（compare_spec.CompareSpec，要素 2）。
     #   penalty（默认，= 现行硬贪婪，逐位可比）| deb | epsilon | lagaros。
     # 定稿 §6 拟将 deb 作为默认档；P1 闸门实测前默认 penalty 保持 A/B 可比性，
@@ -475,6 +486,12 @@ class MUASStageConfig:
                 'compare_mode 必须是 "penalty"/"deb"/"epsilon"/"lagaros"，'
                 f"当前为 {self.compare_mode!r}"
             )
+        for _key in ("end_nest_l1_mode", "end_nest_l3_mode"):
+            if getattr(self, _key) not in ("auto", "nearest", "mcf"):
+                raise ValueError(
+                    f'{_key} 必须是 "auto"/"nearest"/"mcf"，'
+                    f"当前为 {getattr(self, _key)!r}"
+                )
         if self.epsilon0 < 0:
             raise ValueError("epsilon0 不能为负（已废弃字段，仅作兼容校验）")
         if self.epsilon_tc < 1:

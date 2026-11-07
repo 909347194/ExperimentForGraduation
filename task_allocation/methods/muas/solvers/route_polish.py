@@ -558,7 +558,7 @@ class RoutePolishMixin:
         routes = self._repair_sequence(routes)
         routes, ends = self._repair_range(routes, ends)
         if routes:
-            ends = self._choose_end_nests(routes)
+            ends = self._choose_end_nests(routes, phase="l3")
             # P3-b L3a 分账：终点机巢最小费用分配是「**给定路径下的条件
             # 最优**」（定稿 §4.1，禁写「全局最优」）。纯几何动作计数，
             # 交付层据此登记 reason=opt（见 stage_runner）。
@@ -608,7 +608,7 @@ class RoutePolishMixin:
         routes = self._reorder_for_deadlines(routes)
         routes, ends = self._repair_range(routes, ends)
         if routes:
-            ends = self._choose_end_nests(routes)
+            ends = self._choose_end_nests(routes, phase="l3")
             # P3-b L3a 分账（同 post_cost_polish）：给定路径下的条件最优，
             # 非全局最优；登记为几何动作。
             polish_stats["n_mcf_resolve"] = int(

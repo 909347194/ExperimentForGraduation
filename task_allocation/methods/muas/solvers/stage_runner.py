@@ -21,6 +21,9 @@ import numpy as np
 from task_allocation.common.types import AllocationSolution, Nest, Task, UAV
 from task_allocation.methods.muas.base import BaseOptimizer
 from task_allocation.methods.muas.constraints import spec as constraint_spec
+from task_allocation.methods.muas.constraints.nest_capacity import (
+    check_nest_capacity,
+)
 from task_allocation.methods.muas.cost.cost_matrix import CostMatrixBuildResult
 from task_allocation.methods.muas.cost.nest_keys import DEFAULT_NEST_OFFSET
 from task_allocation.methods.muas.problem import (
@@ -652,6 +655,28 @@ def run_selective_muas(
                 for t in final.tours
                 if t.task_ids and t.end_nest_id is not None
             },
+            # P4 exp09（定稿 §4.1 MCF 对照）两个**纯观测量**：不参与
+            # 任何采纳 / 约束判定，只供实验层对账。
+            # 返航段航程 = Σ 末任务→终点巢的有向代价，与
+            # problem.tour_path_cost 的末段同口径（三维 DEM、禁对称/欧氏）。
+            "return_leg_m": float(sum(
+                problem.costs.cost(
+                    t.task_ids[-1], problem.costs.nest_key(t.end_nest_id)
+                )
+                for t in final.tours
+                if t.task_ids and t.end_nest_id is not None
+            )),
+            # 可行率口径：check_nest_capacity 逐巢 overflow 之和
+            # （0 = 终点机巢分配可行；>0 = 超容架次）。
+            "nest_overflow": int(sum(
+                int(v.get("overflow", 0))
+                for v in check_nest_capacity(
+                    problem.fleet_uavs or problem.uavs,
+                    problem.nests,
+                    {t.uav_id: t.end_nest_id for t in final.tours
+                     if t.task_ids and t.end_nest_id is not None},
+                ).per_nest.values()
+            )),
             "n_executed": len(final.executed_task_ids),
             "n_deferred": len(task_list) - len(final.executed_task_ids),
             # P2-b 修复三分流（定稿 §3.2）：终态权威状态 + 计数。
