@@ -107,14 +107,14 @@ def test_l3a_l3b_actions_are_split(monkeypatch):
         + int(d["cost_polish_n_mcf_resolve"])
         + int(d["polish_accepted"].get("position", 0))
     )
-    # 观测标记：L3b 统一总闸（2026-11-06 裁定②）默认关
-    assert d["l3b_enabled_observed"] is False
-    assert d["l3b_enabled"] is False
+    # 观测标记：L3b 统一总闸 2026-11-07 起纯默认档为开
+    assert d["l3b_enabled_observed"] is True
+    assert d["l3b_enabled"] is True
     assert d["l3b_source"] == "default"
-    # 显式开总闸 ⇒ 观测标记翻真（同一场景，开关对照）
-    d_on = _run(MUASStageConfig(l3b_enabled=True)).diagnostics
-    assert d_on["l3b_enabled_observed"] is True
-    assert d_on["l3b_source"] == "explicit"
+    # 显式关总闸 ⇒ 观测标记翻假（同一场景，消融通道仍可用）
+    d_off = _run(MUASStageConfig(l3b_enabled=False)).diagnostics
+    assert d_off["l3b_enabled_observed"] is False
+    assert d_off["l3b_source"] == "explicit"
 
 
 # ---------------------------------------------------------------------------

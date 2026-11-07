@@ -223,13 +223,14 @@ def test_range_gate_rejects_over_budget_candidates():
 
 
 def test_eps_gate_blocks_tiny_improvements():
-    """阈值 huge ⇒ 任何改进都小于 eps ⇒ 不采纳。"""
+    """阈值 huge ⇒ 任何改进都小于 eps ⇒ 不采纳（统一判据用 f 单位）。"""
     nests = [Nest(id=0, x=1000.0, y=0.0, z=0.0, capacity=10, available=True)]
     uavs = [_uav(0, 0.0)]
     tasks = [_task(0, 100.0), _task(1, 900.0), _task(2, 200.0)]
     _, ev = _mk(
         tasks, uavs, nests,
-        stage_cfg=MUASStageConfig(cost_polish_eps=1.0e12),
+        # 米制 cost_polish_eps 现只用于归因计数，采纳阈值是 f 单位。
+        stage_cfg=MUASStageConfig(cost_polish_eps_f=1.0e12),
     )
     sol = ev.evaluate([(0, 0), (0, 1), (0, 2)]).solution
     out, stats = ev.post_cost_polish(sol)
@@ -328,7 +329,8 @@ def test_post_cost_polish_repairs_sequence_downstream():
         Task(id=2, x=520.0, y=0.0, z=0.0, reward=5.0, earliest=0.0,
              latest=1e6, arrival_time=0.0),
     ]
-    # 本测试依赖跨机改派触发下游重解：L3b 总闸默认关，须显式开
+    # 本测试依赖跨机改派触发下游重解：显式开总闸固定口径
+    # （2026-11-07 起纯默认档已默认开）
     # （算子本身的行为未改，只是不再默认启用）。
     prob, ev = _mk(
         tasks, uavs, nests,

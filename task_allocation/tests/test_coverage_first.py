@@ -354,7 +354,7 @@ def test_polish_assignment_without_guard_accepts_improvement_when_not_blind():
     ev = _StubEvaluator(base_exec={0, 1}, cand_exec={0},
                         base_fitness=100.0, cand_fitness=50.0)
     # 三个覆盖开关全关 ⇒ 非覆盖盲；L3b 显式开以产出跨机候选
-    # （统一总闸默认关，否则本用例测不到任何邻域候选）。
+    # （总闸口径见 MUASStageConfig；2026-11-07 起纯默认档默认开）。
     cfg = MUASStageConfig(l3b_enabled=True)
     pr = _stub_result(ev, [(0, 0), (1, 1)], cfg)
     assert pr.n_accepted_total >= 1, "非门禁口径应按适应度接受改进候选"

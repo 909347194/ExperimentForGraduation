@@ -154,7 +154,8 @@ def test_relocate_rescues_misassigned_task():
 
     base = [(0, 0), (0, 1)]                      # 全压给 uav0（远）
     r_base = ev.evaluate(base)
-    # L3b 总闸默认关；本用例验证 relocate 算子本身，显式开总闸。
+    # 本用例验证 relocate 算子本身；显式开总闸固定口径
+    # （2026-11-07 起纯默认档已默认开）。
     res = polish_assignment(ev, base, MUASStageConfig(l3b_enabled=True))
 
     assert res.n_accepted.get("relocate", 0) >= 1, (
@@ -270,7 +271,8 @@ def test_coverage_guard_tracks_current_best_not_initial():
     ev.problem = _Problem()
     res = polish_assignment(
         ev, [(0, 0), (1, 1)],
-        # 需跨机候选才能触发守护回归；L3b 总闸默认关，显式开。
+        # 需跨机候选才能触发守护回归；显式开总闸固定口径
+        # （2026-11-07 起纯默认档已默认开）。
         MUASStageConfig(polish_enabled=True, l3b_enabled=True),
     )
     # 守护必须守住修复链新增的完成量：交付解仍含任务2。
@@ -332,12 +334,16 @@ def test_stage_config_validates_polish_fields():
         MUASStageConfig(polish_max_evals=0)
     with pytest.raises(ValueError, match="polish_eps"):
         MUASStageConfig(polish_eps=-1.0)
-    # 默认档：旧键为 None 哨兵，L3b 总闸关 ⇒ 有效移动集只剩 L3a 的 position
+    # 默认档（2026-11-07 起 L3b 默认开）⇒ 三移动齐全
     assert set(DEFAULT_MOVES) == {"relocate", "swap", "position"}
     base = MUASStageConfig()
     assert base.polish_moves is None
-    assert base.effective_polish_moves == ("position",)
-    # 显式开总闸 ⇒ 三移动齐全（旧 config 逐位保义）
+    assert base.effective_polish_moves == DEFAULT_MOVES
+    # 显式关总闸 ⇒ 只剩 L3a 的 position（消融通道仍可用）
+    assert (
+        MUASStageConfig(l3b_enabled=False).effective_polish_moves
+        == ("position",)
+    )
     assert (
         MUASStageConfig(l3b_enabled=True).effective_polish_moves
         == DEFAULT_MOVES

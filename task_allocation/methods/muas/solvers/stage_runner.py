@@ -538,11 +538,10 @@ def run_selective_muas(
                 new_exec = set(cand.executed_task_ids)
                 cand_late = float(problem.soft_violation(cand))
                 cur_late = float(problem.soft_violation(final))
-                # P3-a 双判据对照（定稿 §4.2）：path 视图 = 旧语义（航程
-                # 分量门，与 method-phase1 逐位可比）；f 视图 = 统一目标
-                # 判据（f(cand)<f(cur)−ε 且 n_hard/执行集/迟到/超限逐分量
-                # 不退化）。两视图都算，mode 决定采纳哪一个；差异进
-                # diagnostics 供 P4 开关对照，禁止静默替换。
+                # 统一采纳判据（定稿 §11.9）：一律走 accept_f_view
+                # （f 严格改进且 n_hard/执行集/迟到/超限逐分量不退化）。
+                # accept_cost_polish_view 仍计算，但只作 P0 判据漂移审计，
+                # **不再参与采纳**；历史 "path" 取值仅为兼容别名，不改行为。
                 accept_path = constraint_spec.accept_cost_polish_view(
                     old_exec, new_exec, int(cand_n_hard), int(final_n_hard),
                     float(cand_excess), float(final_excess_m),
@@ -558,10 +557,13 @@ def run_selective_muas(
                     cand_excess=float(cand_excess),
                     cur_excess=float(final_excess_m),
                 )
+                # requested = 历史 config 里写的取值，仅供实验产物留痕；
+                # 生效判据恒为 f（见 mode_effective）。
                 accept_mode = str(stage_cfg.cost_polish_accept_mode).lower()
-                accepted = accept_f if accept_mode == "f" else accept_path
+                accepted = accept_f
                 cost_polish_accept.update({
                     "mode": accept_mode,
+                    "mode_effective": stage_cfg.cost_polish_accept_mode_effective,
                     "path_view": bool(accept_path),
                     "f_view": bool(accept_f),
                     "drift": bool(accept_path != accept_f),
@@ -577,7 +579,8 @@ def run_selective_muas(
                     _led_polish(
                         evaluator, "post_cost_polish", True,
                         float(final_fitness) - float(cand_fitness),
-                        f"cost_polish_accept(mode={accept_mode},"
+                        f"cost_polish_accept(mode_effective=f,"
+                        f"requested={accept_mode},"
                         f"path={int(accept_path)},f={int(accept_f)})",
                     )
                     final = cand
@@ -728,15 +731,17 @@ def run_selective_muas(
             # 交付航程的下降量（米）；f 档可为负（航程增加但迟到降更多，
             # 综合 f 更优）——这是 A1 修复后的真实行为，非异常。
             "cost_polish_enabled": bool(stage_cfg.cost_polish_enabled),
-            # P3-a 采纳判据统一（定稿 §4.2）：mode="path" 默认与
-            # method-phase1 逐位可比；"f" 走 accept_f_view。两视图结果
-            # 与漂移同时落盘，供 P4 开关对照，禁静默替换。
+            # 统一采纳判据（定稿 §11.9）：生效判据恒为 f。
+            # requested 只保留历史 config 的取值，供 exp07 产物留痕；
+            # mode_effective 恒 "f"。path 视图仍算，仅作 P0 漂移审计。
             "cost_polish_accept_mode": str(stage_cfg.cost_polish_accept_mode),
+            "cost_polish_accept_mode_effective": (
+                stage_cfg.cost_polish_accept_mode_effective
+            ),
             "cost_polish_eps_f": float(stage_cfg.cost_polish_eps_f),
             "cost_polish_accept": dict(cost_polish_accept),
-            # A1 修复证据：f 档局部搜索中「按 f 改进、但航程未下降」的
-            # 移动数（只有 accept_f_view 会采纳，accept_cost_polish_view
-            # 必然拒绝）。恒 0 ⇒ 本周期候选域里不存在判据分歧解。
+            # 统一判据下「按 f 改进、但航程未下降」的移动数（归因量）。
+            # 恒 0 ⇒ 本周期候选域里不存在判据分歧解（§11.8 正式档结论）。
             "cost_polish_n_f_only_gain": int(
                 cost_polish_stats.get("n_f_only_gain", 0)
             ),
@@ -745,10 +750,11 @@ def run_selective_muas(
             #     条件最优**，禁写全局最优）+ polish_assignment 的 position；
             #   L3b 跨机改派 = 交付后成本 polish 的 relocate +
             #     polish_assignment / 单调 polish 的 relocate。
-            # P4：§9 第 3 项「L3b 默认关」已落地（用户裁定②）——统一
-            # 总闸 l3b_enabled 默认 False，同时约束通道 A（polish_moves
-            # 的 relocate/swap）与通道 B（_cost_polish_relocate）；旧
-            # config 显式写全旧键时由映射保义为开。L3a 几何动作不受影响。
+            # 总闸 l3b_enabled 同时约束通道 A（polish_moves 的
+            # relocate/swap）与通道 B（_cost_polish_relocate）；旧 config
+            # 显式写全旧键时由映射保义为开。2026-11-07 起纯默认档
+            # **默认开**（定稿 §11.9），显式 False 为消融通道。
+            # L3a 几何动作不受影响。
             "l3a_geometric_actions": (
                 int(cost_polish_stats.get("n_2opt", 0))
                 + int(cost_polish_stats.get("n_oropt", 0))

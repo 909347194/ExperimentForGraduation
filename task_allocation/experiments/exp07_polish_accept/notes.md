@@ -285,4 +285,27 @@ p=0.423 不显著**（df=2，效能极低，不能写成「有显著收益」，
 （均被 `.gitignore` 忽略）；逐档逐 seed 的 24 个 JSON 齐全。
 代码未改，本次未重跑全量测试（上次 530 passed）。
 
+## 10. 代码落地后的复现口径（2026-11-07 下午）
+
+用户按 §9 的判断发话落地两条（详见定稿 §11.9）：交付后成本 polish
+**统一按 f 裁决**（`path` 实现分支已删），`l3b_enabled` **纯默认档默认开**。
+本实验脚手架（`run.py` / `compare_l3b.py` / `config.py` / `config.yaml` /
+`metrics.py`）**一行未改**，理由是保住两组正式档的可复现性：
+
+* `cost_polish_accept_mode="path"` 现在是**兼容别名**：生产代码不再读取它，
+  任何取值都按统一 f 裁决。本实验仍能跑（两档必然相同），
+  `config diff` 仍只有该字段不同；诊断新增
+  `cost_polish_accept_mode_effective`（恒 `"f"`）与
+  `cost_polish_accept.mode_effective` 留痕。
+* 需要**逐位复现原始双判据行为**（例如重做 A1 修复前的对照）时，
+  checkout 附注标签 **`p4-exp07-formal`**（指向落地前提交 `0962bc5`）。
+* `l3b_enabled` 显式 `false` / `off` / `on` 不受默认翻转影响，
+  本实验两次正式档跑批的所有数值继续有效。
+
+**验证**：全量 531 passed；mid 档两组各 3 seed 重跑与落地前
+`results/_baseline/` 比对，2 份 summary 全部配对质量指标 +
+12 份逐档 `metrics.json` × 11 个质量字段**零差异**，唯一差异是墙钟
+（机器负载）。日志 `results/verify_mid.log`，`VERIFY_RC=0`。
+
+
 

@@ -142,7 +142,8 @@ def test_relocate_end_to_end_via_post_cost_polish():
     nests = [Nest(id=0, x=0.0, y=0.0, z=0.0, capacity=10, available=True)]
     uavs = [_uav(0, 0.0), _uav(1, 250.0)]
     tasks = [_task(0, 0.0), _task(1, 300.0)]
-    # L3b 总闸默认关；本用例验证通道 B 的端到端改派，显式开总闸。
+    # 本用例验证通道 B 的端到端改派；显式开总闸固定口径
+    # （2026-11-07 起纯默认档已默认开）。
     prob, ev = _mk(
         tasks, uavs, nests,
         stage_cfg=MUASStageConfig(l3b_enabled=True),
@@ -263,14 +264,19 @@ def test_relocate_switch_off_skips_dimension():
     assert sol_after is sol_before, "关闭时必须原样返回"
 
 
-def test_l3b_gate_default_off_and_legacy_mapping():
-    """L3b 统一总闸默认关；显式开 / 旧键映射各自恢复两个通道。"""
+def test_l3b_gate_default_on_and_legacy_mapping():
+    """L3b 统一总闸 2026-11-07 起默认开；显式关仍是可用的消融通道。"""
     cfg = MUASStageConfig()
-    assert cfg.effective_l3b_enabled is False, "拍板默认：L3b 关"
-    assert cfg.effective_cost_polish_relocate is False
-    assert cfg.effective_polish_moves == ("position",)
+    assert cfg.effective_l3b_enabled is True, "2026-11-07 拍板默认：开"
+    assert cfg.effective_cost_polish_relocate is True
+    assert cfg.effective_polish_moves == ("relocate", "swap", "position")
     assert cfg.l3b_source == "default"
-    # 显式新键开 ⇒ 通道 A（moves）+ 通道 B（relocate）同时恢复
+    # 显式新键关 ⇒ 通道 A / B 同时禁归属动作（消融口径）
+    off = MUASStageConfig(l3b_enabled=False)
+    assert off.effective_l3b_enabled is False
+    assert off.effective_cost_polish_relocate is False
+    assert off.effective_polish_moves == ("position",)
+    # 显式新键开 ⇒ 两通道仍可用
     on = MUASStageConfig(l3b_enabled=True)
     assert on.effective_l3b_enabled is True
     assert on.effective_cost_polish_relocate is True

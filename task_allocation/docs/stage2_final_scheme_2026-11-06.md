@@ -306,7 +306,7 @@ R3（竞争与修复候选池结构性双轨）属另一维度的改法，暂不
 | 1 | 原始候选独立评价 | `S_raw` 独立求值 `f_eval^raw`；剥掉每代每体的目标改写（`_consolidate` 成本合并、`_best_order` NN/航程裁决） | `projection_only=True` | 同基因重复评价 bit-exact；`reason=opt` 动作数 = 0 |
 | 2 | 可行性优先的 DMDE 竞争 | 默认 Deb 三规则（可行优于不可行 / 两可行比目标 / 两不可行比违反量），作用在**内部选择标量 `F_sel`**；DE 变异、交叉、反映射**一律不动** | `compare_mode`（默认 `deb`；`epsilon` / `lagaros` 为可选对照档） | 完成率恒 100%；精英冻结指标达 P1 闸门；与 v1 同一套 `CompareSpec` 组件，不重复建设 |
 | 3 | 可选硬约束修复候选 | `decode_mode="constructive"` + `projection_only` 子模式；修复比例 / 回写比例可配；失败三分流 | `repair_replacement`（默认 0 = Baldwin）、`max_passes`、`repair_enabled` | `n_repair_failed` 独立计数；硬约束向量全零；不动点收敛断言 |
-| 4 | 可选受限交付精修 | L3a 默认开、L3b 默认关；采纳判据统一为 `f` | `polish_enabled`、`polish_relocate` | 完成「几何 vs 救回任务」收益拆分；L3b 单记 `task_to_uav` 变动 |
+| 4 | 可选受限交付精修 | L3a 默认开、L3b **默认开**（2026-11-07 起，见 §11.9）；采纳判据统一为 `f`（`path` 仅兼容别名） | `polish_enabled`、`l3b_enabled` | 完成「几何 vs 救回任务」收益拆分；L3b 单记 `task_to_uav` 变动 |
 | 5 | 独立交付验收 | 独立事后评价器重建 + 重评 | — | §4.3 五条门槛 |
 | 6 | 完整搜索轨迹与消融 | `DecisionLedger` 默认开（纯观测）+ `ConstraintSpec` 唯一判据 + 三级/2×2 消融 | `ledger_enabled=True` | 台账 `reason` / `constraint_id` 覆盖率 100%；每笔 Δ 可回溯到 `ledger_id` |
 
@@ -1006,5 +1006,77 @@ P4 其余实验（收益拆分 / MCF 层1-层3 对照 / 三级消融 / 重跑基
 仅文档：`docs §11.8`、`exp07/notes.md §9`、
 `.workbuddy/memory/2026-11-07.md`。代码与默认值**零改动**；
 本次未重跑全量测试（代码未变，上次 530 passed）。
+
+---
+
+## 11.9 两条去留判断的代码落地（2026-11-07 下午）
+
+用户发话「按上面两条把代码落地；P4 其余实验」，据此把 §11.8 第 4 节
+从判断升级为实现。**代码、默认值、测试、文档同步落地，实验脚手架零改动。**
+
+### 1. 采纳判据统一到 `f`（去掉 `path` 分支）
+
+* `stage_config.py`：默认 `"path"` → **`"f"`**；新增只读 property
+  `cost_polish_accept_mode_effective` 恒返回 `"f"`；`"path"` 保留为
+  **兼容别名**（校验仍接受，但没有任何实现分支读它）。
+* `route_polish.py`：`_cost_polish_criterion()` 恒返回
+  `("f", λ·航程 + w_late·迟到, cost_polish_eps_f)`；删掉
+  `_cost_polish_routes` / `_cost_polish_relocate` 里全部
+  `if mode == "path"` 的航程门分支与 `if mode == "f"` 的条件判断，
+  `n_f_only_gain` 改为恒记录。米制 `cost_polish_eps` 退为**归因计数**
+  （`blocked_range` / `blocked_late`）专用，不再拦采纳。
+* `stage_runner.py`：`accepted = accept_f`（不再由 mode 决定）；
+  `accept_cost_polish_view` 仍计算但只作 P0 判据漂移审计；新增诊断
+  `cost_polish_accept_mode_effective` 与 `cost_polish_accept.mode_effective`。
+  `cost_polish_accept_mode` 诊断字段保留**请求值**，供 exp07 历史产物留痕。
+* **为什么字段没删干净**：实验脚手架（`exp07/run.py`、`compare_l3b.py`、
+  `config.py`、`config.yaml`、`metrics.py`）与正式档产物都按
+  `dataclasses.replace(..., cost_polish_accept_mode=...)` 锁定唯一对照变量。
+  彻底删字段会让已归档的两组正式档**无法用当前代码复现**。本项目按
+  「历史实验可复现优先」保留兼容键，语义上开关已经取消（任何取值同行为）。
+  落地前的完整双判据代码由附注标签 **`p4-exp07-formal`（→ `0962bc5`）**
+  归档，需要逐位复现原始两档时 checkout 该标签。
+
+### 2. `l3b_enabled` 纯默认档翻为开
+
+* `effective_l3b_enabled` 优先级不变（显式新键 > 旧 config 保义映射），
+  只把**三者均未设**的纯默认档从 `False` 改为 **`True`**。
+* 显式 `l3b_enabled=False` 消融通道、旧键 `legacy_on/legacy_off`
+  保义映射、`l3b_source` / `l3b_legacy_conflict` 诊断全部不变。
+* 影响面（§11.8 已论证）：`exp01_smoke/config.yaml:365` 只写旧键
+  `cost_polish_relocate_enabled: true` ⇒ 主链路一直是开，**翻默认对
+  exp01 数值无影响**；exp07 显式写 `false` 也不受影响。真正变化的是
+  纯 `MUASStageConfig()` 默认档（回到 `010b136` / `method-phase1`
+  的开态），以及断言默认关的单测 —— 已全部改为显式配置固定口径。
+
+### 3. 验证
+
+* 全量 **531 passed**（原 530 + 新增 1 项统一判据契约测试；
+  `test_p4_accept_criterion.py` 从「证明两档不同」重写为「证明别名与
+  f 同行为、两档交付解逐位相同」）。
+* **bit-exact 核验**：重跑 mid 档两组各 3 seed（`VERIFY_RC=0`），
+  与落地前 `results/_baseline/` 逐字段比对：
+  2 份 summary 的全部配对质量指标 + 12 份逐档 `metrics.json` ×
+  11 个质量字段 **零差异**；唯一差异是 `wall_seconds` 及其派生 p 值
+  （机器负载，非数值口径）。配置 diff 仍各只有 1 个字段、铁律全过。
+* 两组正式档（`results/formal/`、`results/l3b_formal/`）用的是**显式档**
+  （`l3b_enabled` 显式 off/on、`cost_polish_accept_mode` 显式 path/f），
+  因此本次落地不改变其任何数值；§11.8 的结论继续有效。
+
+### 4. 口径声明（覆盖历史表述）
+
+§11.4 / §11.5 / §11.7、§11.8 与 `exp07/notes.md` §8 中出现的
+「L3b 默认关」「`cost_polish_accept_mode` 默认仍 `path`」「默认档
+bit-exact」等均为 **2026-11-07 落地前**的口径，自本节起不再生效；
+历史章节作为时间线证据保留，不回改。§4.2「采纳判据统一到 f」与
+§6 要素 4 表格已同步。
+
+### 5. 仍未解决
+
+`independent_audit` 几何重建重评（缺 `RollingHorizon` 审计钩子）、
+§4.3 第 2 条「双开」与生产默认 `coverage_gate=False` 的张力、
+`projection_only=False` / `compare_mode="penalty"` 与 §6 表格不一致、
+`coverage_first` 单调 polish 跨机 relocate 是否纳入总闸（第三来源）。
+
 
 

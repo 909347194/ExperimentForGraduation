@@ -1,14 +1,13 @@
 # -*- coding: utf-8 -*-
-"""P4 A1 修复契约：f 档局部搜索必须能看到 path 档看不到的候选。
+"""统一采纳判据契约（2026-11-07 收口，定稿 §11.9）。
 
-背景（审查 A1）：修复前 ``post_cost_polish`` 的成本门恒为「航程严格下降」，
-迟到门又要求迟到不增，于是产出的候选必然同时满足 ``accept_cost_polish_view``
-与 ``accept_f_view`` ⇒ 两个采纳判据永远同真同假，A/B 在结构上测不出任何东西。
+背景：交付后成本 polish 曾有 ``path``（航程分量门）与 ``f``（完整目标）
+双视图。冒烟 / mid / 正式三档规模共 9 组同 seed 配对（定稿 §11.8）证明
+两档交付解逐位相同、``f_only_gain`` 全 0 ⇒ 双视图属于不需要的复杂性，
+``path`` 实现分支已删；``cost_polish_accept_mode="path"`` 退化为**兼容
+别名**，行为与 ``f`` 完全相同（历史实验产物因此仍可复现）。
 
-修复：``mode="f"`` 时局部搜索改按 ``λ·航程 + w_late·迟到`` 判改进，允许
-「航程略增、迟到降得更多」的移动；``mode="path"`` 走原代码路径（bit-exact）。
-
-本测试用注入的 tour 代价构造一个最小分歧场景（不依赖 DEM/建筑/DE 搜索）：
+本测试用注入的 tour 代价构造最小分歧场景（不依赖 DEM/建筑/DE 搜索）：
 
 ====================  ==========  =============
 tours                  航程(m)     迟到(s)
@@ -17,11 +16,9 @@ tours                  航程(m)     迟到(s)
 2-opt 候选 [1, 0]      1005        0
 ====================  ==========  =============
 
-* path 档：``1005 >= 1000 - 1`` ⇒ 拒绝，零接受；
-* f 档：``0.1×1005 + 0.01×0 = 100.5 < 0.1×1000 + 0.01×200 - 1e-6 = 102``
-  ⇒ 接受，且 ``n_f_only_gain = 1``。
-
-两档交付解因此不同 ⇒ 判据对照不再冗余。
+统一 f 评分：``0.1×1005 + 0.01×0 = 100.5 < 0.1×1000 + 0.01×200 − 1e-6 = 102``
+⇒ 接受。历史上 path 档会拒绝该移动；现在 path 别名也必须接受，且两档
+交付解逐位相同（§11.8 的「零数值变化」在单元级反证）。
 """
 
 from __future__ import annotations
@@ -65,42 +62,40 @@ def _run(mode: str):
     return obj._cost_polish_routes({0: list(BASE)}, {0: 0})
 
 
-def test_criterion_units():
-    """两档评分函数与阈值单位不同，禁止混用。"""
-    p = _polisher("path")
-    f = _polisher("f")
-    m_p, s_p, e_p = p._cost_polish_criterion()
-    m_f, s_f, e_f = f._cost_polish_criterion()
-    assert (m_p, e_p) == ("path", 1.0)
-    assert (m_f, e_f) == ("f", 1e-6)
-    # path 档评分与迟到无关
-    assert s_p(1005.0, 0.0) == 1005.0
-    assert s_p(1005.0, 200.0) == 1005.0
-    # f 档：0.1·m + 0.01·s
-    assert abs(s_f(1000.0, 200.0) - 102.0) < 1e-9
-    assert abs(s_f(1005.0, 0.0) - 100.5) < 1e-9
-    assert s_f(1005.0, 0.0) < s_f(1000.0, 200.0), "航程略增但迟到降更多 ⇒ f 更优"
+def test_default_is_f_and_effective_mode_is_always_f():
+    """默认档翻 f；无论 requested 写什么，生效判据恒为 f。"""
+    assert MUASStageConfig().cost_polish_accept_mode == "f"
+    for mode in ("f", "path"):
+        cfg = MUASStageConfig(cost_polish_accept_mode=mode)
+        assert cfg.cost_polish_accept_mode_effective == "f"
 
 
-def test_path_mode_rejects_and_is_bit_exact():
-    """path 档零接受、解逐位不变（与修复前语义一致）。"""
-    work, ends, stats = _run("path")
-    assert work == {0: [0, 1]}
-    assert ends == {0: 0}
-    assert stats["n_2opt"] + stats["n_oropt"] == 0
-    assert "n_f_only_gain" not in stats, "path 档不得新增诊断键（bit-exact）"
+def test_criterion_is_always_f_with_f_units():
+    """局部搜索目标恒为 f 评分，阈值恒为 f 单位（不随别名变化）。"""
+    for mode in ("f", "path"):
+        m, s, eps = _polisher(mode)._cost_polish_criterion()
+        assert (m, eps) == ("f", 1e-6)
+        assert abs(s(1000.0, 200.0) - 102.0) < 1e-9
+        assert abs(s(1005.0, 0.0) - 100.5) < 1e-9
+        assert s(1005.0, 0.0) < s(1000.0, 200.0), "航程略增但迟到降更多 ⇒ f 更优"
 
 
-def test_f_mode_accepts_path_would_reject():
-    """f 档接受该移动，并如实记为「只有 f 判据会采纳」。"""
+def test_f_mode_accepts_late_reducing_move():
+    """f 判据接受「航程 1000→1005、迟到 200→0」的 2-opt，并留归因量。"""
     work, ends, stats = _run("f")
-    assert work == {0: [1, 0]}, "f 档应接受航程 1000→1005、迟到 200→0 的 2-opt"
+    assert work == {0: [1, 0]}
+    assert ends == {0: 0}
     assert stats["n_2opt"] == 1
     assert stats["n_f_only_gain"] == 1
 
 
-def test_two_modes_produce_different_delivered_solution():
-    """结构性结论：两档交付解不同 ⇒ 判据对照不再冗余。"""
-    path_work, _, _ = _run("path")
-    f_work, _, _ = _run("f")
-    assert path_work != f_work
+def test_legacy_path_alias_accepts_same_move():
+    """path 只是兼容别名，不再走「航程严格下降」的旧门。"""
+    work, _, stats = _run("path")
+    assert work == {0: [1, 0]}, "path 别名必须与 f 档行为一致"
+    assert stats["n_f_only_gain"] == 1
+
+
+def test_two_modes_produce_identical_delivered_solution():
+    """零数值变化：两档交付解逐位相同（§11.8 正式档结论的单元级佐证）。"""
+    assert _run("path")[0] == _run("f")[0]

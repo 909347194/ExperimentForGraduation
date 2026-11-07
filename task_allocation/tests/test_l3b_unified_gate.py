@@ -97,14 +97,14 @@ def _run(stage_cfg=None, seed=7):
 # ---------------------------------------------------------------------------
 
 
-def test_default_gate_is_off_and_only_l3a_moves_remain():
+def test_default_gate_is_on_and_both_channels_available():
     cfg = MUASStageConfig()
     assert cfg.l3b_enabled is None, "None 哨兵 = 未显式设置"
-    assert cfg.effective_l3b_enabled is False, "拍板默认：关"
+    assert cfg.effective_l3b_enabled is True, "2026-11-07 拍板默认：开"
     assert cfg.l3b_source == "default"
     assert cfg.l3b_legacy_conflict is False
-    assert cfg.effective_cost_polish_relocate is False, "通道 B 关"
-    assert cfg.effective_polish_moves == (MOVE_POSITION,), "通道 A 只剩 L3a"
+    assert cfg.effective_cost_polish_relocate is True, "通道 B 开"
+    assert cfg.effective_polish_moves == DEFAULT_MOVES, "通道 A 全开"
 
 
 def test_explicit_on_restores_both_channels():
@@ -188,15 +188,16 @@ def test_replace_is_idempotent():
 
 
 # ---------------------------------------------------------------------------
-# 2. 行为边界：默认关 vs 显式开（同 seed）
+# 2. 行为边界：显式关 vs 默认开（同 seed）
 # ---------------------------------------------------------------------------
 
 
 def test_gate_off_diagnostics_and_completion_are_clean():
-    off = _run(MUASStageConfig(), seed=7).diagnostics
+    # 2026-11-07 起纯默认档为开；消融档必须显式关。
+    off = _run(MUASStageConfig(l3b_enabled=False), seed=7).diagnostics
     assert off["l3b_enabled"] is False
     assert off["l3b_enabled_observed"] is False
-    assert off["l3b_source"] == "default"
+    assert off["l3b_source"] == "explicit"
     assert off["l3b_legacy_conflict"] is False
     assert off["l3b_relocate_actions"] == 0, "两个受控通道都不得改归属"
     assert off["l3b_ungated_monotone_relocate"] == 0, "coverage_first 默认关"

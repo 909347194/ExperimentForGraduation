@@ -166,43 +166,33 @@ class RoutePolishMixin:
         return work, ends, stats
 
     def _cost_polish_criterion(self) -> tuple[str, Any, float]:
-        """交付后成本 polish 的**局部搜索目标**（P4 A1 修复，定稿 §4.2）。
+        """交付后成本 polish 的**局部搜索目标**（统一判据，定稿 §11.9）。
 
-        返回 ``(mode, score(cost_m, late_s), eps)``，score 越小越好。
+        返回 ``("f", score(cost_m, late_s), eps_f)``，score 越小越好::
 
-        * ``mode="path"``（默认）：``score = 航程(米)``，``eps =
-          cost_polish_eps``（米）。与历史实现**逐位一致**（调用点保留原
-          短路顺序，不多算 ``_late_key``）。
-        * ``mode="f"``：``score = λ·航程(米) + w_late·迟到(秒)``，``eps =
-          cost_polish_eps_f``（f 单位）。此时「航程略增、但迟到降得更多」
-          的移动可被局部搜索接受 —— 这是两档**唯一**的行为差异，也是
-          ``accept_f_view`` 相对 ``accept_cost_polish_view`` 的分歧来源。
+            score = λ·航程(米) + w_late·迟到(秒)
+            eps   = cost_polish_eps_f（f 单位）
 
-        ⚠️ 修复前的结构缺陷：局部搜索成本门恒为「航程严格下降」，迟到门
-        又要求迟到不增，于是产出的候选必然同时满足两个视图 ⇒ 双视图永远
-        同真同假，无论跑多少 seed / 多大规模都测不出判据差异。修复后
-        ``f`` 档用自己的目标搜索，候选域不再被 path 门截断。
+        2026-11-07 收口：历史 ``path`` 档（航程分量门 + 米制 eps）经
+        冒烟 / mid / 正式三档规模共 9 组同 seed 配对（定稿 §11.8）与
+        f 档交付解逐位相同，且当前候选域不存在「航程略增、迟到降更多」
+        的移动 ⇒ 双视图是不需要的复杂性，``path`` 实现分支已删；
+        ``cost_polish_accept_mode="path"`` 仅作历史 config 的兼容别名，
+        本函数不再读取它。P4 A1 修复保留在 f 档实现里：成本门按 f
+        评分，候选域不再被「航程严格下降」截断。
 
         本评分只**引导搜索方向**，不是最终采纳判据：最终仍由
-        ``stage_runner`` 用 ``problem.scalar_fitness`` 重算两视图裁决。
-        下游重解（重排/换巢/航程闸）会改变航程与迟到，故内部评分与最终
-        f 允许不完全相等，差异如实进 diagnostics。
+        ``stage_runner`` 用 ``problem.scalar_fitness`` 重算并走
+        ``accept_f_view``（f 严格改进 + 约束向量不退化）。
         """
-        mode = str(getattr(self.config, "cost_polish_accept_mode", "path")).lower()
-        if mode == "f":
-            lam = float(getattr(self.problem.config, "lambda_cost", 0.1))
-            wv = self.problem.late_weight()
-            w_late = 0.0 if wv is None else float(wv)
+        lam = float(getattr(self.problem.config, "lambda_cost", 0.1))
+        wv = self.problem.late_weight()
+        w_late = 0.0 if wv is None else float(wv)
 
-            def score(cost_m: float, late_s: float) -> float:
-                return lam * cost_m + w_late * late_s
+        def score(cost_m: float, late_s: float) -> float:
+            return lam * cost_m + w_late * late_s
 
-            return "f", score, float(getattr(self.config, "cost_polish_eps_f", 1e-6))
-        return (
-            "path",
-            lambda cost_m, late_s: cost_m,
-            float(self.config.cost_polish_eps),
-        )
+        return "f", score, float(getattr(self.config, "cost_polish_eps_f", 1e-6))
 
     def _cost_polish_routes(
         self,
@@ -218,7 +208,8 @@ class RoutePolishMixin:
         2. **迟到门**：候选迟到键 ``(数, 总量)`` 逐分量不差于基线——
            不制造新违约、不加深旧违约（⇒ ``soft_violation`` 不增）；
         3. **执行集门**：置换由构造保持任务集（采纳端再复核）；
-        4. **成本门**：航程严格下降 > ``cost_polish_eps`` 才采纳；
+        4. **成本门**：f 评分（λ·航程 + w_late·迟到）严格下降
+           > ``cost_polish_eps_f`` 才采纳；
         5. **时序门**：候选同链逆序对不得多于基线——2-opt 反转/
            Or-opt 迁移可能破坏 ``sequence_order``，此前缺门会把硬违约当
            “改进”收进来（``sequence_group`` 全空时恒过 ⇒ 零行为变化）。
@@ -229,12 +220,13 @@ class RoutePolishMixin:
         """
         work: dict[int, list[int]] = {k: list(v) for k, v in routes.items()}
         ends: dict[int, int | None] = dict(end_nests)
-        mode, score_of, eps = self._cost_polish_criterion()
+        _, score_of, eps = self._cost_polish_criterion()
         max_rounds = max(1, int(self.config.cost_polish_max_rounds))
-        stats = {"n_2opt": 0, "n_oropt": 0, "n_rounds": 0, "converged": 0}
-        if mode == "f":
-            # 只有 f 判据会采纳、path 判据必然拒绝的移动数（A1 修复生效证据）
-            stats["n_f_only_gain"] = 0
+        stats = {
+            "n_2opt": 0, "n_oropt": 0, "n_rounds": 0, "converged": 0,
+            # 按统一 f 判据改进、但航程未下降的移动数（归因量，恒记录）
+            "n_f_only_gain": 0,
+        }
 
         def cost_of(uid: int, tids: Sequence[int]) -> float:
             return self._tour_cost(uid, tids, ends.get(uid))
@@ -267,25 +259,19 @@ class RoutePolishMixin:
                         c = cost_of(uid, cand)
                         if c > limit + 1e-6:
                             continue
-                        if mode == "path":
-                            # 历史路径：成本门先短路，逐位不变
-                            if c >= base_cost - eps:
-                                continue
-                            late_n, late_t = self._late_key(uid, cand)
-                        else:
-                            # f 档：按 λ·航程 + w_late·迟到 判改进，允许
-                            # 航程不降（甚至略增）而迟到降得更多
-                            late_n, late_t = self._late_key(uid, cand)
-                            if (
-                                score_of(c, late_t)
-                                >= score_of(base_cost, base_late[1]) - eps
-                            ):
-                                continue
+                        # 统一 f 判据：按 λ·航程 + w_late·迟到 判改进，允许
+                        # 航程不降（甚至略增）而迟到降得更多
+                        late_n, late_t = self._late_key(uid, cand)
+                        if (
+                            score_of(c, late_t)
+                            >= score_of(base_cost, base_late[1]) - eps
+                        ):
+                            continue
                         if late_n > base_late[0] or late_t > base_late[1] + 1e-6:
                             continue
                         if seq_pairs(cand) > base_seq:
                             continue  # 时序门：不得制造新的同链逆序
-                        if mode == "f" and c >= base_cost - 1e-9:
+                        if c >= base_cost - 1e-9:
                             stats["n_f_only_gain"] += 1
                         work[uid] = cand
                         stats["n_2opt"] += 1
@@ -309,22 +295,17 @@ class RoutePolishMixin:
                                 c = cost_of(uid, cand)
                                 if c > limit + 1e-6:
                                     continue
-                                if mode == "path":
-                                    if c >= base_cost - eps:
-                                        continue
-                                    late_n, late_t = self._late_key(uid, cand)
-                                else:
-                                    late_n, late_t = self._late_key(uid, cand)
-                                    if (
-                                        score_of(c, late_t)
-                                        >= score_of(base_cost, base_late[1]) - eps
-                                    ):
-                                        continue
+                                late_n, late_t = self._late_key(uid, cand)
+                                if (
+                                    score_of(c, late_t)
+                                    >= score_of(base_cost, base_late[1]) - eps
+                                ):
+                                    continue
                                 if late_n > base_late[0] or late_t > base_late[1] + 1e-6:
                                     continue
                                 if seq_pairs(cand) > base_seq:
                                     continue  # 时序门：不得制造新的同链逆序
-                                if mode == "f" and c >= base_cost - 1e-9:
+                                if c >= base_cost - 1e-9:
                                     stats["n_f_only_gain"] += 1
                                 work[uid] = cand
                                 stats["n_oropt"] += 1
@@ -359,7 +340,8 @@ class RoutePolishMixin:
         2. **迟到门**：两侧迟到键 ``(数, 总量)`` 逐分量不差于基线——
            不制造新违约、不加深旧违约（⇒ ``soft_violation`` 不增）；
         3. **执行集门**：改派保持任务集（采纳端再以 executed ⊇ 旧解复核）；
-        4. **成本门**：Δ < −``cost_polish_eps`` 才采纳；
+        4. **成本门**：f 评分（λ·航程 + w_late·迟到）严格下降
+           > ``cost_polish_eps_f`` 才采纳；
         5. **时序门（保守）**：``sequence_group`` 非空的链成员
            禁止跨机迁移（``blocked_seq`` 计数）——跨机顺序比对口径未实现，
            拆链即进入无人判的盲区；待跨机口径落地后放开。
@@ -371,7 +353,7 @@ class RoutePolishMixin:
         """
         work: dict[int, list[int]] = {k: list(v) for k, v in routes.items()}
         ends: dict[int, int | None] = dict(end_nests)
-        mode, score_of, eps = self._cost_polish_criterion()
+        _, score_of, eps = self._cost_polish_criterion()
         max_rounds = max(1, int(self.config.cost_polish_max_rounds))
         all_uavs = sorted(self._uav_by_id)
         stats = {
@@ -381,9 +363,9 @@ class RoutePolishMixin:
             "blocked_range": 0,
             "blocked_late": 0,
             "blocked_seq": 0,
+            # 按统一 f 判据改进、但航程未下降的归属移动数（归因量）
+            "n_f_only_gain": 0,
         }
-        if mode == "f":
-            stats["n_f_only_gain"] = 0
 
         for round_idx in range(max_rounds):
             stats["n_rounds"] = round_idx + 1
@@ -434,9 +416,8 @@ class RoutePolishMixin:
                         base_dst_late = (
                             self._late_key(dst, dst_tids) if dst_tids else (0, 0.0)
                         )
-                        # 全部插入位中通过两道门的最便宜者（并列取最前位）。
-                        # path 档 best_score 恒等于 best_cost ⇒ 历史逐位不变；
-                        # f 档改按 λ·航程 + w_late·迟到 选最优插入位。
+                        # 全部插入位中通过两道门的最便宜者（并列取最前位），
+                        # 统一按 λ·航程 + w_late·迟到 的 f 评分选最优插入位。
                         best_score = float("inf")
                         best_cost = float("inf")
                         best_late = 0.0
@@ -452,7 +433,7 @@ class RoutePolishMixin:
                             ln, lt = self._late_key(dst, cand)
                             if ln > base_dst_late[0] or lt > base_dst_late[1] + 1e-6:
                                 continue  # 迟到门
-                            s = score_of(c, lt) if mode == "f" else c
+                            s = score_of(c, lt)
                             if s < best_score - 1e-12:
                                 best_score = s
                                 best_cost = c
@@ -474,21 +455,17 @@ class RoutePolishMixin:
                             continue
                         cand_sum_cost = src_cost_new + best_cost
                         base_sum_cost = base_src_cost + base_dst_cost
-                        if mode == "f":
-                            cand_sum_score = score_of(
-                                cand_sum_cost, src_late_new[1] + best_late
-                            )
-                            base_sum_score = score_of(
-                                base_sum_cost,
-                                base_src_late[1] + base_dst_late[1],
-                            )
-                        else:
-                            cand_sum_score = cand_sum_cost
-                            base_sum_score = base_sum_cost
+                        cand_sum_score = score_of(
+                            cand_sum_cost, src_late_new[1] + best_late
+                        )
+                        base_sum_score = score_of(
+                            base_sum_cost,
+                            base_src_late[1] + base_dst_late[1],
+                        )
                         if cand_sum_score >= base_sum_score - eps:
-                            continue  # 成本门：按本档目标非严格下降
+                            continue  # 成本门：统一 f 评分未严格下降
                         # ── 采纳 ─────────────────────────────────────
-                        if mode == "f" and cand_sum_cost >= base_sum_cost - 1e-9:
+                        if cand_sum_cost >= base_sum_cost - 1e-9:
                             stats["n_f_only_gain"] += 1
                         work[src] = src_new
                         work[dst] = list(best_cand)
@@ -525,8 +502,9 @@ class RoutePolishMixin:
            （改序/改派会改末任务 ⇒ 返航腿与巢容量竞争都变）→ 航程闸 →
            逆序兜底 → 重装配。
 
-        调用方按「执行集 ⊇ 旧解 且 硬违约不增 且 交付航程严格下降」
-        择优采纳（见 ``run_selective_muas``）；被拒则交付解保持原样。
+        调用方按统一判据 ``accept_f_view``（f 严格改进 + 约束向量
+        n_hard / 执行集 / 迟到 / 航程超限逐分量不退化）择优采纳
+        （见 ``run_selective_muas``）；被拒则交付解保持原样。
         """
         routes = {
             t.uav_id: list(t.task_ids) for t in solution.tours if t.task_ids

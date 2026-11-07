@@ -159,42 +159,48 @@ class MUASStageConfig:
     cost_polish_max_rounds: int = 30
     # 采纳阈值（米，绝对；吸收浮点求和噪声）。
     cost_polish_eps: float = 1.0
-    # ── P3-a 采纳判据统一（定稿 §4.2，开关对照、不静默替换）──────────
-    # "path"（默认）= 旧语义：航程分量严格下降 > cost_polish_eps（米），
-    #   与 method-phase1 逐位可比；缺陷是允许「航程降但 f 变差」被采纳
-    #   （stage_runner 已算 cand_fitness 却不进判据）。
-    # "f" = 统一判据：f(cand) < f(cur) − ε_f 且约束向量逐分量不退化
-    #   （constraints.spec.accept_f_view；向量 = n_hard / 执行集 / 迟到秒
-    #   / 航程超限）。f 是唯一货币，禁止只按单一分量裁决的旁路。
-    # 默认仍取 "path"；是否翻转由 P4 全量 A/B 决定（定稿 §4.2「迁移须
-    # 开关对照，不得静默替换」）。
-    cost_polish_accept_mode: str = "path"
-    # f 档阈值（**f 单位**，吸收浮点求和噪声）。换算基准 λ=0.1、
+    # ── 采纳判据统一（定稿 §4.2 / §11.9，2026-11-07 收口）─────────────
+    # 交付后成本 polish 一律按**统一目标 f** 裁决：f(cand) < f(cur) − ε_f
+    # 且约束向量逐分量不退化（constraints.spec.accept_f_view；向量 =
+    # n_hard / 执行集 / 迟到秒 / 航程超限）。f 是唯一货币，禁止只按单一
+    # 分量裁决的旁路。
+    # 历史 "path"（航程分量门 + 米制 eps）经冒烟 / mid / 正式三档规模
+    # 共 9 组同 seed 配对（定稿 §11.8）与 f 档交付解**逐位相同**，且
+    # 候选域里不存在「航程略增、迟到降更多」的移动 ⇒ 双视图属于不需要
+    # 的复杂性，path 实现分支已删。字段保留只为兼容历史实验 config 与
+    # 复现产物：取值 "path" 是**别名**，行为与 "f" 完全相同；唯一生效
+    # 判据见 ``cost_polish_accept_mode_effective``。
+    cost_polish_accept_mode: str = "f"
+    # f 阈值（**f 单位**，吸收浮点求和噪声）。换算基准 λ=0.1、
     # w_late=0.01/s：1 单位 f ≈ 10 m 航程 ≈ 100 s 迟到；故旧
     # cost_polish_eps=1.0（米）≈ 0.1 单位 f，两者不同单位、禁止直接复用。
+    # 米制 eps 现仅用于归因计数（blocked_range / blocked_late）。
     cost_polish_eps_f: float = 1e-6
-    # ── L3b 统一总闸（2026-11-06 用户裁定②；定稿 §9 第 3 项）──────────
+    # ── L3b 统一总闸（2026-11-06 裁定② + 2026-11-07 默认翻转）────────
     # L3b = 一切改变「任务 → UAV 归属」的交付期动作，落在两个受控通道：
     #   通道 A  polish_assignment 的 relocate / swap（polish_moves）；
     #   通道 B  交付后成本 polish 的 _cost_polish_relocate。
-    # 拍板：默认关，供「几何(L3a) vs 归属(L3b)」收益拆分做干净的 2×2
-    # 对照；单一显式开关，不做静默降级，两个通道一并通过它约束。
+    # 2026-11-06 裁定②：统一总闸 + 默认关，供收益拆分做干净的对照。
+    # 2026-11-07（定稿 §11.8 / §11.9）：正式档 3 seed 配对逐 seed 零反例
+    # 地压低成本，且 L3b 只作用于**交付后**（不参与 DE 竞争、不回写
+    # 基因，不违反一致性契约）⇒ 用户拍板把**纯默认档翻为开**。
+    # 显式 ``l3b_enabled=False`` 消融通道与旧 config 保义映射保持不变。
     #
     # **None 哨兵**：None = 未显式设置，交由旧 config 映射推导；非 None =
     # 用户（或 yaml）显式拍板，优先级最高。有效值一律只读 property
     # ``effective_l3b_enabled``，禁止直接拿本字段做判定。
     # 旧 config 映射（保义：默认翻转不得静默改掉历史实验数值）：
     #   1. 显式 ``l3b_enabled`` → 以它为准（旧细粒度键不能单独开归属维度）；
-    #   2. 未设 + 旧键显式开启 → True（``cost_polish_relocate_enabled=True``
-    #      或 ``polish_moves`` 含 relocate/swap；exp01_smoke/config.py 属此类）；
-    #   3. 三者均未设（``MUASStageConfig()``）→ **False（拍板默认）**。
+    #   2. 未设 + 旧键显式给出 → 按旧键保义（True 开 / False 关；
+    #      ``exp01_smoke/config.py`` 属 True 一类）；
+    #   3. 三者均未设（``MUASStageConfig()``）→ **True（2026-11-07 拍板默认开）**。
     # 旧键降级为「通道内细粒度开关」，按「总闸 ∧ 旧键」生效（见两个
     # ``effective_*`` property）：总闸关时旧键 True 也开不了归属维度。
     # 显式新键 False 与显式旧键 True 并存 ⇒ 新键优先；不抛错（便于
     # ``--set`` 覆盖旧 yaml），诊断记 ``l3b_legacy_conflict`` 留痕。
-    # ⚠️ 方向性变化：默认档（纯 MUASStageConfig()）自本步起不再与
-    # ``010b136`` / ``method-phase1`` 逐位一致；复现旧数值须显式
-    # ``l3b_enabled=True``（或保留写全旧键的旧 config，由映射保义）。
+    # ⚠️ 方向性变化（2026-11-07）：纯默认档回到 ``010b136`` /
+    # ``method-phase1`` 的开态；``c39d607`` 之后、本次翻转之前的默认关
+    # 数值须显式 ``l3b_enabled=False`` 才能复现。
     l3b_enabled: bool | None = None
     # ── 跨机指派成本 polish（口径约定，组内重排之后的转向）─────
     # 组内 2-opt/Or-opt 只改访问顺序；本开关打开**归属维度**（通道 B）：
@@ -450,9 +456,9 @@ class MUASStageConfig:
             raise ValueError("cost_polish_max_rounds 必须 >= 1")
         if self.cost_polish_eps < 0:
             raise ValueError("cost_polish_eps 不能为负")
-        if self.cost_polish_accept_mode not in ("path", "f"):
+        if self.cost_polish_accept_mode not in ("f", "path"):
             raise ValueError(
-                'cost_polish_accept_mode 必须是 "path"/"f"，'
+                'cost_polish_accept_mode 必须是 "f"（兼容别名 "path"），'
                 f"当前为 {self.cost_polish_accept_mode!r}"
             )
         if self.cost_polish_eps_f < 0:
@@ -505,6 +511,12 @@ class MUASStageConfig:
         """有效回写比例（0=纯 Baldwin 拍板默认；1=完整 Lamarck 对照档）。"""
         return float(self._repair_replacement_eff)
 
+    # ── 采纳判据有效口径（定稿 §11.9）──────────────────────────────
+    @property
+    def cost_polish_accept_mode_effective(self) -> str:
+        """唯一生效判据：恒为 ``"f"``；``"path"`` 只是历史 config 的别名。"""
+        return "f"
+
     # ── L3b 有效口径（唯一判定入口；property 无状态 ⇒ replace() 幂等）──
     @property
     def _l3b_legacy_on(self) -> bool:
@@ -518,10 +530,17 @@ class MUASStageConfig:
 
     @property
     def effective_l3b_enabled(self) -> bool:
-        """L3b 统一总闸有效值（False = 拍板默认，两通道同时禁归属动作）。"""
+        """L3b 统一总闸有效值（纯默认档 2026-11-07 起为 **True**）。
+
+        优先级：显式新键 > 旧 config 保义映射 > 纯默认档（默认开）。
+        显式 ``False`` 是消融通道，必须保留。
+        """
         if self.l3b_enabled is not None:
             return bool(self.l3b_enabled)
-        return bool(self._l3b_legacy_on)
+        if (self.cost_polish_relocate_enabled is not None
+                or self.polish_moves is not None):
+            return bool(self._l3b_legacy_on)
+        return True
 
     @property
     def l3b_source(self) -> str:

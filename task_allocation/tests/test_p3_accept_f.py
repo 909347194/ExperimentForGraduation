@@ -2,8 +2,8 @@
 """P3-a 测试：采纳判据统一为 f（定稿 §4.2），开关对照、默认不静默替换。
 
 契约：
-1. ``cost_polish_accept_mode`` 默认 ``"path"``（旧航程门，与 method-phase1
-   逐位可比）；``"f"`` 走 ``accept_f_view``；非法取值拒绝。
+1. ``cost_polish_accept_mode`` 默认 ``"f"``（统一判据）；``"path"`` 仅为
+   历史 config 兼容别名，行为与 f 相同；非法取值拒绝。
 2. ``cost_polish_eps_f`` 是 **f 单位**（1 f ≈ 10 m 航程 ≈ 100 s 迟到），
    与 ``cost_polish_eps=1.0``（米）不是同一单位、不复用旧值。
 3. ``accept_f_view`` 的约束向量 (n_hard, 执行集, 迟到秒, 航程超限)
@@ -126,7 +126,8 @@ def _inject_path_better_f_worse(monkeypatch) -> None:
 
 def test_config_defaults_and_validation():
     cfg = MUASStageConfig()
-    assert cfg.cost_polish_accept_mode == "path"
+    assert cfg.cost_polish_accept_mode == "f"
+    assert cfg.cost_polish_accept_mode_effective == "f"
     assert cfg.cost_polish_eps_f == 1e-6
     # 单位辨析：旧阈值是米，新阈值是 f 单位，二者不得静默等同
     assert cfg.cost_polish_eps == 1.0
@@ -177,23 +178,26 @@ def test_accept_f_view_requires_non_degrading_constraint_vector():
 
 
 # ---------------------------------------------------------------------------
-# 3. 双视图对照：path 档采纳、f 档拒绝
+# 3. 统一判据：path 别名也必须挡住「航程降但 f 变差」的候选
 # ---------------------------------------------------------------------------
 
 
-def test_path_mode_accepts_f_worse_candidate(monkeypatch):
+def test_path_alias_rejects_f_worse_candidate(monkeypatch):
+    """2026-11-07 收口：path 只是兼容别名，生效判据恒为 f。"""
     _inject_path_better_f_worse(monkeypatch)
     stage = _run(MUASStageConfig(cost_polish_accept_mode="path"))
     acc = stage.diagnostics["cost_polish_accept"]
 
     assert stage.diagnostics["cost_polish_accept_mode"] == "path"
+    assert stage.diagnostics["cost_polish_accept_mode_effective"] == "f"
+    assert acc["mode_effective"] == "f"
     assert acc["path_view"] is True
     assert acc["f_view"] is False
     assert acc["drift"] is True
-    assert acc["accepted"] is True              # 旧语义的缺陷通道
+    assert acc["accepted"] is False             # 统一判据挡住旧缺陷通道
     assert acc["delta_path_m"] > 0
     assert acc["delta_f"] < 0                  # f 确实变差了
-    assert stage.diagnostics["cost_polish_rejected"] == 0
+    assert stage.diagnostics["cost_polish_rejected"] == 1
 
 
 def test_f_mode_rejects_f_worse_candidate(monkeypatch):
@@ -245,7 +249,7 @@ def test_f_mode_accepts_genuine_f_improvement(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-def test_default_mode_is_bit_exact_with_explicit_path():
+def test_default_mode_is_bit_exact_with_legacy_path_alias():
     a = _run(MUASStageConfig())
     b = _run(MUASStageConfig(cost_polish_accept_mode="path"))
     for key in ("final_fitness", "final_path_m", "final_late_s",
@@ -253,4 +257,7 @@ def test_default_mode_is_bit_exact_with_explicit_path():
         assert a.diagnostics[key] == b.diagnostics[key], key
     assert a.solution.assignment_pairs() == b.solution.assignment_pairs()
     assert a.solution.executed_task_ids == b.solution.executed_task_ids
-    assert a.diagnostics["cost_polish_accept_mode"] == "path"
+    assert a.diagnostics["cost_polish_accept_mode"] == "f"
+    assert b.diagnostics["cost_polish_accept_mode"] == "path"
+    assert a.diagnostics["cost_polish_accept_mode_effective"] == "f"
+    assert b.diagnostics["cost_polish_accept_mode_effective"] == "f"
