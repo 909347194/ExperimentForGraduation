@@ -20,7 +20,7 @@
 
 from __future__ import annotations
 
-import random
+import warnings
 from dataclasses import dataclass
 
 import numpy as np
@@ -162,19 +162,45 @@ class PopulationEncoder:
         else:
             return "srp"
 
-    def generate(self, pop_size: int, seed: int | None = None) -> list[Individual]:
+    def generate(
+        self,
+        pop_size: int,
+        seed: int | None = None,
+        rng: "np.random.Generator | None" = None,
+    ) -> list[Individual]:
         """生成初始种群。
+
+        随机性统一取自注入的 ``np.random.Generator``（方案 B 单通道）：
+        **不触碰**全局 ``random`` / ``np.random`` 状态，同种子生成器逐位
+        可复现，且多实例并行互不干扰。
 
         Args:
             pop_size: 种群大小。
-            seed:     随机种子（可选）。
+            seed:     **已废弃的兼容别名**（与 ``rng`` 互斥）：等价
+                      ``rng=np.random.default_rng(seed)``。注意：历史实现
+                      走 ``random.seed`` 全局播种（Mersenne Twister），
+                      同 seed 的种群逐位值已变（PCG64）；仅保证「同 seed
+                      复现一致」，不保证与旧版逐位相同。
+            rng:      随机数生成器。``None`` 时用熵源新建（不保证复现）。
 
         Returns:
             个体列表。
+
+        Raises:
+            ValueError: ``seed`` 与 ``rng`` 同时给定。
         """
+        if seed is not None and rng is not None:
+            raise ValueError("seed 与 rng 互斥：请只给其一")
         if seed is not None:
-            random.seed(seed)
-            np.random.seed(seed)
+            warnings.warn(
+                "PopulationEncoder.generate(seed=...) 已废弃为兼容别名"
+                "（内部转 np.random.default_rng(seed)）；请改传 rng=。",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            rng = np.random.default_rng(seed)
+        if rng is None:
+            rng = np.random.default_rng()
 
         method = {
             "balanced": self._generate_balanced,
@@ -182,15 +208,26 @@ class PopulationEncoder:
             "srp": self._generate_srp,
         }[self.model_type]
 
-        return [method() for _ in range(pop_size)]
+        return [method(rng) for _ in range(pop_size)]
+
+    @staticmethod
+    def _shuffle(seq: list, rng: "np.random.Generator") -> None:
+        """原地乱序（Fisher–Yates），随机性取自注入生成器。"""
+        order = rng.permutation(len(seq))
+        seq[:] = [seq[i] for i in order]
+
+    @staticmethod
+    def _randint(rng: "np.random.Generator", lo: int, hi: int) -> int:
+        """闭区间 ``[lo, hi]`` 随机整数（兼容 ``random.randint`` 语义）。"""
+        return int(rng.integers(lo, hi + 1))
 
     # ---- K=N: 规则 3.1 -----------------------------------------------------
 
-    def _generate_balanced(self) -> Individual:
+    def _generate_balanced(self, rng: "np.random.Generator") -> Individual:
         """规则 3.1: U 和 T 均不重复，一一对应。"""
         n_targets = self._n_targets
         targets = list(range(n_targets))
-        random.shuffle(targets)
+        self._shuffle(targets, rng)
 
         genes = []
         for i, j in enumerate(targets):
@@ -201,13 +238,13 @@ class PopulationEncoder:
 
     # ---- K>N: 规则 3.2 -----------------------------------------------------
 
-    def _generate_overloaded(self) -> Individual:
+    def _generate_overloaded(self, rng: "np.random.Generator") -> Individual:
         """规则 3.2: U 不重复，T 可重复，每个 T 至少出现一次。"""
         n_uavs, n_targets = self._n_uavs, self._n_targets
 
         # 首先保证每个目标至少分配一个 UAV
         uav_indices = list(range(n_uavs))
-        random.shuffle(uav_indices)
+        self._shuffle(uav_indices, rng)
 
         genes = []
         # 前 n_targets 个 UAV 各分配一个不同目标
@@ -220,7 +257,7 @@ class PopulationEncoder:
         # 剩余 UAV 随机分配到任意目标
         for idx in range(n_targets, n_uavs):
             uav_id = uav_indices[idx]
-            target_id = random.randint(0, n_targets - 1)
+            target_id = self._randint(rng, 0, n_targets - 1)
             cost = float(self._cm[uav_id, target_id])
             genes.append(Gene(uav_id=uav_id, target_id=target_id, cost=cost))
 
@@ -228,7 +265,7 @@ class PopulationEncoder:
 
     # ---- K<N: 规则 3.3 -----------------------------------------------------
 
-    def _generate_srp(self) -> Individual:
+    def _generate_srp(self, rng: "np.random.Generator") -> Individual:
         """规则 3.3: U 可重复（巡游），T 不重复，每个 U 至少出现一次。
 
         注："每个 U 至少一个目标"是 DE 映射的**布局不变量**
@@ -241,14 +278,14 @@ class PopulationEncoder:
 
         # 将目标随机分配给 UAV（每个 UAV 至少一个目标）
         targets = list(range(n_targets))
-        random.shuffle(targets)
+        self._shuffle(targets, rng)
 
         # 分组：前 n_uavs 个目标各分配给一个 UAV，剩余目标随机分配
         uav_groups: dict[int, list[int]] = {}
         for i in range(n_uavs):
             uav_groups[i] = [targets[i]]
         for i in range(n_uavs, n_targets):
-            uav_id = random.randint(0, n_uavs - 1)
+            uav_id = self._randint(rng, 0, n_uavs - 1)
             uav_groups[uav_id].append(targets[i])
 
         # 对每组内目标按最近邻排序（贪心 TSP）

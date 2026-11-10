@@ -143,9 +143,15 @@ def _random_cost_vector(
 
     长度必须与当前种群一致：方案 A 下 SRP 个体的基因数恒为 ``M``
     （终点机巢不进编码，无终止基因）。
+
+    随机流收口：随机性经 ``encoder.generate(rng=...)`` 取自调用方注入的
+    种子 ``rng``（方案 B 单通道），不触碰全局 ``random`` / ``np.random``
+    状态。历史缺陷：曾忽略 ``rng`` 直接走全局状态，灭绝重置随进程内
+    其它随机消费者（基线求解器、诊断钩子、并行调用）漂移，固定 seed
+    不能逐位复现。
     """
     from ..representation.encoder import PopulationEncoder
 
     encoder = PopulationEncoder(cost_matrix, n_uavs, n_targets)
-    ind = encoder.generate(1)[0]
+    ind = encoder.generate(1, rng=rng)[0]
     return ind.cost_vector

@@ -263,7 +263,9 @@ class DMDESolver(BaseOptimizer):
 
         # ---- Step 1: 初始化种群 (算法 3.1 行 01-06) ----
         encoder = PopulationEncoder(cost_matrix, n_uavs, n_targets)
-        population = encoder.generate(cfg.pop_size, seed=cfg.seed)
+        # 初始种群与进化共用同一种子生成器（方案 B 单通道）：全程不触碰
+        # 全局 random / np.random，同 seed 逐位可复现、多实例并行安全。
+        population = encoder.generate(cfg.pop_size, rng=rng)
 
         # 评估初始种群
         best_idx = 0

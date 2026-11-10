@@ -205,7 +205,7 @@ def test_default_config_is_plan_a():
     """
     assert not hasattr(MUASStageConfig(), "end_nest_in_encoding")
     cm = np.zeros((3 + 5, 5))
-    ind = PopulationEncoder(cm, 3, 5).generate(1, seed=0)[0]
+    ind = PopulationEncoder(cm, 3, 5).generate(1, rng=np.random.default_rng(0))[0]
     assert len(ind.genes) == 5
     assert all(g.uav_id >= -1 for g in ind.genes)  # 无 -2 终止基因
     assert len(ind.cost_vector) == 5

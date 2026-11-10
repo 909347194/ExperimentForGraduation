@@ -160,7 +160,7 @@ def _inverse_phi_standard(
     # 规则 3.6: 无效值随机修补
     if invalid_indices:
         repaired = repair_invalid(
-            cm_work, mask, invalid_indices, model_type, n_uavs
+            cm_work, mask, invalid_indices, model_type, n_uavs, rng=rng
         )
         for uav_id, tgt_id, cost in repaired:
             genes.append(Gene(uav_id=uav_id, target_id=tgt_id, cost=cost))

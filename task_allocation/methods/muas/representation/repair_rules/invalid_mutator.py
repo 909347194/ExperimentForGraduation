@@ -12,8 +12,6 @@
 
 from __future__ import annotations
 
-import random
-
 import numpy as np
 
 
@@ -24,6 +22,7 @@ def repair_invalid(
     invalid_indices: list[int],
     model_type: str,
     n_uavs: int,
+    rng: np.random.Generator,
 ) -> list[tuple[int, int, float]]:
     """对无效差分值执行随机变异修补。
 
@@ -35,6 +34,8 @@ def repair_invalid(
         invalid_indices: 无效值在基因序列中的位置索引列表。
         model_type:     分配模型类型。
         n_uavs:         UAV 数量。
+        rng:            随机数生成器（必填，方案 B 单通道）：全部随机性
+                        取自该生成器，不触碰全局 ``random`` 状态。
 
     Returns:
         修补后的基因三元组列表 [(uav_id, target_id, cost), ...]。
@@ -58,7 +59,7 @@ def repair_invalid(
         if len(candidates) == 0:
             break
 
-        idx = random.randint(0, len(candidates) - 1)
+        idx = int(rng.integers(0, len(candidates)))
         row, col = candidates[idx]
         cost = float(cost_matrix[row, col])
 
