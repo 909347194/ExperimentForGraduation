@@ -3,19 +3,17 @@
 
 【report 层 · 结论与论文插图】
 
-回答「候选预筛的截断规模该按什么标定？」——intersect 口径下候选名额
-⌈α·K⌉ 提到 40 毫无用处，因为**选择数被 ⌈max_ratio·K⌉=16 封顶**。
+回答「候选预筛的截断规模该按什么标定？」——intersect 口径下选择数被
+⌈max_ratio·K⌉ 封顶，候选名额 ⌈α·K⌉ 增大未必传导到选择数。
 
 双联面板：
 
     (a) 候选 n_cand vs 选择 n_sel（名额族）   每组 N 下两变体的候选名额
-                      （20 / 40，浅柱）与最终选择数（16 / 16，深柱）；
-                      红色虚线为 ⌈max_ratio·K⌉=16 的封顶线——n_sel 触线即停。
-    (b) 名额族 F1 对照   同 sel 下两变体交付收益几乎相同（差异 < 4%），
-                      说明候选名额在该区间是「死旋钮」。
+                      与最终选择数；红色虚线为封顶值（从 metrics 现算）。
+    (b) 名额族 F1 对照   同选择数下两变体交付收益对照（标注相对差）。
 
-读图要点：若瓶颈在 α，(a) 中 sel 应随 k 上升；(b) 中两柱应明显分化。
-标定口径的答案（选择数接到 cap(t)、候选名额只需 ≥ 选择数）见图 r05。
+读图要点：α 是否是有效旋钮，看 (a) 中 sel 是否随 k 上升、(b) 中两柱是否分化；
+结论以本次正式档实测为准，图注不预设结论。能力驱动口径见图 r05。
 
 数据来源：``metrics.json`` 的
 ``scales[].selection.{capability_n_cand,n_selected,capability_n_sel}``
@@ -107,7 +105,7 @@ def plot_r04_bottleneck(
                      zorder=4)
         ax_a.text(xs[-1] + 0.42, lim_v, f" max_ratio·K 上取整={lim_v} 封顶",
                   color="#e45756", fontsize=FS["annotation"], va="center")
-    style_axes(ax_a, title="(a) 名额族：候选 n_cand 翻倍、选择 n_sel 触顶不动",
+    style_axes(ax_a, title="(a) 名额族：候选 n_cand 与选择 n_sel 对照",
                xlabel="任务规模 N", ylabel="任务数")
     ax_a.set_xticks(xs, [str(n) for n in ns])
     ax_a.set_ylim(bottom=0, top=48)
@@ -138,14 +136,14 @@ def plot_r04_bottleneck(
     ax_b.set_ylim(bottom=0)
     ax_b.legend(loc="upper left", fontsize=FS["legend"])
 
-    fig.suptitle("瓶颈定位：选择数被 max_ratio·K 上取整封顶，α 在 intersect 口径下是死旋钮",
+    fig.suptitle("瓶颈定位：名额族候选规模与选择数封顶（α vs max_ratio·K）",
                  fontsize=FS["suptitle"])
     fig.tight_layout(rect=(0, 0.06, 1, 0.93))
     footnote(fig,
              "数据来源：results/metrics.json 的 scales[]（quota_a2.5 / quota_a5 两变体）。"
-             "intersect 口径下 capability 只能收紧不能放宽：候选名额 α·K 上取整从 20 提到 40，"
-             "选择数仍被 max_ratio·K 上取整=16 封顶（capability_n_sel），故 F1 差异 < 4%。"
-             "能力驱动口径（mode=primary，选择数接到 cap(t)）见图 r05。单 seed（42）。")
+             "intersect 口径下 capability 只能收紧不能放宽；候选名额 ⌈α·K⌉ 与"
+             f"选择封顶（本次 capability_n_sel={lim_v}）均以本次 metrics 为准。"
+             "能力驱动口径（mode=primary）见图 r05。单 seed（42）。")
 
     stem = Path(out_dir) / "R04_bottleneck"
     return save_figure(fig, stem, formats, dpi=dpi)

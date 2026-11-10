@@ -80,10 +80,33 @@ CSV_COLUMNS = (
     "wall_seconds",
     # 审查 L4：尾插不移位旧列，兼容按列位置解析的下游 CSV 脚本
     "n_oper_cycles",
+    # ── v3 统一事后评价器新增列（一律尾插，见 docs/exp05_redesign_2026-11-09.md §4）──
+    "path_m_audit",              # 两把尺子几何重算：DEM 有向三维航程（唯一生产口径）
+    "path_m_euclid3d",           # 两把尺子几何重算：三维直线（历史朴素口径）
+    "ruler_gap_m",               # 同一解、两把尺子的差
+    "f_audit",                   # 逐周期 problem 重评 f 之和
+    "late_s_audit",
+    "n_hard_audit",
+    "n_skip_audit",
+    "n_audit_cycles",
+    "n_audit_ok",
+    "n_audit_unavailable",
+    "consistency_equal_all",     # 0/1，自报 vs 几何重建重评逐位一致
+    "n_consistency_checked",
+    "audit_errors",              # JSON 字符串；审计 FAIL 只记账
+    "n_evals_total",             # 代价层：累计评估次数
+    "n_legs_audit",
+    "n_missing_end_nest",
 )
 
+#: 非数值列（不参与 mean±std 聚合）
+NON_NUMERIC_KEYS = frozenset({"audit_errors"})
+
 #: 跨 seed 聚合的数值键（mean±std）
-AGG_KEYS = tuple(k for k in CSV_COLUMNS if k not in ("arm", "solver", "cost_model", "seed"))
+AGG_KEYS = tuple(
+    k for k in CSV_COLUMNS
+    if k not in ("arm", "solver", "cost_model", "seed") and k not in NON_NUMERIC_KEYS
+)
 
 
 def write_json(path: Path, payload: Any) -> Path:
@@ -130,6 +153,8 @@ def build_summary(
     # 三维航程：各周期交付解的 final_path_m 之和（米）
     total_path_m = sum(float(r.muas.get("final_path_m", 0.0) or 0.0) for r in records)
     solve_ms = sum(float(r.muas.get("solve_seconds", 0.0) or 0.0) for r in records) * 1000.0
+    # 代价层：累计真实评估次数（与墙钟并列，禁止只报质量不报代价）
+    n_evals_total = sum(int(r.muas.get("n_evals", 0) or 0) for r in records)
 
     n_infeasible_delivery = sum(len(r.infeasible_ids) for r in records)
     n_late = sum(len(r.late_ids) for r in records)
@@ -188,7 +213,9 @@ def build_summary(
     # ② 停机时仍服务休眠（时变能力不足的暂缓，不出池）。休眠不是放弃：
     # 新停机判据保证「不存在能被完成却没被完成的任务」才自然收敛，
     # 故自然停机时 n_dormant_end=0、排除为恒等操作；仅异常/兜底停机兜底。
-    # 分账恒等式：arrived = done + unreachable + dormant_end + remain。
+    # 分账恒等式：arrived = done + unreachable + remain；n_remaining_pool 是
+    # 停机时池中全部剩余（含末态休眠），dormant_end 只是它的归因子集，
+    # 不可再单列相加，否则 60 = 51+4+5+5 这类重复计数会假报恒等式失败。
     # 淘汰是机制缺陷信号、须为 0（不单列合法失败类）；
     # 按时率 = 最终交付中按时比例（迟到交付计完成、不计按时）。
     n_final_denom = max(0, n_arrived - n_unreachable - n_dormant_end)
@@ -342,6 +369,7 @@ def build_summary(
         "avg_wait_s": round((sum(waits) / len(waits)) if waits else 0.0, 3),
         "n_remaining_pool": len(pool),
         "solve_time_ms": round(solve_ms, 2),
+        "n_evals_total": n_evals_total,
         "wall_seconds": round(float(wall_seconds), 3),
     }
 
@@ -352,7 +380,13 @@ def aggregate_summaries(summaries: Sequence[Mapping[str, Any]]) -> dict[str, Any
 
     out: dict[str, Any] = {}
     for k in AGG_KEYS:
-        vals = [float(s.get(k, 0.0)) for s in summaries]
+        vals: list[float] = []
+        for s in summaries:
+            try:
+                vals.append(float(s.get(k, 0.0) or 0.0))
+            except (TypeError, ValueError):
+                # 非数值诊断列（如审计状态）不参与均值，避免污染聚合
+                continue
         if not vals:
             out[k] = {"mean": 0.0, "std": 0.0}
             continue
@@ -383,9 +417,19 @@ def summary_csv_row(
         "cost_model": cost_model,
         "seed": seed,
     }
-    for k in AGG_KEYS:
+    for k in CSV_COLUMNS:
+        if k in ("arm", "solver", "cost_model", "seed"):
+            continue
+        if k in NON_NUMERIC_KEYS:
+            continue
         if agg is not None:
             row[k] = (agg.get(k) or {}).get("mean", 0.0)
         else:
             row[k] = summary.get(k, 0.0)
+    if agg is None:
+        row["audit_errors"] = json.dumps(
+            summary.get("audit_errors", []), ensure_ascii=False
+        )
+    else:
+        row["audit_errors"] = ""
     return row

@@ -5,8 +5,9 @@
     当 |T_t| >> K(t) 时，把全部任务直接交给精细组合优化会显著扩大
     搜索空间。第一阶段用候选预筛把 T_t 压到 T_t^sel，据称能提高实时性。
 
-exp01_smoke 跑在「机多任务少」一侧（10 任务 / 24 机，αK=60），n_cand 预筛从不
-触发，无法验证该机制。本实验固定 K=8（可用无人机数），把任务规模扫到 10/50/100，
+exp01_smoke 是逐周期到达的滚动任务流（首周期 20 任务 / 6 机），候选预筛
+不构成规模瓶颈，无法充分验证该机制。本实验按当前 guangzhou 场景固定
+K=6（3 机巢 × 容量 2），把任务规模扫到 10/50/100，
 分别测量：
 
     T_hint    cost_hint（最近可用机，惰性表 O(n·K) 条边）
@@ -70,6 +71,7 @@ from task_allocation.methods.muas.solvers.muas_stage import (  # noqa: E402
     run_selective_muas,
 )
 from task_allocation.methods.selection import run as run_selection  # noqa: E402
+from task_allocation.methods.utils.building_layer import BuildingLayer  # noqa: E402
 from task_allocation.methods.selection import SelectionConfig  # noqa: E402
 from task_allocation.methods.selection.capability import CapabilityScaleConfig  # noqa: E402
 from task_allocation.methods.selection.feasibility import FeasibilityConfig  # noqa: E402
@@ -187,7 +189,10 @@ def main(argv: list[str] | None = None) -> int:
     out_dir = EXP_DIR / cfg["experiment"]["output_dir"]
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # ── 场景：机巢 + DEM + 局部平面 + 估算器 + 统一距离尺子 ─────────
+    # ── 场景：机巢 + DEM + 建筑包络 + 局部平面 + 估算器 + 统一距离尺子 ─
+    # 2026-11-10 切 guangzhou：估算器必须挂建筑层，否则垂直切面代价只含地形，
+    # 与 exp01 当前正式档的「DEM + 建筑屋顶包络」口径不一致。
+    # 其余参数用类默认值（50 / 300 / 0.15 / 200），与 exp01 cost 段显式值逐位一致。
     data_cfg = cfg["data"]
     problem_cfg = cfg["problem"]
     scenario = build_nest_scenario(
@@ -198,7 +203,17 @@ def main(argv: list[str] | None = None) -> int:
         dem_path=scenario_data.resolve_file(data_cfg["dem"], data_cfg.get("scenario")),
     )
     terrain = scenario.dem.to_metric_terrain(scenario.frame, step_m=200.0)
-    estimator = VerticalSectionCostEstimator(dem_terrain=terrain)
+
+    buildings = None
+    bname = data_cfg.get("buildings")
+    if bname:
+        bbase = scenario_data.scenario_dir(data_cfg.get("scenario")) / str(bname)
+        bpaths = sorted(bbase.glob("*.shp")) if bbase.is_dir() else [bbase]
+        if not bpaths:
+            raise FileNotFoundError(f"建筑数据不存在：{bbase}")
+        buildings = BuildingLayer.from_shapefiles(bpaths, scenario.frame)
+        print(f"[exp02] 建筑层：{len(bpaths)} 个 shapefile", flush=True)
+    estimator = VerticalSectionCostEstimator(dem_terrain=terrain, buildings=buildings)
     # 统一距离口径（与 horizon 同款）：带记忆化，跨变体/跨规模共享缓存
     distance_fn = make_distance_fn(estimator)
 
@@ -210,9 +225,10 @@ def main(argv: list[str] | None = None) -> int:
     max_time = problem_cfg.get("uav_max_time")
     if max_time is None and speed > 0:
         max_time = max_range / speed
-    # UAV 驻留其机巢（exp01 build_uavs 同口径）：任务锚定在散布的机巢周围
-    # （nest span 约 70km×87km），驻巢后最近可用机距离中位数 ~15km、
-    # cap(t)≈42，与 full baseline 的执行数同量级，能力驱动标定才真正可测。
+    # UAV 驻留其机巢（exp01 build_uavs 同口径）：guangzhou 研究区内撒点、
+    # 满电航程 10 km。c̃ 与 cap(t) 的实际量级由本次 metrics.json 的
+    # selection.capability_cap 现算，不再沿用旧 lasa_chengguan 档的
+    # 70km×87km / cap≈42 说明。
     nest_list = list(scenario.nests)
     uavs = [
         UAV(
@@ -235,8 +251,8 @@ def main(argv: list[str] | None = None) -> int:
         seed=int(cfg["experiment"].get("seed", 42)),
     )
     m = cfg.get("problem", {})
-    # 与 exp01 / exp05 生产口径一致的四层准字典序评价（字典序 + 惩罚量纲
-    # 解耦 + 迟到折减 + T0 物理违约支配层）；覆盖门禁默认关。
+    # 与 exp01 当前正式档一致：单一加权标量 f（完成是约束、成本是目标），
+    # 搜索用 f 不含 −m·F1、F3 已移除；覆盖门禁口径由 config 显式给出。
     problem_model = MUASProblemConfig(
         allow_unassigned=bool(m.get("allow_unassigned", True)),
         allow_idle_uav=bool(m.get("allow_idle_uav", True)),

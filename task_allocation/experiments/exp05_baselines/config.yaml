@@ -1,10 +1,14 @@
-# exp05_baselines —— 整体方法对照实验：本文方法 vs 构造式基线 / 距离模型
+# exp05_baselines —— v3「方法主张检验台」（2026-11-09 重新设计）
 #
-# 对照臂见下方 methods: 段；场景 / 协议与 exp01 生产口径**逐项相同**
-# （同一 data / problem / tasks / selection / muas / constraints / rolling），
-# 保证「同一场景、同一指标口径、同一 seed 协议」（notes.md 公平性协议）。
-# 各臂共享同一任务到达序列（同 seed 生成），唯一差异 = 第二阶段搜索引擎
-# （DMDE vs 构造式启发式）或代价模型（DEM 三维 vs 欧氏）。
+# 设计定稿（冲突以定稿为准）：task_allocation/docs/exp05_redesign_2026-11-09.md
+# v3 不再问「我们是否比启发式更好」，而检验五条可证伪主张：
+#   C1 完成是硬约束  C2 唯一距离=DEM 有向三维航程、换尺子会改变结论
+#   C3 交付解可独立重评  C4 成本对照须与代价并列  C5 组件去留由证据裁决
+#
+# 场景 / 协议与 exp01 生产口径**逐项相同**；各方法共享同一任务到达序列
+# （同 seed 生成）。关键口径：评价端一律 DEM 有向三维航程，与求解端解耦；
+# 同一批交付解再用两把尺子各算一次，检验尺子本身是否改变结论。
+# 旧 results/ 是 v2 存档（notes 主表与 CSV 批次混拼），不作论文主表数据源。
 #
 # 参数放置原则（见 experiments/README.md 与 notes.md）：
 #   data/      实测事实（机巢经纬度、DEM 栅格），跨实验复用，不随实验改
@@ -20,37 +24,59 @@ experiment:
     # 对照实验协议：≥5 个 seed，报告均值±标准差（notes.md 成功标准）。
     # 任务到达序列由 seed 决定，同 seed 各臂共享，保证逐任务可比。
     seeds: [42, 43, 44, 45, 46]
-    output_dir: results # 数值产物（<ARM>/seed_<s>/ + summary.csv）
+    output_dir: results_v3 # v3 数值产物；旧 results/ 冻结为 v2 存档，不混用
 
-# ── 对照臂（exp05 专属）──────────────────────────────────────────
+# ── 对照方法（v3，exp05 专属）────────────────────────────────────
 # id → 结果目录名；solver → dmde（本文方法）或 baselines.REGISTRY key；
-# cost_model → dem（三维地形代价，生产口径）| euclidean（同架构欧氏对照）。
-# params 透传给 baseline 构造器（如 random 的 seed/max_tries）。
+# cost_model 只作用于**求解端**；评价端一律 DEM 有向三维航程（见 evaluation:）。
+# primary=false ⇒ 只进附表，不参与主表配对比较（异口径 / 双因素）。
+# pair_with ⇒ 主张报告里的配对对象；solver_budget ⇒ DMDE 预算覆盖。
+# 口径提醒：B1/B2 与 M0 是整个第二阶段求解范式的差异，不是单因素；
+# D0 是复合档（规划距离 + ETA/时间窗动力学一起换），禁止写成单因素归因。
 methods:
     - id: M0
       solver: dmde
       cost_model: dem
-      label: 本文方法（选择 + DMDE-MUAS + 方案 A 终点 + DEM）
+      label: 本文完整方法（默认档，主张检验锚点）
+      primary: true
+      pair_with: null
     - id: D0
       solver: dmde
       cost_model: euclidean
-      label: 同架构欧氏对照（仅替换代价/距离函数）
+      label: 同架构，把规划用的距离换成平面近似（复合档，不作单因素归因）
+      primary: true
+      pair_with: M0
     - id: B1
       solver: random
       cost_model: dem
-      label: 随机可行分配（性能下界）
+      label: 随机可行分配（下界参照，描述性对照）
+      primary: true
+      pair_with: M0
     - id: B2
       solver: greedy
       cost_model: dem
-      label: 收益/代价比贪心插入
+      label: 收益/代价比贪心插入（描述性对照）
+      primary: true
+      pair_with: M0
+    - id: Q0
+      solver: dmde
+      cost_model: dem
+      label: 同架构，只压低搜索预算（质量—代价前沿用，小预算档）
+      primary: true
+      pair_with: M0
+      solver_budget: {population: 8, max_iter: 8}
     - id: B3
       solver: vrptw
       cost_model: dem
-      label: Solomon 插入式 VRPTW 启发（硬时间窗）
+      label: 硬时间窗插入式（异口径：主动跳过任务，只进附表）
+      primary: false
+      pair_with: null
     - id: B2e
       solver: greedy
       cost_model: euclidean
-      label: 贪心 + 欧氏（朴素策略下的距离模型对照）
+      label: 贪心 + 平面近似（距离 × 求解范式双因素，只进附表）
+      primary: false
+      pair_with: null
 
 # data/<scenario>/ 下的实测与共享数据（跨实验复用，不随实验改）
 data:
@@ -186,6 +212,9 @@ selection:
 
 # ── 第二阶段：选择性多机巢 MUAS（论文 §4-§5）─────────────────────
 muas:
+    # 覆盖门禁审计分账：定稿 §4.3 要求开；生产默认 True。
+    # v3 显式写出，避免实验自持装配层默认值漂移把它静默关掉。
+    coverage_audit: true
     allow_unassigned: true # 允许 y_j = 0（任务保留至下一周期）
     allow_idle_uav: true # 允许 n_u = 0（UAV 本周期空闲）
     # 适应度口径：覆盖门禁（唯一主口径）。big_m 仅作 W_hard/
@@ -444,5 +473,27 @@ run:
     make_plots: true
     verbose: true
 
-# ── 可视化：exp05 暂不出图（结论表 = results/summary.csv）；
-#    论文插图待 summary 定稿后按 experiments/README.md 的 plot/ 约定补。
+# ── v3 统一事后评价器（docs/exp05_redesign_2026-11-09.md §4）──────
+# 评价端与求解端解耦：所有方法的交付解一律按 DEM 有向三维航程重评，
+# 再用两把尺子各算一次，检验「换尺子是否改变方法间结论」（C2 主证据）。
+# profile 只作落盘标签；冒烟/mid 结论不可外推正式档，正式档须单独跑批。
+evaluation:
+    two_rulers: true           # 同一批交付解：d_DEM 有向 vs d_euclid3d
+    independent_audit: true    # 逐周期几何重建重评（零生产改动的运行期包装）
+    distance_definition: dem_vertical_section_3d
+    comparator_ruler: euclidean_3d
+    coordinate_precision: full # 落盘坐标不 round（铁律：离散包络查询）
+    profile: formal            # smoke | mid | formal；跑冒烟时 --set evaluation.profile=smoke
+    audit_failure_policy: record_only # 审计 FAIL 只记账、不中断；先怀疑实现缺陷
+
+# ── v3 主张检验（seed 单源 = experiment.seeds，勿在此重复写 seeds）──
+# primary_methods 决定第 0 层门槛对谁强制；未通过者单列归因，不静默删除。
+claims:
+    primary_methods: [M0, D0, B1, B2, Q0]
+    alpha: 0.05
+    min_abs_dz: 0.5
+    multiple_comparison_note: 名义 p 值，未做多重比较校正；禁从多指标里挑显著项当主结论
+    evidence_index: task_allocation/docs/stage2_final_scheme_2026-11-06.md §11.8-§11.12
+
+# ── 可视化：v3 主表由 claims_report.json / summary_primary.csv 单源生成；
+#    notes.md 只引用不抄数。论文插图待正式档定稿后按 experiments/README.md 补。

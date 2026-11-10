@@ -803,7 +803,11 @@ def main():
     ap.add_argument("--n-uavs", type=int, default=3)
     ap.add_argument("--area", type=float, default=1000.0)
     ap.add_argument("--cycles", type=int, default=1)
-    ap.add_argument("--out-dir", default="results_gap")
+    # 2026-11-10 目录规整：历史批次已归档，默认输出改到归档区，避免在实验顶层
+    # 重新长出 results_* 目录；需要另起新批次时用 --out-dir 显式指定。
+    ap.add_argument("--out-dir", default="../_archive/ab_mechanism_3steps__results_gap",
+                    help="输出目录（相对本脚本目录）；默认写归档区，"
+                         "显式 --out-dir results_gap 可在顶层另起新批次")
     ap.add_argument("--report-only", action="store_true",
                     help="从已落盘 CSV 重生成图与报告，不重跑实验")
     args = ap.parse_args()

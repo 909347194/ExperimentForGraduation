@@ -6,6 +6,9 @@
   results/step2_cells.csv, step2_interaction.csv            (40:2 双截止)
   results_s2_60/step2_cells.csv, step2_interaction.csv     (60:1 d0)
   results/step3_offline.csv, step3_e2e.csv, step3_matrix.csv
+
+2026-11-10 目录规整：历史批次已归档到 _archive/<实验名>__<目录名>；
+顶层同名目录优先（新跑的批次），否则回退到归档区，见下方 R2。
 """
 from __future__ import annotations
 
@@ -23,6 +26,9 @@ import common as C  # noqa: E402
 
 R1 = HERE / "results"
 R2 = HERE / "results_s2_60"
+if not R2.exists():
+    # 顶层无新批次时读归档区（2026-11-10 目录规整）
+    R2 = HERE.parent / "_archive" / "ab_mechanism_3steps__results_s2_60"
 
 
 def load(p):

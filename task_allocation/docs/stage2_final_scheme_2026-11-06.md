@@ -484,10 +484,11 @@ Zotero 全文 `storage/UEDCMGSJ/…pdf`。页码为**期刊印刷页码**，PDF 
 距离口径；采纳判据缺陷（`stage_runner` 已算 `cand_fitness` 未进判据）
 **保持原样、仅入台账观测**（修复在 P3）；回写/ε/L3b 均保持现状默认。
 
-**已知环境缺口（诚实声明）**：本环境缺 DEM 场景数据（`guangzhou/dem.tif`、
-`lasa_chengguan/Chengguan_DEM.tif`、`guangzhou/building/`），exp01 生产口径
-实验与 exp01 审计 25/25 无法在此运行；P0 数值验证以合成探针 + 全量单测为准，
-正式档验收（exp01 审计、论文数字对账）须在带数据的环境补跑后回填本节。
+**数据环境（2026-11-09 更正，详见 §11.13）**：本节原记「本环境缺 DEM 场景数据、
+exp01 审计 25/25 无法在此运行」，系 2026-11-06 fresh clone 时的环境事实，**当前
+机器已不成立**：`guangzhou` / `lasa_chengguan` 数据齐备，exp01 审计已于
+2026-11-09 补跑通过（26/26），全量回归 549 passed。上表第 2 条「427 绿 + 6
+失败」保留为 P0 当时的历史记录，不追改；补验收的**限制与仍须补跑项**见 §11.13。
 
 ### 11.2 P1 原始评价 + 可行性优先竞争（2026-11-06，已落地 + 闸门实测）
 
@@ -1469,6 +1470,165 @@ MCF 重解恒 1 次/seed、分叉仍是同一处纯成本改派，
 §4.3「双开」与生产默认 `coverage_gate=False` 的张力、
 `projection_only=False` / `compare_mode="penalty"` 与 §6 表格不一致、
 `independent_audit` 几何重建重评接入。
+
+---
+
+### 11.13 数据环境补验收与场景口径澄清（2026-11-09）
+
+**背景**：§11.1「已知环境缺口」及 `docs/rolling_review_2026-11-03.md` 中
+「本机无 DEM/建筑数据」等表述，均为 2026-11-06 前 fresh clone 环境的记录。
+本轮用现有数据补跑搁置的验收并更正；**用户裁定：`guangzhou` 为当前实验场景**。
+本轮**未启动任何实验、未改任何实验 config、未改生产默认值、未改数据文件**。
+
+#### 1. 数据齐备性（实测）
+
+| 场景 | 内容 | 加载自检 |
+|---|---|---|
+| `guangzhou` | `dem.tif` + `building/`（5 类建筑 shapefile，20670 栋）+ 3 机巢 CSV + `region.geojson`，26M / 44 文件 | `build_terrain` → `DEMTerrain`，`build_cost_estimator` → `VerticalSectionCostEstimator`；`scenario=guangzhou`、3 机巢 |
+| `lasa_chengguan` | `Chengguan_DEM.tif` + 6 机巢 CSV + 城关区多边形 | 目录齐备，可切回 |
+
+- `pytest task_allocation/tests/test_task_region.py -q` → **8 passed**
+  （§11.1 当时 6 个 DEM/geojson 数据缺口失败已全部消失，非代码修复所致）；
+- `pytest task_allocation/tests/test_p0_contracts.py -q` → **19 passed**；
+- 全量 `pytest task_allocation/tests tests -q` → **549 passed in 28.91s**。
+
+#### 2. exp01 审计补跑（§4.3 第 4 条）
+
+```
+.venv/Scripts/python.exe -u task_allocation/experiments/exp01_smoke/audit_correctness.py
+→ AUDIT_RC=0；3 个 seed 目录（42/43/44）合并，26/26 通过，无 WARN
+```
+
+落盘 `effective_config.json` 的 `data` 段为 `scenario=guangzhou` /
+`dem=dem.tif` / `buildings=building` / `problem.n_nests=3`，即审计确实在
+**广州城市场景（DEM + 建筑包络）** 下复核，A–O 各不变量（终局守恒、完成唯一、
+迟到、奖励守恒、航程物理有序重算、机巢容量、ETA 一致性等）全部 PASS。
+
+**项数勘误**：§4.3 第 4 条与 `exp01_smoke/notes.md` 历史段落写「25/25」，
+是旧版检查项数；提交 `bdc32b9`（补「无超期淘汰 + 软窗」口径）新增 A2
+「淘汰恒为零（结构性保证）」后共 **26 项**。属检查项扩充，不是新增失败，
+也不是口径退化；§4.3 条款措辞按验收源纪律保持原样，以此勘误为准。
+
+#### 3. P0 数值核验的边界（更正一处易误读的表述）
+
+P0 bit-exact 用的是**合成采样探针**（`docs/p0_criteria_drift_baseline_2026-11-06.md`
+明示「不依赖 DEM 场景数据」，seed=20261106）+ 全量单测，因此**从未受数据缺口
+影响**。§11.1 把它与「缺数据」并列只说明验证手段，不表示 P0 核验被阻塞；
+数据缺口实际只阻塞 exp01 审计与论文数字对账。P0 契约 19 项已在上述全量回归中通过。
+
+#### 4. 仍未闭合（不得据此宣称验收完成）
+
+- 本次审计针对 `exp01_smoke/results/` 的 **2026-11-05 20:40 落盘批次**，
+  验证的是该批次内部一致性；11-07 之后生产代码已有默认变更（§11.9 采纳判据
+  统一 `f`、`l3b_enabled` 默认开）。故 **26/26 不等于当前代码在 guangzhou 场景
+  的端到端验收**。
+- §4.3 第 4 条的「论文数字对账」仍须用当前代码重跑 exp01 后回填；按纪律
+  正式档须单独发话、严格串行跑批，本轮未启动。**（以上两条为 11-09 时点记录；
+  2026-11-10 已用当前代码重跑闭合，结论与限制见 §11.14。保留原文以保持
+  历史快照，勿再按本段判断当前状态。）**
+- §4.3 第 5 条（与 `method-phase1` 同场景、同 seed、同预算配对 t 检验）与
+  P4 待办「统一事后评价器重评 phase1」仍未做，见 §11.12 §6。
+- exp05 v3 正式档遗留（seed 43 早停使完成约束仅 30/35 成立、`f_audit` 混尺子、
+  单周期口径退化 210 项）不因本节补验收而改变，见
+  `docs/exp05_v3_formal_results_2026-11-09.md`。
+
+#### 5. 场景口径（用户裁定）
+
+- **当前实验场景 = `guangzhou`**：`data/README.md` 已登记；`exp01_smoke`、
+  exp07 / exp08 / exp09 / exp10 均使用该场景（3 机巢、DEM + 建筑垂直切面包络）。
+- `lasa_chengguan` 保留在库、可切回（6 机巢、DEM、无建筑）。**exp05 v3 正式档
+  使用该场景**，属另一场景的历史批次：跨实验**禁直接比绝对值**，也禁把它的
+  数值写成当前 guangzhou 场景结果。切换场景只改各自 `config.yaml` 的 `data:`
+  段与 `problem.n_nests`，代码零改动（`data/README.md` §场景切换）。
+- 本轮未统一 exp05 v3 的场景，也未新增 guangzhou 外效度对照档；如需要，另发话、
+  另跑批。
+
+#### 6. 本轮改动
+
+- `docs/stage2_final_scheme_2026-11-06.md`：§11.1 环境缺口段改写 + 新增本节；
+  **§0–§10 拍板内容零改动**（验收源不得走样）。
+- 未新增/修改代码、未跑实验、未提交 git。
+
+### 11.14 当前代码 exp01 端到端重跑与论文数字对账（2026-11-10）
+
+**触发**：§11.13 §4 列出的未闭合项「§4.3 第 4 条论文数字对账须用当前代码
+重跑 exp01」。用户本轮发话「进行实验；分析问题」即正式档单独跑批授权；
+`guangzhou` 为当前实验场景。详见
+`docs/exp01_current_code_reconcile_2026-11-10.md`。
+
+#### 1. 跑批与验收
+
+```
+FORMAL_START 2026-11-10 14:31:22 +08:00
+.venv/Scripts/python.exe -u task_allocation/experiments/exp01_smoke/run.py --no-plots
+FORMAL_RC=0（17m57s，3 seed 严格串行、不渲图、不并行）
+```
+
+3 个 seed 均周期 4 `pool_empty` 自然收敛、30/30 完成；末尾自动审计
+**逐 seed 3 目录合并 26/26 PASS、无 WARN**。11-05 旧批次（17 文件 / 30M）
+完整归档到 `experiments/_archive/exp01_smoke_results_2026-11-05_pre_current_code/`，
+未删数据。**§11.13 §4 第 1 条「26/26 不等于当前代码端到端验收」至此闭合**；
+§4.3 第 4 条的「论文数字对账」结论见下条，但**不等于论文数字已可直接引用**。
+
+#### 2. 当前代码在 guangzhou 的新基线（取数以此为准）
+
+`results/metrics.json` 的 `seed_summary`（3 seed 均值±std）：完成 30.00±0.00 /
+完成率 **1.000±0.000** / 按时率 **0.9778±0.0157** / 总航程
+42953.63±2570.25 m / 每完成航程 1431.79±85.67 m / 迟到 0.667±0.471 /
+求解 342691±14910 ms；淘汰、硬违约、服务不可达、剩余池全 0，恒等式 3/3 闭合。
+
+#### 3. 论文数字对账结论：历史主表数字整体作废
+
+历史主报告 §2 的 exp01 数字（按时 0.7695±0.0218、每完成航程 24.22±0.64 km、
+60 任务）属 **8 机巢 / 80 km 满电 / 60 任务 / 4.5–9 周期**口径；提交 `55f4b5b`
+切换口径时该报告被删除，此后又切到 `guangzhou` 3 巢 / 10 km / 20-5-5。
+**跨三套口径禁比绝对值、禁算百分比、禁配对 t 检验**；由其推出的
+「−13% / −15.8pp」一并作废（长期记忆中「exp01 按时 0.7695 / 24.2 km」
+应标为历史口径、禁止进论文主表）。当前工作区已无 `FULL_REPORT.md`，
+仅在 git 历史中可查。
+
+#### 4. 与 11-05 同题批次对照（描述性，禁作受控推断）
+
+`solution.json` 的初始机队 / 30 任务 / 3 机巢 / `fitness_weights` **3/3 seed
+逐位一致**（`metrics.fleet` 是末态快照，其 `nest_id` 排列差异属交付解、
+不是初始条件）。逐 seed 差值（新−旧）：总航程 +41.3 / +692.1 / **−2435.4 m**，
+按时率 1.000→0.9667（2/3 seed 各 1 个迟到，9.03 s / 84.30 s），
+交付后 `cost_polish_gain_m` −240 / −136 / −487，求解耗时 +10~16%；
+完成数、完成率、不可达、淘汰、硬违约、`total_reward` 逐位一致。
+
+逐周期诊断显示终点机巢 `end_nests` 全变、解码期 `polish_accepted.relocate`
+由 12/11/6 次降到 0/1/1 次、新增修复三分流与返航段诊断。11-05 之后有
+**多处并发改动**（终点巢分层、修复三分流、解码期算子收口、`l3b_enabled` 默认开、
+采纳判据统一 `f`、`coverage_audit` 换名），故**不能单因素归因**、
+**禁做跨版本配对 t 检验**、禁写「L3b/MCF 带来收益」或「成本换时效」。
+`n_repair_failed`=24/21/34 是搜索期候选诊断计数（含被淘汰候选），
+`delivery_refused` 全 false，不得误读为交付失败。
+
+#### 5. 口径红线（实测确认）
+
+- `f = 0.1·path + 0.01·late_s` 在 9 个有作业周期残差全为 0 ⇒ `f` 与航程
+  **线性同源，不是两条独立证据**；
+- `total_f2 = path + penalty` 混加米与秒（本批次差 9.033 / 84.301 即迟到秒数），
+  **禁当航程引用**，航程一律用 `total_path_m` / `total_cost`。
+
+#### 6. 仍未闭合
+
+① **完成约束反例未消除**：本场景 3 seed 100%，但 exp05 v3 在
+`lasa_chengguan` 的 seed 43 仍遗留 1 个可完成任务（早停判据待修），
+**禁写「当前代码完成率恒 100%」**；
+② 单因素归因须在当前代码内另做受控消融（L3b 总闸 / 终点巢层 1×层 3 /
+解码期 polish / 采纳判据），正式档另发话另跑批；
+③ §4.3 第 5 条 phase1 同场景同 seed 配对 t 检验、P4「统一事后评价器重评
+phase1」仍未做；
+④ exp05 v3 场景为 `lasa_chengguan`，与本批次**禁直接比绝对值**；
+⑤ 本次 `--no-plots`，无新图件，旧图属旧批次不可配新数字。
+
+#### 7. 本轮改动
+
+新增 `docs/exp01_current_code_reconcile_2026-11-10.md`、回填本节与
+`exp01_smoke/notes.md`；**未改生产代码 / 实验 config / 数据文件、未渲图、
+未提交 git**。
+
 
 
 

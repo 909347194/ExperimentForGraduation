@@ -166,7 +166,8 @@ Gandomi & Deb (2020) BU 是**隐式** CHT：直接在**变量上下界**上按�
    改进代数 ≈ 0.2，根因是「**子代系统性劣于初始精英**」，不是「候选没参与竞争」——
    候选一直参与，`dmde_solver.py:225` 的 `if child.fitness < population[i].fitness`
    就是父代/子代同台竞争。用户表述的「候选直接参与父代竞争」**不是新增机制**。
-2. `ab_optimization_attribution/probe_mechanism.py`：`lamarckian=False` +
+2. `ab_optimization_attribution/probe_mechanism.py`（一次性机制探针，
+   2026-11-10 目录规整已清理，结论保留于此）：`lamarckian=False` +
    gen80/pop20 下进化臂**仍等于裸修复基线**（7937.661）。即「不替代原始基因」
    （Baldwinian）单独并不能恢复进化增益。
 3. 既有 analysis 文档 §1.2/§3.2 的机制判断恰好相反：解码链的目标改进是

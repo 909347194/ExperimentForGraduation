@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """聚合：读取各 tX_cY/dZ 子目录的 ab_attr_raw.csv，生成合并报告。
 
-输出（results/）：
+输出（默认 <脚本目录>/results/）：
   - ab_attr_report.md        合并归属报告（按场景/截止分表 + 机制说明）
   - ab_attr_attribution.csv  合并归属（按 combo 一行 + pooled 一行）
   - ab_attr_summary.csv      合并逐臂聚合
@@ -27,8 +27,17 @@ sys.path.insert(0, str(HERE))
 
 import run as R  # noqa: E402
 
-# 注意：run.py 从仓库根以 `--out-dir results` 启动，故结果落在仓库根/results
-OUT = REPO / "results"
+# run.py 的 --out-dir 默认落在脚本目录 results/（与启动 cwd 无关），故聚合也从这里读。
+# 若尚未生成，回退到 2026-11-05 之前遗留的仓库根 results/，并显式告警：
+# 那批数据可能来自旧批次，不能与本次结果混拼。
+_NEW_OUT = HERE / "results"
+_LEGACY_OUT = REPO / "results"
+OUT = _NEW_OUT if _NEW_OUT.exists() else _LEGACY_OUT
+if OUT == _LEGACY_OUT:
+    print(
+        f"[warn] 回退到历史输出目录 {OUT}；"
+        "数据可能来自 2026-11-05 旧批次，请核对时间戳"
+    )
 
 
 def read_rows(csv_path: Path) -> list[dict]:

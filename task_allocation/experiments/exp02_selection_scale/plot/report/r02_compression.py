@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""图 ``r02_compression``——规模压缩与 N 解耦（成功标准 1）。
+"""图 ``r02_compression``——规模压缩与候选/选择/执行数。
 
 【report 层 · 结论与论文插图】
 
@@ -7,16 +7,14 @@
 
 三联面板（x = 任务规模 N，分类轴）：
 
-    (a) 候选名额 n_cand   优先级预筛截断后的候选规模。机数名额族恒为 20/40、
-                      能力族恒为 cap(t)=10/20/40——**全部与 N 无关**（平线）；
-                      全量对照 = N 自身（斜线）。
+    (a) 候选名额 n_cand   优先级预筛截断后的候选规模。机数名额族由 ⌈α·K⌉
+                      给出、能力族由 cap(t) 给出；全量对照 = N 自身。
     (b) 选择数 sel / 执行数 exec   最终参与 MUAS 与真正交付的任务数
                       （漏斗 N → k → sel → exec 的末两级）。
-    (c) 压缩比 N/sel   随 N 线性增长（名额族 2.5× → 5× → 10×，α=2.5），
-                      说明分层压缩的收益随规模扩大而扩大。
+    (c) 压缩比 N/sel   随 N 的变化。
 
-读图要点：三条平线（a）是「与 N 解耦」的直接证据；若压缩随 N 走，
-（a）应是与全量斜线平行的斜线。
+读图要点：观察 (a) 中候选规模是否随 N 变化；若候选规模由名额或能力决定，
+应呈平线。是否解耦以本次正式档实测为准，图注不预设结论。
 
 数据来源：``metrics.json`` 的
 ``scales[].selection.{capability_n_cand,n_selected}`` +
@@ -168,8 +166,8 @@ def plot_r02_compression(
     footnote(fig,
              "数据来源：results/metrics.json 的 scales[]。n_cand = selection.capability_n_cand"
              "（Top-α 预筛后候选规模）；sel = n_selected（最终参与 MUAS）；exec = muas.n_executed"
-             "（真正交付）。漏斗为 N → Top-k → k → k：驻巢修复后往返预筛与 postcheck 零拒绝，"
-             "规模完全由候选/选择名额决定。单 seed（42）。")
+             "（真正交付）。漏斗为 N → 候选 → 选择 → 交付；各档实测值以本次 metrics 为准。"
+             "单 seed（42）。")
 
     stem = Path(out_dir) / "R02_compression"
     return save_figure(fig, stem, formats, dpi=dpi)

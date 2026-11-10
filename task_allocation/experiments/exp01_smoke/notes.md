@@ -1,6 +1,7 @@
 # exp01_smoke
 
-**status:** active（设计 / 配置就绪，待运行）
+**status:** active（当前代码在 `guangzhou` 的正式档已跑完，2026-11-10；
+结论与对账见 `docs/exp01_current_code_reconcile_2026-11-10.md` 与定稿 §11.14）
 
 ## 目的
 
@@ -481,3 +482,48 @@ est_cost（容差 1m）」FAIL，差 1.4~2.5 m（0.03%~0.07%）。**非本次改
 
 - 全量 pytest 377 项全部通过；四张静态图与 P06 动画/GIF 均按收敛后的代码
   重渲染并目检，图件脚注与图例细节统一指向 `results/figures/figure_notes.md`。
+
+---
+
+## 当前代码正式档重跑与论文数字对账（2026-11-10）
+
+> 完整版见 `docs/exp01_current_code_reconcile_2026-11-10.md`、定稿 §11.14。
+> 本节只留本实验取数要点；以下数值均为**当前 `results/` 批次**（3 seed）。
+
+- 跑批：`python -u run.py --no-plots`，`FORMAL_RC=0`、17m57s、严格串行；
+  3 seed 均周期 4 `pool_empty` 自然收敛；末尾自动审计 **26/26 PASS、无 WARN**。
+  11-05 旧批次完整归档到
+  `experiments/_archive/exp01_smoke_results_2026-11-05_pre_current_code/`（未删数据）。
+- **当前基线**（`metrics.json` 的 `seed_summary`，不是顶层 `summary`）：
+  完成 30.00±0.00 / 完成率 1.000±0.000 / 按时率 **0.9778±0.0157** /
+  总航程 42953.63±2570.25 m / 每完成航程 1431.79±85.67 m /
+  迟到 0.667±0.471 / 求解 342691±14910 ms；淘汰、硬违约、服务不可达全 0。
+- **历史主表数字作废**：旧主报告 §2 的「按时 0.7695±0.0218、每完成航程
+  24.22±0.64 km」属 8 巢 / 80 km / 60 任务口径，`55f4b5b` 切换口径后已删除；
+  当前为 guangzhou 3 巢 / 10 km / 30 任务，**跨口径禁比、禁引用**。
+- 与 11-05 同题批次（初始机队 / 任务 / 机巢 / `fitness_weights` 逐位一致）相比：
+  航程 +41.3 / +692.1 / −2435.4 m，按时率 1.000→0.9667（2 seed 各 1 个迟到），
+  求解耗时 +10~16%；终点机巢分配与解码期 polish 动作数明显变化。
+  因 11-05 之后有**多处并发代码改动**，此差异**不能单因素归因**、
+  **禁做跨版本配对 t 检验**、禁写「L3b/MCF 带来收益」。
+- 口径提醒：`f = 0.1·path + 0.01·late_s`（9 周期残差 0，线性同源）；
+  `total_f2 = path + penalty` 混加米与秒，**禁当航程**；
+  `n_repair_failed`（24/21/34）是搜索期候选诊断计数，`delivery_refused` 全 false。
+- **禁写「当前代码完成率恒 100%」**：exp05 v3 在 `lasa_chengguan` 的 seed 43
+  仍有可完成任务遗留（早停判据待修）；本场景 3 seed 100% 不可外推。
+- 本次 `--no-plots`，`results/` 无 `figures/`；旧图在归档目录、属旧批次，
+  不可配新数字使用。
+
+## 图、表产物（2026-11-10 重跑）
+
+- 求解与出图/出表分离：跑批用 `--no-plots`；求解完成后单独执行
+  `python render_from_json.py png,pdf` 补 `results/figures/`，
+  `python build_tables.py` 生成 `results/tables/`。
+- `build_tables.py` 是本实验自持的表格入口：从 `results/metrics.json` 的
+  `seed_summary` / `per_seed` **单源生成** `exp01_main_results.csv`、
+  `exp01_main_results.tex`（booktabs 三线表）、
+  `exp01_per_seed.csv`（逐 seed 全指标明细）；脚本内不内置任何实测值。
+- 主表不列 `total_f2`（米+秒混量纲，禁当航程）；完成率分母排除 UNREACHABLE；
+  墙钟只作观测。**表格数值一律以本次重跑的 `metrics.json` 为准**，
+  不沿用上一节旧批次数字；两批次若逐位一致属复现，若不一致须逐格说明、
+  禁跨版本配对 t 检验。

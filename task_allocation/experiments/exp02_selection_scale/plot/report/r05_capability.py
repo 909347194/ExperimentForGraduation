@@ -1,22 +1,20 @@
 # -*- coding: utf-8 -*-
-"""图 ``r05_capability``——能力驱动标定：cap(t) 是天然平衡点。
+"""图 ``r05_capability``——能力驱动标定：cap_x* 阶梯对照。
 
 【report 层 · 结论与论文插图】
 
 回答「候选规模按机数名额还是机队能力标定？」——能力驱动口径
-（``mode=primary``，选择数接到 cap(t)=⌊budget_scale·B/c̃⌋）把压缩损失
-大部分买回来，且 n_cand 超过 cap(t) 后收益迅速衰减。
+（``mode=primary``，选择数接到 cap(t)=⌊budget_scale·B/c̃⌋）与名额族对照。
 
 双联面板（x = 候选/选择规模 n_cand / n_sel，对数轴）：
 
-    (a) 绝对口径   y = F1。能力族三点（n_cand=10/20/40）沿曲线爬升，
-                      全量对照为同 N 红色虚线；cap_x1（n_cand≈cap(t)）
-                      达到全量的高质量保持率。灰色带 = cap(t) 附近（±3）。
+    (a) 绝对口径   y = F1；能力族三档沿曲线分布，全量对照为同 N 红色虚线。
+                      灰色带 = cap(t) 附近（±3，cap(t) 从 metrics 现算）。
     (b) 相对口径（有全量对照的规模）   左轴 = 质量保持率 %（实心），
                       右轴 = 耗时比 %（空心，对数）。
 
-读图要点：(a) 中 n_cand 超过 cap(t) 后（加到全量）收益速衰而耗时继续涨——
-cap(t) 即「天然平衡点」。
+读图要点：观察候选规模增大时收益与耗时的边际变化；cap(t) 是否构成平衡点
+以本次正式档实测为准，图注不预设结论。
 
 数据来源：``metrics.json`` 的 ``scales[]``（cap_x* 阶梯 + quota_a2.5 +
 full_baseline 参考）。
@@ -59,18 +57,21 @@ __all__ = ["plot_r05_capability"]
 
 _FULL = "full_baseline"
 _CAP_POINTS = ("cap_x0.25", "cap_x0.5", "cap_x1")
-_CAP_T_FALLBACK = 40  # metrics 无 capability_cap 时的兜底值
 
 
 def _cap_t_of(metrics: dict[str, Any]) -> int:
-    """cap(t) 代表值：cap_x* 各行 capability_cap 的中位数（兜底 40）。"""
+    """cap(t) 代表值：cap_x* 各行 capability_cap 的中位数。
+
+    无 capability_cap 字段时按机队规模推导（⌈max_ratio·K⌉ 量级），
+    不写死旧场景数值。
+    """
     vals = [
         cap_t(row)
         for row in (metrics.get("scales") or [])
         if str(row.get("variant")) in _CAP_POINTS and cap_t(row) is not None
     ]
     if not vals:
-        return _CAP_T_FALLBACK
+        return max(1, 2 * int(metrics.get("K", 0) or 0))
     vals.sort()
     return int(vals[len(vals) // 2])
 
@@ -197,12 +198,14 @@ def plot_r05_capability(
                 ha="center", va="bottom", fontsize=FS["annotation"] - 0.5,
                 color="#6b7280")
 
-    fig.suptitle("能力驱动标定：k≈cap(t) 是「质量—耗时」的天然平衡点（成功标准 3/4）",
+    budget_km = (float(metrics.get("K", 0) or 0)
+                 * float(metrics.get("uav_max_range_m", 0.0) or 0.0) / 1000.0)
+    fig.suptitle("能力驱动标定：cap_x* 阶梯的质量—耗时对照",
                  fontsize=FS["suptitle"])
     fig.tight_layout(rect=(0, 0.06, 1, 0.93))
     footnote(fig,
              "数据来源：results/metrics.json 的 scales[]。k = n_selected；cap(t)=下取整"
-             "(budget_scale·B/c)（B=机队总航程 640 km，c=最近可用机三维航程中位数），"
+             f"(budget_scale·B/c)（B=机队总航程 {budget_km:g} km，c=最近可用机三维航程中位数），"
              "实测见 metrics 的 capability_cap 字段。全量对照三个规模全测。"
              "灰色带 = cap(t)±3。单 seed（42）。")
 

@@ -3,18 +3,17 @@
 
 【report 层 · 结论与论文插图】
 
-回答「分层省下的搜索时间，是否被 O(n²) 代价构建吃掉？」——
-代价矩阵延迟构建（惰性代价表）下的答案：没有，且二阶段耗时与 N 无关。
+回答「分层省下的搜索时间，是否被 O(n²) 代价构建吃掉？」
 
 三联面板：
 
-    (a) 二阶段耗时 t_muas vs N（对数轴）   固定 k 时三条平线
-                      （极差 < 2%）——耗时只随 k 涨，不随 N 涨。
+    (a) 二阶段耗时 t_muas vs N（对数轴）   观察固定候选规模下是否随 N 变化。
     (b) 一阶段三项耗时 vs N（对数轴）   hint（最近机 O(n·K)）/
-                      selection / build（候选子集矩阵）全程在百毫秒~秒级，
-                      占端到端比例随 N 下降（二阶段求解主导端到端）。
-    (c) 惰性表现算边数 vs N（双对数）   实测惰性边沿 O(N) 增长（k 固定），
-                      全量矩阵沿 O(N²)（斜率 2 参考线）。
+                      selection / build（候选子集矩阵）分段计时。
+    (c) 惰性表现算边数 vs N（双对数）   惰性表现算边数与全量矩阵的规模对照
+                      （含斜率 2 参考线）。
+
+是否解耦、边数增长阶次均以本次正式档实测为准，图注不预设结论。
 
 数据来源：``metrics.json`` 的 ``scales[].t_{hint,selection,build,muas}_ms``
 与 ``lazy_edges``。
@@ -147,7 +146,7 @@ def plot_r03_time_breakdown(
     ax_b.legend(loc="upper left", fontsize=FS["legend"] - 0.5)
     ax_c.legend(loc="lower right", fontsize=FS["legend"] - 1.0)
 
-    fig.suptitle("耗时分解：二阶段与 N 解耦、一阶段百毫秒级、惰性边 O(N)（成功标准 2）",
+    fig.suptitle("耗时分解：二阶段耗时、一阶段分段计时与惰性边规模随 N 的变化",
                  fontsize=FS["suptitle"])
     fig.tight_layout(rect=(0, 0.06, 1, 0.93))
     footnote(fig,

@@ -64,9 +64,10 @@ expXX_<name>/
 ├── run.py           # 主编排：建场景 → 滚动求解 → 落盘 → 出图 → 审计
 ├── metrics.py       # 指标计算（逐周期 / 汇总 / 多种子聚合）
 ├── audit_correctness.py  # 方法正确性审计（run.py 末尾自动调用，是门禁不是装饰）
+├── build_tables.py  # 从 results/metrics.json 单源生成 CSV + LaTeX 三线表
 ├── plot/            # 可视化（registry.py 为图清单唯一事实来源）
 ├── notes.md         # 本实验口径、结果、标定史
-└── results/         # 数值与图产物（gitignore）
+└── results/         # 数值与图产物（gitignore）；figures/ 出图、tables/ 出表
 ```
 
 `render_from_json.py` 是**补图入口**：已有 `results/` 时可不重跑求解直接重画。
@@ -83,17 +84,45 @@ expXX_<name>/
 
 | 目录 | 目的 | 状态 |
 |---|---|---|
-| `exp01_smoke` | 主链路冒烟 + 主口径结果（滚动闭环、覆盖门禁） | active |
-| `exp02_selection_scale` | 选择层规模（N / 名额 / 能力上界）标定 | active |
+| `exp01_smoke` | 主链路冒烟 + 主口径结果（滚动闭环、覆盖门禁）；11-10 用当前代码重跑正式档、26/26 PASS | active |
+| `exp02_selection_scale` | 选择层规模（N / 名额 / 能力上界）标定；11-10 切 guangzhou 当前口径重跑 | active |
 | `exp03_event_rolling` | 事件触发重规划 | planned（仅 notes） |
 | `exp04_ablation` | 消融矩阵收编 | planned（仅 notes） |
-| `exp05_baselines` | 与基线方法对照（M0/D0/B1/B2/B2e/B3） | active |
+| `exp05_baselines` | 主张检验台 C1–C5（同一批解两把尺子、独立重评、配对精确 p）；v3 正式档 35 单元 | active |
 | `exp06_joint_regime` | 联合域（机队规模 × 到达率 × 能力衰减） | active |
+| `exp07_polish_accept` | 采纳判据统一 `f` + L3b 开/关对照 | active（定稿 §11.8/§11.9） |
+| `exp08_gain_decomposition` | 交付后成本优化收益拆分 2×2 | active（§11.10） |
+| `exp09_mcf_layers` | 终点机巢层 1 × 层 3 四档 | active（§11.11） |
+| `exp10_capacity_pressure` | 容量压力四场景 | active（§11.12） |
+| `ab_m21_patrol_writeback` | 机制诊断：段内序 Lamarckian 回写三臂 | 诊断证据链 |
+| `ab_mechanism_3steps` | 机制诊断：基因型/表型、2×2、模块三步 + 选择错配探针 | 诊断证据链 |
+| `ab_optimization_attribution` | 机制诊断：优化工作归属（进化 / 修复 / 精修） | 诊断证据链 |
+| `ab_order_marginal` | 机制诊断：组内顺序的边际贡献 | 诊断证据链 |
 
-planned 目录只放 `notes.md`（有意占位），**不要删**。历史数据与一次性扫描
-结果归到 `_archive/`（gitignore），不占实验顶层。
+planned 目录只放 `notes.md`（有意占位），**不要删**。四个 `ab_*` 目录是阶段二
+重构的机制诊断证据链，被 `docs/stage2_final_scheme_2026-11-06.md` 等文档引用，
+**不要因为名字不像 expXX 就当临时脚本删掉**。
 
-## 7. 运行
+## 7. 目录纪律与历史产物归档（2026-11-10 规整）
+
+- 每个实验顶层只放 §4 约定的自持文件（`config.py/yaml`、`build.py`、`paths.py`、
+  `run.py`、`metrics.py`、`notes.md`、`plot/`、`results/`）与少量结论性报告/图。
+  **一次性探针脚本、运行日志、编译中间产物不得留在实验顶层**。
+- 历史批次、一次性扫描结果与日志统一归到 `_archive/`（gitignore），命名规则
+  **`_archive/<实验名>__<原目录名>`**，例如 `exp05_baselines__results_v3`、
+  `ab_mechanism_3steps__results_s2_60`。`docs/` 与各实验 `notes.md` / 报告里出现的
+  旧 `results_*` 相对路径，一律按此规则映射到 `_archive/` 下读取；
+  **结论与数值未因归档改动**。
+- 顶层日志留底在 `_archive/logs_2026-11-10/`，一次性脚本留底在
+  `_archive/temp_scripts_2026-11-10/`；`results/` 内部的正式档日志原地保留。
+- `config.yaml` 的 `output_dir` 是实验自变量，**不因归档改写**；重跑会在顶层
+  重新生成同名产物目录，跑完按本节规则归档。
+- 纯 `results/` 是各实验当前有效产物目录，**不归档**；归档的只是带后缀的历史批次。
+- 结果表由各实验自持的 `build_tables.py` 从 `results/metrics.json` **单源生成**，
+  产物落 `results/tables/`（CSV + LaTeX 三线表 `.tex` 片段）；**禁手写数字**。
+  出图与出表都在求解完成后单独执行，不占求解进程（跑批纪律：求解时不出图）。
+
+## 8. 运行
 
 ```bash
 # 从仓库根，用项目虚拟环境

@@ -2,6 +2,11 @@
 
 > 自动生成汇总版，整合 6 个 (任务数:周期, 截止压力) 组合。原始逐 run 数据见各
 > `results_<scen>_<dl>/` 子目录；图件见 `figs/`。
+>
+> **2026-11-10 目录规整**：上述 `results_*` 子目录与 `figs/` 已整体归档至
+> `experiments/_archive/`，命名规则 `<实验名>__<原目录名>`（例如
+> `ab_m21_patrol_writeback__results_60_0`、`ab_m21_patrol_writeback__figs`）。
+> 下文相对路径按此映射，报告数值与结论未改动。
 
 ## 0. 运行配置
 

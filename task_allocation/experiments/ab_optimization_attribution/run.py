@@ -22,7 +22,8 @@
 各实例同几何种子 + 同求解器种子配对（差异仅来自臂配置），对比交付质量
 （path_cost / late / coverage / delivered_fitness / n_hard / 种群方差塌缩）。
 
-输出（每档场景x每档截止落在 results/t<任务数>_c<周期>/d<deadline>/）：
+输出（默认落在脚本所在目录的 results/，与启动 cwd 无关）：
+每档场景x每档截止 results/t<任务数>_c<周期>/d<deadline>/：
   - ab_attr_raw.csv            逐 run 原始指标
   - ab_attr_summary.csv        各臂聚合（mean/std）
   - ab_attr_contrast.csv       配对对照（C->A 进化、A->B 精修）
@@ -30,7 +31,7 @@
   - ab_attr_armcmp.png         三臂交付质量对比
   - ab_attr_attribution.png    归属饼/柱
   - ab_attr_summary.json       结构化快照
-顶层 results/ab_attr_report.md：归属结论 + 诚实口径。
+顶层 <脚本目录>/results/ab_attr_report.md：归属结论 + 诚实口径。
 
 用法：
   python run.py                                       # 默认三档场景 + 双截止压力
@@ -570,7 +571,11 @@ def main():
     ap.add_argument("--area", type=float, default=DEFAULTS["area"])
     ap.add_argument("--pop", type=int, default=DEFAULTS["pop_size"])
     ap.add_argument("--gens", type=int, default=DEFAULTS["max_generations"])
-    ap.add_argument("--out-dir", default="results")
+    ap.add_argument(
+        "--out-dir",
+        default=str(Path(__file__).resolve().parent / "results"),
+        help="输出目录（默认：%(default)s；与启动 cwd 无关）",
+    )
     args = ap.parse_args()
 
     scenarios = parse_scenarios(args.scenarios)

@@ -1,3 +1,14 @@
+# exp02_selection_scale —— 选择层规模压缩与标定扫描
+#
+# 2026-11-10 场景切换（用户裁定「广州数据，当前口径」）：
+#   lasa_chengguan → guangzhou（3 机巢 / DEM + 建筑垂直切面包络 / 10 km 满电航程），
+#   与 exp01_smoke 当前正式档同一场景、同一距离与目标口径。
+#   机队规模受总容量约束由 K=8 → K=6（3 巢 × 容量 2），
+#   因此名额族 ⌈α·K⌉、选择封顶 ⌈max_ratio·K⌉、能力族 cap(t) 全部随场景改变；
+#   变体矩阵保留五档，但**旧档的 20/40/16/42 等数值一律作废**，
+#   图上数值一律由本次 metrics.json 现算，不写死在代码里。
+#   跨实验禁直接比绝对值（场景与规模档位不同）。
+
 experiment:
   name: exp02_selection_scale
   seed: 42
@@ -6,50 +17,43 @@ experiment:
   plot_dir: plot
 
 # 目的：在 |T_t| >> K_avail 的规模下量化第一阶段的压缩收益与代价
-# （exp01_smoke 跑在机多任务少一侧，Top-αK 从不触发，无法验证该机制）
+# （exp01_smoke 是逐周期到达的滚动任务流，单周期候选池小，无法充分验证该机制）
 
 data:
-  scenario: lasa_chengguan # 场景数据目录 data/<scenario>/（见 data/README.md）
+  scenario: guangzhou # 当前实验场景（用户裁定 2026-11-10）；场景目录 data/guangzhou/
   source: file
-  path: nest_location_data.csv
-  dem: Chengguan_DEM.tif
-  region_geojson: Chengguan_district.geojson
+  path: nest_location_data.csv # 3 个机巢经纬度
+  dem: dem.tif # 地面基底高程
+  buildings: building # 建筑 shapefile 目录；垂直切面障碍包络 = max(地面, 地面+建筑高)，与 exp01 同口径
+  region_geojson: region.geojson # 任务撒点区域多边形（广州研究区）；run.py 从本段读取
   coordinate_column: Coordinate
 
 problem:
-  n_nests: 6
-  nest_capacity: 4
-  # 关键变量：可用机数固定为 8，任务规模远大于它 → |T_t| >> K_avail
-  n_uavs: 8
-  # 满电航程（m）：与 exp01 生产口径一致（城关区 20 km）。
-  # 航程必须是真实瓶颈，「按机队能力标定规模」的机制才可被真正检验。
-  uav_max_range: 20000.0
-  uav_max_time: null # 最大飞行时间（秒）；null=自动派生 uav_max_range/uav_speed（与航程预算自洽，不新增淘汰）。
-  # 与 exp01 / exp05 生产口径保持一致的模型权重（单位：收益当量 / 米）
+  n_nests: 3
+  nest_capacity: 2
+  # 关键变量：机队规模受 3 巢 × 容量 2 约束固定为 K=6，任务规模远大于它 → |T_t| >> K
+  n_uavs: 6
+  uav_speed: 15.0 # m/s（与 exp01 同值）
+  # 满电航程（m）：guangzhou 生产口径 10 km。航程必须是真实瓶颈，
+  # 「按机队能力标定规模」的机制才可被真正检验。
+  uav_max_range: 10000.0
+  uav_max_time: null # null = 派生 uav_max_range/uav_speed（与航程预算自洽，不新增淘汰）
   allow_unassigned: true
   allow_idle_uav: true
-  # 按口径约定统一为 1e-1，与 exp01 现行值一致；
-  # 改前为 1e-2（原生产默认）。本轮全实验同口径，结果可进同一张主表。
-  lambda_cost: 1.0e-1
+  lambda_cost: 1.0e-1 # 全实验统一 1e-1；旧档 1e-2 作废
   w_penalty: 1.0
   # 惩罚量纲解耦：秒级惩罚不再随 F2 一起乘 λ 被压没
-  # （迟到 300 s ≈ 3 点奖励，足以抵消单任务收益）
   w_violation: 0.01
   w_nest_capacity: 1.0
   # 门禁口径（唯一主口径）：
   #   f = W_hard·n_hard + w_exc·excess_m + W_skip·n_skip + w_late·L_tot + λ·path
-  #   （固定表述：搜索用 f 不含 −m·F1；F1 只作事后指标）
-  #   T0 物理违约（硬）> T0.5 覆盖门禁 > T2 迟到（秒级软计价）> T3 航程
+  #   （固定表述：搜索用 f 不含 −m·F1；F1 只作事后指标；F3 已移除）
   lexicographic: true
   big_m: null # null = 按问题数据自动推导（仅作 W_hard/W_skip 推导基数，不进 f）
-  # 迟到奖励折减容忍 W（s）：晚到任务 eff = R × max(0, 1 − L/W)；
-  # 与 exp01 生产同值（1800）
-  late_reward_decay_seconds: 1800.0
+  late_reward_decay_seconds: 1800.0 # 与 exp01 生产同值
   w_hard_violation: null # null = 自动 κ·m·R_pool（可行解永远压到不可行解之前）
   hard_violation_kappa: 10.0
-  # 覆盖门禁（唯一主口径，与 exp01 生产口径一致；见
-  # docs/objective_caliber_two_approaches_archive_2026-10-24.md）：
-  #   coverage_gate = 终态构造性修复；lexicographic_coverage = W_skip 罚层 + 审计分账
+  # 覆盖门禁：coverage_gate = 终态构造性修复；lexicographic_coverage = W_skip 罚层 + 审计分账
   lexicographic_coverage: true
   w_skip_violation: null
 
@@ -78,13 +82,12 @@ constraints:
 stage:
   # 选择性：字典序下经济性剔除自动关闭（丢正收益任务必降 F1），
   # 任务暂缓仅由可行性修复产生；键保留供消融对比
-  prune_unprofitable: false  # 与「完成是约束」冲突，门禁口径下必须关
+  prune_unprofitable: false # 与「完成是约束」冲突，门禁口径下必须关
   prune_max_rounds: 8
   prune_margin: 0.0
   prune_wait_bonus: 1.0
   wait_scale: 3600.0
-  # 需求感知参与（生产口径）：贪心最大覆盖选参与机，
-  # 再按航程预算容量感知补机（治 K 塌缩 → 远任务未服务）
+  # 需求感知参与（生产口径）
   participating_policy: demand
   participation_cost: 0.0
   marginal_tour_cap: null
@@ -92,30 +95,31 @@ stage:
   demand_range_factor: 0.5
   demand_provision_serving: true
   demand_serve_margin: 0.95
-  # 「可达即执行」救援池口径：救援池扩到全可用机队（存在量化）
+  # 「可达即执行」救援池口径：救援池扩到全可用机队
   reflow_rescue_scope: fleet
   polish_enabled: true
   polish_max_rounds: 20
   polish_max_evals: 800
   polish_eps: 1.0e-6
-  # 覆盖门禁两层（默认关，与生产口径一致；消融时两开关同开 = 完整门禁口径）
   coverage_gate: true
   coverage_gate_max_rounds: 8
   coverage_first: false
 
 tasks:
   source: synthetic
-  # 撒点域：exp02 为「规模可扩展性」实验，沿用锚定机巢口径；
-  # 全域撒点（dem_extent）是 exp01 的需求不确定性设定
-  domain: nest_anchored
-  spread_m: 25000.0
+  # 与 exp01 同款：广州研究区多边形内均匀撒点（需求不确定性设定）。
+  # 旧档 nest_anchored + spread_m=25km 属 lasa_chengguan 大区域口径，已作废。
+  domain: region
+  region_geojson: region.geojson # run.py 实际从 data.region_geojson 读取；两处保持一致
+  spread_m: 12000.0 # 仅 domain=nest_anchored 生效；保留占位，本档不生效
   reward_min: 1.0
   reward_max: 10.0
   deadline_min: 3600.0
   deadline_max: 28800.0
   anchor_to_nests: true
 
-# 扫描的任务规模；每个规模独立测一轮（K_avail 恒为 8）
+# 扫描的任务规模；每个规模独立测一轮（K 恒为 6）。
+# N=10 略大于 K，N=50/100 构成 |T_t| >> K，用于观察压缩是否与 N 解耦。
 scales:
   - 10
   - 50
@@ -131,6 +135,10 @@ selection:
     w_c: 0.15
   synergy_radius: 5000.0
   wait_scale: 3600.0
+  # 注意：exp02 自持的 selection_config_from() 只读取本段的 alpha / weights /
+  # synergy_radius / wait_scale；MarginalConfig 用代码默认 max_ratio=2.0。
+  # 本段不写 marginal.max_ratio——那是死键（写了也静默不生效）。
+  # K=6 ⇒ 选择封顶 ⌈max_ratio·K⌉=12；名额族 ⌈α·K⌉=15 / 30。
 
 # 规模标定扫描：候选/选择规模政策 × 能力预算系数。两族对照——
 #   quota_*：纯机数名额，k = ⌈α·K⌉，与机队吞吐能力脱钩
@@ -139,11 +147,10 @@ selection:
 #           cap(t) = ⌊budget_scale·Σ remaining_range / 单任务中位代价⌋
 #           —— 跟着机队总吞吐走。
 # max_expand_factor 防 c̃ 过小时规模失控（相对机数名额的扩张倍数上限）。
-# 取点：B = 8×80km = 640km、任务中位代价 ~15km ⇒ cap(×1.0)≈42；变点取
-# 0.25/0.5/1.0 ⇒ cap≈10/21/42，与机数名额 20/40 交错形成对照曲线；
-# 其中 quota_a5(40) 与 cap_x1(42) 近似等规模，可直接对比「同规模下
-# 两种标定口径的选择质量」。cap(t)≈80/128 等更右端取点与相邻点曲线形状
-# 重复，不入矩阵；不压缩极点由 full_baseline 承担。
+# 广州口径下 B = 6×10 km = 60 km；cap(t) 的实际量级由本次 metrics.json 的
+# selection.capability_cap 现算，旧档「B=640 km / cap≈42 / 20/40 交错」的
+# 取点说明全部作废。三档 budget_scale 仍按 4 倍阶梯取 0.25/0.5/1.0，
+# 覆盖 cap(t) 两侧；不压缩极点由 full_baseline 承担。
 variants:
   - name: quota_a2.5
     alpha: 2.5
@@ -173,8 +180,8 @@ variants:
       max_expand_factor: 25
 
 # 第二阶段只对候选集求解，规模受候选上限限制，用中等算力即可。
-# exp02 量的是「吞吐-耗时-质量」权衡曲线的形状，不是生产级解质量
-# （那由 exp01 以 100 代 + 2000 评估的口径给出）；全格同预算，横向可比。
+# exp02 量的是「吞吐-耗时-质量」权衡曲线的形状，不是生产级解质量；
+# 全格同预算，横向可比（与旧档同预算，但跨场景禁配对 t 检验）。
 solver:
   pop_size: 20
   max_generations: 40

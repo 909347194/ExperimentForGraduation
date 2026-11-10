@@ -113,7 +113,13 @@ def plot_setup_params(
         ("机巢数 / 容量", f"{problem.get('n_nests', '—')} 个 / 每巢 {problem.get('nest_capacity', '—')} 架"),
         ("满电航程", f"{max_range_km:g} km（每周期末充电恢复）"),
         ("任务规模 N", " / ".join(str(s) for s in scales)),
-        ("任务撒点", f"{tasks_cfg.get('domain', 'nest_anchored')}，spread={float(tasks_cfg.get('spread_m', 0))/1000:g} km"),
+        ("任务撒点", (
+            f"{tasks_cfg.get('domain', 'nest_anchored')}，"
+            f"区域={tasks_cfg.get('region_geojson') or cfg.get('data', {}).get('region_geojson', '—')}"
+            if str(tasks_cfg.get("domain", "")).strip().lower() == "region"
+            else f"{tasks_cfg.get('domain', 'nest_anchored')}，"
+                 f"spread={float(tasks_cfg.get('spread_m', 0))/1000:g} km"
+        )),
         ("奖励范围", f"{tasks_cfg.get('reward_min', '—')} ~ {tasks_cfg.get('reward_max', '—')}"),
         ("时间窗", f"{float(tasks_cfg.get('deadline_min', 0))/3600:g} ~ {float(tasks_cfg.get('deadline_max', 0))/3600:g} h"),
         ("随机种子", str(cfg.get("experiment", {}).get("seed", "—"))),
@@ -142,8 +148,8 @@ def plot_setup_params(
         ("polish", f"≤{stage.get('polish_max_rounds', '—')} 轮 / ≤{stage.get('polish_max_evals', '—')} 评估"),
         ("选择机制", f"优先级→n_cand 预筛→可行性→边际收益；α={_fmt(sel_cfg.get('alpha'))}"),
         ("capability", "cap(t)=下取整(budget_scale·B/c)，c=最近机代价中位数"),
-        ("距离口径", "垂直切面 DEM 三维航程（全链路程统一 CostProvider）"),
-        ("适应度", "四层准字典序：硬违约→收益→迟到→航程"),
+        ("距离口径", "垂直切面 DEM + 建筑包络三维航程（全链路统一 CostProvider）"),
+        ("适应度", "单一加权标量 f（完成是约束、成本是目标；F3 已移除）"),
         ("全量对照", f"N ∈ {sorted(cfg.get('run', {}).get('full_muas_baseline_scales') or [])}"),
     ]
 

@@ -25,10 +25,10 @@
 
     setup_params     实验设定总览（口径基准）
     r01_tradeoff     吞吐—耗时—质量全局权衡（核心图；论文主图候选）
-    r02_compression  成功标准 1：压缩真实发生且与 N 解耦
-    r03_time_breakdown 成功标准 2：二阶段耗时与 N 无关 + O(n²) 瓶颈已除
+    r02_compression  观察：压缩是否发生、是否与 N 解耦
+    r03_time_breakdown 观察：分段耗时与现算边数随 N 的变化
     r04_bottleneck   瓶颈定位：选择名额 max_ratio·K 而非 α
-    r05_capability   成功标准 3/4：能力驱动 k≈cap(t) 的平衡点
+    r05_capability   观察：能力族阶梯的质量—耗时对照
 """
 
 from __future__ import annotations
@@ -64,7 +64,7 @@ GROUPS: dict[str, str] = {
 TOPICS: dict[str, str] = {
     "config": "实验配置快照",
     "tradeoff": "吞吐—耗时—质量权衡",
-    "compression": "规模压缩与解耦",
+    "compression": "规模压缩",
     "timing": "耗时分解与瓶颈",
     "calibration": "规模标定口径",
 }
@@ -132,7 +132,7 @@ FIGURES: tuple[Figure, ...] = (
         id="r02_compression",
         group="report",
         topic="compression",
-        title="规模压缩与 N 解耦：候选数 / 选择数 / 执行数 / 压缩比随 N 的演化",
+        title="规模压缩：候选数 / 选择数 / 执行数 / 压缩比随 N 的演化",
         needs=("metrics",),
         source="metrics.json 的 scales[].selection.{n_tasks_in,capability_n_cand,n_selected} + muas.n_executed + compression_ratio",
         func=plot_r02_compression,
@@ -141,7 +141,7 @@ FIGURES: tuple[Figure, ...] = (
         id="r03_time_breakdown",
         group="report",
         topic="timing",
-        title="耗时分解与惰性边：二阶段耗时与 N 无关，O(n²) 构建瓶颈已除",
+        title="耗时分解与惰性边：分段计时与现算边数的规模对照",
         needs=("metrics",),
         source="metrics.json 的 scales[].t_{hint,selection,build,muas}_ms + lazy_edges",
         func=plot_r03_time_breakdown,
@@ -150,7 +150,7 @@ FIGURES: tuple[Figure, ...] = (
         id="r04_bottleneck",
         group="report",
         topic="calibration",
-        title="瓶颈定位：候选名额 α 无感、选择数被 max_ratio·K 封顶",
+        title="瓶颈定位：名额族候选规模与选择数封顶",
         needs=("metrics",),
         source="metrics.json 的 scales[]（quota_a2.5 vs quota_a5 同 sel 对照 + selection.capability_n_sel）",
         func=plot_r04_bottleneck,
@@ -159,7 +159,7 @@ FIGURES: tuple[Figure, ...] = (
         id="r05_capability",
         group="report",
         topic="calibration",
-        title="能力驱动标定：k≈cap(t) 时质量保持率高、加速比大，cap(t) 是天然平衡点",
+        title="能力驱动标定：cap_x* 阶梯的质量—耗时对照",
         needs=("metrics",),
         source="metrics.json 的 scales[]（cap_x* 阶梯的 k / F1 / t_muas + full_baseline 参考）",
         func=plot_r05_capability,

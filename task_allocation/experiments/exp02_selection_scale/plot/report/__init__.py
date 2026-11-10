@@ -8,7 +8,7 @@
 数值产物只有一份 ``metrics.json``（``scales`` 列表），图回答四个问题：
 
     r01_tradeoff       吞吐—耗时—质量的全局权衡（核心图）
-    r02_compression    规模压缩是否发生、与 N 是否解耦（成功标准 1）
+    r02_compression    规模压缩是否发生、与 N 是否解耦
     r03_time_breakdown 耗时分解与惰性边数：O(n²) 瓶颈是否已除（成功标准 2）
     r04_bottleneck     瓶颈定位：选择名额 max_ratio·K 还是 α
     r05_capability     能力驱动标定：k≈cap(t) 的平衡点（成功标准 3/4）

@@ -1,31 +1,33 @@
 # -*- coding: utf-8 -*-
-"""exp05_baselines 入口：整体方法对照实验（方法 vs 基线 / 距离模型）。
+"""exp05_baselines v3 入口：方法主张检验台（2026-11-09 重新设计）。
 
-对照臂（config.yaml 的 ``methods:`` 段）：
+设计定稿：``task_allocation/docs/exp05_redesign_2026-11-09.md``。
+v3 不再问「我们是否比启发式更好」，而检验五条可证伪主张（C1–C5）。
 
-    M0  本文方法：选择 + DMDE-MUAS + 方案 A 终点 + DEM 三维代价
-    D0  同架构欧氏对照：仅替换代价/距离函数（DEM → 三维直线）
-    B1  random：随机可行分配（性能下界）
-    B2  greedy：收益/代价比贪心插入
-    B3  vrptw：Solomon 插入式 VRPTW 启发（硬时间窗）
-    B2e greedy + 欧氏（朴素策略下距离模型是否仍有影响）
+与 v2 的三处关键差异：
 
-公平性协议（notes.md）：各臂共享同一滚动外壳、同一任务到达序列（同 seed
-生成）、同一硬约束定义与评价指标；臂间唯一差异 = 第二阶段搜索引擎
-（DMDE vs 构造式启发式）或代价模型（DEM vs 欧氏）。
+1. **评价端统一**：所有方法的交付解一律按 DEM 有向三维航程重评；
+   同一批交付解再用两把尺子各算一次，检验尺子本身是否改变结论；
+2. **独立重评**：逐周期几何重建重评（``post_eval.IndependentEvalHook``），
+   自报 vs 重评逐位一致性留档；
+3. **配对统计与单源主表**：同 seed 配对差 + 精确 p + 三态结论，
+   主表/附表全部由落盘结果生成，``notes.md`` 只引用不抄数。
 
-产物::
+产物（``results_v3/``，旧 ``results/`` 冻结为 v2 存档）::
 
-    results/<ARM>/seed_<s>/metrics.json     单次运行汇总指标
-    results/<ARM>/seed_<s>/run_meta.json    运行元信息（距离口径等）
-    results/<ARM>/seed_<s>/solution.json    分配结构（逐周期航次）
-    results/<ARM>/summary.json              该臂跨 seed mean±std
-    results/summary.csv                     论文主表数据源
+    <ID>/seed_<s>/{metrics,run_meta,solution,audit}.json
+    <ID>/summary.json                 跨 seed mean±std
+    summary_primary.csv               论文主表（primary=true）
+    summary_appendix.csv              异口径/双因素附表（primary=false）
+    claims_report.json                逐主张证据 + 三态结论 + 红线
+    paired_report.json                配对明细（claims_report 的配对子集）
+    summary.csv                       全量逐 seed 明细（兼容旧脚本）
 
 命令行覆盖（调试入口）：
 
-    --arms M0,B2        只跑指定臂
+    --arms M0,B2        只跑指定方法
     --seeds 42-46       覆盖 experiment.seeds（42 / 42,43 / 42-46 均可）
+    --set evaluation.profile=smoke   跑冒烟档（结论不可外推正式档）
 """
 
 from __future__ import annotations
@@ -39,6 +41,7 @@ import json
 import sys
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Mapping
 
 # 任意调用方式可跑（python -m / 任意 cwd）：脚本目录先入 sys.path，
@@ -65,8 +68,12 @@ from metrics import (
     summary_csv_row,
     write_json,
 )
+# v3：实验自持模块（不跨实验 import，见 experiments/README.md §1）
+from claims import build_claims_report
+from post_eval import IndependentEvalHook, recompute_two_rulers, summarize_audits
 
 from task_allocation.baselines import get_baseline
+from task_allocation.methods.muas.cost.vertical_section import make_distance_fn
 from task_allocation.methods.muas.solvers.dmde_solver import DMDEConfig
 from task_allocation.methods.rolling.horizon import RollingHorizon
 from task_allocation.methods.task_pool import TaskPool
@@ -81,7 +88,7 @@ __all__ = ["main"]
 
 
 def make_solver_factory(arm: MethodArm, seed: int):
-    """对照臂 → 每周期求解器工厂。
+    """对照方法 → 每周期求解器工厂。
 
     - ``dmde``：返回 None → ``run_selective_muas`` 走默认 DMDE 主算法；
     - 其它：从 ``baselines.REGISTRY`` 实例化（每周期一个新实例）。
@@ -118,13 +125,18 @@ def run_once(
     estimator: Any,
     batch: Any,
     verbose: bool,
-) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
-    """跑一个对照臂的一次滚动闭环，返回 (summary, run_meta, solution)。"""
+    dem_distance_fn: Any = None,
+    euclid_distance_fn: Any = None,
+    nest_xyz: Mapping[int, tuple[float, float, float]] | None = None,
+    audit_enabled: bool = True,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """跑一个方法的一次滚动闭环，返回 (summary, run_meta, solution, audit)。"""
     cfg = bundle.raw
+    budget = dict(arm.solver_budget or {})
     # 求解器种子 = 实验种子（DMDE 搜索随机性与任务生成同步可复现）
     solver_cfg = DMDEConfig(
-        pop_size=bundle.solver.pop_size,
-        max_generations=bundle.solver.max_generations,
+        pop_size=int(budget.get("population", bundle.solver.pop_size)),
+        max_generations=int(budget.get("max_iter", bundle.solver.max_generations)),
         zeta=bundle.solver.zeta,
         delta=bundle.solver.delta,
         seed=seed,
@@ -133,8 +145,9 @@ def run_once(
         lamarckian=bundle.solver.lamarckian,
     )
 
-    # 代价模型切换（D0 同架构对照）：DEM 三维代价 vs 三维直线。
-    # 任务实例与场景逐位一致，只换求解端的距离/代价函数。
+    # 代价模型切换只作用于**求解端**；评价端一律 DEM 有向三维航程（v3）。
+    # D0 是复合档：estimator=None 会连带换掉 ETA / 时间窗动力学，
+    # 故结论里禁止写成单因素归因（见定稿 §3）。
     use_dem = arm.cost_model == "dem"
     uavs = build_uavs(nests, cfg)
     pool = TaskPool(current_time=0.0)
@@ -156,9 +169,17 @@ def run_once(
         solver_factory=make_solver_factory(arm, seed),
     )
     t0 = time.time()
-    # 每臂独立任务副本：TaskPool 会原位改写 status / meta，必须各臂各一份
+    # 每个方法独立任务副本：TaskPool 会原位改写 status / meta
     arrivals = copy.deepcopy(batch.arrivals)
-    records = horizon.run(n_cycles=bundle.horizon.n_cycles, arrivals=arrivals)
+    if audit_enabled:
+        with IndependentEvalHook() as hook:
+            records = horizon.run(
+                n_cycles=bundle.horizon.n_cycles, arrivals=arrivals
+            )
+        audit_reports = list(hook.reports)
+    else:
+        records = horizon.run(n_cycles=bundle.horizon.n_cycles, arrivals=arrivals)
+        audit_reports = []
     wall = round(time.time() - t0, 3)
 
     summary = build_summary(
@@ -168,35 +189,44 @@ def run_once(
         problem_model=bundle.problem_model,
         wall_seconds=wall,
     )
-    summary.update({"arm": arm.id, "solver": arm.solver, "cost_model": arm.cost_model, "seed": seed})
+    summary.update({
+        "arm": arm.id, "solver": arm.solver,
+        "cost_model": arm.cost_model, "seed": seed,
+    })
 
     run_meta = {
         "experiment": bundle.experiment.get("name"),
         "arm": arm.id,
         "solver": arm.solver,
         "cost_model": arm.cost_model,
-        # 距离定义必须随结果落盘（欧氏组单独注明，notes.md 主指标口径）
+        # 求解端口径（欧氏组单独注明）；评价端口径见 distance_definition_review
         "distance_definition": (
             "dem_vertical_section_3d" if use_dem else "euclidean_3d"
         ),
+        "distance_definition_review": "dem_vertical_section_3d",
+        "comparator_ruler": "euclidean_3d",
+        "coordinate_precision": "full",
+        "primary": bool(arm.primary),
+        "solver_budget": budget,
+        "design": "task_allocation/docs/exp05_redesign_2026-11-09.md",
+        "evaluation_profile": str(bundle.evaluation.get("profile", "formal")),
         "seed": seed,
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "config_path": str((EXP_DIR / "config.yaml").relative_to(ROOT)),
         "repo_root": str(ROOT),
-        # 生效配置指纹（含 --set）：断点续跑复用的判据。换 λ / 代数 / 门禁
-        # 开关必须导致不复用，否则旧口径静默混入论文主表。
+        # 生效配置指纹（含 --set、evaluation/claims 段与 arm 新字段）
         "config_fingerprint": _config_fingerprint(bundle.raw, arm),
     }
 
+    # 坐标一律全精度落盘（铁律：离散包络查询，round 会让重评跨边界失真）
     solution = {
         "arm": arm.id,
         "seed": seed,
         "tasks": [
             {
                 "id": int(t.id),
-                "x": round(float(t.x), 3),
-                "y": round(float(t.y), 3),
-                "z": round(float(t.z), 3),
+                "xyz": [float(t.x), float(t.y), float(t.z)],
+                "x": float(t.x), "y": float(t.y), "z": float(t.z),
                 "reward": round(float(t.reward), 4),
                 "arrival_time": round(float(t.arrival_time), 3),
                 "earliest": t.earliest,
@@ -204,6 +234,11 @@ def run_once(
                 "status": t.status.value,
             }
             for t in batch.all_tasks()
+        ],
+        "nests": [
+            {"id": int(n.id), "xyz": [float(n.x), float(n.y), float(n.z)],
+             "capacity": int(n.capacity)}
+            for n in nests
         ],
         "uavs_initial": [
             {"id": int(u.id), "x": float(u.x), "y": float(u.y), "z": float(u.z),
@@ -224,7 +259,55 @@ def run_once(
             for r in records
         ],
     }
-    return summary, run_meta, solution
+
+    # ---- 两把尺子：同一批交付解，按实际飞行方向逐腿重算 -----------------
+    rulers = recompute_two_rulers(
+        solution,
+        dem_distance_fn=dem_distance_fn,
+        euclid_distance_fn=euclid_distance_fn,
+        nest_xyz=nest_xyz or {},
+    )
+    summary.update({
+        "path_m_audit": rulers.path_m_audit,
+        "path_m_euclid3d": rulers.path_m_euclid3d,
+        "ruler_gap_m": round(rulers.ruler_gap_m, 3),
+        "n_legs_audit": rulers.n_legs,
+        "n_missing_end_nest": rulers.n_missing_end_nest,
+    })
+
+    # ---- 独立几何重建重评：自报 vs 重评逐位一致性 -----------------------
+    audit_cols = summarize_audits(audit_reports)
+    summary.update({
+        "f_audit": audit_cols["f_audit"],
+        "path_m_audit_from_problem": audit_cols["path_m_audit_from_problem"],
+        "late_s_audit": audit_cols["late_s_audit"],
+        "n_hard_audit": audit_cols["n_hard_audit"],
+        "n_skip_audit": audit_cols["n_skip_audit"],
+        "n_audit_cycles": audit_cols["n_audit_cycles"],
+        "n_audit_ok": audit_cols["n_audit_ok"],
+        "n_audit_unavailable": audit_cols["n_audit_unavailable"],
+        "consistency_equal_all": int(bool(audit_cols["consistency_equal_all"])),
+        "n_consistency_checked": audit_cols["n_consistency_checked"],
+        "audit_errors": audit_cols["audit_errors"],
+        # 门槛 failures 只记账、不升级为实验失败；分类见 post_eval.summarize_audits
+        "audit_failure_counts": audit_cols["audit_failure_counts"],
+        "audit_failure_examples": audit_cols["audit_failure_examples"],
+    })
+    audit = {
+        "arm": arm.id,
+        "seed": seed,
+        "reports": audit_reports,
+        "columns": audit_cols,
+        "two_rulers": {
+            "path_m_audit": rulers.path_m_audit,
+            "path_m_euclid3d": rulers.path_m_euclid3d,
+            "ruler_gap_m": rulers.ruler_gap_m,
+            "n_legs": rulers.n_legs,
+            "n_tours": rulers.n_tours,
+            "n_missing_end_nest": rulers.n_missing_end_nest,
+        },
+    }
+    return summary, run_meta, solution, audit
 
 
 # ---------------------------------------------------------------------------
@@ -302,7 +385,7 @@ def _config_fingerprint(raw_cfg: Mapping[str, Any], arm: Any) -> str:
 
     断点续跑的复用判据不能只看 metrics.json 是否存在：换 λ / 代数 / 门禁
     开关后跑进同一 results 目录，会静默混入旧口径结果并直接进论文主表
-    （修复）。故把生效配置连同对照臂关键参数一起哈希，落盘
+    （修复）。故把生效配置连同对照方法关键参数一起哈希，落盘
     run_meta 并在复用时比对；不匹配即不复用。
     """
     payload = {
@@ -312,6 +395,11 @@ def _config_fingerprint(raw_cfg: Mapping[str, Any], arm: Any) -> str:
             "solver": getattr(arm, "solver", None),
             "cost_model": getattr(arm, "cost_model", None),
             "overrides": getattr(arm, "overrides", None),
+            # v3：主表归属、配对对象、搜索预算覆盖都必须参与指纹，
+            # 否则换口径后旧结果会被静默复用（定稿 §4.3 批次防混）。
+            "primary": getattr(arm, "primary", None),
+            "pair_with": getattr(arm, "pair_with", None),
+            "solver_budget": getattr(arm, "solver_budget", None),
         },
     }
     blob = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
@@ -322,7 +410,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="运行 exp05_baselines 对照实验")
     parser.add_argument(
         "--arms", nargs="+", metavar="ARM",
-        help="只跑指定臂（M0 D0 B1 B2 B3 B2e…）；支持逗号分隔；省略跑全部",
+        help="只跑指定方法（M0 D0 B1 B2 Q0 B3 B2e…）；支持逗号分隔；省略跑全部",
     )
     parser.add_argument(
         "--seeds", nargs="+", metavar="SEED",
@@ -364,22 +452,43 @@ def main(argv: list[str] | None = None) -> int:
     arms = [a for a in bundle.arms if arm_ids is None or a.id in arm_ids]
     if not arms:
         known = ", ".join(a.id for a in bundle.arms)
-        raise SystemExit(f"没有匹配的对照臂（--arms {arm_ids}）；可用：{known}")
+        raise SystemExit(f"没有匹配的对照方法（--arms {arm_ids}）；可用：{known}")
 
     verbose = bundle.verbose
-    out_root = EXP_DIR / str(bundle.experiment.get("output_dir", "results"))
+    out_root = EXP_DIR / str(bundle.experiment.get("output_dir", "results_v3"))
     out_root.mkdir(parents=True, exist_ok=True)
 
-    # ── 场景（与 seed / arm 无关，只构建一次）────────────────────────
+    eval_cfg = dict(bundle.evaluation)
+    claims_cfg = dict(bundle.claims)
+    profile = str(eval_cfg.get("profile", "formal"))
+    audit_enabled = bool(eval_cfg.get("independent_audit", True))
+    two_rulers = bool(eval_cfg.get("two_rulers", True))
+
+    # ── 场景（与 seed / 方法无关，只构建一次）────────────────────────
     scenario = build_scenario(raw_cfg)
     nests = scenario.nests
     terrain = build_terrain(scenario, raw_cfg)
     estimator = build_cost_estimator(terrain, raw_cfg)
+    # 两把尺子：d_DEM（有向，生产口径）与 d_euclid3d（历史朴素口径）。
+    # 缓存跨方法/seed 复用（精确坐标键，不同任务不会误命中）。
+    dem_distance_fn = (
+        make_distance_fn(estimator, cache={}) if two_rulers
+        else (lambda a, b: 0.0)
+    )
+    euclid_distance_fn = (
+        make_distance_fn(None, cache={}) if two_rulers
+        else (lambda a, b: 0.0)
+    )
+    nest_xyz = {
+        int(n.id): (float(n.x), float(n.y), float(n.z)) for n in nests
+    }
     if verbose:
         print(
             f"[exp05] 场景：{scenario.count} 机巢 × 容量 {nests[0].capacity}，"
             f"DEM={'已接入' if terrain is not None else '未接入'}；"
-            f"对照臂：{', '.join(a.id for a in arms)}；seeds={seeds}"
+            f"方法：{', '.join(a.id for a in arms)}；seeds={seeds}；"
+            f"profile={profile}；两把尺子={two_rulers}；独立重评={audit_enabled}",
+            flush=True,
         )
 
     # ── arm × seed 网格 ─────────────────────────────────────────────
@@ -420,30 +529,42 @@ def main(argv: list[str] | None = None) -> int:
                     "（旧结果口径与当前不符，沿用会污染主表）"
                 )
             t0 = time.time()
-            summary, run_meta, solution = run_once(
+            summary, run_meta, solution, audit = run_once(
                 bundle, arm, seed,
                 scenario=scenario, nests=nests, terrain=terrain,
                 estimator=estimator, batch=batch, verbose=verbose,
+                dem_distance_fn=dem_distance_fn,
+                euclid_distance_fn=euclid_distance_fn,
+                nest_xyz=nest_xyz,
+                audit_enabled=audit_enabled,
             )
             per_arm[arm.id].append(summary)
             write_json(run_dir / "metrics.json", summary)
             write_json(run_dir / "run_meta.json", run_meta)
             write_json(run_dir / "solution.json", solution)
+            write_json(run_dir / "audit.json", audit)
             if verbose:
                 print(
                     f"[exp05] {arm.id:<4} seed={seed}：完成率(final) "
-                    f"{summary['completion_rate_final']:.3f} / 有效完成 "
-                    f"{summary['effective_completion_rate']:.3f} / 奖励产出 "
+                    f"{summary['completion_rate_final']:.3f} / 奖励产出 "
                     f"{summary['reward_yield']:.3f} / 按时(交付集) "
-                    f"{summary['on_time_rate_final']:.3f} / 航程 "
+                    f"{summary['on_time_rate_final']:.3f} / 自报航程 "
                     f"{summary['total_path_m'] / 1000:.1f} km / "
-                    f"{time.time() - t0:.1f}s"
+                    f"重评DEM {summary.get('path_m_audit', 0.0) / 1000:.1f} km / "
+                    f"尺子差 {summary.get('ruler_gap_m', 0.0):.1f} m / "
+                    f"独立重评 {summary.get('n_audit_ok', 0)} 周期 / "
+                    f"{time.time() - t0:.1f}s",
+                    flush=True,
                 )
 
-    # ── 聚合与 summary.csv ─────────────────────────────────────────
-    rows: list[dict[str, Any]] = []
+    # ── 聚合：主表 / 附表 / 全量明细，全部由落盘结果单源生成 ────────
+    rows_all: list[dict[str, Any]] = []
+    rows_primary: list[dict[str, Any]] = []
+    rows_appendix: list[dict[str, Any]] = []
     for arm in arms:
         summaries = per_arm[arm.id]
+        if not summaries:
+            continue
         agg = aggregate_summaries(summaries)
         write_json(
             out_root / arm.id / "summary.json",
@@ -452,35 +573,97 @@ def main(argv: list[str] | None = None) -> int:
                 "solver": arm.solver,
                 "cost_model": arm.cost_model,
                 "label": arm.label,
+                "primary": bool(arm.primary),
                 "seeds": seeds,
                 "agg": agg,
                 "per_seed": summaries,
             },
         )
+        target = rows_primary if arm.primary else rows_appendix
         for s in summaries:
-            rows.append(
-                summary_csv_row(
-                    s, arm=arm.id, solver=arm.solver,
-                    cost_model=arm.cost_model, seed=int(s["seed"]),
-                )
+            row = summary_csv_row(
+                s, arm=arm.id, solver=arm.solver,
+                cost_model=arm.cost_model, seed=int(s["seed"]),
             )
-        rows.append(
-            summary_csv_row(
-                summaries[0], arm=arm.id, solver=arm.solver,
-                cost_model=arm.cost_model, seed="mean", agg=agg,
-            )
+            rows_all.append(row)
+            target.append(row)
+        mean_row = summary_csv_row(
+            summaries[0], arm=arm.id, solver=arm.solver,
+            cost_model=arm.cost_model, seed="mean", agg=agg,
         )
+        rows_all.append(mean_row)
+        target.append(mean_row)
 
-    csv_path = out_root / "summary.csv"
-    with csv_path.open("w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=list(CSV_COLUMNS))
-        writer.writeheader()
-        for row in rows:
-            writer.writerow({k: row.get(k, "") for k in CSV_COLUMNS})
+    def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
+        with path.open("w", newline="", encoding="utf-8") as fh:
+            writer = csv.DictWriter(fh, fieldnames=list(CSV_COLUMNS))
+            writer.writeheader()
+            for row in rows:
+                writer.writerow({k: row.get(k, "") for k in CSV_COLUMNS})
+
+    _write_csv(out_root / "summary.csv", rows_all)
+    _write_csv(out_root / "summary_primary.csv", rows_primary)
+    _write_csv(out_root / "summary_appendix.csv", rows_appendix)
+
+    # ── 主张检验：逐主张配对统计 + 三态结论 + 红线 ───────────────────
+    rows_by_method: dict[str, dict[int, dict[str, Any]]] = {
+        a.id: {int(s["seed"]): s for s in per_arm[a.id]} for a in arms
+    }
+    primary_methods = [
+        str(x) for x in claims_cfg.get(
+            "primary_methods", [a.id for a in arms if a.primary]
+        )
+    ]
+    report = build_claims_report(
+        rows_by_method,
+        seeds=seeds,
+        primary_methods=primary_methods,
+        profile=profile,
+    )
+    write_json(out_root / "claims_report.json", report)
+    c2 = report["claims"]["C2"]
+    c4 = report["claims"]["C4"]
+    write_json(
+        out_root / "paired_report.json",
+        {
+            "experiment": "exp05_baselines",
+            "design": "task_allocation/docs/exp05_redesign_2026-11-09.md",
+            "profile": profile,
+            "seeds": seeds,
+            "paired_seeds": [
+                int(s) for s in seeds if int(s) not in report["unpaired_seeds"]
+            ],
+            "unpaired_seeds": report["unpaired_seeds"],
+            "all_pairs_complete": report["all_pairs_complete"],
+            "primary_gates_passed": report["primary_gates_passed"],
+            "primary_criterion": c2["primary_criterion"],
+            "ruler_effect": c2["ruler_effect"],
+            "ruler_gap": c2["ruler_gap"],
+            "ruler_changes_direction": c2["ruler_changes_direction"],
+            "ruler_bias_by_method": c2["ruler_bias_by_method"],
+            "M0_vs_D0_descriptive": c2["method_pair_descriptive"],
+            "M0_vs_B2_descriptive": c4["pairs"].get("B2", {}),
+            "M0_vs_B1_descriptive": c4["pairs"].get("B1", {}),
+            "caveats": report["caveats"],
+            "red_lines": report["red_lines"],
+        },
+    )
 
     if verbose:
-        print(f"[exp05] 汇总表：{csv_path.relative_to(ROOT)}")
-        print(f"[exp05] 全部 {len(arms)} 臂 × {len(seeds)} seed 运行完成")
+        print(
+            f"[exp05] 主表 {out_root / 'summary_primary.csv'} / "
+            f"附表 {out_root / 'summary_appendix.csv'} / "
+            f"主张报告 {out_root / 'claims_report.json'}",
+            flush=True,
+        )
+        print(
+            f"[exp05] 全部 {len(arms)} 方法 × {len(seeds)} seed 完成；"
+            f"门槛={report['primary_gates_passed']} "
+            f"配对完整={report['all_pairs_complete']} "
+            f"M0一致性={report['claims']['C3']['m0_all_equal']} "
+            f"尺子改变方向={c2['ruler_changes_direction']}",
+            flush=True,
+        )
     return 0
 
 

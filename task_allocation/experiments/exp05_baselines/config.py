@@ -2,7 +2,7 @@
 """exp05_baselines 配置装配：``config.yaml`` → 各模块的配置对象。
 
 与 exp01 同一套 yaml 键（场景 / 选择 / MUAS / 约束 / 求解器 / 滚动），
-保证「同一场景、同一指标口径」；exp05 额外读 ``methods:`` 段定义对照臂
+保证「同一场景、同一指标口径」；exp05 额外读 ``methods:`` 段定义对照方法
 （method_id → 求解器 + 代价模型）。
 
 只做「读 yaml + 建配置对象」：不建场景、不跑算法、不写产物。
@@ -52,10 +52,10 @@ def _section(raw: Mapping[str, Any], name: str) -> dict[str, Any]:
 
 @dataclass(frozen=True)
 class MethodArm:
-    """一个对照臂（methods: 段的一行）。
+    """一个对照方法（methods: 段的一行）。
 
     Attributes:
-        id:         臂名（结果目录名，如 M0 / D0 / B1 / B2 / B3）。
+        id:         方法 ID（结果目录名，如 M0 / D0 / B1 / B2 / Q0）。
         solver:     求解器名：dmde（本文方法）或 baselines.REGISTRY 的 key。
         cost_model: dem（三维地形代价，生产口径）| euclidean（同架构欧氏对照）。
         params:     求解器构造参数（透传给 baseline 构造器，如 seed）。
@@ -67,6 +67,15 @@ class MethodArm:
     cost_model: str = "dem"
     params: dict[str, Any] = field(default_factory=dict)
     label: str = ""
+    # v3：是否进论文主表。异口径（B3 硬时间窗）与双因素（B2e）只进附表。
+    primary: bool = True
+    # v3：该方法的配对对象（主张报告用），None 表示不参与跨方法配对。
+    pair_with: str | None = None
+    # v3 预留：arm 级问题/阶段配置覆盖（P1「经典全集指派」档用）。
+    # 只覆盖显式列出的键，禁止静默改写其它口径；本轮不启用。
+    overrides: dict[str, Any] = field(default_factory=dict)
+    # v3：DMDE 搜索预算覆盖（Q0 等预算档）；空 dict = 用 solver: 段主预算。
+    solver_budget: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if self.cost_model not in ("dem", "euclidean"):
@@ -118,6 +127,16 @@ class ConfigBundle:
         return _section(self.raw, "run")
 
     @property
+    def evaluation(self) -> dict[str, Any]:
+        """v3 统一事后评价器配置（两把尺子 / 独立重评 / profile）。"""
+        return _section(self.raw, "evaluation")
+
+    @property
+    def claims(self) -> dict[str, Any]:
+        """v3 主张检验配置（seed 协议、profile、主表方法）。"""
+        return _section(self.raw, "claims")
+
+    @property
     def seed(self) -> int:
         return int(self.experiment.get("seed", 42))
 
@@ -129,7 +148,7 @@ class ConfigBundle:
 def _build_arms(raw: Mapping[str, Any]) -> tuple[MethodArm, ...]:
     rows = raw.get("methods") or []
     if not rows:
-        raise ValueError("config.yaml 缺少 methods: 段（至少一个对照臂）")
+        raise ValueError("config.yaml 缺少 methods: 段（至少一个对照方法）")
     arms = []
     seen: set[str] = set()
     for row in rows:
@@ -139,9 +158,13 @@ def _build_arms(raw: Mapping[str, Any]) -> tuple[MethodArm, ...]:
             cost_model=str(row.get("cost_model", "dem")).strip().lower(),
             params=dict(row.get("params") or {}),
             label=str(row.get("label", "")),
+            primary=bool(row.get("primary", True)),
+            pair_with=(None if row.get("pair_with") is None else str(row["pair_with"])),
+            overrides=dict(row.get("overrides") or {}),
+            solver_budget=dict(row.get("solver_budget") or {}),
         )
         if arm.id in seen:
-            raise ValueError(f"methods 段臂 id 重复：{arm.id}")
+            raise ValueError(f"methods 段方法 id 重复：{arm.id}")
         seen.add(arm.id)
         arms.append(arm)
     return tuple(arms)
@@ -177,9 +200,14 @@ def build_config_bundle(cfg: Mapping[str, Any]) -> ConfigBundle:
             if m.get("late_reward_decay_seconds") is None
             else float(m["late_reward_decay_seconds"])
         ),
-        # 覆盖门禁审计分账开关；兼容旧 yaml 键 lexicographic_coverage
+        # 覆盖门禁审计分账开关；兼容旧 yaml 键 lexicographic_coverage。
+        # 【v3 修复】生产默认 MUASProblemConfig.coverage_audit=True
+        # （methods/muas/config.py:129），旧实验默认值却写死 False，
+        # 且 exp05 config.yaml 未显式给值 ⇒ 静默关掉审计分账，
+        # 与定稿 §4.3「coverage_audit 开」冲突，独立验收器实测报 FAIL。
+        # 默认改为 True 与生产对齐；yaml 同时显式写出，防再次漂移。
         coverage_audit=bool(
-            m.get("coverage_audit", m.get("lexicographic_coverage", False))
+            m.get("coverage_audit", m.get("lexicographic_coverage", True))
         ),
         w_skip_violation=(
             None if m.get("w_skip_violation") is None
