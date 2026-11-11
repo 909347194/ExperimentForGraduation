@@ -483,8 +483,9 @@ evaluation:
     distance_definition: dem_vertical_section_3d
     comparator_ruler: euclidean_3d
     coordinate_precision: full # 落盘坐标不 round（铁律：离散包络查询）
+    #（清理2026-11-11：原 audit_failure_policy 键无代码消费，已删；行为固定在
+    #  代码里：审计 FAIL 只记账、不中断，先怀疑实现缺陷）
     profile: formal            # smoke | mid | formal；跑冒烟时 --set evaluation.profile=smoke
-    audit_failure_policy: record_only # 审计 FAIL 只记账、不中断；先怀疑实现缺陷
 
 # ── v3 主张检验（seed 单源 = experiment.seeds，勿在此重复写 seeds）──
 # primary_methods 决定第 0 层门槛对谁强制；未通过者单列归因，不静默删除。
@@ -492,6 +493,7 @@ claims:
     primary_methods: [M0, D0, B1, B2, Q0]
     alpha: 0.05
     min_abs_dz: 0.5
+    #（内容键：以下两项是预注册告示/证据索引文本，不参与装配——勿按死键清理）
     multiple_comparison_note: 名义 p 值，未做多重比较校正；禁从多指标里挑显著项当主结论
     evidence_index: task_allocation/docs/stage2_final_scheme_2026-11-06.md §11.8-§11.12
 

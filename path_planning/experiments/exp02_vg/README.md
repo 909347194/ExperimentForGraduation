@@ -64,6 +64,11 @@
 
 ## 6. 复现注意
 
+- 一次性工具脚本（`build_full_graph` / `plan_full_od` / `profile_full_only` /
+  `merge_full_into_scaling` / `replot_profile`）已于 2026-11-11 清理（`git rm`）：
+  全图建图 / 全图实测 / 全城 3-OD 演示的结论已固化于 §4 与 `results/` 报告，
+  需要重跑时从 git 历史恢复；常规入口仍是 `run.py` / `profile_scaling.py` / `sweep_protection.py`。
+
 - 验证窗口是**手动裁剪**的小窗；但**全图 23.23 km² 已实测跑完**（见上「大区 profiling」全图实测行 + `profile_full_region.json` + `profile_scaling.json` 末点），不再依赖外推。
 - `include_dynamic_as_static=false` 为默认（选项 A）。若置 `true`，动态禁飞会被保守烤入建图（对应选项 B：安全但过度剪枝，丢失时间变化语义）。
 - 数据文件中真实动态禁飞区位于 x≈3900, y≈900（exp01 窗口内），不在本实验裁剪窗内，故动态演示用合成区注入以隔离验证机制。

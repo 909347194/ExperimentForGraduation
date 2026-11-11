@@ -17,7 +17,7 @@ scenario:
   # 窗口内超限栋时保留离中心最近的 N 栋。不要设 null——整栋保留会把 max_nodes 预算
   # 吃光，导致大片区域无节点可接 → 大量 ORIGIN_UNREACHABLE。
   max_buildings: 350
-  min_building_area: 1.0
+  #（清理2026-11-11：原 min_building_area 键无任何代码消费，已删）
 
 # 可见性图 / 稀疏路图参数（path_planning/methods/visibility_graph/params.py）
 # 键名与 VisibilityGraphParams 严格一致，写错会启动即报错（不静默用默认值）。
@@ -96,4 +96,4 @@ checks:
   enable_unit_checks: true      # 专项用例（建筑阻挡 / 动态时间窗）
   enable_path_audit: true       # 平滑后路径独立复核（建筑 + 静态/动态禁飞）
   audit_step_m: 2.0
-  edge_case_t_offset: -30.0     # "擦边"用例：相对禁飞生效时刻的起飞偏移 s
+  #（清理2026-11-11：原 edge_case_t_offset 键无任何代码消费，已删——「擦边」用例未落地）

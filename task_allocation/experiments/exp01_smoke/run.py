@@ -12,7 +12,7 @@
 多 seed 时另落 ``results/seed_{id}/{metrics,solution}.json``；正确性审计需要
 solution 的 tours / fitness_weights 才能复核 D/J/K/M/N 项，只靠
 ``metrics.json`` 的 ``per_seed[seed]["cycles"]`` 审不了其余 seed
-（修复，见 docs/exp01_code_audit_2026-10-24.md P0-1）。
+（修复，见 docs/exp01_code_audit_2026-10-24.md P0-1——该评审文档未入库）。
 
 链路（对齐 Chapter3_README §8 技术路线）::
 
@@ -418,8 +418,13 @@ def main(argv: list[str] | None = None) -> int:
         print("===== --dry-run：生效配置（已合并 --set/--window/--range-km） =====")
         print(f"  seeds              = {seeds}")
         print(f"  n_nests            = {prob.get('n_nests')}")
-        print(f"  n_uavs             = {prob.get('n_uavs')}")
-        print(f"  uav_max_range (km) = {prob.get('uav_max_range')/1000.0}")
+        if prob.get("fleet_file"):
+            # 异构机队：逐机参数在机队清单里（problem.n_uavs/uav_* 只是回显缺省）
+            print(f"  fleet_file         = {prob.get('fleet_file')}")
+        else:
+            print(f"  n_uavs             = {prob.get('n_uavs')}")
+        _rng = prob.get('uav_max_range')
+        print(f"  uav_max_range (km) = {_rng / 1000.0 if _rng is not None else None}")
         print(f"  deadline_cycles    = {tasks.get('deadline_cycles_min')} ~ "
               f"{tasks.get('deadline_cycles_max')}")
         print(f"  n_tasks (周期1)     = {tasks.get('n_tasks')}")

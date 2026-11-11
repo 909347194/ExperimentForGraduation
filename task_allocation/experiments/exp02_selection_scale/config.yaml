@@ -14,7 +14,7 @@ experiment:
   seed: 42
   output_dir: results
   figures_dir: results/figures
-  plot_dir: plot
+  #（清理2026-11-11：原 plot_dir 键无代码消费——图代码位置是目录约定，不走配置）
 
 # 目的：在 |T_t| >> K_avail 的规模下量化第一阶段的压缩收益与代价
 # （exp01_smoke 是逐周期到达的滚动任务流，单周期候选池小，无法充分验证该机制）

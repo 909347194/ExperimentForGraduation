@@ -83,7 +83,7 @@ tasks:
     #   下界 = (870 s + 服务 300 s) × 1.05 ≈ 1230 s ≈ 2.0 周期；
     #   上界保持 2:1 比例 → 4.0 周期。仍有淘汰 ⇒ 选择性压力保留。
     # 历史多轮标定（大区域时代 + 统一 DEM 三维航程口径重标定）与扫描档位
-    # 见 notes.md「时间窗标定史」。
+    # 见 exp01_smoke/notes_archive.md「时间窗标定史」（标定史留档在 exp01）。
     deadline_cycles_min: 2.0
     deadline_cycles_max: 4.0
 
