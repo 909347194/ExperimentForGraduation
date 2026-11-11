@@ -1,0 +1,15 @@
+{
+    "defaults": { "speed_mps": 15.0, "max_range_m": 10000.0 },
+    "models": {
+        "long": { "max_range_m": 25000.0, "speed_mps": 20.0 },
+        "short": { "max_range_m": 6000.0 }
+    },
+    "uavs": [
+        { "id": 0, "model": "long", "home_nest": 0 },
+        { "id": 1, "model": "long", "home_nest": 1 },
+        { "id": 2, "model": "short", "home_nest": 0 },
+        { "id": 3, "model": "short", "home_nest": 1 },
+        { "id": 4, "model": "short", "home_nest": 2 },
+        { "id": 5, "home_nest": 2, "max_range_m": 12000.0, "max_time_s": 900.0 }
+    ]
+}

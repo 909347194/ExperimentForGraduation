@@ -39,6 +39,8 @@ RED_LINES = (
     "「Δf=0.1·Δ航程」是线性缩放，不是两条独立证据",
     "MCF 只能写「给定路径下的条件最优」，不能写全局最优",
     "禁写「本实验证明求解端必须用 DEM」：C2 只检验评价端口径",
+    "C4 参照表统一用 path_m_audit（DEM 有向三维航程）；f_audit 混尺子、禁进主表",
+    "外部量级参照只给估计量与区间、并列求解代价，不作方法优劣结论",
 )
 
 
@@ -93,19 +95,24 @@ CLAIMS: tuple[ClaimSpec, ...] = (
     ),
     ClaimSpec(
         id="C4",
-        statement="在完成前提下压低成本与迟到，且代价必须显式报告",
+        statement="在完成前提下压低成本与迟到，且代价必须显式报告；"
+                  "与朴素构造方法的差距只作外部量级参照，不作方法优劣结论",
         kind="method_pair",
         pair=("M0", "B2"),
         metrics=(
-            ("f_audit", "negative"),
-            ("path_m_audit", "negative"),
+            ("path_m_audit", "negative"),         # 唯一主尺子：DEM 有向三维航程
+            ("f_audit", "negative"),              # 异口径诊断列：留档但不进参照表
             ("on_time_rate_final", "positive"),
             ("reward_yield", "positive"),
         ),
         descriptive_only=True,
-        note="M0 与构造式基线的差异是整个第二阶段的求解范式（含解码修复链、"
+        note="唯一评价尺子是 path_m_audit（交付解几何重算的 DEM 有向三维航程）；"
+             "逐周期 problem 重评得到的 f_audit 在 D0/B2e 仍按各自求解端口径自报，"
+             "且含 skip/hard/late 惩罚项、与航程不同量纲，故只留档、禁进参照表。"
+             "M0 与构造式基线的差异是整个第二阶段的求解范式（含解码修复链、"
              "交付后精修、终点机巢分层），不是单因素；且 M0 求解代价高约"
-             "3 个数量级，必须与评估次数/墙钟并列报告",
+             "3 个数量级，必须与评估次数/墙钟并列报告。参照表只给估计量与区间，"
+             "名义 p 留档但不出推断结论",
     ),
     ClaimSpec(
         id="C5",
@@ -401,28 +408,58 @@ def build_claims_report(
         "caveats": list(CAVEATS),
     }
 
-    # ---- C4：质量—代价（描述性） --------------------------------------
+    # ---- C4：外部量级参照（描述性） ------------------------------------
+    # 唯一主尺子 = path_m_audit（垂直切面 DEM 三维有向航程，交付解几何重算）。
+    # f_audit 是逐周期 problem 重评之和：D0/B2e 仍按各自求解端口径自报，
+    # 且 skip/hard/late 惩罚项与航程不同量纲 ⇒ 留档但不进参照表。
     c4: dict[str, Any] = {
         "statement": CLAIMS[3].statement,
         "kind": "method_pair",
         "note": CLAIMS[3].note,
         "descriptive_only": True,
         "caveats": list(CAVEATS),
+        "table_spec": {
+            "role": "external_magnitude_reference",
+            "primary_ruler": "path_m_audit",
+            "normalized_ruler": "path_m_audit_per_completion",
+            "excluded_columns": (
+                "f_audit", "total_path_m", "path_per_completion_m",
+            ),
+            "exclusion_reason": "混尺子或异量纲；禁进参照表",
+            "cost_columns": ("n_evals_total", "wall_seconds"),
+            "inference": "none",
+            "wording": "只报估计量与区间，不作方法优劣结论",
+        },
+        "reference": _build_reference(rows, seed_list, primary_methods),
         "pairs": {},
     }
     for other in ("B2", "B1"):
         entry: dict[str, Any] = {}
         for key, expected in CLAIMS[3].metrics:
             st, paired, unpaired = _pair("M0", other, key)
-            entry[key] = {
-                "stats": st,
-                "paired_seeds": paired,
-                "unpaired_seeds": unpaired,
+            item: dict[str, Any] = {
+                "stats": st, "paired_seeds": paired, "unpaired_seeds": unpaired,
                 "expected": expected,
                 # 描述性档只给估计量与区间：产出 verdict 会被下游误读成
                 # 「方法优劣的结论」，与 C4 的 descriptive_only 口径冲突。
                 "descriptive_only": True,
             }
+            if key == "f_audit":
+                item["not_for_table"] = True
+                item["ruler"] = "mixed"
+                item["note"] = (
+                    "逐周期 problem 重评之和：D0/B2e 仍按求解端自报尺子，"
+                    "且与航程不同量纲；只留档，不进参照表"
+                )
+            elif key == "path_m_audit":
+                item["ruler"] = "dem_directed_3d"
+                item["table_role"] = "primary_ruler"
+            entry[key] = item
+        # 派生主尺子：逐 seed 先归一（DEM 航程 / 完成数）再配对。
+        # 不能用 total_path_m / n_completed：那是各方法自报尺子，混口径。
+        entry["path_m_audit_per_completion"] = _normalized_pair(
+            rows, "M0", other, seed_list, "path_m_audit", "n_completed"
+        )
         for key in ("n_evals_total", "wall_seconds"):
             st, paired, unpaired = _pair("M0", other, key)
             entry[f"cost:{key}"] = {
@@ -451,6 +488,118 @@ def build_claims_report(
             f"profile={profile}：冒烟/mid 档只验链路与配置纯度，结论不可外推正式档"
         )
     return report
+
+
+# ---------------------------------------------------------------------------
+# C4 外部量级参照：统一尺子的派生列与逐方法绝对量
+# ---------------------------------------------------------------------------
+
+
+def _ratio_or_none(
+    row: Mapping[str, Any], num: str, den: str
+) -> float | None:
+    """逐 seed 归一；分母非正返回 None，绝不静默补 0。"""
+    d = float(row.get(den, 0) or 0)
+    if d <= 0:
+        return None
+    return float(row.get(num, 0.0) or 0.0) / d
+
+
+def _abs_stats(values: Sequence[float]) -> dict[str, Any]:
+    """绝对量只留估计量与区间；不做检验、不产出 p 或 verdict。"""
+    st = paired_stats([float(v) for v in values])
+    return {
+        "n": st["n_pairs"],
+        "mean": st["mean"],
+        "std": st["std"],
+        "ci95": st["ci95"],
+    }
+
+
+def _normalized_pair(
+    rows: Mapping[str, Mapping[int, Mapping[str, Any]]],
+    a: str,
+    b: str,
+    seeds: Sequence[int],
+    num: str,
+    den: str,
+) -> dict[str, Any]:
+    """``num / den`` 逐 seed 先归一再配对（差值恒 a − b）。
+
+    与 :func:`paired_stats.paired_difference` 的区别：归一发生在配对之前，
+    分母缺失的 seed 显式计入 ``unpaired_seeds``，不补 0、不静默丢弃。
+    """
+    ra = {int(s): v for s, v in rows.get(a, {}).items()}
+    rb = {int(s): v for s, v in rows.get(b, {}).items()}
+    diffs: list[float] = []
+    paired: list[int] = []
+    unpaired: list[int] = []
+    for s in seeds:
+        if s not in ra or s not in rb:
+            unpaired.append(int(s))
+            continue
+        va = _ratio_or_none(ra[s], num, den)
+        vb = _ratio_or_none(rb[s], num, den)
+        if va is None or vb is None:
+            unpaired.append(int(s))
+            continue
+        diffs.append(va - vb)
+        paired.append(int(s))
+    return {
+        "definition": f"{num} / {den}，逐 seed 先归一再配对（差值恒 {a} − {b}）",
+        "stats": paired_stats(diffs),
+        "per_seed": [round(x, 6) for x in diffs],
+        "paired_seeds": paired,
+        "unpaired_seeds": unpaired,
+        "ruler": "dem_directed_3d",
+        "table_role": "primary_ruler_per_completion",
+        "expected": "negative",
+        "descriptive_only": True,
+        "note": "分母 n_completed ≤ 0 的 seed 显式列为未配对，不补 0",
+    }
+
+
+def _build_reference(
+    rows: Mapping[str, Mapping[int, Mapping[str, Any]]],
+    seeds: Sequence[int],
+    primary_methods: Sequence[str],
+) -> dict[str, Any]:
+    """逐方法绝对量（单源，供参照主表直接取用）。
+
+    只取 primary 方法；所有航程列一律来自 ``path_m_audit`` 这一把尺子，
+    ``total_path_m`` / ``path_per_completion_m`` / ``f_audit`` 均不进入。
+    """
+    keys = (
+        "path_m_audit", "n_completed", "on_time_rate_final",
+        "reward_yield", "n_evals_total", "wall_seconds",
+    )
+    out: dict[str, Any] = {}
+    for method in primary_methods:
+        # seed 键可能是字符串（外部直接读 JSON 构造 rows），统一规范为 int
+        by_seed = {int(s): v for s, v in (rows.get(method) or {}).items()}
+        cells = [by_seed[int(s)] for s in seeds if int(s) in by_seed]
+        if not cells:
+            continue
+        metrics = {
+            key: _abs_stats([float(c.get(key, 0.0) or 0.0) for c in cells])
+            for key in keys
+        }
+        ratios: list[float] = []
+        n_missing = 0
+        for c in cells:
+            r = _ratio_or_none(c, "path_m_audit", "n_completed")
+            if r is None:
+                n_missing += 1
+            else:
+                ratios.append(r)
+        metrics["path_m_audit_per_completion"] = _abs_stats(ratios)
+        out[str(method)] = {
+            "n_seeds": len(cells),
+            "n_missing_denominator": n_missing,
+            "ruler": "dem_directed_3d",
+            "metrics": metrics,
+        }
+    return out
 
 
 def _direction_change(a: Mapping[str, Any], b: Mapping[str, Any]) -> bool | None:

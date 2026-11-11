@@ -40,6 +40,29 @@
 
 ---
 
+## C4 外部量级参照表（2026-11-11 收口，当前有效）
+
+保留 v3「主张检验台」主叙事；C4 只作**外部量级参照**，不改成方法优劣对照台
+（与引言的任务取舍 / 终点机巢条件最优 / 三维航程 / 滚动闭环四条贡献对齐）。
+
+- 唯一主尺子 `path_m_audit`（交付解几何重算的垂直切面 DEM 三维有向航程）；
+  新增逐 seed 归一的 `path_m_audit / n_completed`，分母非正显式记未配对、不补 0。
+  `f_audit`（逐周期 problem 重评之和，D0/B2e 仍按求解端自报尺子且含惩罚项）
+  与自报 `total_path_m` / `path_per_completion_m` 一律**不进参照表**，只留档。
+- `claims.py` 的 `C4.reference` 是单源：`build_reference_table.py` 只读
+  `claims_report.json`，产出 `reference_table.csv` 与 `reference_table.tex`。
+  表只给估计量与区间、并列评估次数与墙钟、不产出 `verdict`；名义 p 仅随 CSV 留档，
+  完成数只随 CSV 留档（完成是硬约束，不作展示列）。
+- 门禁：`profile` 非 formal、存在未配对 seed、缺少 `table_spec` 一律拒绝出表；
+  `primary_gates_passed=False` 不拒绝，但表注必须如实声明完成约束反例。
+- 用法（正式档闭合后单独执行，接在 `run.py` 之后）：
+  `.venv/Scripts/python.exe task_allocation/experiments/exp05_baselines/build_reference_table.py --claims task_allocation/experiments/exp05_baselines/results_v3/claims_report.json`
+  当前 `results_v3/` 只有 15/35 格、未生成 `claims_report.json`，此时运行会明确报
+  「未就绪不出表」，不得拿归档旧口径档冒充正式档。
+- 禁写：方法优劣结论、性能提升、显著优于、独立收益、协同效应、完成率恒 100%。
+
+---
+
 ## 目的
 
 在 **同一场景、同一指标口径、同一 seed 协议** 下，把本文完整方法与
