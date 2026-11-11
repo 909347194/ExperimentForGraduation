@@ -285,6 +285,18 @@ P03 `allocation` 与 P04 并存接入注册表，共 5 张。被裁图件见 git
   不沿用上一节旧批次数字；两批次若逐位一致属复现，若不一致须逐格说明、
   禁跨版本配对 t 检验。
 
+## 机队配置与异构口径（2026-11-11 起）
+
+- 机队改由 `uav_config.json`（`problem.fleet_file`）逐机装配：3 巢 6 机混编
+  （2×25 km 远程 / 3×6 km 近程 / 1×12 km 中程），初始机巢逐机显式给定、
+  满电出巢；不设 fleet_file 即回同构（n_uavs + uav_*），行为逐位不变。
+  schema 与语义见 `docs/design_fleet_spec_2026-11-11.md`。
+- ⚠️ **跨口径禁比**：10 km 同构基线的历史数字不适用于本机队（完成率/航程/
+  迟到均受机队构成影响），对照须按本口径重跑基线。
+- 审计 per-UAV 化：`audit_correctness.py` 的 D/J/J2 逐机取
+  speed/max_range/max_time（`solution.json` 的 `uavs[]` 新增性能字段；
+  旧产物缺字段时回退全局缺省，历史结果仍可审）。异构冒烟审计 26/26 PASS。
+
 ## 已知问题与待办
 
 - **禁飞区未实现**(TODO)：`cost/vertical_section.py` 只做最小离地余量，无 no-fly 实体。

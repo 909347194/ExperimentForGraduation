@@ -834,6 +834,18 @@ def _uav_rows(uavs: Sequence[UAV]) -> list[dict[str, Any]]:
                 "y": float(pos[1]),
                 "z": float(pos[2]) if len(pos) > 2 else 0.0,
                 "nest_id": int(u.nest_id) if u.nest_id is not None else None,
+                # 逐机性能字段（异构机队 per-UAV 化）：max_range/max_time 为
+                # None = 跟随全局缺省（同构回退口径）；审计按「逐机优先、
+                # 缺省回退」解析（audit_correctness.py J/J2/D 项）。
+                "speed": float(getattr(u, "speed", 0.0) or 0.0),
+                "max_range": (
+                    float(u.max_range)
+                    if getattr(u, "max_range", None) is not None else None
+                ),
+                "max_time": (
+                    float(u.max_time)
+                    if getattr(u, "max_time", None) is not None else None
+                ),
                 "available": bool(getattr(u, "is_available", True)),
             }
         )

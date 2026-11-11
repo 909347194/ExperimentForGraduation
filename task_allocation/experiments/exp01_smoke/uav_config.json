@@ -1,15 +1,64 @@
 {
-    "defaults": { "speed_mps": 15.0, "max_range_m": 10000.0 },
+    "version": 1,
+    "description": "exp01_smoke 异构机队清单（fleet spec）—— 3 巢 6 机，长短航程混编。\n\n字段语义与规则（详见 task_allocation/docs/design_fleet_spec_2026-11-11.md）：\n  · 单位显式写在键名：max_range_m=满电航程(米)，speed_mps=巡航速度(米/秒)，max_time_s=最大飞行时间(秒)。\n  · home_nest = 初始机巢 id（= data/guangzhou/nest_location_data.csv 行序，0 起）；初始位置=所驻机巢坐标，满电出巢（remaining_range = max_range_m）。\n  · 字段解析优先级：defaults ← models[model] ← 逐机显式键（逐机最优先）。本文件所有逐机字段均已显式写出（值与继承解析结果一致），自包含可直接读。\n  · max_time_s 显式给值即独立绑定约束；留 null 则自动派生 = 航程/速度。\n  · 机号 id 必须唯一；初始驻巢数 ≤ nest_capacity（config.yaml problem: 段，2 架/巢）。\n  · 未知键/非法值会直接报错，不静默忽略——改坏会立刻发现。\n\n机队构成（巢容量 2/巢，满配）：\n  巢 0：id0 远程 + id2 近程  |  巢 1：id1 远程 + id3 近程  |  巢 2：id4 近程 + id5 中程\n  · long（远程，2 架）：25 km @ 20 m/s，续航 1250 s——负责远域任务，与 geo 永久不可达判定「用机队最强航程」配合，长机不被短机误杀。\n  · short（近程，3 架）：6 km @ 15 m/s，续航 400 s——近域高频次服务。\n  · id5（中程定制，1 架）：12 km @ 15 m/s，续航 900 s（显式约束，宽于派生 800 s）。\n\n启用方式：config.yaml 的 problem.fleet_file: uav_config.json（相对本实验目录）。不设 fleet_file 则退回同构（n_uavs + uav_*），行为逐位不变。\n本清单 2026-11-11 经 tests/test_fleet_spec.py 校验通过并接入 exp01 装配。",
+    "defaults": { "speed_mps": 15.0, "max_range_m": 10000.0, "max_time_s": null },
     "models": {
         "long": { "max_range_m": 25000.0, "speed_mps": 20.0 },
         "short": { "max_range_m": 6000.0 }
     },
     "uavs": [
-        { "id": 0, "model": "long", "home_nest": 0 },
-        { "id": 1, "model": "long", "home_nest": 1 },
-        { "id": 2, "model": "short", "home_nest": 0 },
-        { "id": 3, "model": "short", "home_nest": 1 },
-        { "id": 4, "model": "short", "home_nest": 2 },
-        { "id": 5, "home_nest": 2, "max_range_m": 12000.0, "max_time_s": 900.0 }
+        {
+            "id": 0,
+            "model": "long",
+            "home_nest": 0,
+            "max_range_m": 25000.0,
+            "speed_mps": 20.0,
+            "max_time_s": 1250.0,
+            "meta": { "role": "远程", "note": "驻巢 0；25km 航程承担远域任务，geo 判定以本型为机队最强" }
+        },
+        {
+            "id": 1,
+            "model": "long",
+            "home_nest": 1,
+            "max_range_m": 25000.0,
+            "speed_mps": 20.0,
+            "max_time_s": 1250.0,
+            "meta": { "role": "远程", "note": "驻巢 1；与 id0 分巢部署，覆盖东部远域" }
+        },
+        {
+            "id": 2,
+            "model": "short",
+            "home_nest": 0,
+            "max_range_m": 6000.0,
+            "speed_mps": 15.0,
+            "max_time_s": 400.0,
+            "meta": { "role": "近程", "note": "驻巢 0；6km 近域高频次服务" }
+        },
+        {
+            "id": 3,
+            "model": "short",
+            "home_nest": 1,
+            "max_range_m": 6000.0,
+            "speed_mps": 15.0,
+            "max_time_s": 400.0,
+            "meta": { "role": "近程", "note": "驻巢 1；6km 近域高频次服务" }
+        },
+        {
+            "id": 4,
+            "model": "short",
+            "home_nest": 2,
+            "max_range_m": 6000.0,
+            "speed_mps": 15.0,
+            "max_time_s": 400.0,
+            "meta": { "role": "近程", "note": "驻巢 2；6km 近域高频次服务" }
+        },
+        {
+            "id": 5,
+            "home_nest": 2,
+            "max_range_m": 12000.0,
+            "speed_mps": 15.0,
+            "max_time_s": 900.0,
+            "meta": { "role": "中程定制", "note": "驻巢 2；12km 中程，续航 900s 为显式绑定（宽于派生 800s），演示逐机参数覆盖" }
+        }
     ]
 }

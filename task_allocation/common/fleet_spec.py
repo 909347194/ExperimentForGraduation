@@ -53,7 +53,7 @@ _PERF_KEYS = ("speed_mps", "max_range_m", "max_time_s")
 #: 逐机条目允许的键 = 性能键 + 身份键
 _UAV_KEYS = ("id", "model", "home_nest", "meta") + _PERF_KEYS
 #: 顶层允许的键
-_TOP_KEYS = ("version", "defaults", "models", "uavs")
+_TOP_KEYS = ("version", "description", "defaults", "models", "uavs")
 
 _FLEET_SPEC_VERSION = 1
 
@@ -158,6 +158,9 @@ def load_fleet_spec(path: str | Path) -> FleetSpec:
     version = raw.get("version", _FLEET_SPEC_VERSION)
     if version != _FLEET_SPEC_VERSION:
         raise _err(f"version 只支持 {_FLEET_SPEC_VERSION}，得到 {version!r}", source)
+    desc = raw.get("description")
+    if desc is not None and not isinstance(desc, str):
+        raise _err("description 必须是字符串（人读说明，不参与装配）", source)
 
     # ── defaults / models：只允许性能键 ──────────────────────────
     defaults = raw.get("defaults") or {}

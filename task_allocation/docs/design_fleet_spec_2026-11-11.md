@@ -34,6 +34,7 @@
 ```json
 {
   "version": 1,
+  "description": "人读说明（可选，不参与装配）",
   "defaults": {"speed_mps": 15.0, "max_range_m": 10000.0, "max_time_s": null},
   "models": {
     "long":  {"max_range_m": 25000.0, "speed_mps": 20.0},
@@ -52,6 +53,7 @@
 | 键 | 层 | 必填 | 语义 |
 |---|---|---|---|
 | `version` | 顶层 | 否（=1） | schema 版本，只认 1 |
+| `description` | 顶层 | 否 | 人读说明（自由文本，不参与装配，仅溯源/阅读） |
 | `defaults` | 顶层 | 否 | 性能缺省（三层继承的底层） |
 | `models` | 顶层 | 否 | 型号表：名字 → 性能键 |
 | `uavs` | 顶层 | **是** | 逐机条目（非空列表） |
@@ -106,8 +108,9 @@ problem:
   `data.path`（机巢 CSV，按场景数据目录解析）刻意区分）；绝对路径直用。
 - 不设 `fleet_file` ⇒ 同构回退，行为逐位不变（既有实验零破坏，与 WP-B
   「全局缺省回退」同一模式）。
-- 下游**零改动**：`solution.json` 的 `uavs[]` 本来就逐机落盘
-  `max_range` / `speed` / `nest_id`；绘图、审计、指标均按逐机字段消费。
+- 下游**零改动**：`solution.json` 的 `uavs[]` 逐机落盘 `speed` / `max_range` /
+  `max_time` / `nest_id`（2026-11-11 补齐性能字段，并把审计 D/J/J2 per-UAV 化：
+  逐机取值、缺省回退全局）；绘图、指标按逐机字段消费。
 - 已知边界：`metrics.problem` 的 `uav_speed` / `uav_max_range_km` 两个回显
   字段在 fleet_file 模式下取 yaml 缺省值（heterogeneous 明细以
   `solution.json` 的 `uavs[]` 为准）；如需精确回显，保留同名 yaml 键作台账摘要。

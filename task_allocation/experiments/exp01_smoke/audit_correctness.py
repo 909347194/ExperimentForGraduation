@@ -184,6 +184,41 @@ def _run_checks(
     nests = {int(n["id"]): n for n in sol["nests"]}
     speed = float(m["problem"]["uav_speed"])
     max_range = float(m["problem"]["uav_max_range_km"]) * 1000.0
+    # ── 逐机性能解析（per-UAV 化）：solution.json 的 uavs[] 带逐机
+    # speed / max_range / max_time（异构机队）；缺字段或 None（同构回退、
+    # 旧产物）时退回上面的全局缺省，与历史口径逐位一致。
+    uav_perf: dict[int, dict[str, float | None]] = {}
+    for _u in sol.get("uavs") or []:
+        try:
+            _uid = int(_u["id"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        uav_perf[_uid] = {
+            "speed": float(_u["speed"]) if _u.get("speed") else None,
+            "max_range": (
+                float(_u["max_range"]) if _u.get("max_range") is not None else None
+            ),
+            "max_time": (
+                float(_u["max_time"]) if _u.get("max_time") is not None else None
+            ),
+        }
+
+    def _uav_speed(uid):
+        return uav_perf.get(int(uid), {}).get("speed") or speed
+
+    def _uav_range(uid):
+        return uav_perf.get(int(uid), {}).get("max_range") or max_range
+
+    def _uav_max_time(uid):
+        """逐机最大飞行时间：逐机值（显式/派生）优先；缺省回退全局口径。"""
+        mt = uav_perf.get(int(uid), {}).get("max_time")
+        if mt is not None:
+            return float(mt)
+        mt = m["problem"].get("uav_max_time")
+        if mt is None:
+            s = _uav_speed(uid)
+            return _uav_range(uid) / s if s > 0 else None
+        return float(mt)
     w_decay = cfg["muas"].get("late_reward_decay_seconds")
     # 覆盖门禁模式：F1 回归纯完成计数，不做迟到折减
     # （迟到单一定价走 w_late·L）——奖励守恒的交付端口径跟着切纯。
@@ -311,6 +346,8 @@ def _run_checks(
             continue
         lb = {int(k): float(v) for k, v in (cmeta.get("lateness_by_task") or {}).items()}
         for tour in c["tours"]:
+            uid = int(tour["uav_id"])
+            spd = _uav_speed(uid)  # 逐机速度（异构机队；缺省回退全局）
             # 方向不确定带（M 项口径分裂的定量化）：
             # 地形跟随航程方向相关（爬升规则从起点扫描）。
             # 运行端 ETA 与代价矩阵**都按飞行方向**取有序口径，记账侧已无
@@ -335,7 +372,7 @@ def _run_checks(
                 out: dict[int, float] = {}
                 for (tid, _, _), d in zip(legs, ds):
                     t = tasks[tid]
-                    cur += d / speed
+                    cur += d / spd
                     if cur < float(t["earliest"]):
                         cur = float(t["earliest"])
                     out[tid] = max(0.0, cur - float(t["latest"]))
@@ -595,16 +632,18 @@ def _run_checks(
             if abs(cost - float(tour["est_cost"])) > max(1.0, 0.0001 * cost):
                 match_bad.append((c["cycle"], uid, round(cost, 1),
                                   round(float(tour["est_cost"]), 1)))
-            if cost > max_range + 1.0:
-                range_bad.append((c["cycle"], uid, f"航程 {cost:.0f} > {max_range:.0f}"))
-            # 飞行时间核对（与航程对称）：派生/显式 uav_max_time；None 时不约束。
-            # 派生 = max_range/speed，与 build_uavs 的派生口径一致 ⇒ 满足航程即
+            # 航程/续航逐机核对（per-UAV：按 tour 所属机的满电航程与
+            # 最大飞行时间；同构/旧产物无逐机字段时回退全局缺省）
+            rng_u = _uav_range(uid)
+            spd_u = _uav_speed(uid)
+            if cost > rng_u + 1.0:
+                range_bad.append((c["cycle"], uid, f"航程 {cost:.0f} > {rng_u:.0f}"))
+            # 飞行时间核对（与航程对称）：逐机 max_time；None 时不约束。
+            # 派生 = 航程/速度，与 build_uavs 的派生口径一致 ⇒ 满足航程即
             # 满足时间；仅当显式给定更小值才成为独立绑定约束。
-            mt = m["problem"].get("uav_max_time")
-            if mt is None and speed > 0:
-                mt = max_range / speed
-            if mt is not None and cost / speed > float(mt) + 1.0:
-                time_bad.append((c["cycle"], uid, f"飞行时间 {cost/speed:.0f}s > {float(mt):.0f}s"))
+            mt = _uav_max_time(uid)
+            if mt is not None and spd_u > 0 and cost / spd_u > float(mt) + 1.0:
+                time_bad.append((c["cycle"], uid, f"飞行时间 {cost/spd_u:.0f}s > {float(mt):.0f}s"))
             # 起点链：本周期起点 = 上周期终点机巢位置（降落后换电/驻留）
             if uid in prev_end:
                 sp = tuple(float(v) for v in tour["start"])

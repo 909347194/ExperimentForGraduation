@@ -27,9 +27,11 @@ data:
 
 # 本实验的问题规模设定（做规模/容量灵敏度改这里，不动数据文件）
 problem:
-    #（异构机队：设 fleet_file: <清单.json>（相对本实验目录）按清单逐机装配
-    #  ——型号 / 初始机巢 home_nest / 航程 max_range_m / 续航 / 速度；设计见
-    #  docs/design_fleet_spec_2026-11-11.md。不设则同构回退，行为逐位不变。）
+    # 异构机队清单（逐机：型号 / 初始机巢 home_nest / 航程 / 续航 / 速度）；
+    # 相对本实验目录解析。详见 docs/design_fleet_spec_2026-11-11.md。
+    # 设 fleet_file 后 n_uavs/uav_* 降为 metrics 回显缺省；删掉本行即退回同构
+    # （行为逐位不变）。
+    fleet_file: uav_config.json
     n_nests: 3 # 用 3 个机巢
     nest_capacity: 2 # 单机巢容量（架）
     n_uavs: 6 # 机队规模（≤ n_nests × nest_capacity 才不初始超容，即 6）
