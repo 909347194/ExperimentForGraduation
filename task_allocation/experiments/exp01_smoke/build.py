@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-import paths  # noqa: F401  # sys.path 引导：挂载仓库根，供 task_allocation.* 导入
+import paths  # noqa: F401  # sys.path 引导：挂载仓库根，供 task_allocation.* 导入；EXP_DIR 供 fleet_file 解析
 
 from task_allocation.common.scenario import build_nest_scenario
 from task_allocation.common import scenario_data
@@ -204,8 +204,27 @@ def build_cost_estimator(
 
 
 def build_uavs(nests: Sequence[Nest], cfg: Mapping[str, Any]) -> list[UAV]:
-    """按 ``problem`` 段生成机队：轮转驻留在各机巢，占用对应泊位。"""
+    """按 ``problem`` 段生成机队。两种形态（互斥）：
+
+    - ``problem.fleet_file``：JSON 机队清单（异构：逐机型号 / 初始机巢
+      ``home_nest`` / 航程 ``max_range_m`` / 续航 / 速度），相对路径按
+      实验目录解析；加载与校验见 :mod:`task_allocation.common.fleet_spec`
+      （设计：docs/design_fleet_spec_2026-11-11.md）。此时 n_uavs/uav_*
+      降为 metrics 回显缺省，不参与装配。
+    - 否则同构回退（历史口径）：``n_uavs`` + 全局 uav_* 缺省，
+      轮转驻留在各机巢，占用对应泊位。
+    """
     p = cfg["problem"]
+    fleet_file = p.get("fleet_file")
+    if fleet_file:
+        from task_allocation.common.fleet_spec import (  # 惰性：同构路径零依赖
+            build_uavs_from_spec,
+            load_fleet_spec,
+        )
+        spec_path = Path(str(fleet_file))
+        if not spec_path.is_absolute():
+            spec_path = paths.EXP_DIR / spec_path
+        return build_uavs_from_spec(load_fleet_spec(spec_path), nests)
     n_uavs = int(p["n_uavs"])
     speed = float(p.get("uav_speed", 15.0))
     max_range = float(p.get("uav_max_range", 120000.0))
