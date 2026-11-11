@@ -130,7 +130,7 @@ def plot_r04_bottleneck(
                     ax_b.annotate(f"{d:+.1f}%", xy=(p, y / 2.0), ha="center",
                                   fontsize=FS["annotation"], color="white",
                                   fontweight="bold")
-    style_axes(ax_b, title="(b) 名额族 F1：同 n_sel 下几无差异（标注为相对差）",
+    style_axes(ax_b, title="(b) 名额族 F1：同 n_sel 下的相对差（%）",
                xlabel="任务规模 N", ylabel="交付收益 F1")
     ax_b.set_xticks(xs, [str(n) for n in ns])
     ax_b.set_ylim(bottom=0)
@@ -141,7 +141,7 @@ def plot_r04_bottleneck(
     fig.tight_layout(rect=(0, 0.06, 1, 0.93))
     footnote(fig,
              "数据来源：results/metrics.json 的 scales[]（quota_a2.5 / quota_a5 两变体）。"
-             "intersect 口径下 capability 只能收紧不能放宽；候选名额 ⌈α·K⌉ 与"
+             "intersect 口径下 capability 只能收紧不能放宽；候选名额（α·K 上取整）与"
              f"选择封顶（本次 capability_n_sel={lim_v}）均以本次 metrics 为准。"
              "能力驱动口径（mode=primary）见图 r05。单 seed（42）。")
 

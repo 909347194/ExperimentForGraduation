@@ -180,7 +180,10 @@ class TestRepairInvalid(unittest.TestCase):
     def test_returns_reachable_pairs(self):
         cm = build_cost_matrix(3, 3, seed=2)
         mask = np.zeros_like(cm, dtype=bool)
-        out = repair_invalid(cm, mask, [0, 1], "balanced", n_uavs=3)
+        out = repair_invalid(
+            cm, mask, [0, 1], "balanced", n_uavs=3,
+            rng=np.random.default_rng(0),
+        )
         self.assertIsInstance(out, list)
         for uav_id, tgt_id, cost in out:
             self.assertTrue(0 <= uav_id < 3, f"uav_id 越界：{uav_id}")
@@ -189,14 +192,19 @@ class TestRepairInvalid(unittest.TestCase):
             self.assertGreaterEqual(cost, 0.0)
 
     def test_never_emits_out_of_range_ids(self):
-        """回归：repair_invalid 曾从目标行/机巢列取位置，产出越界 id。"""
+        """回归：repair_invalid 曾从目标行/机巢列取位置，产出越界 id。
+
+        随机流按方案 B 收口：逐 seed 注入独立的 ``np.random.Generator``，
+        不再依赖（也不污染）全局 ``random`` 状态；50 个 seed 的扫描语义不变。
+        """
         for model, k, m in (("balanced", 3, 3), ("overloaded", 5, 2)):
             cm = build_cost_matrix(k, m, seed=4)
             for seed in range(50):
                 rng_mask = np.zeros_like(cm, dtype=bool)
-                import random as _r
-                _r.seed(seed)
-                out = repair_invalid(cm, rng_mask, [0, 1, 2], model, n_uavs=k)
+                out = repair_invalid(
+                    cm, rng_mask, [0, 1, 2], model, n_uavs=k,
+                    rng=np.random.default_rng(seed),
+                )
                 for uav_id, tgt_id, _ in out:
                     self.assertLess(uav_id, k, f"{model}: uav_id {uav_id} >= {k}")
                     self.assertLess(tgt_id, m, f"{model}: tgt_id {tgt_id} >= {m}")

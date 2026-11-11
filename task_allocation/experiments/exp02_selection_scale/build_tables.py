@@ -97,13 +97,17 @@ def build(metrics: dict, out_dir: Path) -> list[Path]:
     rng = metrics.get("uav_max_range_m", "—")
     tex_note = _tex_note(k, rng)
 
-    # 1) 全格明细 CSV
+    # 1) 全格明细 CSV（计时列保留 2 位小数，其余保持 json 原值）
+    _TIME_COLS = {"t_hint_ms", "t_sel_ms", "t_build_ms", "t_muas_ms", "t_total_ms"}
     p_csv = out_dir / "exp02_main_results.csv"
     with p_csv.open("w", encoding="utf-8-sig", newline="") as f:
         w = csv.writer(f)
         w.writerow([c for c, _ in MAIN_COLUMNS])
         for r in rows:
-            w.writerow([r.get(key, "") for _, key in MAIN_COLUMNS])
+            w.writerow([
+                _f(r.get(key), 2) if col in _TIME_COLS else r.get(key, "")
+                for col, key in MAIN_COLUMNS
+            ])
 
     # 2) 主结果 LaTeX 三线表（每个 N 一段，行=variant）
     p_tex = out_dir / "exp02_main_results.tex"

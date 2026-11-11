@@ -161,13 +161,15 @@ def plot_r01_tradeoff(
                        title="变体", title_fontsize=FS["legend"])
     ax_a.add_artist(leg1)
     ax_b.legend(loc="lower right", fontsize=FS["legend"])
+    # 形状图例放在脚注之上、坐标轴之下：三者各占一条水平带，避免
+    # 与自动折行的两行脚注压在同一高度（2026-11-10 正式档出图实测）。
     fig.legend(handles=n_handles, loc="lower center", ncol=len(n_handles),
                fontsize=FS["legend"], frameon=False,
-               bbox_to_anchor=(0.5, 0.005))
+               bbox_to_anchor=(0.5, 0.085))
 
     fig.suptitle("吞吐—耗时—质量权衡：变体扫描全景（颜色=变体，形状=N）",
                  fontsize=FS["suptitle"])
-    fig.tight_layout(rect=(0, 0.06, 1, 0.94))
+    fig.tight_layout(rect=(0, 0.135, 1, 0.94))
     footnote(fig,
              "数据来源：results/metrics.json 的 scales[]。F1 = f1_reward（交付收益，"
              "按迟到折减后口径）；t_muas 仅计第二阶段求解（不含一阶段选择与建矩阵）。"

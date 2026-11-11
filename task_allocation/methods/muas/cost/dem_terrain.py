@@ -87,26 +87,46 @@ class DEMTerrain:
         col_f = (xs - left) / max(res_x, 1e-12)
         row_f = (top - ys) / max(res_y, 1e-12)
         h, w = self._elevation.shape
-        mask = (col_f < 0) | (col_f >= w - 1) | (row_f < 0) | (row_f >= h - 1)
-        col_f = np.clip(col_f, 0, w - 2)
-        row_f = np.clip(row_f, 0, h - 2)
-        row0 = np.floor(row_f).astype(int)
-        col0 = np.floor(col_f).astype(int)
+        # 上界必须是严格大于：col_f = w-1 / row_f = h-1 是最后一个**有效
+        # 节点**（bounds 的 right/top 是节点外沿，对应 col_f = w / row_f = h）。
+        # 旧实现用 >= w-1 把最后一行/列整圈误判为越界，破坏
+        # to_metric_terrain 承诺的 query(x_i, y_j) == grid[j, i]。
+        mask = (col_f < 0) | (col_f > w - 1) | (row_f < 0) | (row_f > h - 1)
+        # clip 上界保留 w-1 / h-1：最后一个节点要靠 dx=1 / dy=1 取到
+        # 最后一列/行；若把 col_f 直接压到 w-2，dx 会变成 0 而错取倒数第二列。
+        col_f = np.clip(col_f, 0, w - 1)
+        row_f = np.clip(row_f, 0, h - 1)
+        row0 = np.clip(np.floor(row_f).astype(int), 0, h - 2)
+        col0 = np.clip(np.floor(col_f).astype(int), 0, w - 2)
         dy = row_f - row0
         dx = col_f - col0
-        z00 = self._elevation[row0, col0]
-        z01 = self._elevation[row0, col0 + 1]
-        z10 = self._elevation[row0 + 1, col0]
-        z11 = self._elevation[row0 + 1, col0 + 1]
+
+        elev = np.asarray(self._elevation, dtype=np.float64)
+        invalid = ~np.isfinite(elev)
+        clean = np.where(invalid, 0.0, elev)
+        bad = invalid.astype(np.float64)
+        w00 = (1 - dx) * (1 - dy)
+        w01 = dx * (1 - dy)
+        w10 = (1 - dx) * dy
+        w11 = dx * dy
         result = (
-            z00 * (1 - dx) * (1 - dy)
-            + z01 * dx * (1 - dy)
-            + z10 * (1 - dx) * dy
-            + z11 * dx * dy
+            w00 * clean[row0, col0]
+            + w01 * clean[row0, col0 + 1]
+            + w10 * clean[row0 + 1, col0]
+            + w11 * clean[row0 + 1, col0 + 1]
         )
-        any_nan = np.isnan(z00) | np.isnan(z01) | np.isnan(z10) | np.isnan(z11)
+        # 只有实际参与加权的邻居无效才判 NaN（与 GeoTIFFDEM.sample_elevation
+        # 同口径）。旧实现 any_nan 四邻全算，会让「邻居是空洞但权重为 0」
+        # 的有效节点也变成 NaN，节点契约因此不成立。
+        bad_weight = (
+            w00 * bad[row0, col0]
+            + w01 * bad[row0, col0 + 1]
+            + w10 * bad[row0 + 1, col0]
+            + w11 * bad[row0 + 1, col0 + 1]
+        )
         result = np.asarray(result, dtype=np.float64)
-        result[any_nan | mask] = np.nan
+        result[bad_weight > 1e-9] = np.nan
+        result[mask] = np.nan
         return result
 
     def extract_profile(

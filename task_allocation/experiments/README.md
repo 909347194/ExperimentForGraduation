@@ -84,8 +84,8 @@ expXX_<name>/
 
 | 目录 | 目的 | 状态 |
 |---|---|---|
-| `exp01_smoke` | 主链路冒烟 + 主口径结果（滚动闭环、覆盖门禁）；11-10 用当前代码重跑正式档、26/26 PASS | active |
-| `exp02_selection_scale` | 选择层规模（N / 名额 / 能力上界）标定；11-10 切 guangzhou 当前口径重跑 | active |
+| `exp01_smoke` | 主链路冒烟 + 主口径结果（滚动闭环、覆盖门禁）；11-10 用当前代码重跑正式档、26/26 PASS，图 8 件 + 表 3 件 | active |
+| `exp02_selection_scale` | 选择层规模（N / 名额 / 能力上界）标定；11-10 切 guangzhou 当前口径重跑正式档，18/18 格闭合，图 12 件 + 表 4 件 | active |
 | `exp03_event_rolling` | 事件触发重规划 | planned（仅 notes） |
 | `exp04_ablation` | 消融矩阵收编 | planned（仅 notes） |
 | `exp05_baselines` | 主张检验台 C1–C5（同一批解两把尺子、独立重评、配对精确 p）；v3 正式档 35 单元 | active |
@@ -136,3 +136,43 @@ planned 目录只放 `notes.md`（有意占位），**不要删**。四个 `ab_*
 ```
 
 **严禁多实验并行跑**：耗时是上报指标，并行会污染墙钟。
+
+## 9. 代码口径变更与正式档重评（2026-11-10，**未完成**）
+
+> 本节只记录「当前代码 ≠ 已交付结果档」的事实与处置纪律，**不宣称旧档作废**。
+> 逐项实测数字见 `.workbuddy/memory/2026-11-10.md`。
+
+同日两处**相互独立**的改动落在共用底座上。凡使用 `guangzhou` 并走 `DMDESolver`
+的正式档，其绝对值口径都须在受控重评后再决定是否沿用。
+
+| | 变更 A：DEM 采样与网格 | 变更 B：随机流单通道（远端 `6fee472`） |
+|---|---|---|
+| 位置 | `methods/utils/dem_geotiff.py`、`methods/muas/cost/dem_terrain.py`（本地未提交） | `methods/muas/representation/*`、`operators/extinction.py`、`solvers/dmde_solver.py`（已合入） |
+| 实质 | nodata **插值前**掩码；`nx/ny` 由 `round` 改 `floor`；extent 内缩 1 像素；查询边界 `>=` 改 `>` | 删全局 `random.seed` / `np.random.seed`；初始种群与进化**合并为同一** `Generator`(PCG64)；灭绝重置开始消费该 `rng` |
+| 实测 | 网格 25×25→**24×25**；NaN 108/625(17.28%)→**56/600(9.33%)**；有限高程 max 255→**52.851**；>75m 的 nodata 派生错误值 20→**0**；节点契约 600/600；1806 个 OD 代价全为有限正值 | 同 seed 两次 solve 逐位一致；`generate(seed=42)` 不再改写全局流；一次 tiny solve 内**无参熵源兜底 0 次**；6 代内灭绝触发 2 次（回归非空转） |
+| 影响 | 唯一距离口径（垂直切面 DEM + 建筑包络三维有向航程） | 初始种群逐位值改变，且**后续所有世代的 F 值 / 交叉 / 灭绝判定序列整体平移**——不是只换初始种群 |
+
+**受影响结果档**：明确受影响的是 `exp01_smoke`、`exp02_selection_scale`、
+`exp07`–`exp10`（guangzhou + DMDESolver）。`exp05_baselines` v3 正式档用的是
+**`lasa_chengguan`**（6 巢、无建筑）：RNG 变更影响需确认，DEM 变更是否影响
+**须单独查该场景 DEM 有无 nodata，不得推定同病**。旧档一律归档不删、不覆盖；
+跨场景禁直接比绝对值、禁配对 t 检验。各实验 `notes.md` 若引用旧绝对值，须加注本节。
+
+**红线**：① 不能凭「存在污染格点」直接写「旧数字作废」——必须修前/修后
+**同 seed 受控重评**量化差值，配对差是否抵消不得假设；② 两处变更已合并进
+同一份代码，**差值不可归因到单因素**，若要归因须在当前代码内另做受控单因素消融；
+③ 旧绝对值不直接进论文；墙钟只作观测、不可跨实验横向比较；`f` 与航程的
+线性缩放不是两条独立证据；p 不显著须如实声明。
+
+**重评计划（须单独发话执行，本轮未做）**：
+1. 先做轻量定量：`exp01_smoke`（3 seed，约 19 分钟）修前/修后同 seed 配对重评，
+   量化距离与完成/按时指标差值；
+2. 据差值决定 `exp02`（约 3h34m）、`exp05` v3（约 1h56m）及 `exp07`–`exp10`
+   是否重跑；
+3. 重跑严格串行、求解期不出图、旧档先归档、失败 seed 不静默重采样。
+
+**库层面残留纪律**：生产代码仍有 13 处 `rng=None → default_rng()` 熵源兜底
+（只有 `repair_invalid` 为必填）；`DMDEConfig.seed` 默认 `None`，各实验
+`config.yaml` 均显式给 seed 故实际实验可复现；`seed=` 兼容别名只发默认不可见的
+`DeprecationWarning`。新增 `test_solve_never_falls_back_to_entropy_rng`
+锁死主链路单通道，新增入口漏传 rng 立即失败。全量回归 **573 passed in 35.57s**。

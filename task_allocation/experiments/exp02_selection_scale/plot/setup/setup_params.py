@@ -143,13 +143,16 @@ def plot_setup_params(
         rows_b = [("（config 未定义 variants）", "—")]
 
     # (c) 求解预算与口径
+    # 值文本控制在右半栏宽度内：右对齐的长串会向左溢出压住参数名（2026-11-10
+    # 正式档出图实测），故这里只写关键量，完整定义见 config.yaml / notes.md。
     rows_c = [
         ("DMDE", f"pop={solver.get('pop_size', '—')} × gens={solver.get('max_generations', '—')}"),
         ("polish", f"≤{stage.get('polish_max_rounds', '—')} 轮 / ≤{stage.get('polish_max_evals', '—')} 评估"),
-        ("选择机制", f"优先级→n_cand 预筛→可行性→边际收益；α={_fmt(sel_cfg.get('alpha'))}"),
-        ("capability", "cap(t)=下取整(budget_scale·B/c)，c=最近机代价中位数"),
-        ("距离口径", "垂直切面 DEM + 建筑包络三维航程（全链路统一 CostProvider）"),
-        ("适应度", "单一加权标量 f（完成是约束、成本是目标；F3 已移除）"),
+        ("选择机制", "优先级→预筛→可行性→边际收益"),
+        ("名额系数 α", _fmt(sel_cfg.get('alpha'))),
+        ("capability", "cap(t)=floor(budget·B/c)"),
+        ("距离口径", "DEM + 建筑包络三维航程"),
+        ("适应度", "加权标量 f（F3 已移除）"),
         ("全量对照", f"N ∈ {sorted(cfg.get('run', {}).get('full_muas_baseline_scales') or [])}"),
     ]
 

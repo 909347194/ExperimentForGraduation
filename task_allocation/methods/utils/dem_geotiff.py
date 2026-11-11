@@ -175,6 +175,7 @@ class GeoTIFFDEM:
         )
         self._nodata = tag_nodata if nodata is _UNSET else nodata
         self._elevation: np.ndarray | None = None
+        self._sampling_grid: tuple[np.ndarray, np.ndarray] | None = None
 
     # -- 基本信息 --------------------------------------------------------
     @property
@@ -219,6 +220,24 @@ class GeoTIFFDEM:
             self._elevation = self._load_elevation()
         return self._elevation
 
+    def _sampling_layers(self) -> tuple[np.ndarray, np.ndarray]:
+        """惰性构造「干净高程 + 空洞权重」两张与栅格同形的数组。
+
+        只在首次采样时算一次并缓存：``to_metric_terrain`` 分块采样和撒点
+        过滤都会反复调用 :meth:`sample_elevation`，若每次重建，大 DEM
+        （如 3601x3601）会产生上百 MB 的重复分配。
+        """
+        cached = getattr(self, "_sampling_grid", None)
+        if cached is None:
+            raw = np.asarray(self.elevation, dtype=np.float64)
+            if self._nodata is not None:
+                invalid = ~np.isfinite(raw) | (raw == self._nodata)
+            else:
+                invalid = ~np.isfinite(raw)
+            cached = (np.where(invalid, 0.0, raw), invalid.astype(np.float64))
+            self._sampling_grid = cached
+        return cached
+
     def _load_elevation(self) -> np.ndarray:
         try:
             from PIL import Image
@@ -254,10 +273,18 @@ class GeoTIFFDEM:
         lon: float | np.ndarray,
         bilinear: bool = True,
     ) -> np.ndarray | float:
-        """在 ``(纬度, 经度)`` 处采样高程；越界返回 ``np.nan``。
+        """在 ``(纬度, 经度)`` 处采样高程；越界或加权邻域含空洞返回 ``np.nan``。
 
         ``bilinear=True`` 双线性插值，``False`` 取最近邻。
         标量输入返回 float，数组输入返回同形状 ndarray。
+
+        空洞值（``nodata``）与非有限像素必须在插值**之前**掩掉：把
+        -9999 / 255 当普通高程参与邻域加权，会产出有限却错误的高程
+        （四邻含一个 -9999 时格心得到 -2424.75），而插值后再比较
+        ``values == nodata`` 已判不中，错误值会直接流进垂直切面代价。
+        判定按**权重**：只有实际参与加权的邻居是空洞才判无效，与
+        ``DEMTerrain.query_elevations_batch`` 同口径，从而保证
+        ``to_metric_terrain`` 的节点对齐契约。
         """
         lat_arr = np.asarray(lat, dtype=np.float64)
         lon_arr = np.asarray(lon, dtype=np.float64)
@@ -268,32 +295,43 @@ class GeoTIFFDEM:
         h, w = self.elevation.shape
         out_of_bounds = (row_f < 0) | (row_f > h - 1) | (col_f < 0) | (col_f > w - 1)
 
+        clean, bad = self._sampling_layers()
+
+        # row_f / col_f 已被上界约束在 [0, h-1] / [0, w-1]；clip 到
+        # h-2 / w-2 后 dr、dc 自然落在 [0, 1]，不会产生负权重外插。
+        row0 = np.clip(np.floor(row_f).astype(np.int64), 0, h - 2)
+        col0 = np.clip(np.floor(col_f).astype(np.int64), 0, w - 2)
+        dr = row_f - row0
+        dc = col_f - col0
+
         if bilinear:
-            row0 = np.floor(row_f).astype(np.int64)
-            col0 = np.floor(col_f).astype(np.int64)
-            row0 = np.clip(row0, 0, h - 2)
-            col0 = np.clip(col0, 0, w - 2)
-            dr = row_f - row0
-            dc = col_f - col0
-            z00 = self.elevation[row0, col0].astype(np.float64)
-            z01 = self.elevation[row0, col0 + 1].astype(np.float64)
-            z10 = self.elevation[row0 + 1, col0].astype(np.float64)
-            z11 = self.elevation[row0 + 1, col0 + 1].astype(np.float64)
+            w00 = (1 - dr) * (1 - dc)
+            w01 = (1 - dr) * dc
+            w10 = dr * (1 - dc)
+            w11 = dr * dc
             values = (
-                z00 * (1 - dr) * (1 - dc)
-                + z01 * (1 - dr) * dc
-                + z10 * dr * (1 - dc)
-                + z11 * dr * dc
+                w00 * clean[row0, col0]
+                + w01 * clean[row0, col0 + 1]
+                + w10 * clean[row0 + 1, col0]
+                + w11 * clean[row0 + 1, col0 + 1]
+            )
+            bad_weight = (
+                w00 * bad[row0, col0]
+                + w01 * bad[row0, col0 + 1]
+                + w10 * bad[row0 + 1, col0]
+                + w11 * bad[row0 + 1, col0 + 1]
             )
         else:
             row_i = np.clip(np.rint(row_f).astype(np.int64), 0, h - 1)
             col_i = np.clip(np.rint(col_f).astype(np.int64), 0, w - 1)
-            values = self.elevation[row_i, col_i].astype(np.float64)
+            values = clean[row_i, col_i]
+            bad_weight = bad[row_i, col_i]
 
         values = np.asarray(values, dtype=np.float64)
+        # 容差 1e-9：节点反算的浮点误差会给「0 权重」邻居约 1e-12 的权重，
+        # 不应因此把一个有效节点判成空洞。
+        values = np.where(bad_weight > 1e-9, np.nan, values)
         values = np.where(out_of_bounds, np.nan, values)
-        if self._nodata is not None:
-            values = np.where(values == self._nodata, np.nan, values)
         return float(values) if scalar else values
 
     def sample_elevation_local(
@@ -330,6 +368,17 @@ class GeoTIFFDEM:
 
         if extent is None:
             left, bottom, right, top = self.bounds
+            # bounds 是像素**外沿**，而 latlon_to_pixel 以像素中心为整数索引；
+            # 直接拿外沿当 extent 时，边界格点反算回经纬度会落在 DEM 之外
+            # （叠加 ENU 反算的浮点误差更明显），造成网格外圈整圈 NaN
+            # （guangzhou 实测 17.28%）。内缩一个像素：半像素把「外沿」
+            # 映射到像素中心有效范围，另半像素吸收 ENU 正/反算在包络
+            # 边缘的偏差（约数十米量级，不改变 DEM 内部采样值）。
+            t = self._transform
+            left += t.xres
+            right -= t.xres
+            top -= t.yres
+            bottom += t.yres
             corner_lats = np.array([top, top, bottom, bottom])
             corner_lons = np.array([left, right, left, right])
             enu = frame.to_enu(corner_lats, corner_lons, 0.0)
@@ -342,8 +391,11 @@ class GeoTIFFDEM:
             if xmax <= xmin or ymax <= ymin:
                 raise ValueError(f"extent 非法：{extent}")
 
-        nx = int(round((xmax - xmin) / step_m)) + 1
-        ny = int(round((ymax - ymin) / step_m)) + 1
+        # 必须用 floor：round 在小数部分 >0.5 时会让最后一个节点
+        # xmin+(nx-1)*step 超出 xmax 近一个 step（本场景 200m，远大于
+        # DEM 像素尺寸），该列/行反算后整圈越界变成 NaN。
+        nx = int(np.floor((xmax - xmin) / step_m)) + 1
+        ny = int(np.floor((ymax - ymin) / step_m)) + 1
         if nx < 2 or ny < 2:
             raise ValueError("extent 相对 step_m 太小，无法构成网格")
 

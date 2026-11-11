@@ -154,8 +154,8 @@ def plot_r05_capability(
         )
     ax_b.axhline(100, color="#e45756", linestyle="--", linewidth=1.0,
                  alpha=0.6, zorder=1)
-    ax_b.text(9.2, 100, " 全量参考（100%）", color="#e45756",
-              fontsize=FS["annotation"], va="center")
+    ax_b.text(200, 100, "全量参考（100%） ", color="#e45756",
+              fontsize=FS["annotation"], va="center", ha="right")
     ax_b.set_xscale("log")
     ax_b.set_xlim(8, 210)
     ax_b.set_ylim(0, 108)
@@ -189,25 +189,21 @@ def plot_r05_capability(
     ], loc="lower right", fontsize=FS["legend"] - 0.5)
     fig.legend(handles=n_handles, loc="lower center", ncol=len(n_handles),
                fontsize=FS["legend"], frameon=False,
-               bbox_to_anchor=(0.5, 0.005))
+               bbox_to_anchor=(0.5, 0.085))
 
-    # cap(t) 带标注（放在两轴顶部）
-    for ax in (ax_a, ax_b):
-        ax.text(cap_t_val, 1.0, f"cap(t)≈{cap_t_val}",
-                transform=ax.get_xaxis_transform(),
-                ha="center", va="bottom", fontsize=FS["annotation"] - 0.5,
-                color="#6b7280")
+    # cap(t) 代表值写进脚注，不再放到轴顶：轴顶 y=1.0 的文本会与
+    # 「全量参考」虚线及面板标题叠在一起（2026-11-10 正式档出图实测）。
 
     budget_km = (float(metrics.get("K", 0) or 0)
                  * float(metrics.get("uav_max_range_m", 0.0) or 0.0) / 1000.0)
     fig.suptitle("能力驱动标定：cap_x* 阶梯的质量—耗时对照",
                  fontsize=FS["suptitle"])
-    fig.tight_layout(rect=(0, 0.06, 1, 0.93))
+    fig.tight_layout(rect=(0, 0.135, 1, 0.93))
     footnote(fig,
              "数据来源：results/metrics.json 的 scales[]。k = n_selected；cap(t)=下取整"
              f"(budget_scale·B/c)（B=机队总航程 {budget_km:g} km，c=最近可用机三维航程中位数），"
              "实测见 metrics 的 capability_cap 字段。全量对照三个规模全测。"
-             "灰色带 = cap(t)±3。单 seed（42）。")
+             f"灰色带 = cap(t)±3（本次代表值 cap(t)≈{cap_t_val}）。单 seed（42）。")
 
     stem = Path(out_dir) / "R05_capability"
     return save_figure(fig, stem, formats, dpi=dpi)

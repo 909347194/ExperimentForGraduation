@@ -13,6 +13,8 @@
 4. 端到端：DMDESolver 同 seed 两次 solve 逐位一致；solve 全程
    （含初始种群）不触碰全局随机；且求解轨迹对「求解中途消费全局随机」
    完全免疫（覆盖灭绝触发路径）。
+5. 主求解链单通道：solve 全程不得触发无参 ``default_rng()`` 熵源兜底，
+   防止新增算子/入口漏传 rng 后静默退化成不可复现。
 
 运行：PYTHONPATH=. python -m pytest task_allocation/tests/test_extinction_rng_reproduc.py
 """
@@ -236,4 +238,38 @@ def test_dmde_trajectory_independent_of_global_random_pollution():
     assert ev_clean.trace, "应有评价轨迹（否则锁不住契约）"
     _assert_runs_identical(
         ev_clean, res_clean, ev_dirty, res_dirty, "污染/干净两次 solve"
+    )
+
+
+def test_solve_never_falls_back_to_entropy_rng(monkeypatch):
+    """锁死主链路单通道：solve 全程不得触发无参 ``default_rng()`` 兜底。
+
+    生产算子仍保留 ``rng=None → np.random.default_rng()`` 的历史兼容兜底
+    （crossover / mutation / scale_factor / extinction / nearest_match /
+    inverse_phi / encoder 共 13 处），所以「固定 seed 可复现」依赖调用方
+    把同一个 Generator 注入到每一跳。本用例把该依赖变成可执行约束：
+    新增入口一旦漏传 rng，会静默退化成熵源并破坏复现性，此处立即失败。
+
+    注：本用例只约束主求解链，不改动这些兜底本身（保持与上游方案 B
+    的接口兼容）；库层面「调用方须显式注入 rng」的纪律另见文档。
+    """
+    calls: list[int] = []
+    orig = np.random.default_rng
+
+    def _spy(*args, **kwargs):
+        if not args and not kwargs:
+            calls.append(1)
+        return orig(*args, **kwargs)
+
+    monkeypatch.setattr(np.random, "default_rng", _spy)
+
+    np.random.default_rng()  # 探针自检：确认无参调用确实能被捕获
+    assert calls, "无参 default_rng() 未被探针捕获（本用例会空转）"
+    calls.clear()
+
+    ev, _ = _solve_once(populate_polluter=False)
+    assert ev.trace, "solve 应产生评价轨迹（否则锁不住契约）"
+    assert not calls, (
+        f"主求解链触发 {len(calls)} 次无参熵源兜底：某个算子未接收到注入的 "
+        "rng，固定 seed 将不可复现"
     )

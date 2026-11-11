@@ -106,7 +106,7 @@ def plot_r02_compression(
         ax_a.annotate(f"{n}", xy=(x, n), xytext=(0, 6),
                       textcoords="offset points", ha="center",
                       fontsize=FS["annotation"] - 0.5, color=color(_FULL))
-    style_axes(ax_a, title="(a) 候选名额 n_cand：全部与 N 无关",
+    style_axes(ax_a, title="(a) 候选名额 n_cand 随 N 的变化",
                xlabel="任务规模 N", ylabel="候选任务数 n_cand")
     ax_a.set_yscale("log")
     ax_a.set_ylim(8, 260)
@@ -149,7 +149,7 @@ def plot_r02_compression(
     for v in variants:
         ys = [compression(g[n].get(v, {})) for n in ns]
         _line(ax_c, xs, ys, v, annotate=True, seen=seen_c)
-    style_axes(ax_c, title="(c) 压缩比 N/n_sel：随 N 线性增长",
+    style_axes(ax_c, title="(c) 压缩比 N/n_sel 随 N 的变化",
                xlabel="任务规模 N", ylabel="压缩比（×）")
 
     for ax in (ax_a, ax_b, ax_c):
@@ -160,7 +160,7 @@ def plot_r02_compression(
     ax_a.legend(loc="upper left", fontsize=FS["legend"] - 0.5, ncol=2)
     ax_b.legend(loc="upper left", fontsize=FS["legend"] - 0.5, ncol=2)
 
-    fig.suptitle("规模压缩：候选/选择/执行与压缩比随 N 的演化（成功标准 1）",
+    fig.suptitle("规模压缩：候选/选择/执行与压缩比随 N 的演化",
                  fontsize=FS["suptitle"])
     fig.tight_layout(rect=(0, 0.055, 1, 0.93))
     footnote(fig,
