@@ -11,12 +11,11 @@
 # 旧 results/ 是 v2 存档（notes 主表与 CSV 批次混拼），不作论文主表数据源。
 #
 # 参数放置原则（见 experiments/README.md 与 notes.md）：
-#   data/      实测事实（机巢经纬度、DEM 栅格），跨实验复用，不随实验改
-#   config.yaml 本次实验设定：规模、容量、算法与超参，做灵敏度时只改这里
-#   methods/   算法实现，不读配置、不关心数据从哪来
-#
-# 除 data 段外，以下每个数值都会被 run.py 显式读取并传给对应模块；
-# 新增可调项请同步在 notes.md 的「参数放哪里」表中登记。
+#   data/        实测事实（机巢经纬度、DEM），跨实验复用
+#   config.yaml  本次实验设定（下方每个数值都被 run.py 显式读取）
+#   methods/     算法实现，不读配置、不写死数值
+# 新增可调项请同步登记 notes.md「参数放哪里」。
+# 注释只写当前语义与调法；标定史、实测裁决、清理记录见 notes_archive.md。
 
 experiment:
     name: exp05_baselines
@@ -87,7 +86,7 @@ data:
     region_geojson: Chengguan_district.geojson # 任务撒点区域门禁（城关区多边形）
     coordinate_column: Coordinate
 
-# 本实验的问题规模设定（改这里做规模/容量灵敏度，不动数据文件）
+# 本实验的问题规模设定（做规模/容量灵敏度改这里，不动数据文件）
 problem:
     n_nests: 6 # 用前 6 个机巢（城关区 CSV 共 6 条）
     nest_capacity: 4 # 单机巢容量（架）
@@ -153,8 +152,8 @@ method:
 
 # ── 第一阶段：动态任务选择（论文 §3）──────────────────────────────
 selection:
-    alpha: 2.5 # 候选数的机数倍率 α∈[2,3]：n_cand = ⌈α·K⌉（K=可用机数，非任务数）
-    weights: # 基础优先级 P_i(t) 的五项权重（会自动归一化）
+    alpha: 2.5 # 候选数的机数倍率：n_cand = ⌈α·K⌉（K=可用机数）
+    weights: # 基础优先级 P_i(t) 的五项权重（自动归一化）
         w_r: 0.30 # 任务收益
         w_u: 0.25 # 时间紧迫度
         w_w: 0.15 # 等待补偿
@@ -169,42 +168,36 @@ selection:
         # 旧单程口径的 0.95 等效 76km 单程，直接迁到往返口径会把可达半径
         # 腰斩到 38km 误杀远站任务，故置 1.0；<1 仅消融。
         range_margin: 1.0
-        # 时间窗预筛：默认关闭（用户原则「任务不被完成只有
-        # 物理约束被违反」）。迟到是奖励定价问题（适应度按 L/W 折减），
-        # 不是参选资格；预筛只拦物理不可达（无机可用/往返超航程）。
-        # true = 消融口径（恢复时间窗拒绝，配 late_tolerance_seconds）。
+        # 时间窗预筛：默认关闭（迟到是奖励定价问题，不是参选资格；
+        # 预筛只拦物理不可达）。true = 消融口径（配 late_tolerance_seconds）。
         check_time_window: false
         budget_factor: 1.0 # 机群总航程预算系数
         # 消融口径专用（check_time_window=true 时生效）：迟到容忍 W（s）。
-        # 0 = 历史口径（直飞到达 > latest 即拒）。
-        # 与 muas.late_reward_decay_seconds 保持同值（1800）。
+        # 0 = 历史口径（直飞到达 > latest 即拒）；须与 muas.late_reward_decay_seconds 同值。
         late_tolerance_seconds: 1800.0
     marginal:
         eps: 1.0 # 边际代价地板，与距离同量纲（m）
         max_selected: null # null → 由 max_ratio × K 决定（n_sel = ⌈max_ratio·K⌉）
         max_ratio: 2.0
         min_marginal_ratio: 0.0
-        # 防饥饿软加权：等待时长对终刀接受判据的乘性软加权（单位无关、有界）。
-        # eff = ratio·(1 + age_gamma·age)，age∈[0,1] 由 waited/wait_scale 得。
-        # 与下方 anti_starvation 配合：本项让"刚老了点"的任务在终刀更有机会，
-        # 而真正老透/临期的任务由 anti_starvation 强制纳入，保证不停饿。
+        # 防饥饿软加权：eff = ratio·(1 + age_gamma·age)，age∈[0,1] 由
+        # waited/wait_scale 得；刚老的任务终刀更有机会，老透/临期由
+        # anti_starvation 强制纳入。
         age_gamma: 1.0
         wait_scale: 3600.0 # 与 priority.wait_scale 对齐（run() 会同步）
     capability:
         enabled: true # false → 退回纯机数名额（消融对照口径）
-        # 机数名额与能力上界 cap(t) 的合成方式：
-        #   intersect（默认）min{名额, cap(t)} —— 能力只能收紧，绝不超名额（只治"过筛"）
-        #   primary          cap(t) 为主、名额降为兜底 —— 紧张收编、充裕允许"超名额"（双向）
+        # 机数名额与能力上界 cap(t) 的合成：
+        #   intersect（默认）min{名额, cap(t)}——能力只能收紧
+        #   primary          cap(t) 为主、名额兜底（紧张收编、充裕可超名额）
         mode: intersect
-        # 仅 mode=primary 生效：相对机数名额的最大扩张倍数，防 c̃ 过小时规模失控
-        max_expand_factor: null
-        budget_scale: 1.0 # 预算额外折扣（与 budget_factor 相乘）；<1 给未来紧急任务留余量
-        quantile: 0.5 # 粗代价分位数：调低→cap 更宽松，调高→更保守
+        max_expand_factor: null # 仅 mode=primary 生效：相对机数名额的最大扩张倍数
+        budget_scale: 1.0 # 预算额外折扣（与 budget_factor 相乘）
+        quantile: 0.5 # 粗代价分位数：低→cap 宽松，高→保守
         min_cap: 1 # cap 下限（保证总能评出一个候选）
-        # 候选规模上界：即便 enabled=false 也按吞吐上界收敛候选规模（默认关，保持消融基线）
-        fallback_when_disabled: false
-    # 防饥饿强制：等待超阈值或逼近 latest 的任务强制纳入候选集
-    # （绕过 Top-αK 预筛），并在终刀获强优先，保证不无限期推迟。
+        fallback_when_disabled: false # true=即便 enabled=false 也按吞吐上界收敛候选规模
+    # 防饥饿强制：等待超阈值或逼近 latest 的任务强制纳入候选（绕过 Top-αK
+    # 预筛）并在终刀获强优先，保证不无限期推迟。
     anti_starvation:
         enabled: true
         force_after_seconds: 1200.0 # 等待满 2 周期（2×cycle_length）即强制纳入
@@ -228,9 +221,8 @@ muas:
     lambda_cost: 1.0e-1 # 次目标权重（收益当量/米）；字典序下只裁决收益等价的解
     # 口径约定：生产默认 1e-4 → 1e-2（与 exp01 主口径同步；1e-1 = 敏感性上界）
     w_penalty: 1.0 # 约束违反惩罚总权重（历史口径：惩罚随 F2 一起乘 λ）
-    # 惩罚量纲解耦：留空 null = 历史口径（惩罚进 F2 再乘 λ，秒级惩罚被压没）；
-    # 给数值则惩罚不再乘 λ，直接以「奖励当量 / 惩罚单位」计入适应度。
-    # 时间窗违约以秒计，取 0.01~0.02 即「迟到 300 s ≈ 3~6 点奖励」。
+    # 惩罚量纲解耦：null = 惩罚进 F2 再乘 λ；给数值则以「奖励当量/惩罚单位」
+    # 直接计入、不乘 λ（如 0.01 ⇒ 迟到 300s ≈ 3 点奖励）。
     w_violation: 0.01
     w_nest_capacity: 1.0 # 机巢容量违反的惩罚权重
     # ── 四层准字典序 T0 层────────────────────────────
@@ -245,94 +237,49 @@ muas:
     w_hard_violation: null
     w_range_excess: null
     hard_violation_kappa: 10.0 # W_hard = κ·m·R_pool 的安全系数
-    # 迟到奖励折减容忍 W（s）：晚到任务有效奖励 eff = R × max(0, 1 − L/W)。
-    # 迟到不是废飞（协议）——晚到仍算完成、计奖励，但按迟到
-    # 时长线性折减，与 w_violation 同向压实「按时服务」。
-    # 【重新标定】600→1800：实测 12 个迟到任务 145–1475s（中位
-    # 838s），W=600 时 7/12 奖励归零（均值保留 27.8%）——与「迟到可以接受」
-    # 直接冲突；W=1800 时 0/12 归零、均值保留 61.6%，且 L=1800s 才等价于
-    # 丢掉整个任务，「可接受但最好不迟到」的拐点。
-    # 必须与 selection.feasibility.late_tolerance_seconds 同值；
-    # null = 关闭折减（历史口径：F1 全额，迟到只经 w_violation 计价）。
+    # 迟到奖励折减容忍 W（s）：eff = R × max(0, 1 − L/W)。迟到不是废飞——
+    # 仍算完成、计奖励，按时长折减。须与 selection.feasibility.late_tolerance_seconds
+    # 同值；null = 关闭折减。标定依据见 notes_archive.md「config 注释精简留档」。
     late_reward_decay_seconds: 1800.0
     default_service_time: 60.0 # 单任务作业时长（s）
-    # 参与规划的 UAV 上限；null → 自动取 min(K, N-1) 以走 srp 巡游模型
-    max_participating_uavs: null
+    max_participating_uavs: null # 参与规划的 UAV 上限；null → min(K, N-1)（srp 巡游模型）
     participating_policy: demand # cheapest | first | marginal | demand
-    # ── 需求感知参与（policy=demand）──
-    # 贪心最大覆盖选参与机：每架覆盖「代价 ≤ 半径」的选中任务，依次挑覆盖
-    # 最多未覆盖任务者，直到全部选中任务被覆盖或达 K 上限。根治 cheapest
-    # 把机堆在稠密区、饿死北/西离群稀疏任务（后期 K 收缩致其不可达）。
-    #   demand_coverage_radius: 显式覆盖半径（米）；null → 用航程因子推导
-    #   demand_range_factor:    半径 = factor·remaining_range（默认 0.5 =
-    #                          单任务往返航程 ≤ 剩余航程的保守可达性）
-    demand_coverage_radius: null
-    demand_range_factor: 0.5
-    # ── 服务能力感知 provisioning（policy=demand 生效）──
-    # 最小覆盖后按「航程预算」补机：把过载（最近机往返 > 剩余航程×裕度）任务
-    # 剥给最近空闲机，拉入参与，直接救「K 塌缩→远任务未服务」的残余瓶颈。
+    # ── ③需求感知参与（policy=demand）──
+    # 贪心最大覆盖选参与机：依次挑「覆盖最多未覆盖任务」的机，直到选中
+    # 任务全被覆盖或达 K 上限（治 cheapest 把机堆在稠密区、饿死离群任务）。
+    demand_coverage_radius: null # 显式覆盖半径（m）；null → 用航程因子推导
+    demand_range_factor: 0.5 # 半径 = factor·remaining_range（0.5 = 单任务往返的保守可达）
+    # 服务能力感知补机：最小覆盖后按航程预算把过载任务剥给最近空闲机并
+    # 拉入参与（救「K 塌缩 → 远任务未服务」的残余瓶颈）。
     demand_provision_serving: true
     demand_serve_margin: 0.95
-    # ──「可达即执行」救援池口径 ──
-    # 方法论：任务只要能力可达、不违反约束就应最终被执行，成本最小化是此前提下
-    # 的次级目标。「可达」是**存在量化**（∃ 机队中某方案可服务），不是「给定
-    # 方案内塞得进」。此前航程修复的改派救援只在参与集内找闲置机，而参与集是按
-    # 最小距离覆盖挑的子集（K 常被压到 2~5 架且多为满载），于是物理可达的任务
-    # 被误判 y_j=0（假暂缓）。
-    #   fleet（默认）：救援池扩到全可用机队，可达即执行；
-    #   participating：历史口径，仅参与集内改派（消融对照）。
+    # 「可达即执行」救援池：任务只要能力可达就应最终被执行。可达 = 存在
+    # 量化（∃ 机队中某方案可服务），不限「给定参与集内塞得进」。
+    #   fleet（默认）：救援池 = 全可用机队；participating：仅参与集（消融）。
     reflow_rescue_scope: fleet # fleet | participating
-    # ── K 决策扩展旋钮（与 M 解耦，实验/消融用；默认不启用）──
-    # 三者（max_participating_uavs / sortie_budget / participation_cost）共同决定
-    # 本周期参与机数 K；均不配置时退回旧行为 K = min(可用机数, N-1)。
-    # sortie_budget：本周期出动架次硬上限 S_t（独立天花板，与边际收益无关）。
-    #   null → 不设架次上限（仅受 max_participating_uavs / SRP 不变式 K≤N-1 约束）。
-    #   例：机巢同时只能起降 3 架 / 充电位有限 → 设 3。
-    sortie_budget: null
-    # participation_cost：每架固定出动代价 γ（起降/能耗/架次占用）。
-    #   仅在 participating_policy=marginal 时生效：
-    #   γ=0（默认）→ 只要加一架机能降一点代价就继续派，不早停（只剔纯冗余机）；
-    #   γ>0       → 新增一架机的覆盖代价下降 ≤ γ 即停，按「边际收益 vs 出动成本」经济性早停。
-    #   ⚠️ γ 与估计器 gain 同为「代价(米)」量纲，但 gain 大小由任务簇几何决定、
-    #      与「每架固定成本」无可比性——实测 γ=0/20/60km 三档结果逐位相同。
-    #      要让它真正咬合，需先把 gain 改定义为与 γ 同单位的量（奖励和/路径增量）。
+    # ── K 决策扩展旋钮（实验/消融用；均不配置时 K = min(可用机数, N-1)）──
+    sortie_budget: null # 本周期出动架次硬上限 S_t；null = 不设
+    # 每架固定出动代价 γ（起降/能耗/架次占用）；仅 participating_policy=marginal
+    # 生效：γ=0 不早停；γ>0 新增机覆盖代价下降 ≤ γ 即停。
     participation_cost: 0.0
-    # marginal_tour_cap：估计器的单机服务容量（一架机一次出动最多串几个任务）。
-    #   null → 按航程自动推导 cap = max(1, ⌊min 剩余航程 / 平均单程代价⌋ − 1)；
-    #   给整数则固定（消融用）。无容量旧口径把每架机当成能同时覆盖全部任务，
-    #   gain 与真实服务能力脱节；加容量后 gain 才反映航程/时间窗下的边际贡献。
+    # 估计器单机服务容量（一次出动最多串几个任务）；null = 按航程自动推导
+    # cap = max(1, ⌊min 剩余航程/平均单程代价⌋ − 1)；给整数则固定（消融）。
     marginal_tour_cap: null
     prune_unprofitable: false # 与「完成是约束」冲突，门禁口径下必须关
     prune_margin: 0.0 # 剔除判据裕度：λ·节省 > R·(1+margin) 才剔除
     prune_max_rounds: 8
-    # 零奖励剔除（四层适应度配套）：ETA ≥ latest+W 的任务 eff≈0，
-    # 带着飞只赔迟到惩罚（T2）却按完成计——暂缓把机会留给下周期。字典序下
-    # prune_unprofitable 整体关闭（丢正收益任务必降 F1），但零奖励任务不降
-    # F1，剔除是严格改进。仅 late_reward_decay_seconds>0 时生效。
-    # 【消融实测 seed=42】W=1800 下零奖励交付已为 0（A2），剔除开启（A3）反而
-    # 因搜索期结构扰动偏向「周期1 多塞一个但迟到更深」（6 迟发/均~1000s vs 2），
-    # 奖励产出率 94.4%→91.1%、按时率 81.7%→78.3%——靶病不存在时只亏不赚。
-    # 故 exp01 生产默认关闭；保留开关供 |T|≫K 压力场（exp02）评估。
+    # 零奖励剔除：ETA ≥ latest+W 的任务 eff≈0，暂缓把机会留给下周期。
+    # 仅 late_reward_decay_seconds>0 时生效。消融实测见 notes_archive.md。
     prune_zero_reward: false
-    # 等待补偿（论文 §3.2 的 W_i(t)）：滞留越久，有效收益越高，越难被剔除，
-    # 避免偏远任务连续多周期得不到执行而永久滞留
-    prune_wait_bonus: 1.0
+    prune_wait_bonus: 1.0 # 等待补偿：滞留越久有效收益越高，越难被剔除
     wait_scale: 3600.0 # 等待补偿的时间尺度（s）
-    # Lamarckian 回写（TODO §2.7）：把修复后的解（经 _prune / _repair_range）
-    # 的起始任务归属写回获胜个体基因，使后继代际的差分变异围绕修复后的
-    # 可行子空间展开。关闭则退化为围绕未修复空间搜索。
-    # 注：终点机巢不进编码（方案 A），由解码后内层最小费用流精确求解。
+    # ── ⑤Lamarckian 回写：把修复后解的起始任务归属写回获胜个体基因，
+    # 使后继代际围绕修复后的可行子空间展开。终点机巢不进编码（方案 A），
+    # 由解码后内层最小费用流精确求解。
     lamarckian: true
     # 解码后局部搜索 polish：DMDE 收敛后对 best_assignment 做
-    # relocate / swap / 插入位局部搜索，每个候选都过**同一** build_solution
-    # 修复链（evaluator.evaluate），仅严格改进（< 当前 − eps）才接受。
-    # 治「收敛曲线第 3 代躺平」的两个根因：① big-M 阶梯适应度下差分算子对
-    # 换机/换序级改善不可见（T9 换机省 27.9km 仅折 2.8 适应度单位 vs 单
-    # 任务 2.8e5，梯度比 1e-5）；② Lamarckian 回写冻结归属（只写起始基因
-    # 通道，闲置槽成死维度）。局部搜索直接在解空间操作，绕过编码—回写冻结。
-    # 搜索期口径不受影响（cost_history/best_fitness 仍是 DMDE 曲线）；
-    # 交付解若被打磨得更优则采用之（final_fitness 只降不升）。
-    # 消融对照：polish_enabled: false（git 历史里的旧 results/ 即该口径）。
+    # relocate/swap/插入位搜索，候选过同一 build_solution 修复链，仅严格
+    # 改进才接受（治收敛后路由改善不可见的问题，详见 notes_archive.md）。
     polish_enabled: true
     polish_moves: [relocate, swap, position] # 扫描优先级：结构性收益最大的排首
     polish_max_rounds: 30   # 无改进即停的轮数上限
@@ -363,7 +310,7 @@ constraints:
     range: true # 航程
     endurance: true # 飞行时间 / 续航
     # 协同
-    time_window: true # 交付时间窗：本模型暂不纳入（要纳入改 true，两阶段同步生效）
+    time_window: true # 交付时间窗（关 = 模型暂不纳入；两阶段同步生效）
     sequence: true # 时序 / 前置依赖
     sync: true # 同时到达
     # 机巢
@@ -396,8 +343,8 @@ solver:
     # 调试时可临时调回 100 或配合 --no-plots。
     max_iter: 100 # max_generations（论文主口径；500代对照见敏感性分析）
     zeta: 3 # 动态交叉率曲率指数 ζ（论文式 3-9 取 3）
-    # 灭绝门限 δ：留空 = 论文公式 3-12 原式 GMR = 1 - CR（不加门限）。
-    # 填一个数值（如 0.3）则附加工程门限 CR>=δ 时不灭绝，把重置推迟到后期。
+    # 灭绝门限 δ：null = 论文式 3-12 原式 GMR = 1 − CR；填数值（如 0.3）
+    # 则附加工程门限 CR>=δ 时不灭绝。
     delta: null
     seed: 42
     verbose: false
@@ -426,9 +373,9 @@ rolling:
     n_cycles: 60 # 安全上限（周期数本身不定）；真实停止由 stop_when_stable 收敛早停决定
     cycle_length: 600.0 # 每周期推进的时间（s）
     complete_after_cycle: true # 周期末把执行中的任务判为完成
-    # 完成反馈的可行性闸门（论文 §6）：true → 本周期解被判违约的任务不顺延
-    # 完成（解绑回池、下周期重选，记入 metrics 的 infeasible_ids），完成率不说谎；
-    # false → 回到历史行为（一律标完成），用于消融对比。
+    # 完成反馈可行性闸门（论文 §6）：true = 被判违约的任务不顺延完成
+    # （解绑回池、下周期重选，记入 infeasible_ids），完成率不说谎；
+    # false = 历史行为（一律标完成），消融对比用。
     completion_feasibility_gate: true
     recharge_at_nest: true # 降落后机巢换电，剩余航程回满
     # 动态到达过程（论文 §6「动态任务到达」）：第 2 周期起每周期的新到达任务数。
@@ -455,9 +402,8 @@ rolling:
         enabled: true
         patience: 4
     strict_capacity: false # true → 落地期超容直接抛异常（调试用）
-    # 事件驱动本期重规划（论文 §6）：命中 UAV 故障 / 突发高优先级任务 /
-    # 机巢不可用时，本周期内做反应式调整（强制纳入紧急任务、剔除不可用机巢）。
-    # false → 事件仅记录、不重规划，用于消融对比关停该机制。
+    # 事件驱动本期重规划（论文 §6）：UAV 故障 / 突发高优先级任务 / 机巢
+    # 不可用时本周期内反应式调整；false = 事件仅记录不重规划（消融）。
     event_replan: true
     faults: {} # 故障注入：{周期号: [uav_id, ...]}，验证 T_t^release 链路
     events:
