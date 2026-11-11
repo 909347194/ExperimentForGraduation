@@ -8,7 +8,8 @@
 # 场景 / 协议与 exp01 生产口径**逐项相同**；各方法共享同一任务到达序列
 # （同 seed 生成）。关键口径：评价端一律 DEM 有向三维航程，与求解端解耦；
 # 同一批交付解再用两把尺子各算一次，检验尺子本身是否改变结论。
-# 旧 results/ 是 v2 存档（notes 主表与 CSV 批次混拼），不作论文主表数据源。
+# 旧 v2 档已归档到 _archive/exp05_baselines__results_v1v2_2026-10-25/
+# （notes 主表与 CSV 批次混拼），不作论文主表数据源。
 #
 # 参数放置原则（见 experiments/README.md 与 notes.md）：
 #   data/        实测事实（机巢经纬度、DEM），跨实验复用
@@ -23,7 +24,7 @@ experiment:
     # 对照实验协议：≥5 个 seed，报告均值±标准差（notes.md 成功标准）。
     # 任务到达序列由 seed 决定，同 seed 各臂共享，保证逐任务可比。
     seeds: [42, 43, 44, 45, 46]
-    output_dir: results_v3 # v3 数值产物；旧 results/ 冻结为 v2 存档，不混用
+    output_dir: results_v3 # v3 数值产物；v2 旧档已归档，不混用
 
 # ── 对照方法（v3，exp05 专属）────────────────────────────────────
 # id → 结果目录名；solver → dmde（本文方法）或 baselines.REGISTRY key；

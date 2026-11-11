@@ -13,7 +13,8 @@ v3 不再问「我们是否比启发式更好」，而检验五条可证伪主�
 3. **配对统计与单源主表**：同 seed 配对差 + 精确 p + 三态结论，
    主表/附表全部由落盘结果生成，``notes.md`` 只引用不抄数。
 
-产物（``results_v3/``，旧 ``results/`` 冻结为 v2 存档）::
+产物（``results_v3/``；v2 旧档已归档到
+``_archive/exp05_baselines__results_v1v2_2026-10-25/``）::
 
     <ID>/seed_<s>/{metrics,run_meta,solution,audit}.json
     <ID>/summary.json                 跨 seed mean±std

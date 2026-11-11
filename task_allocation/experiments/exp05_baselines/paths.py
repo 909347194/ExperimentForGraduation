@@ -7,8 +7,9 @@
 约定::
 
     EXP_DIR/                 本实验：config.yaml / run.py / 各拆分模块
-    EXP_DIR/results/         数值产物（<ARM>/seed_<s>/{metrics,run_meta,solution}.json）
-    EXP_DIR/results/summary.csv    论文主表数据源（arm × seed + 均值行）
+    EXP_DIR/results_v3/      数值产物（<ARM>/seed_<s>/{metrics,run_meta,solution}.json）
+    EXP_DIR/results_v3/summary_primary.csv  论文主表数据源（arm × seed + 均值行）
+    （v2 旧档已归档到 ../_archive/exp05_baselines__results_v1v2_2026-10-25/）
     DATA_DIR/                场景数据注册表根（task_allocation/data/；
                              场景目录取 data/<scenario>/，解析走 scenario_data）
 """
