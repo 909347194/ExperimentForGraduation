@@ -121,7 +121,8 @@ def _draw_gantt(ax, rows: list[dict[str, Any]],
                 task_by_id: dict[int, dict[str, Any]],
                 nest_by_id: dict[int, dict[str, Any]],
                 arrival_cycle: dict[int, int] | None = None, *,
-                title: str | None = None):
+                title: str | None = None,
+                uav_range_km: dict[int, float] | None = None):
     """航程比例航迹条（替代原「收益着色顺序条」）。
 
     每行 = 一个航次（周期×UAV）；画一条 **UAV 色**航线，其**长度 ∝ 真实飞行
@@ -130,6 +131,11 @@ def _draw_gantt(ax, rows: list[dict[str, Any]],
     与 metrics 的 f2_cost、allocation_anim 的里程读数同口径。
     任务按真实位置落点画方框并标号，航线两端分别标「起飞巢 / 返航巢」。
     这样一眼能看出：哪架 UAV 飞了多远、任务沿航线怎么分布、是否异巢终止。
+
+    ``uav_range_km`` 传入 ``{uav_id: 满电航程(km)}`` 时，额外在距离轴上标出
+    逐机上限刻度；不传则完全不画（P03 逐周期面板保持原样）。该上限与横轴
+    ``est_cost`` 同口径（DEM 有向三维航程、含返巢），且每周期落巢换电回满，
+    故可直接读作「这一航次还差多少到满电航程」。
     """
     import math
 
@@ -212,9 +218,35 @@ def _draw_gantt(ax, rows: list[dict[str, Any]],
             ax.axhline((ys[i] + ys[i + 1]) / 2.0, color="#c3cbd4",
                        linewidth=0.9, linestyle=(0, (4, 3)), zorder=0)
 
+    # ── 逐机满电航程上限刻度（仅 P04 传入）────────────────────────────
+    # 横轴 est_cost 与航程硬约束判据 tour_path_cost 同源（DEM 有向三维航程，
+    # 含返巢）；recharge_at_nest=true 使每次落巢换电回满，故本行航迹条长度
+    # 的上界就是该机 max_range。去重后的上限画淡色全局参考线，每行再用本行
+    # UAV 色画一段行内短刻度，指明「这一行该看哪条线」。
+    range_levels: dict[float, str] = {}
+    if uav_range_km:
+        for y, r in zip(ys, rows):
+            cap = float(uav_range_km.get(int(r["uav_id"])) or 0.0)
+            if cap <= 0.0:
+                continue
+            color = uav_color(int(r["uav_id"]))
+            ax.vlines(cap, y - 0.30, y + 0.30, colors=color, lw=1.8,
+                      linestyles=(0, (3, 2)), zorder=3)
+            range_levels.setdefault(cap, color)
+        for cap in sorted(range_levels):
+            ax.axvline(cap, color="#b7c1cc", lw=0.9,
+                       linestyle=(0, (5, 4)), zorder=0)
+            # 数值标签放在 axes 内顶边：放 axes 外会被面板标题压住。
+            ax.text(cap, 0.985, f"{cap:g} km", transform=ax.get_xaxis_transform(),
+                    ha="center", va="top", fontsize=6.6, color="#5b6472",
+                    bbox=dict(facecolor="white", edgecolor="none",
+                              alpha=0.82, pad=0.8),
+                    zorder=8)
+
     ax.set_yticks(ys, [f"C{r['cycle']}·U{r['uav_id']}" for r in rows],
                   fontsize=FS["tick"])
-    ax.set_xlim(-max_dist * 0.03, max_dist * 1.06)
+    x_right = max([max_dist] + list(range_levels)) if range_levels else max_dist
+    ax.set_xlim(-max_dist * 0.03, x_right * 1.06)
     ax.set_ylim(-0.7, n + 0.3)
     style_axes(ax, title=title or "(a)")
     ax.grid(axis="x", alpha=0.15)
@@ -375,7 +407,7 @@ def plot_allocation(
 
     fig.suptitle("exp01_smoke：分配结构与逐周期空间演化",
                  fontsize=FS["suptitle"])
-    footnote(fig, "线长按真实航程标定；每面板只显本周期任务。口径与符号说明见 figure_notes.md。")
+    footnote(fig, "线长按真实航程标定；每面板只显本周期任务。完整口径与符号说明见 PIPELINE.md。")
     return save_figure(fig, Path(out_dir) / "P03_allocation", formats, dpi=dpi)
 
 if __name__ == "__main__":

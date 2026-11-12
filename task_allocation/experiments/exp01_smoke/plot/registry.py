@@ -216,7 +216,7 @@ def resolve(
 
 
 def describe() -> str:
-    """生成一张 Markdown 表，用于文档（PIPELINE.md / notes.md）直接粘贴。"""
+    """生成一张 Markdown 表，用于文档（PIPELINE.md）直接粘贴。"""
     lines = [
         "| 层 | 图 id | 说明 | 数据来源 |",
         "|---|---|---|---|",

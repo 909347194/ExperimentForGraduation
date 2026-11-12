@@ -1,11 +1,11 @@
 # exp01_smoke —— 端到端冒烟：真实机巢/DEM 场景 + 两阶段选择 + 滚动闭环
 #
-# 参数放置原则（见 experiments/README.md 与 notes.md）：
+# 参数放置原则（见 experiments/README.md 与 PIPELINE.md）：
 #   data/        实测事实（机巢经纬度、DEM），跨实验复用
 #   config.yaml  本次实验设定（下方每个数值都被 run.py 显式读取）
 #   methods/     算法实现，不读配置、不写死数值
-# 新增可调项请同步登记 notes.md「参数放哪里」。
-# 注释只写当前语义与调法；标定史、实测裁决、清理记录见 notes_archive.md。
+# 新增可调项请同步登记 PIPELINE.md。
+# 注释只写当前语义与调法；标定史、实测裁决、清理记录见 PIPELINE.md。
 
 experiment:
     name: exp01_smoke
@@ -36,7 +36,7 @@ problem:
     nest_capacity: 2 # 单机巢容量（架）
     n_uavs: 6 # 机队规模（≤ n_nests × nest_capacity 才不初始超容，即 6）
     uav_speed: 15.0 # m/s
-    uav_max_range: 10000.0 # 满电航程（m）；远巢任务将出现真几何不可达（分母合法排除项）
+    uav_max_range: 10000.0 # 同构回退时的满电航程（m）；设 fleet_file 后仅作 metrics 回显缺省，不参与装配
     uav_max_time: null # 最大飞行时间（s）；null=自动派生 航程/速度（与航程预算自洽）。显式更小值即成独立绑定约束
 
 # 合成任务点（暂无实测任务数据；换 data/task_location_data.csv 时只替换
@@ -67,7 +67,7 @@ tasks:
     # 标定原则：窗口尺度与「典型任务航时」同量级——太紧则时间窗变成物理
     # 不可能的判官，太松则失去选择性压力。当前值按城关区/广州最大单程
     # ~870 s 标定（下界 (870+300)×1.05 ≈ 2.0 周期，上界 2:1 → 4.0），
-    # 仍有淘汰。历史多轮标定与扫描档位见 notes_archive.md「时间窗标定史」。
+    # 仍有淘汰。历史多轮标定与扫描档位见 PIPELINE.md。
     deadline_cycles_min: 2.0
     deadline_cycles_max: 4.0
 
@@ -134,7 +134,7 @@ muas:
     # big_m 仅作 W_hard/W_skip 推导基数（κ·m·R_pool），不进 f。
     big_m: null # null = 按问题数据自动推导；给数值则显式固定
     # 口径约定：1e-2 → 1e-1（本实验口径切换，非全局默认）。λ 扫描结论与
-    # 跨档数据分列要求见 notes_archive.md「config 注释精简留档」。
+    # 跨档数据分列要求见 PIPELINE.md。
     lambda_cost: 1.0e-1 # 次目标权重（收益当量/米）；只裁决收益等价的解
     w_penalty: 1.0 # 约束违反惩罚总权重（历史口径：惩罚随 F2 一起乘 λ）
     # 惩罚量纲解耦：null = 惩罚进 F2 再乘 λ；给数值则以「奖励当量/惩罚单位」
@@ -145,7 +145,7 @@ muas:
     hard_violation_kappa: 10.0 # W_hard = κ·m·R_pool 的安全系数
     # 迟到奖励折减容忍 W（s）：eff = R × max(0, 1 − L/W)。迟到不是废飞——
     # 仍算完成、计奖励，按时长折减。须与 selection.feasibility.late_tolerance_seconds
-    # 同值；null = 关闭折减。标定依据见 notes_archive.md「config 注释精简留档」。
+    # 同值；null = 关闭折减。标定依据见 PIPELINE.md。
     late_reward_decay_seconds: 1800.0
     default_service_time: 60.0 # 单任务作业时长（s）
     max_participating_uavs: null # 参与规划的 UAV 上限；null → min(K, N-1)（srp 巡游模型）
@@ -176,7 +176,7 @@ muas:
     prune_margin: 0.0 # 剔除判据裕度：λ·节省 > R·(1+margin) 才剔除
     prune_max_rounds: 8
     # 零奖励剔除：ETA ≥ latest+W 的任务 eff≈0，暂缓把机会留给下周期。
-    # 仅 late_reward_decay_seconds>0 时生效。消融实测见 notes_archive.md。
+    # 仅 late_reward_decay_seconds>0 时生效。消融实测见 PIPELINE.md。
     prune_zero_reward: false
     prune_wait_bonus: 1.0 # 等待补偿：滞留越久有效收益越高，越难被剔除
     wait_scale: 3600.0 # 等待补偿的时间尺度（s）
@@ -186,7 +186,7 @@ muas:
     lamarckian: true
     # 解码后局部搜索 polish：DMDE 收敛后对 best_assignment 做
     # relocate/swap/插入位搜索，候选过同一 build_solution 修复链，仅严格
-    # 改进才接受（治收敛后路由改善不可见的问题，详见 notes_archive.md）。
+    # 改进才接受（治收敛后路由改善不可见的问题，详见 PIPELINE.md）。
     polish_enabled: true
     polish_moves: [relocate, swap, position] # 扫描优先级：结构性收益最大的排首
     polish_max_rounds: 30 # 无改进即停的轮数上限
@@ -211,7 +211,7 @@ muas:
     monotone_polish_eps: 1.0e-6
     # ── ⑦重排期航程优化：零迟到时评估「最近邻」候选，仅「仍零迟到 且
     # 航程严格更短」才采纳。语义 = 覆盖优先、成本随后。
-    # ⚠️ 实测为负优化（A/B 见 notes_archive.md），默认关，仅供对照/复现。
+    # ⚠️ 实测为负优化（A/B 见 PIPELINE.md），默认关，仅供对照/复现。
     reorder_range_optimize: false
     reorder_range_eps: 1.0 # 采纳航程改进的严格阈值（米，绝对）
     # ── ⑧交付后成本 polish：对**交付解**做组内 2-opt（段反转）/ Or-opt
@@ -268,7 +268,7 @@ solver:
     # 主口径 200 代（500 代仅敏感性对照）。注意 max_iter 同时是 CR/温度
     # 调度分母 S：S=200 相对原文 1000 是搜索预算的量级变化，不是微调，
     # 论文中须作标定项显式声明。标定史与对照数据见
-    # notes_archive.md「求解预算标定史」「config 注释精简留档」。
+    # PIPELINE.md。
     max_iter: 200 # max_generations
     zeta: 3 # 动态交叉率曲率指数 ζ（论文式 3-9 取 3）
     # 灭绝门限 δ：null = 论文式 3-12 原式 GMR = 1 − CR；填数值（如 0.3）

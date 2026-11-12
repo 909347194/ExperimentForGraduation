@@ -608,7 +608,7 @@ def plot_allocation_anim(
     # 标题和口径说明（曾因顺序错位导致动画产物缺两者，见 审查）。
     fig.suptitle("exp01_smoke：分配过程动画演变（滚动闭环 · 航迹生长 · DMDE 收敛）",
                  fontsize=_F_SUPTITLE)
-    footnote(fig, "航迹按周期生长，任务扫过即点亮；状态行与驻巢数逐帧更新。完整口径见 figure_notes.md。")
+    footnote(fig, "航迹按周期生长，任务扫过即点亮；状态行与驻巢数逐帧更新。完整口径见 PIPELINE.md。")
 
     try:
         from PIL import Image
@@ -716,7 +716,7 @@ def _last_change_index(hist: Sequence[float]) -> int:
 def _draw_conv(ax, solution: dict[str, Any], c: int | None, p: float) -> None:
     """右栏上：当前周期 DMDE 收敛曲线（best-so-far），随动画进度 p 渐进揭示。
 
-    呈现约定（与 notes.md §9 一致，只改绘图不改数据）：
+    呈现约定（与 PIPELINE.md 的口径一致，只改绘图不改数据）：
 
     1. 只画「当前周期」自己的曲线——各周期目标量级差可达 1 个数量级，
        跨周期共享 y 轴会把本周期改进压成像素级平线；

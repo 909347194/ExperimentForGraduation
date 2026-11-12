@@ -13,8 +13,8 @@
   `max_range` / `max_time` / `speed` / `nest_id`，geo 永久判定用机队最强航程、
   预筛/服务判据逐机，换电恢复到逐机满电值。
 - 缺的是**配置层**：`config.yaml` 的 `problem:` 段只能写同构机队
-  （`n_uavs` + 全局 `uav_max_range`），无法表达「3 架 A 型驻巢 0、航程 25 km；
-  2 架 B 型驻巢 1、航程 8 km」。
+  （`n_uavs` + 全局 `uav_max_range`），无法表达「3 架 A 型驻巢 0、航程 10 km；
+  2 架 B 型驻巢 1、航程 6 km」。
 - WP-D 的 D3「异构域扫描」（异构度 = 航程极差比 → 完成率 / 选择行为 /
   休眠率）需要逐机配置入口——本设计即其前置。
 
@@ -37,15 +37,20 @@
   "description": "人读说明（可选，不参与装配）",
   "defaults": {"speed_mps": 15.0, "max_range_m": 10000.0, "max_time_s": null},
   "models": {
-    "long":  {"max_range_m": 25000.0, "speed_mps": 20.0},
+    "long":  {"max_range_m": 10000.0, "speed_mps": 20.0},
     "short": {"max_range_m": 6000.0}
   },
   "uavs": [
     {"id": 0, "model": "long",  "home_nest": 0},
-    {"id": 1, "model": "long",  "home_nest": 1, "max_range_m": 18000.0},
-    {"id": 2, "model": "short", "home_nest": 1, "max_time_s": 900.0}
+    {"id": 1, "model": "long",  "home_nest": 1, "max_range_m": 8000.0},
+    {"id": 2, "model": "short", "home_nest": 1, "max_time_s": 300.0}
   ]
 }
+
+> Schema 示例的数值仅演示三层继承，不是标定值。exp01 当前清单按
+> guangzhou 研究区（约 5 km × 5 km）标为 10 / 8 / 6 km，见
+> `experiments/exp01_smoke/uav_config.json` 的 `description`；
+> `max_time_s` 在该清单中一律留 `null`，由航程/速度派生。
 ```
 
 ### 3.1 字段

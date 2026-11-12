@@ -133,7 +133,9 @@ def plot_outcome_summary(
     f2 = [float((c.get("muas") or {}).get("f2_cost", 0.0)) / 1000.0 for c in cycles]
     feas = [bool((c.get("muas") or {}).get("feasible", False)) for c in cycles]
 
-    n_seeds = len(metrics.get("seeds") or [])
+    _seeds = list(metrics.get("seeds") or [])
+    n_seeds = len(_seeds)
+    first_seed = _seeds[0] if _seeds else "?"
     feas_rate = float(summary.get("cycle_feasible_rate", 0.0))
     # A1：naive 完成率键已删，完成率只报 final 口径（主口径）。
     #口径约定 A：η_final 分母 = arrived − unreachable − dormant_end
@@ -155,7 +157,7 @@ def plot_outcome_summary(
     n_skip = int(summary.get("n_voluntary_skip", 0))
 
     fig, ((ax_a, ax_b), (ax_c, ax_d)) = plt.subplots(
-        2, 2, figsize=(FIG_WIDE, 7.3))
+        2, 2, figsize=(FIG_WIDE, 9.0))
 
     # ── (a) 每周期执行构成 + 累计吞吐 ────────────────────────────
     ax_a.bar(x, n_on_time, 0.62, color=PALETTE["executed"], alpha=0.9,
@@ -182,6 +184,8 @@ def plot_outcome_summary(
     h1, l1 = ax_a.get_legend_handles_labels()
     h2, l2 = ax_a2.get_legend_handles_labels()
     ax_a.legend(h1 + h2, l1 + l2, loc="upper left", fontsize=FS["legend"])
+    # 图例在左上角，抬高左轴上限给它留出净空，避免压住 C1 堆叠柱顶。
+    ax_a.set_ylim(0, max(max(n_exec, default=1) * 1.45, 1.0))
 
     # ── (b) 任务终局构成 ─────────────────────────────────────────
     # 终局分账恒等式（口径约定 A）：到达 = 完成 + 不可达 + 服务暂缓
@@ -234,58 +238,69 @@ def plot_outcome_summary(
     # ── (d) 关键指标表 ───────────────────────────────────────────
     rows = [
         ("到达 / 完成任务", f"{n_arrived} / {n_done_total}"),
-        ("不可达（geo / service，出池）",
+        ("不可达（geo/service）",
          f"{n_unreach}（{int(summary.get('n_unreachable_geo', 0))} / "
          f"{int(summary.get('n_unreachable_service', 0))}）"),
-        ("服务暂缓（停机时未唤醒）", f"{n_dormant_end}"),
+        ("服务暂缓（停机未唤醒）", f"{n_dormant_end}"),
         ("滞留池中（非暂缓）", f"{n_remain_plain}"),
         ("正确执行吞吐（完成/运营周期）", f"{throughput:.3f}"),
-        ("平均正确执行率（逐周期，按时/出动）", f"{correct_rate:.1%}"),
-        ("按时率（交付集）/ 迟到交付", f"{on_time_final:.1%} / {n_late_total}"),
+        ("正确执行率（逐周期）", f"{correct_rate:.1%}"),
+        ("按时率 / 迟到交付", f"{on_time_final:.1%} / {n_late_total}"),
         ("平均迟到", f"{avg_late / 60:.1f} min"),
         ("有效完成率 / 奖励产出率",
          f"{summary.get('effective_completion_rate', 0.0):.1%} / "
          f"{summary.get('reward_yield', 0.0):.1%}"),
-        ("废飞（物理不可行）/ 已飞航程",
+        ("废飞 / 已飞航程",
          f"{n_waste_total} / {waste_path_m:.0f} m"),
-        ("淘汰（机制缺陷信号，须为 0）", str(n_eliminated_total)),
+        ("淘汰（须为 0）", str(n_eliminated_total)),
         ("完成率 η_final（主口径）", f"{completion:.1%}"),
-        ("候选池命中率 Σn_sel/Σn_cand", f"{cand_hit:.1%}"),
-        ("门禁救回 / S 内可装未装（应 0）", f"{n_gate_rescued} / {n_skip}"),
+        ("候选池命中率", f"{cand_hit:.1%}"),
+        ("门禁救回 / 可装未装", f"{n_gate_rescued} / {n_skip}"),
         ("周期解可行率", f"{feas_rate:.0%}"),
         ("总收益 F1（折减后）", f"{summary.get('total_reward', 0.0):.1f}"),
         ("总路径代价", f"{summary.get('total_cost', 0.0) / 1000:.1f} km"),
         ("平均等待", f"{summary.get('avg_wait', 0.0):.0f} s"),
         ("平均可用机数 K", f"{summary.get('K_mean', summary.get('K_avail_mean', 0.0)):.1f}"),
-        ("求解耗时（MUAS，不含选择阶段）",
+        ("求解耗时（MUAS）",
          f"{summary.get('solve_time_ms', 0.0) / 1000:.1f} s"),
-        ("运行口径", "单 seed（调试）" if n_seeds <= 1 else f"{n_seeds} seeds 均值"),
+        # (d) 全表取自 metrics.summary（只记首 seed）；跨 seed 统计在
+        # seed_summary / per_seed。旧标注写「N seeds 均值」会把首 seed
+        # 数值误报成均值，与「顶层 summary 仅首 seed」的口径冲突。
+        ("运行口径", "单 seed（调试）" if n_seeds <= 1 else
+         f"首 seed {first_seed}；跨 seed 见 seed_summary"),
     ]
     ax_d.set_axis_off()
     ax_d.set_xlim(0, 1)
-    ax_d.set_ylim(0, len(rows) + 1.2)
-    ax_d.text(0.0, len(rows) + 0.55, "(d) 关键指标（summary）",
+    # 单列塞 21 行会让相邻行文字互相压叠；拆成左右两列后行距翻倍，
+    # 信息一条不丢。跨 seed 统计仍以 seed_summary / per_seed 为准。
+    n_left = (len(rows) + 1) // 2
+    ax_d.set_ylim(0, n_left + 1.2)
+    ax_d.text(0.0, n_left + 0.55, "(d) 关键指标（首 seed summary）",
               fontsize=FS["title"], fontweight=500, va="center", color="#1f2933")
     for i, (k, v) in enumerate(rows):
-        y = len(rows) - i - 0.5
-        if i % 2 == 0:
-            ax_d.add_patch(plt.Rectangle((0, y - 0.40), 1, 0.80,
+        col = 0 if i < n_left else 1
+        j = i if col == 0 else i - n_left
+        y = n_left - j - 0.5
+        x0 = 0.01 if col == 0 else 0.51
+        x1 = 0.49 if col == 0 else 0.99
+        if j % 2 == 0:
+            ax_d.add_patch(plt.Rectangle((x0, y - 0.40), 0.48, 0.80,
                                          facecolor="#f5f6f7", edgecolor="none",
                                          zorder=0))
         warn = (k == "周期解可行率" and feas_rate < 0.999) or \
                (k == "完成率 η_final（主口径）" and completion < 0.05) or \
                (k.startswith("淘汰") and n_eliminated_total > 0) or \
                (k.startswith("门禁救回") and n_skip > 0)
-        ax_d.text(0.02, y, k, fontsize=FS["tick"], va="center",
+        ax_d.text(x0 + 0.01, y, k, fontsize=FS["tick"] - 1.0, va="center",
                   family=MONO_ZH, color="#3c4148", zorder=2)
-        ax_d.text(0.98, y, v, fontsize=FS["tick"], va="center", ha="right",
+        ax_d.text(x1, y, v, fontsize=FS["tick"] - 1.0, va="center", ha="right",
                   family=MONO_ZH,
                   color=PALETTE["release"] if warn else "#0f4c81", zorder=2)
 
     fig.suptitle("exp01_smoke：结果总览（正确执行 · 终局构成 · 双目标 · 关键指标）",
                  fontsize=FS["suptitle"])
     fig.tight_layout(rect=(0, 0.035, 1, 0.95))
-    footnote(fig, "主指标为吞吐与逐周期执行率；迟到计完成、废飞为物理不可行弹回。完整口径见 figure_notes.md。")
+    footnote(fig, "主指标为吞吐与逐周期执行率；迟到计完成、废飞为物理不可行弹回。完整口径见 PIPELINE.md。")
     return save_figure(fig, Path(out_dir) / "R01_outcome_summary", formats, dpi=dpi)
 
 if __name__ == "__main__":

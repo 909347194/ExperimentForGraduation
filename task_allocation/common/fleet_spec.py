@@ -15,12 +15,15 @@ Schema（**严格**：未知键一律报错，防拼写错误静默失效；单�
     {
       "version": 1,
       "defaults": {"speed_mps": 15.0, "max_range_m": 10000.0, "max_time_s": null},
-      "models":   {"long": {"max_range_m": 25000.0, "speed_mps": 20.0}},
+      "models":   {"long": {"max_range_m": 10000.0, "speed_mps": 20.0}},
       "uavs": [
         {"id": 0, "model": "long", "home_nest": 0},
         {"id": 1, "home_nest": 1, "max_range_m": 8000.0, "speed_mps": 12.0}
       ]
     }
+
+（示例数值仅演示三层继承链，不是实验标定值；实际航程以各实验
+``uav_config.json`` 的说明为准。）
 
 字段解析优先级：``defaults`` ← ``models[model]`` ← 逐机显式键；
 ``home_nest``（初始机巢 id）必填、不参与继承——机巢归属是逐机事实。

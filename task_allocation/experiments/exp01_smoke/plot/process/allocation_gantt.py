@@ -37,6 +37,8 @@ if __name__ == "__main__" and __package__ in (None, ""):
 from pathlib import Path
 from typing import Any, Sequence
 
+from matplotlib.lines import Line2D
+
 from ..base.geo import (
     _G_DRONE,
     _G_HOUSE,
@@ -68,15 +70,26 @@ def plot_allocation_gantt(
     task_by_id = {int(t["id"]): t for t in (solution.get("tasks") or [])}
     nest_by_id = {int(n["id"]): n for n in nests}
     arrival_cycle = _arrival_cycle_map(solution)
+    # 满电航程（米 → km）取自交付解落盘的逐机生效值，不读 config 回显缺省。
+    # 同构旧档无 uavs 段时字典为空 ⇒ 不画刻度，图仍可正常渲染。
+    uav_range_km = {
+        int(u["id"]): float(u["max_range"]) / 1000.0
+        for u in (solution.get("uavs") or [])
+        if u.get("max_range") is not None
+    }
     n_rows = len(rows)
     gantt_h = max(3.0, 0.52 * n_rows + 1.7)
 
-    fig = plt.figure(figsize=(12.6, gantt_h + 1.35))
-    gs = fig.add_gridspec(1, 1, left=0.11, right=0.965, top=0.93, bottom=0.13)
+    fig = plt.figure(figsize=(12.6, gantt_h + 1.70))
+    gs = fig.add_gridspec(1, 1, left=0.11, right=0.965, top=0.88, bottom=0.22)
     ax = fig.add_subplot(gs[0])
     _draw_gantt(ax, rows, task_by_id, nest_by_id, arrival_cycle,
-                title="分配航迹条：线长 ∝ 真实航程 · 方块=任务 · 两端=起/降巢")
-    # 图例：UAV 配色 + 机巢符号（与地图一致）
+                title="分配航迹条：线长 ∝ 真实航程 · 方块=任务 · 两端=起/降巢",
+                uav_range_km=uav_range_km or None)
+    # 面板标题已含口径，这里只留单位；详细标定口径写进脚注，避免长 xlabel
+    # 与图例、脚注挤在底部同一水平带。
+    ax.set_xlabel("累计航程 (km)")
+    # 图例：UAV 配色 + 机巢符号（与地图一致）+ 满电航程刻度
     uavs_used = sorted({int(r["uav_id"]) for r in rows})
     handles = [
         _IconPatch(_G_DRONE, fc=uav_color(u), ec="white", lw=1.0,
@@ -86,13 +99,21 @@ def plot_allocation_gantt(
         _IconPatch(_G_HOUSE, fc=PALETTE["nest"], ec="white", lw=1.0,
                    label="机巢（○=返航巢，琥珀=异巢终止）"),
     ]
-    fig.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.5, 0.028),
+    if uav_range_km:
+        handles.append(
+            Line2D([0], [0], color="#6b7684", lw=1.7, linestyle=(0, (3, 2)),
+                   label="竖直刻度 = 该行 UAV 满电航程上限")
+        )
+    fig.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.5, 0.080),
                handler_map={_IconHandler: _IconHandler()},
-               ncol=min(8, len(handles)), fontsize=FS["legend"],
-               columnspacing=1.1, frameon=False)
+               ncol=3, fontsize=FS["legend"],
+               columnspacing=1.2, frameon=False)
 
-    fig.suptitle("exp01_smoke：分配航迹条（按周期 × UAV 逐行）", fontsize=FS["suptitle"])
-    footnote(fig, "行=航次，线长 ∝ 真实航程；实心屋=起飞巢、空心圈=返航巢。完整口径见 figure_notes.md。")
+    fig.suptitle("exp01_smoke：分配航迹条（按周期 × UAV 逐行）",
+                 fontsize=FS["suptitle"], y=0.975)
+    footnote(fig, "线长 ∝ 真实航程（起飞巢起算，段距按三维几何比例、总量按 est_cost 标定）；"
+                  "实心屋=起飞巢、空心圈=返航巢；竖直虚线=该行 UAV 满电航程上限，与横轴同为 "
+                  "DEM 三维航程，每周期落巢换电回满。口径见 PIPELINE.md。", y=0.012)
     return save_figure(fig, Path(out_dir) / "P04_allocation_gantt", formats, dpi=dpi)
 
 if __name__ == "__main__":

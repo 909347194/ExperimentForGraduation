@@ -9,7 +9,7 @@
 本文考虑持续任务流下的多机巢无人机协同作业：无人机为执行平台，机巢为其起降与返回基地，典型应用场景如图~\ref{fig:frame} 所示。
 \begin{figure}[htbp]
       \centering
-      \includegraphics[width=0.8\textwidth]{figures/fig1-Illustration-of-a-motivating-scenario-for-multi-UAV-and-multi-depot.png}
+      \includegraphics[width=0.6\textwidth]{figures/fig1-Illustration-of-a-motivating-scenario-for-multi-UAV-and-multi-depot.png}
       \caption{多机巢下无人机协同作业场景}\label{fig:frame}
 \end{figure}
 任务沿时间轴持续到达，机队长期驻留，机巢分散部署；无人机自机巢起飞执行任务，完成后降落于某一可用机巢。由于任务到达与机队服务能力不匹配，任务池通常无法被全部覆盖。本文将该问题刻画为滚动时域下的选择性多机巢多无人机任务分配，以固定周期序贯决策，不以任务全集可被覆盖为前提。建模假设如下：
@@ -30,30 +30,30 @@ $\mathcal{T}_t=\mathcal{T}_t^{\mathrm{remain}}\cup\mathcal{T}_t^{\mathrm{new}}\c
       \caption{主要符号及其含义}\label{tab:symbols}
       \begin{tabularx}{\textwidth}{lXlX}
             \toprule
-            符号 & 含义 & 符号 & 含义 \\
+            符号                                                             & 含义                                   & 符号                                                                                                  & 含义                            \\
             \midrule
-            \multicolumn{4}{l}{\emph{集合与索引}} \\
-            $\mathcal{T}_t$ & 周期 $t$ 的任务池 & $\mathcal{T}_t^{\mathrm{remain}},\ \mathcal{T}_t^{\mathrm{new}},\ \mathcal{T}_t^{\mathrm{release}}$ & 任务池的滞留、新到达与故障释放子集 \\
-            $\mathcal{T}_t^{\mathrm{loadable}}$ & 任务池中硬约束下存在可行航次的任务集 & $\mathcal{U}_t,\ \mathcal{U}_t^{\mathrm{avail}},\ \mathcal{N}$ & 无人机集合、可用子集与机巢集合 \\
-            $j,\ u,\ n$ & 任务、无人机、机巢的索引 & $\prec$ & 任务之间的时序先后关系 \\
+            \multicolumn{4}{l}{\emph{集合与索引}}                                                                                                                                                                                                            \\
+            $\mathcal{T}_t$                                                & 周期 $t$ 的任务池                          & $\mathcal{T}_t^{\mathrm{remain}},\ \mathcal{T}_t^{\mathrm{new}},\ \mathcal{T}_t^{\mathrm{release}}$ & 任务池的滞留、新到达与故障释放子集             \\
+            $\mathcal{T}_t^{\mathrm{loadable}}$                            & 任务池中硬约束下存在可行航次的任务集                   & $\mathcal{U}_t,\ \mathcal{U}_t^{\mathrm{avail}},\ \mathcal{N}$                                      & 无人机集合、可用子集与机巢集合               \\
+            $j,\ u,\ n$                                                    & 任务、无人机、机巢的索引                         & $\prec$                                                                                             & 任务之间的时序先后关系                   \\
             \midrule
-            \multicolumn{4}{l}{\emph{外生参数}} \\
-            $\bm{p}_j$ & 任务 $j$ 的位置向量 & $R_j$ & 任务 $j$ 的收益，仅用于事后评价 \\
-            $a_j$ & 任务 $j$ 的到达时刻 & $e_j,\ l_j$ & 期望服务期限的下界与上界；迟到允许并计价 \\
-            $\bm{p}_u(t),\ B_u(t)$ & 周期 $t$ 无人机 $u$ 的位置与剩余航程 & $v,\ B_{\max},\ T_u^{\max},\ s_j$ & 飞行速度、满电航程、最大飞行时间与任务 $j$ 的服务时长 \\
-            $\bm{p}_n,\ C_n,\ \delta_n(t)$ & 机巢 $n$ 的位置、停机位容量与可用性 & $c(\bm{p},\bm{p}\,')$ & 节点间三维地形飞行代价，一般非对称 \\
-            $w_{\mathrm{late}}$ & 迟到量的单位计价系数 & $\lambda$ & 三维航程的成本系数 \\
+            \multicolumn{4}{l}{\emph{外生参数}}                                                                                                                                                                                                             \\
+            $\bm{p}_j$                                                     & 任务 $j$ 的位置向量                         & $R_j$                                                                                               & 任务 $j$ 的收益，仅用于事后评价            \\
+            $a_j$                                                          & 任务 $j$ 的到达时刻                         & $e_j,\ l_j$                                                                                         & 期望服务期限的下界与上界；迟到允许并计价          \\
+            $\bm{p}_u(t),\ B_u(t)$                                         & 周期 $t$ 无人机 $u$ 的位置与剩余航程              & $v,\ B_{\max},\ T_u^{\max},\ s_j$                                                                   & 飞行速度、满电航程、最大飞行时间与任务 $j$ 的服务时长 \\
+            $\bm{p}_n,\ C_n,\ \delta_n(t)$                                 & 机巢 $n$ 的位置、停机位容量与可用性                 & $c(\bm{p},\bm{p}\,')$                                                                               & 节点间三维地形飞行代价，一般非对称             \\
+            $w_{\mathrm{late}}$                                            & 迟到量的单位计价系数                           & $\lambda$                                                                                           & 三维航程的成本系数                     \\
             \midrule
-            \multicolumn{4}{l}{\emph{决策变量}} \\
-            $z_j$ & 任务 $j$ 是否被接纳 & $x_{uj}$ & 任务 $j$ 是否指派给无人机 $u$ \\
-            $y_j$ & 任务 $j$ 是否于本周期执行 & $\pi_u$ & 无人机 $u$ 航次内任务的访问顺序 \\
-            $\nu_u$ & 无人机 $u$ 航次的终点机巢 & & \\
+            \multicolumn{4}{l}{\emph{决策变量}}                                                                                                                                                                                                             \\
+            $z_j$                                                          & 任务 $j$ 是否被接纳                         & $x_{uj}$                                                                                            & 任务 $j$ 是否指派给无人机 $u$           \\
+            $y_j$                                                          & 任务 $j$ 是否于本周期执行                      & $\pi_u$                                                                                             & 无人机 $u$ 航次内任务的访问顺序            \\
+            $\nu_u$                                                        & 无人机 $u$ 航次的终点机巢                      &                                                                                                     &                               \\
             \midrule
-            \multicolumn{4}{l}{\emph{导出量}} \\
-            $\mathcal{T}_t^{\mathrm{sel}},\ \mathcal{T}_t^{\mathrm{exec}}$ & 接纳集 $\{j:z_j=1\}$ 与执行集 $\{j:y_j=1\}$ & $T_j$ & 任务 $j$ 的完成时刻 \\
-            $L_j=\max(0,\ T_j-l_j)$ & 任务 $j$ 的迟到量 & $L_{\mathrm{tot}}=\sum_{j\in\mathcal{T}_t^{\mathrm{exec}}}L_j$ & 单周期总迟到量 \\
-            $d_u(\pi_u,\nu_u)$ & 无人机 $u$ 航次含返航的三维总航程 & $\tau_u(\pi_u,\nu_u)$ & 无人机 $u$ 航次含返航的飞行时长 \\
-            $C_n^{\mathrm{free}}(t)$ & 机巢 $n$ 的可用停机位，$C_n-o_n+q_n$ & & \\
+            \multicolumn{4}{l}{\emph{导出量}}                                                                                                                                                                                                              \\
+            $\mathcal{T}_t^{\mathrm{sel}},\ \mathcal{T}_t^{\mathrm{exec}}$ & 接纳集 $\{j:z_j=1\}$ 与执行集 $\{j:y_j=1\}$ & $T_j$                                                                                               & 任务 $j$ 的完成时刻                  \\
+            $L_j=\max(0,\ T_j-l_j)$                                        & 任务 $j$ 的迟到量                          & $L_{\mathrm{tot}}=\sum_{j\in\mathcal{T}_t^{\mathrm{exec}}}L_j$                                      & 单周期总迟到量                       \\
+            $d_u(\pi_u,\nu_u)$                                             & 无人机 $u$ 航次含返航的三维总航程                  & $\tau_u(\pi_u,\nu_u)$                                                                               & 无人机 $u$ 航次含返航的飞行时长            \\
+            $C_n^{\mathrm{free}}(t)$                                       & 机巢 $n$ 的可用停机位，$C_n-o_n+q_n$          &                                                                                                     &                               \\
             \bottomrule
       \end{tabularx}
 \end{table}
@@ -75,7 +75,7 @@ $\mathcal{T}_t=\mathcal{T}_t^{\mathrm{remain}}\cup\mathcal{T}_t^{\mathrm{new}}\c
 \begin{equation}
       B_u(t+1)=
       \begin{cases}
-            B_{\max}, & \text{本周期出动},\\
+            B_{\max}, & \text{本周期出动},  \\
             B_u(t),   & \text{本周期不出动},
       \end{cases}
       \qquad
@@ -137,9 +137,9 @@ $\mathcal{T}_t=\mathcal{T}_t^{\mathrm{remain}}\cup\mathcal{T}_t^{\mathrm{new}}\c
       \begin{aligned}
             (P)\quad \min_{z,\,x,\,y,\,\pi,\,\nu}\quad
              & w_{\mathrm{late}} L_{\mathrm{tot}}
-            +\lambda\sum_{u\in\mathcal{U}^{\mathrm{avail}}}d_u(\pi_u,\nu_u) \\
+            +\lambda\sum_{u\in\mathcal{U}^{\mathrm{avail}}}d_u(\pi_u,\nu_u)                                      \\
             \text{s.t.}\quad
-             & y_j = 1,\qquad \forall j\in\mathcal{T}_t^{\mathrm{loadable}},\\
+             & y_j = 1,\qquad \forall j\in\mathcal{T}_t^{\mathrm{loadable}},                                     \\
              & \text{式~\eqref{eq:range_time}--\eqref{eq:nest_cap}，且 $\pi_u$ 为执行集上的排列、满足式~\eqref{eq:prec_order}。}
       \end{aligned}
       \label{eq:obj}
