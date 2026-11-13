@@ -22,7 +22,7 @@ data:
 problem:
     fleet_file: uav_config.json
     n_nests: 3
-    nest_capacity: 2
+    nest_capacity: 3          # 3×3=9 泊位 > 6 机，闭塞 1 巢后仍余 6 泊位（容灾冗余）
     n_uavs: 6
     uav_speed: 15.0
     uav_max_range: 10000.0
