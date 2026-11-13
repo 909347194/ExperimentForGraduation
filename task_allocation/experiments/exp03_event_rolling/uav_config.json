@@ -1,0 +1,77 @@
+{
+    "version": 1,
+    "description": "exp01_smoke 异构机队清单（fleet spec）—— 3 巢 6 机，长短航程混编。\n\n【满电航程标定依据：guangzhou 研究区约 5 km × 5 km】\n  · region.geojson 实测 4846 m × 4792 m、对角 6815 m；30 个落盘任务点跨 4634 × 4450 m。\n  · 3 个机巢两两相距 2.4–2.8 km；任务到最近机巢的往返三维直线距离最大 4379 m、中位 2228 m。\n  · 取值判据：足够覆盖任意单任务往返，又装不下全量任务串飞。实测 25 km 远程机曾把 C1 的 20 个任务\n    串成单航次 22506.8 m；本清单最强 10 km 会迫使拆成多航次，且与 11-10 同构基线同量级。\n  · 最强 10 km ≥ 最远单任务往返，因此不引入真几何不可达；geo 判定用机队最强满电航程。\n\n字段语义与规则（详见 task_allocation/docs/design_fleet_spec_2026-11-11.md）：\n  · 单位显式写在键名：max_range_m=满电航程(米)，speed_mps=巡航速度(米/秒)，max_time_s=最大飞行时间(秒)。\n  · home_nest = 初始机巢 id（= data/guangzhou/nest_location_data.csv 行序，0 起）；初始位置=所驻机巢坐标，满电出巢（remaining_range = max_range_m）。\n  · 字段解析优先级：defaults ← models[model] ← 逐机显式键（逐机最优先）。逐机性能值均显式写出，自包含可直接读。\n  · 本清单不设独立飞行时间约束：max_time_s 一律 null，由 航程/速度 自动派生；避免「显式值宽于派生值」形成永不绑定空约束。\n  · 机号 id 必须唯一；初始驻巢数 ≤ nest_capacity（config.yaml problem: 段，2 架/巢）。\n  · 未知键/非法值会直接报错，不静默忽略——改坏会立刻发现。\n\n机队构成（巢容量 2/巢，满配）：\n  巢 0：id0 远程 + id2 近程  |  巢 1：id1 远程 + id3 近程  |  巢 2：id4 近程 + id5 中程\n  · long（远程，2 架）：10 km @ 20 m/s → 派生 500 s；负责跨巢/较远任务。\n  · short（近程，3 架）：6 km @ 15 m/s → 派生 400 s；近域高频次服务。\n  · id5（中程，1 架）：8 km @ 15 m/s → 派生 533.3 s；逐机覆盖缺省，保留异构度。\n\n启用方式：config.yaml 的 problem.fleet_file: uav_config.json（相对本实验目录）。不设 fleet_file 则退回同构（n_uavs + uav_*），行为逐位不变。\n2026-11-12 按研究区尺度从旧 25/12/6 km 重标定为 10/8/6 km（旧值作废）；经 tests/test_fleet_spec.py 校验并接入 exp01 装配。",
+    "defaults": {
+        "speed_mps": 15.0,
+        "max_range_m": 10000.0,
+        "max_time_s": null
+    },
+    "models": {
+        "long": { "max_range_m": 10000.0, "speed_mps": 20.0 },
+        "short": { "max_range_m": 6000.0 }
+    },
+    "uavs": [
+        {
+            "id": 0,
+            "model": "long",
+            "home_nest": 0,
+            "max_range_m": 10000.0,
+            "speed_mps": 20.0,
+            "max_time_s": null,
+            "meta": {
+                "role": "远程",
+                "note": "驻巢 0；10 km 为机队最强航程，geo 真几何不可达判定以此为准"
+            }
+        },
+        {
+            "id": 1,
+            "model": "long",
+            "home_nest": 1,
+            "max_range_m": 10000.0,
+            "speed_mps": 20.0,
+            "max_time_s": null,
+            "meta": {
+                "role": "远程",
+                "note": "驻巢 1；与 id0 分巢部署"
+            }
+        },
+        {
+            "id": 2,
+            "model": "short",
+            "home_nest": 0,
+            "max_range_m": 6000.0,
+            "speed_mps": 15.0,
+            "max_time_s": null,
+            "meta": { "role": "近程", "note": "驻巢 0；6 km 近域高频次服务" }
+        },
+        {
+            "id": 3,
+            "model": "short",
+            "home_nest": 1,
+            "max_range_m": 6000.0,
+            "speed_mps": 15.0,
+            "max_time_s": null,
+            "meta": { "role": "近程", "note": "驻巢 1；6 km 近域高频次服务" }
+        },
+        {
+            "id": 4,
+            "model": "short",
+            "home_nest": 2,
+            "max_range_m": 6000.0,
+            "speed_mps": 15.0,
+            "max_time_s": null,
+            "meta": { "role": "近程", "note": "驻巢 2；6 km 近域高频次服务" }
+        },
+        {
+            "id": 5,
+            "home_nest": 2,
+            "max_range_m": 8000.0,
+            "speed_mps": 15.0,
+            "max_time_s": null,
+            "meta": {
+                "role": "中程",
+                "note": "驻巢 2；8 km 中程，逐机覆盖 defaults，保留异构度"
+            }
+        }
+    ]
+}
