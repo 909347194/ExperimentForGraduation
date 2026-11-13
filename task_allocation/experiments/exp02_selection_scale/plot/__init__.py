@@ -4,6 +4,8 @@
 职责边界（与 exp01_smoke 同口径，见 ``experiments/README.md``）：
 
     * 本包**只负责绘制**——不跑算法、不改结果、不决定图存哪；
+    * 图与表只描述单周期规模、墙钟量级与任务去向，不产方法/档位优劣、
+      完成约束验收或标定选型结论（边界见同目录 ``notes.md``）；
     * 图的落盘目录由 ``run.py`` 传入（约定在 ``results/figures/``）；
     * 读的是已经落盘的 ``metrics.json``，因此图与数值产物同源、可独立复现
       （改图不必重跑实验）；本实验无 ``solution.json``（单周期变体扫描），
@@ -15,8 +17,8 @@
     ├── registry.py     图清单：唯一事实来源（6 张图，新增图 = 加一行）
     ├── theme.py        学术绘图样式与保存约定（唯一 import pyplot 的地方）
     ├── base/           被图依赖、但自己不是图的共享绘制件（版面自检/去重叠）
-    ├── setup/          ① 实验设置：场景 / 变体矩阵 / 求解预算（参数即图）
-    └── report/         ④ 结果分析：规模压缩与标定结论（可直接进论文）
+    ├── setup/          ① 实验设置：场景 / 档位矩阵 / 求解预算（参数即图）
+    └── report/         ④ 结果分析：规模压缩、分段墙钟与任务去向（描述性）
 
 命名约定（四者同名 + 分类编号前缀，见 ``registry.py`` 顶部说明）::
 
@@ -39,6 +41,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import sys
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
@@ -104,6 +107,17 @@ def make_plots(
     figures = resolve(names=names, groups=groups)
     if not figures:
         return []
+
+    # 出图门禁（唯一入口）：任何入口（run.py / render_from_json.py / 单图脚本）
+    # 都要过。图标题/来源说明出现优劣类结论词即失败，不静默出图。
+    _exp = Path(__file__).resolve().parents[1]
+    if str(_exp) not in sys.path:
+        sys.path.insert(0, str(_exp))
+    from accounting import assert_no_quality_claims
+
+    for fig in figures:
+        assert_no_quality_claims(fig.title, where=f"figure:{fig.id}")
+        assert_no_quality_claims(fig.source, where=f"figure:{fig.id}")
 
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)

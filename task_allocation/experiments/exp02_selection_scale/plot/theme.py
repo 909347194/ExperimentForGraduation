@@ -25,10 +25,19 @@ PDF 输出用 TrueType（fonttype 42），保证嵌入与文本可搜索。
 
 from __future__ import annotations
 
+import sys
 import time
 import unicodedata
 from pathlib import Path
 from typing import Iterable
+
+# 实验自持的口径门禁：脚注 / 轴标题出现优劣类结论词即失败。
+# 这里做 sys.path 引导，保证从 run.py / render_from_json.py / 单图脚本 /
+# 测试四种入口都能 import 到，门禁不因入口不同而静默失效。
+_EXP_DIR = Path(__file__).resolve().parents[1]
+if str(_EXP_DIR) not in sys.path:
+    sys.path.insert(0, str(_EXP_DIR))
+from accounting import assert_no_quality_claims  # noqa: E402
 
 import matplotlib
 
@@ -327,12 +336,17 @@ def style_axes(ax, *, title: str | None = None, xlabel: str | None = None,
     自检实测 P09(a) 达 1.16×、P09(e) 1.19×、P01(d) 1.20×），超出的部分会压到
     相邻子图上。交给 matplotlib 按**实际渲染宽度**自动折行最可靠——自己估算
     字宽会重复踩「估宽偏松」的坑（见 :func:`_wrap_to_width` 的余量说明）。
+
+    口径门禁：标题 / 轴标签不得出现优劣类结论词（见 accounting.py）。
     """
     if title:
+        assert_no_quality_claims(title, where="axes.title")
         ax.set_title(title, fontsize=FS["title"], wrap=True)
     if xlabel:
+        assert_no_quality_claims(xlabel, where="axes.xlabel")
         ax.set_xlabel(xlabel, fontsize=FS["base"])
     if ylabel:
+        assert_no_quality_claims(ylabel, where="axes.ylabel")
         ax.set_ylabel(ylabel, fontsize=FS["base"])
 
 
@@ -378,7 +392,10 @@ def footnote(fig, text: str, x: float = 0.01, y: float = 0.004) -> None:
 
     超宽的段会按画布可用宽度自动折行（见 :func:`_wrap_to_width`），避免单行
     溢出画布并把 tight bbox 撑宽。
+
+    口径门禁：脚注里出现优劣类结论词即抛错——本实验只做规模可扩展性描述。
     """
+    assert_no_quality_claims(text, where="footnote")
     fs = FS["footnote"]
     fig_w = float(fig.get_size_inches()[0])
     avail_in = max(1.0, fig_w * (0.995 - x))

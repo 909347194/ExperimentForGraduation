@@ -1,24 +1,24 @@
 # -*- coding: utf-8 -*-
-"""图 ``r02_compression``——规模压缩与候选/选择/执行数。
+"""图 ``r02_compression``——规模压缩与候选/选择/交付数（描述性观测）。
 
-【report 层 · 结论与论文插图】
+【report 层】
 
 回答「压缩真实发生了吗？压到多少？跟 N 走还是跟 K/能力走？」
 
 三联面板（x = 任务规模 N，分类轴）：
 
     (a) 候选名额 n_cand   优先级预筛截断后的候选规模。机数名额族由 ⌈α·K⌉
-                      给出、能力族由 cap(t) 给出；全量对照 = N 自身。
-    (b) 选择数 sel / 执行数 exec   最终参与 MUAS 与真正交付的任务数
-                      （漏斗 N → k → sel → exec 的末两级）。
+                      给出、能力族由 cap(t) 给出；参照臂 = N 自身。
+    (b) 选择数 sel / 交付数 done   最终参与 MUAS 与真正交付的任务数
+                      （漏斗 N → k → sel → done 的末两级）。
     (c) 压缩比 N/sel   随 N 的变化。
 
-读图要点：观察 (a) 中候选规模是否随 N 变化；若候选规模由名额或能力决定，
-应呈平线。是否解耦以本次正式档实测为准，图注不预设结论。
+只登记规模与结构，不判断哪一档更好；N=10 时 N 小于全部上限、选择层
+不触发，五档逐位相同，是「未压缩」参照点而非档位差异的证据。
 
 数据来源：``metrics.json`` 的
 ``scales[].selection.{capability_n_cand,n_selected}`` +
-``muas.n_executed`` + ``compression_ratio``。
+``accounting.n_done`` + ``compression_ratio``。
 """
 
 from __future__ import annotations
@@ -165,9 +165,11 @@ def plot_r02_compression(
     fig.tight_layout(rect=(0, 0.055, 1, 0.93))
     footnote(fig,
              "数据来源：results/metrics.json 的 scales[]。n_cand = selection.capability_n_cand"
-             "（Top-α 预筛后候选规模）；sel = n_selected（最终参与 MUAS）；exec = muas.n_executed"
-             "（真正交付）。漏斗为 N → 候选 → 选择 → 交付；各档实测值以本次 metrics 为准。"
-             "单 seed（42）。")
+             "（Top-α 预筛后候选规模）；sel = n_selected（最终参与 MUAS）；done = accounting.n_done"
+             "（真正交付）。漏斗为 N → 候选 → 选择 → 交付；未选中与选中未交付一律记"
+             " remain（单周期快照无后续周期），不叫暂缓/顺延，本实验不评价完成约束。"
+             "N=10 时选择层不触发、五档逐位相同。各档实测值以本次 metrics 为准；"
+             "单 seed（42），只描述结构、不作档位比较或机制归因。")
 
     stem = Path(out_dir) / "R02_compression"
     return save_figure(fig, stem, formats, dpi=dpi)

@@ -85,7 +85,7 @@ expXX_<name>/
 | 目录 | 目的 | 状态 |
 |---|---|---|
 | `exp01_smoke` | 主链路冒烟 + 主口径结果（滚动闭环、覆盖门禁）；11-10 用当前代码重跑正式档、26/26 PASS，图 8 件 + 表 3 件 | active |
-| `exp02_selection_scale` | 选择层规模（N / 名额 / 能力上界）标定；11-10 切 guangzhou 当前口径重跑正式档，18/18 格闭合，图 12 件 + 表 4 件 | active |
+| `exp02_selection_scale` | **单周期任务规模可扩展性台**：N=10/50/100 的压缩比、分段墙钟、现算边数与任务去向分账（描述性）；11-12 收窄职责、旧档归档，11-13 正式档 18 格跑完并验收（6 图 4 表） | active（正式档就绪） |
 | `exp03_event_rolling` | 事件触发重规划 | planned（仅 notes） |
 | `exp04_ablation` | 消融矩阵收编 | planned（仅 notes） |
 | `exp05_baselines` | 主张检验台 C1–C5（同一批解两把尺子、独立重评、配对精确 p）；v3 正式档 35 单元 | active |
@@ -176,6 +176,19 @@ planned 目录只放 `notes.md`（有意占位），**不要删**。四个 `ab_*
    是否重跑；
 3. 重跑严格串行、求解期不出图、旧档先归档、失败 seed 不静默重采样。
 
+**11-12 更新（exp02 职责收窄）**：`exp02_selection_scale` 已按 §6 收窄为
+「单周期任务规模可扩展性台」，撤下 F1 质量判据、补齐任务去向分账与恒等式
+门禁、参照臂改为单因素、落 `effective_config.json`。收窄前 11-10 的
+`results/` 按 §7 归档为冻结旧档，字段与当前代码不兼容，**不再是有效正式档**；
+重跑仍须单独发话。边界与口径见该实验 `notes.md`。
+
+**11-13 更新（exp02 正式档）**：用户发话后先审查并加固结果保存链路与出图表
+脚本（原子落盘 + 配置指纹、S01 静默丢图修复、补图门禁），随后严格串行跑完
+18 格（等待会话外 exp11 退出、确认无并行负载后启动）：`FORMAL_RC=0` /
+`TABLES_RC=0` / `FIGURES_RC=0`，`identity_ok_all=true`，12 图文件 / 4 表。
+逐格数值、三条论文必写口径（`max_ratio·K=12` 非全局常数、`remain` 不是淘汰、
+墙钟只作量级观测）与剩余技术债见 `exp02_selection_scale/notes.md` §6。
+全量回归 **638 passed**。
 **库层面残留纪律**：生产代码仍有 13 处 `rng=None → default_rng()` 熵源兜底
 （只有 `repair_invalid` 为必填）；`DMDEConfig.seed` 默认 `None`，各实验
 `config.yaml` 均显式给 seed 故实际实验可复现；`seed=` 兼容别名只发默认不可见的

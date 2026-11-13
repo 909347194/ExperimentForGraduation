@@ -1,23 +1,23 @@
 # -*- coding: utf-8 -*-
-"""图 ``r05_capability``——能力驱动标定：cap_x* 阶梯对照。
+"""图 ``r05_capability``——档位观察：cap_x* 阶梯的规模、墙钟与任务去向。
 
-【report 层 · 结论与论文插图】
+【report 层 · 描述性观测】
 
-回答「候选规模按机数名额还是机队能力标定？」——能力驱动口径
-（``mode=primary``，选择数接到 cap(t)=⌊budget_scale·B/c̃⌋）与名额族对照。
+登记能力驱动口径（``mode=primary``，选择数接到
+cap(t)=⌊budget_scale·B/c̃⌋）三档在给定任务规模下的选择规模、二阶段墙钟
+与任务去向，全部描述性：
 
-双联面板（x = 候选/选择规模 n_cand / n_sel，对数轴）：
+    (a) 二阶段墙钟 vs 选择规模    x = n_sel（对数轴），y = t_muas
+                      （s，对数轴）；红色虚线为同 N 参照臂的 t_muas 水平。
+                      灰色带 = cap(t) 代表值附近（±3，从 metrics 现算）。
+    (b) 任务去向 vs 选择规模    x = n_sel（对数轴），y = 交付数 /
+                      未完成数（两项之和 = 到达 N）。
 
-    (a) 绝对口径   y = F1；能力族三档沿曲线分布，全量对照为同 N 红色虚线。
-                      灰色带 = cap(t) 附近（±3，cap(t) 从 metrics 现算）。
-    (b) 相对口径（有全量对照的规模）   左轴 = 质量保持率 %（实心），
-                      右轴 = 耗时比 %（空心，对数）。
+本图不判断哪一档更好、不给选型结论、不给相对快慢比值；cap(t) 灰带只是
+结构参考位置，不是「拐点」或取值建议。
 
-读图要点：观察候选规模增大时收益与耗时的边际变化；cap(t) 是否构成平衡点
-以本次正式档实测为准，图注不预设结论。
-
-数据来源：``metrics.json`` 的 ``scales[]``（cap_x* 阶梯 + quota_a2.5 +
-full_baseline 参考）。
+数据来源：``metrics.json`` 的 ``scales[]``（cap_x* 阶梯 + 全部档位 +
+full_baseline 参照）。
 """
 
 from __future__ import annotations
@@ -42,9 +42,9 @@ from typing import Any, Sequence
 
 from ..theme import FIG_WIDE, FS, footnote, plt, save_figure, style_axes
 from ._common import (
+    acc_of,
     cap_t,
     color,
-    f1,
     grouped,
     label,
     marker,
@@ -94,74 +94,57 @@ def plot_r05_capability(
 
     fig, (ax_a, ax_b) = plt.subplots(1, 2, figsize=(FIG_WIDE, 4.4))
 
-    # cap(t) 平衡带
+    # cap(t) 结构参考带（不是取值建议）
     band = (max(cap_t_val - 3, 1), cap_t_val + 3)
     for ax in (ax_a, ax_b):
         ax.axvspan(band[0], band[1], color="#9aa5b1", alpha=0.18, zorder=1)
 
-    # ── (a) 绝对口径：F1 vs k ────────────────────────────────────
+    # ── (a) 二阶段墙钟 vs 选择规模 ────────────────────────────────
     for n in ns_with_full:
-        ax_a.axhline(f1(g[n][_FULL]), color="#e45756", linestyle="--",
+        y = t_muas_s(g[n][_FULL])
+        ax_a.axhline(y, color="#e45756", linestyle="--",
                      linewidth=1.0, alpha=0.6, zorder=1)
-        ax_a.text(9.2, f1(g[n][_FULL]), f" 全量 N={n}（{f1(g[n][_FULL]):.0f}）",
-                  color="#e45756", fontsize=FS["annotation"], va="center")
+        # 标注放右端右对齐，避免三条水平线的标签在左侧叠成一团
+        ax_a.text(195.0, y, f"参照 N={n} ", color="#e45756",
+                  fontsize=FS["annotation"], va="bottom", ha="right")
     for v in variants:
         for n in ns:
             row = g[n].get(v)
             if row is None:
                 continue
             k = float(sel_n(row))
-            ax_a.scatter(k, f1(row), s=46, marker=marker(n), color=color(v),
-                         edgecolor="white", linewidth=0.7, zorder=3)
-    # cap_x1 标注
-    for n in ns:
-        row = g[n].get("cap_x1")
-        if row is not None:
-            ax_a.annotate(f"N={n}", xy=(sel_n(row), f1(row)),
-                          xytext=(6, -11), textcoords="offset points",
-                          fontsize=FS["annotation"], color="#2f6b3a")
+            ax_a.scatter(k, max(t_muas_s(row), 1e-3), s=46, marker=marker(n),
+                         color=color(v), edgecolor="white", linewidth=0.7,
+                         zorder=3)
     ax_a.set_xscale("log")
+    ax_a.set_yscale("log")
     ax_a.set_xlim(8, 210)
-    style_axes(ax_a, title="(a) 绝对口径：交付收益 vs 规模 n_cand/n_sel",
-               xlabel="候选/选择规模 n_cand / n_sel（对数轴）", ylabel="交付收益 F1")
+    style_axes(ax_a, title="(a) 二阶段墙钟 vs 选择规模",
+               xlabel="选择规模 n_sel（对数轴）",
+               ylabel="二阶段墙钟 t_muas（s，对数轴）")
 
-    # ── (b) 相对口径：保持率（左轴）/ 耗时比（右轴）──────────────
+    # ── (b) 任务去向 vs 选择规模 ──────────────────────────────────
     for v in variants:
-        for n in ns_with_full:
+        for n in ns:
             row = g[n].get(v)
             if row is None:
                 continue
+            a = acc_of(row)
+            if not a:
+                continue  # 收窄前旧档无分账：跳过，不伪造 0
             k = float(sel_n(row))
-            yr = 100.0 * f1(row) / max(f1(g[n][_FULL]), 1e-9)
-            tr = 100.0 * t_muas_s(row) / max(t_muas_s(g[n][_FULL]), 1e-9)
-            ax_b.scatter(k, yr, s=46, marker=marker(n), color=color(v),
-                         edgecolor="white", linewidth=0.7, zorder=3)
-            ax_b.scatter(k, tr, s=46, marker=marker(n), facecolor="none",
-                         edgecolor=color(v), linewidth=1.3, zorder=3)
-    # cap_x1 关键数标注
-    for n in ns_with_full:
-        row = g[n].get("cap_x1")
-        if row is None:
-            continue
-        k = float(sel_n(row))
-        yr = 100.0 * f1(row) / max(f1(g[n][_FULL]), 1e-9)
-        tr = 100.0 * t_muas_s(row) / max(t_muas_s(g[n][_FULL]), 1e-9)
-        speed = 100.0 / tr if tr > 0 else float("inf")
-        ax_b.annotate(
-            f"N={n}: {yr:.0f}% @ {tr:.0f}%（{speed:.1f}×）",
-            xy=(k, yr), xytext=(8, -13), textcoords="offset points",
-            fontsize=FS["annotation"], color="#2f6b3a",
-        )
-    ax_b.axhline(100, color="#e45756", linestyle="--", linewidth=1.0,
-                 alpha=0.6, zorder=1)
-    ax_b.text(200, 100, "全量参考（100%） ", color="#e45756",
-              fontsize=FS["annotation"], va="center", ha="right")
+            ax_b.scatter(k, int(a.get("n_done", 0)), s=46, marker=marker(n),
+                         color=color(v), edgecolor="white", linewidth=0.7,
+                         zorder=3)
+            ax_b.scatter(k, int(a.get("n_remain", 0)), s=46, marker=marker(n),
+                         facecolor="none", edgecolor=color(v), linewidth=1.3,
+                         zorder=3)
     ax_b.set_xscale("log")
     ax_b.set_xlim(8, 210)
-    ax_b.set_ylim(0, 108)
-    style_axes(ax_b, title="(b) 相对口径：保持率（实心）与耗时比（空心）同轴",
-               xlabel="候选/选择规模 n_cand / n_sel（对数轴）",
-               ylabel="保持率 / 耗时比（%，对同 N 全量）")
+    ax_b.set_ylim(bottom=0)
+    style_axes(ax_b, title="(b) 任务去向（实心=交付，空心=未完成）",
+               xlabel="选择规模 n_sel（对数轴）",
+               ylabel="任务数（两项之和 = 到达 N）")
 
     # 图例
     from matplotlib.lines import Line2D
@@ -176,34 +159,34 @@ def plot_r05_capability(
                color="0.35", label=f"N={n}")
         for n in ns
     ]
-    leg = ax_a.legend(handles=v_handles, loc="lower right",
-                      fontsize=FS["legend"] - 0.5, title="变体",
+    leg = ax_a.legend(handles=v_handles, loc="upper left",
+                      fontsize=FS["legend"] - 0.5, title="档位",
                       title_fontsize=FS["legend"] - 0.5)
     ax_a.add_artist(leg)
     ax_b.legend(handles=[
         Line2D([], [], marker="o", linestyle="", markersize=5, color="0.35",
-               label="实心 = 质量保持率"),
+               label="实心 = 交付 done"),
         Line2D([], [], marker="o", linestyle="", markersize=5,
                markerfacecolor="none", markeredgecolor="0.35",
-               label="空心 = 耗时比"),
-    ], loc="lower right", fontsize=FS["legend"] - 0.5)
+               label="空心 = 未完成 remain"),
+    ], loc="upper right", fontsize=FS["legend"] - 0.5)
     fig.legend(handles=n_handles, loc="lower center", ncol=len(n_handles),
                fontsize=FS["legend"], frameon=False,
                bbox_to_anchor=(0.5, 0.085))
 
-    # cap(t) 代表值写进脚注，不再放到轴顶：轴顶 y=1.0 的文本会与
-    # 「全量参考」虚线及面板标题叠在一起（2026-11-10 正式档出图实测）。
-
     budget_km = (float(metrics.get("K", 0) or 0)
                  * float(metrics.get("uav_max_range_m", 0.0) or 0.0) / 1000.0)
-    fig.suptitle("能力驱动标定：cap_x* 阶梯的质量—耗时对照",
+    fig.suptitle("档位观察：cap_x* 阶梯的选择规模、墙钟与任务去向",
                  fontsize=FS["suptitle"])
     fig.tight_layout(rect=(0, 0.135, 1, 0.93))
     footnote(fig,
              "数据来源：results/metrics.json 的 scales[]。k = n_selected；cap(t)=下取整"
              f"(budget_scale·B/c)（B=机队总航程 {budget_km:g} km，c=最近可用机三维航程中位数），"
-             "实测见 metrics 的 capability_cap 字段。全量对照三个规模全测。"
-             f"灰色带 = cap(t)±3（本次代表值 cap(t)≈{cap_t_val}）。单 seed（42）。")
+             "实测见 metrics 的 capability_cap 字段。灰色带 = cap(t)±3"
+             f"（本次代表值 cap(t)≈{cap_t_val}），仅为结构参考位置、不是取值建议。"
+             "分账：单周期快照无后续周期，未选中与选中未交付一律记 remain（未完成），"
+             "本实验不评价完成约束。墙钟为单 seed 单次观测、跨格共享 DEM 段长缓存，"
+             "只描述量级、不作机制归因或档位比较。参照臂三个规模全测。单 seed（42）。")
 
     stem = Path(out_dir) / "R05_capability"
     return save_figure(fig, stem, formats, dpi=dpi)

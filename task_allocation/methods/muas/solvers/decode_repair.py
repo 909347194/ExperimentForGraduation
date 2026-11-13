@@ -711,12 +711,17 @@ class DecodeRepairMixin:
         P1 projection_only：层 1 降级为「最近合法巢」确定性投影
         （:meth:`_choose_end_nests_projection`，零联合优化）。
 
+        P5 exp11：``home`` ⇒ 强制返回本航次起飞的机巢
+        （:meth:`_choose_end_nests_home`，对照臂「必须返原巢」）。
+
         P4 exp09 ``phase``：``"l1"``＝解码期、``"l3"``＝交付期；实验可用
         ``end_nest_l1_mode`` / ``end_nest_l3_mode`` 精确切换两层策略，
         以做定稿 §4.1 的两层 × 四档同 seed 配对。诊断性调用（如
         subset-optimality proxy）不传 phase，恒走 auto。
         """
         mode = self._end_nest_mode_for_phase(phase)
+        if mode == "home":
+            return self._choose_end_nests_home(routes)
         if mode == "nearest":
             return self._choose_end_nests_projection(routes)
         if mode is None and bool(getattr(self.config, "projection_only", False)):
@@ -775,6 +780,48 @@ class DecodeRepairMixin:
             )[:240],
             gate_reason="mcf_exact(容量约束下精确求解)",
         )
+        return chosen
+
+    def _choose_end_nests_home(
+        self,
+        routes: Mapping[int, Sequence[int]],
+    ) -> dict[int, int | None]:
+        """P5 exp11 对照臂：强制返回本航次起飞的机巢（「必须返原巢」）。
+
+        与 :meth:`_choose_end_nests`（MCF）和 :meth:`_choose_end_nests_projection`
+        （最近合法巢）同为终点决策，但**取消异巢降落自由度**：每架有航次的
+        UAV 一律以周期初所在机巢（``uav.nest_id``）为终点。
+
+        三条口径纪律：
+
+        1. **不求解、不比较费用**：原巢即唯一候选，返航段代价照常计入
+           ``d_u`` / ``τ_u`` 与目标，**不因代价高而改派**——这正是对照组要
+           暴露的损失。
+        2. **不做容量预占**：每机回自家巢，占用与起飞前逐巢相同，
+           ``C_n^free`` 账不变，故不会因本策略制造 overflow；若原巢不可用
+           （``δ_n=0``）或末任务→原巢不可达，照常返回并由模型判据计违约，
+           **不静默改投他巢**（否则对照臂就不是「必须返原巢」了）。
+        3. 原巢缺失（``nest_id is None``，理论上仅未装配的机）⇒ 终点置
+           ``None`` 并留痕，由下游按缺失终点处理。
+
+        用途：exp11 三臂对照（``home`` / ``nearest`` / ``mcf``）的可行性—
+        代价分解，见该实验 notes。
+        """
+        active = [uid for uid, tids in routes.items() if tids]
+        chosen: dict[int, int | None] = {}
+        for uid in sorted(active):
+            uav = self._uav_by_id.get(uid)
+            home = None if uav is None else uav.nest_id
+            chosen[uid] = home
+            self._led_record(
+                "choose_end_nests", "assign_end_nests", "hard", "nest_capacity",
+                f"uav:{uid}", to_state=f"nest:{home}",
+                gate_reason=(
+                    "force_home_nest(P5 强制返原巢)"
+                    if home is not None
+                    else "force_home_nest_no_home(原巢缺失,按缺失终点处理)"
+                ),
+            )
         return chosen
 
     def _choose_end_nests_projection(

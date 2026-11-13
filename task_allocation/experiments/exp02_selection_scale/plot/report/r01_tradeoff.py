@@ -1,22 +1,19 @@
 # -*- coding: utf-8 -*-
-"""图 ``r01_tradeoff``——吞吐—耗时—质量权衡（核心图）。
+"""图 ``r01_tradeoff``——单周期规模—耗时曲线与任务去向分账（核心图）。
 
-【report 层 · 结论与论文插图】
+【report 层 · 描述性观测】
 
-回答全实验的总问题：「把任务池压到多小，换来多快的求解，损失多少质量？」
+对应论文 §4.5「任务规模 20→100+ 的单周期求解时间曲线，说明分层框架 +
+选择层裁剪对搜索规模的压缩效果」。双联面板：
 
-双联面板：
+    (a) 规模—耗时曲线   x = 任务规模 N（分类轴），y = 单周期端到端墙钟
+                        t_total（s，对数轴）；每条线一个给定档位，
+                        红色虚线为同口径参照臂（不调用选择层）。
+    (b) 任务去向分账    每个 N 的堆叠柱：交付 done / 未选中 / 选中未交付，
+                        三者之和恒等于到达 N（恒等式门禁）。
 
-    (a) 绝对口径   x = 二阶段求解耗时 t_muas（s，对数轴），y = 交付收益 F1。
-                   颜色分变体、形状分任务规模 N；红色虚线为同 N 全量对照
-                   （不经过第一阶段直接全量求解）的 F1 水平。
-    (b) 相对口径   x = 耗时比（t_muas / 同 N 全量 × 100%，对数轴），
-                   y = 质量保持率（F1 / 同 N 全量 × 100%）。
-                   右下为优（更快且不掉质量）；虚线为 y=x 参考。
-
-读图要点：比较各变体在「耗时—质量保持率」平面上的位置；名额族的选择数
-受 ⌈max_ratio·K⌉ 封顶，能力族随 budget_scale 变化。结论以本次正式档
-metrics.json 为准，图注不预设结论。
+两图都只描述量级与结构，**不作机制归因、不给相对快慢比值、不判断档位
+高低**。墙钟为单 seed 单次观测且跨格共享 DEM 段长缓存，存在先后偏倚。
 
 数据来源：``metrics.json`` 的 ``scales[]`` 全字段。
 """
@@ -40,17 +37,16 @@ if __name__ == "__main__" and __package__ in (None, ""):
 from pathlib import Path
 from typing import Any, Sequence
 
+import numpy as np
 
 from ..theme import FIG_WIDE, FS, footnote, plt, save_figure, style_axes
 from ._common import (
-    VARIANT_ORDER,
+    acc_of,
     color,
-    f1,
     grouped,
     label,
-    marker,
     scales_present,
-    t_muas_s,
+    t_total_s,
     variants_present,
 )
 
@@ -72,108 +68,85 @@ def plot_r01_tradeoff(
         return []
     variants = [v for v in variants_present(metrics) if v != _FULL]
     ns = scales_present(metrics)
+    xs = np.arange(len(ns))
 
     fig, (ax_a, ax_b) = plt.subplots(1, 2, figsize=(FIG_WIDE, 4.4))
 
-    # ── (a) 绝对口径 ─────────────────────────────────────────────
-    for n in ns:
-        full = g[n].get(_FULL)
-        if full is not None:
-            ax_a.axhline(f1(full), color="#e45756", linestyle="--",
-                         linewidth=1.0, alpha=0.55, zorder=1)
-            ax_a.text(28.0, f1(full), f" 全量 N={n}（{f1(full):.0f}）",
-                      color="#e45756", fontsize=FS["annotation"],
-                      va="center", ha="left")
+    # ── (a) 规模—耗时曲线（论文可扩展性主图） ──────────────────────
     for v in variants:
-        for n in ns:
-            row = g[n].get(v)
-            if row is None:
-                continue
-            ax_a.scatter(t_muas_s(row), f1(row), s=46, marker=marker(n),
-                         color=color(v), edgecolor="white", linewidth=0.7,
-                         zorder=3)
-    # 关键点标注：cap_x1（平衡点候选）
-    for n in ns:
-        row = g[n].get("cap_x1")
-        if row is not None:
-            ax_a.annotate(
-                f"N={n}",
-                xy=(t_muas_s(row), f1(row)),
-                xytext=(6, -11), textcoords="offset points",
-                fontsize=FS["annotation"], color="#2f6b3a",
-            )
-    ax_a.set_xscale("log")
+        ys = [t_total_s(g[n][v]) for n in ns if v in g[n]]
+        vx = [x for x, n in enumerate(ns) if v in g[n]]
+        ax_a.plot(vx, ys, marker="o", markersize=4.5, linewidth=1.5,
+                  color=color(v), label=label(v), zorder=3)
+    fx = [x for x, n in enumerate(ns) if _FULL in g[n]]
+    if fx:
+        ax_a.plot(fx, [t_total_s(g[n][_FULL]) for n in ns if _FULL in g[n]],
+                  marker="D", markersize=4.5, linewidth=1.5,
+                  color=color(_FULL), linestyle="--",
+                  label=label(_FULL), zorder=3)
+    ax_a.set_yscale("log")
+    ax_a.set_xticks(xs, [str(n) for n in ns])
+    ax_a.set_xlim(-0.25, len(ns) - 0.75)
     style_axes(ax_a,
-               title="(a) 绝对口径：二阶段耗时 vs 交付收益",
-               xlabel="二阶段求解耗时 t_muas（s，对数轴）",
-               ylabel="交付收益 F1（奖励当量）")
-    ax_a.set_xlim(left=18.0)
+               title="(a) 单周期端到端墙钟随任务规模的变化",
+               xlabel="任务规模 N（到达任务数）",
+               ylabel="端到端墙钟 t_total（s，对数轴）")
+    ax_a.legend(loc="upper left", fontsize=FS["legend"] - 0.5, ncol=2)
 
-    # ── (b) 相对口径 ─────────────────────────────────────────────
-    for v in variants:
-        for n in ns:
-            row = g[n].get(v)
-            full = g[n].get(_FULL)
-            if row is None or full is None:
-                continue
-            xr = 100.0 * t_muas_s(row) / max(t_muas_s(full), 1e-9)
-            yr = 100.0 * f1(row) / max(f1(full), 1e-9)
-            ax_b.scatter(xr, yr, s=46, marker=marker(n), color=color(v),
-                         edgecolor="white", linewidth=0.7, zorder=3)
-    # cap_x1 标注（结论 5 的三个数）
-    for n in ns:
-        row = g[n].get("cap_x1")
-        full = g[n].get(_FULL)
-        if row is None or full is None:
+    # ── (b) 任务去向分账（堆叠柱，恒等式 arrived = done + remain） ───
+    width = 0.62
+    for x, n in zip(xs, ns):
+        row = g[n].get(_FULL) or next(iter(g[n].values()), {})
+        a = acc_of(row)
+        if not a:
+            # 收窄前旧档没有分账：明确跳过该柱，不伪造 0。
             continue
-        xr = 100.0 * t_muas_s(row) / max(t_muas_s(full), 1e-9)
-        yr = 100.0 * f1(row) / max(f1(full), 1e-9)
-        ax_b.annotate(
-            f"N={n}: {yr:.0f}% @ {xr:.0f}%",
-            xy=(xr, yr), xytext=(7, 5), textcoords="offset points",
-            fontsize=FS["annotation"], color="#2f6b3a",
-        )
-    lim = (6.0, 130.0)
-    ax_b.plot(lim, lim, color="#9aa5b1", linestyle=":", linewidth=1.0,
-              zorder=1, label="y = x（等比交换）")
-    ax_b.set_xscale("log")
-    ax_b.set_xlim(*lim)
-    ax_b.set_ylim(0, 105)
+        done = int(a.get("n_done", 0))
+        not_sel = int(a.get("n_not_selected", 0))
+        deferred = int(a.get("n_deferred_in_selected", 0))
+        bottom = 0
+        for val, c, name in (
+            (done, "#54a24b", "交付 done"),
+            (deferred, "#f58518", "选中未交付"),
+            (not_sel, "#b279a2", "未选中"),
+        ):
+            if val <= 0:
+                continue
+            ax_b.bar([x], [val], width, bottom=bottom, color=c,
+                     edgecolor="white", linewidth=0.6, zorder=3)
+            bottom += val
+        ax_b.text(x, bottom, f"N={n}", ha="center", va="bottom",
+                  fontsize=FS["annotation"], color="#3c4148")
+    ax_b.set_xticks(xs, [str(n) for n in ns])
+    ax_b.set_ylim(bottom=0)
     style_axes(ax_b,
-               title="(b) 相对口径：耗时比 vs 质量保持率（对同 N 全量）",
-               xlabel="耗时比（%，对数轴；越小越快）",
-               ylabel="质量保持率（%）")
+               title="(b) 参照臂的任务去向分账",
+               xlabel="任务规模 N（到达任务数）",
+               ylabel="任务数（三项之和 = 到达 N）")
+    # 图例用显式句柄：N=10 时后两类为 0、不画柱，若靠 bar(label=...) 自动收集
+    # 会只剩「交付」一项，而 N=50/100 的柱里明明还有选中未交付/未选中。
+    from matplotlib.patches import Patch
 
-    # ── 图例：变体（色）+ N（形）两张合一 ────────────────────────
-    from matplotlib.lines import Line2D
+    ax_b.legend(
+        handles=[
+            Patch(facecolor="#54a24b", edgecolor="white", label="交付 done"),
+            Patch(facecolor="#f58518", edgecolor="white", label="选中未交付"),
+            Patch(facecolor="#b279a2", edgecolor="white", label="未选中"),
+        ],
+        loc="upper left", fontsize=FS["legend"] - 0.5,
+    )
 
-    v_handles = [
-        Line2D([], [], marker="o", linestyle="", markersize=5,
-               color=color(v), label=label(v))
-        for v in [*variants, _FULL] if v in VARIANT_ORDER or v == _FULL
-    ]
-    n_handles = [
-        Line2D([], [], marker=marker(n), linestyle="", markersize=5,
-               color="0.35", label=f"N={n}")
-        for n in ns
-    ]
-    leg1 = ax_a.legend(handles=v_handles, loc="lower right", fontsize=FS["legend"],
-                       title="变体", title_fontsize=FS["legend"])
-    ax_a.add_artist(leg1)
-    ax_b.legend(loc="lower right", fontsize=FS["legend"])
-    # 形状图例放在脚注之上、坐标轴之下：三者各占一条水平带，避免
-    # 与自动折行的两行脚注压在同一高度（2026-11-10 正式档出图实测）。
-    fig.legend(handles=n_handles, loc="lower center", ncol=len(n_handles),
-               fontsize=FS["legend"], frameon=False,
-               bbox_to_anchor=(0.5, 0.085))
-
-    fig.suptitle("吞吐—耗时—质量权衡：变体扫描全景（颜色=变体，形状=N）",
+    fig.suptitle("单周期任务规模可扩展性：墙钟曲线与任务去向分账",
                  fontsize=FS["suptitle"])
-    fig.tight_layout(rect=(0, 0.135, 1, 0.94))
+    fig.tight_layout(rect=(0, 0.135, 1, 0.93))
     footnote(fig,
-             "数据来源：results/metrics.json 的 scales[]。F1 = f1_reward（交付收益，"
-             "按迟到折减后口径）；t_muas 仅计第二阶段求解（不含一阶段选择与建矩阵）。"
-             "全量对照 = 不经过第一阶段、直接对全部 N 个任务求解。单 seed（42）。")
+             "数据来源：results/metrics.json 的 scales[]。t_total = hint + selection + "
+             "build + muas 四段之和（参照臂前两段为 0）；两臂共用同一惰性代价表与"
+             "同一距离函数，只差是否调用选择层。分账口径：单周期静态快照无后续周期，"
+             "未选中与选中未交付一律记 remain（未完成），unreachable 本实验不可观测、"
+             "记为 null 而非 0；本实验不评价完成约束，完成约束由 exp01 滚动闭环检验。"
+             "墙钟为单 seed 单次 perf_counter 观测、跨格共享 DEM 段长记忆化缓存，"
+             "只描述量级、不作机制归因。F1 只作事后指标、不进搜索标量 f。")
 
     stem = Path(out_dir) / "R01_tradeoff"
     return save_figure(fig, stem, formats, dpi=dpi)

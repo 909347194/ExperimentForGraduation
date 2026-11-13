@@ -3,6 +3,10 @@
 
 新增一张图 = 在 ``FIGURES`` 里加一行。改标题 / 调顺序 / 换分组，都只动这里。
 
+职责边界：本实验是**单周期任务规模可扩展性台**，六张图只描述
+「规模 → 压缩 / 分段墙钟 / 现算边数 / 任务去向」的观测，
+不产出方法或档位优劣、质量高低、标定选型结论。见 ``notes.md``。
+
 命名与查找规则（四者同名，文件名另带「分类+编号」前缀）::
 
     模块名 ≡ 图 id ≡ 绘制函数名去掉 ``plot_``；输出文件名 = 分类编号前缀 + 图 id
@@ -14,21 +18,21 @@
 
 分层（本实验只有两层，原因：单周期变体扫描，无逐周期过程数据）::
 
-    setup     ① 实验设置：问题规模 / 变体矩阵 / 求解预算（参数即图）
-    report    ④ 结果分析：规模压缩与标定结论（可直接进论文）
+    setup     ① 实验设置：问题规模 / 档位矩阵 / 求解预算（参数即图）
+    report    ④ 结果分析：规模压缩、分段墙钟与任务去向（描述性观测）
 
 与 exp01_smoke 四层的对应关系：本实验没有「初始态势」（无 solution.json）
 与「求解过程」（无逐周期 cycles），故 initial/process 两层整体缺位；
 若将来补场景图件，从 exp01_smoke/plot/ 复制骨架即可。
 
-## 六张图与「成功标准」的对应
+## 六张图与职责的对应
 
-    setup_params     实验设定总览（口径基准）
-    r01_tradeoff     吞吐—耗时—质量全局权衡（核心图；论文主图候选）
-    r02_compression  观察：压缩是否发生、是否与 N 解耦
-    r03_time_breakdown 观察：分段耗时与现算边数随 N 的变化
-    r04_bottleneck   瓶颈定位：选择名额 max_ratio·K 而非 α
-    r05_capability   观察：能力族阶梯的质量—耗时对照
+    setup_params       实验设定总览（口径基准）
+    r01_tradeoff       规模—耗时曲线：N × 档位的单周期墙钟（论文可扩展性主图）
+    r02_compression    压缩是否发生、选择数是否随 N 解耦
+    r03_time_breakdown 分段计时与现算边数随 N 的变化
+    r04_bottleneck     名额族候选规模与选择数封顶（结构观察，不作选型）
+    r05_capability     能力档位阶梯的选择规模、墙钟与任务去向
 """
 
 from __future__ import annotations
@@ -56,17 +60,17 @@ __all__ = [
 
 #: 两层——论文叙事线（本实验无 initial/process，见模块顶说明）
 GROUPS: dict[str, str] = {
-    "setup": "① 实验设置：问题规模、变体矩阵、求解预算（参数即图）",
-    "report": "④ 结果分析：规模压缩与标定结论（可直接进论文）",
+    "setup": "① 实验设置：问题规模、档位矩阵、求解预算（参数即图）",
+    "report": "④ 结果分析：规模压缩、分段墙钟与任务去向（描述性观测）",
 }
 
 #: 二级标签——同层内按"看什么"再归类
 TOPICS: dict[str, str] = {
     "config": "实验配置快照",
-    "tradeoff": "吞吐—耗时—质量权衡",
-    "compression": "规模压缩",
-    "timing": "耗时分解与瓶颈",
-    "calibration": "规模标定口径",
+    "scalability": "规模—耗时曲线",
+    "compression": "规模压缩与任务去向",
+    "timing": "分段计时与现算边数",
+    "structure": "选择规模的结构观察",
 }
 
 #: 输出文件名「分类+编号」前缀映射（单一事实来源；与 FIGURES 顺序一致）。
@@ -113,35 +117,35 @@ FIGURES: tuple[Figure, ...] = (
         id="setup_params",
         group="setup",
         topic="config",
-        title="实验设定总览：场景 / 变体矩阵 / 选择机制 / 求解预算",
+        title="实验设定总览：场景 / 档位矩阵 / 选择机制 / 求解预算",
         needs=("metrics",),
         source="config.yaml 全段 + metrics.json 的 scales[].selection 字段",
         func=plot_setup_params,
     ),
-    # ── ④ report：结果分析（五张，按结论叙事序） ──────────────────
+    # ── ④ report：结果分析（五张，按叙事序；全部描述性） ─────────────
     Figure(
         id="r01_tradeoff",
         group="report",
-        topic="tradeoff",
-        title="吞吐—耗时—质量权衡：全变体扫描散点（x=二阶段耗时，y=交付收益 F1）",
+        topic="scalability",
+        title="规模—耗时曲线：N × 档位的单周期端到端墙钟与任务去向",
         needs=("metrics",),
-        source="metrics.json 的 scales[] 全字段（variant × N × F1 × t_muas）",
+        source="metrics.json 的 scales[]（n_tasks / variant / t_total_ms / accounting）",
         func=plot_r01_tradeoff,
     ),
     Figure(
         id="r02_compression",
         group="report",
         topic="compression",
-        title="规模压缩：候选数 / 选择数 / 执行数 / 压缩比随 N 的演化",
+        title="规模压缩：候选数 / 选择数 / 交付数 / 未完成数随 N 的演化",
         needs=("metrics",),
-        source="metrics.json 的 scales[].selection.{n_tasks_in,capability_n_cand,n_selected} + muas.n_executed + compression_ratio",
+        source="metrics.json 的 scales[].selection.{n_tasks_in,capability_n_cand,n_selected} + accounting.{n_done,n_remain}",
         func=plot_r02_compression,
     ),
     Figure(
         id="r03_time_breakdown",
         group="report",
         topic="timing",
-        title="耗时分解与惰性边：分段计时与现算边数的规模对照",
+        title="分段计时与惰性边：分段墙钟和现算边数的规模对照",
         needs=("metrics",),
         source="metrics.json 的 scales[].t_{hint,selection,build,muas}_ms + lazy_edges",
         func=plot_r03_time_breakdown,
@@ -149,8 +153,8 @@ FIGURES: tuple[Figure, ...] = (
     Figure(
         id="r04_bottleneck",
         group="report",
-        topic="calibration",
-        title="瓶颈定位：名额族候选规模与选择数封顶",
+        topic="structure",
+        title="结构观察：名额族候选规模与选择数封顶",
         needs=("metrics",),
         source="metrics.json 的 scales[]（quota_a2.5 vs quota_a5 同 sel 对照 + selection.capability_n_sel）",
         func=plot_r04_bottleneck,
@@ -158,10 +162,10 @@ FIGURES: tuple[Figure, ...] = (
     Figure(
         id="r05_capability",
         group="report",
-        topic="calibration",
-        title="能力驱动标定：cap_x* 阶梯的质量—耗时对照",
+        topic="structure",
+        title="档位观察：cap_x* 阶梯的选择规模、墙钟与任务去向",
         needs=("metrics",),
-        source="metrics.json 的 scales[]（cap_x* 阶梯的 k / F1 / t_muas + full_baseline 参考）",
+        source="metrics.json 的 scales[]（cap_x* 阶梯的 n_sel / t_muas / accounting）",
         func=plot_r05_capability,
     ),
 )

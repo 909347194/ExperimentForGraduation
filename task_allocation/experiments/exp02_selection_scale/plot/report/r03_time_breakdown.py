@@ -1,19 +1,20 @@
 # -*- coding: utf-8 -*-
-"""图 ``r03_time_breakdown``——耗时分解与惰性边（成功标准 2 + 优化 A 证据）。
+"""图 ``r03_time_breakdown``——分段计时与惰性边（描述性观测）。
 
-【report 层 · 结论与论文插图】
+【report 层】
 
-回答「分层省下的搜索时间，是否被 O(n²) 代价构建吃掉？」
+登记「四段墙钟」与「现算边数」随 N 的量级变化，不回答机制归因：
 
-三联面板：
-
-    (a) 二阶段耗时 t_muas vs N（对数轴）   观察固定候选规模下是否随 N 变化。
+    (a) 二阶段耗时 t_muas vs N（对数轴）   固定候选规模下是否随 N 变化。
     (b) 一阶段三项耗时 vs N（对数轴）   hint（最近机 O(n·K)）/
                       selection / build（候选子集矩阵）分段计时。
-    (c) 惰性表现算边数 vs N（双对数）   惰性表现算边数与全量矩阵的规模对照
+    (c) 惰性表现算边数 vs N（双对数）   与参照臂全量矩阵的规模对照
                       （含斜率 2 参考线）。
 
-是否解耦、边数增长阶次均以本次正式档实测为准，图注不预设结论。
+墙钟是单进程单 seed 单次 perf_counter 观测，且 ``distance_fn`` 的记忆化
+缓存**跨格共享**，先跑的格承担冷启动、后跑的格命中缓存，存在系统性先后
+偏倚；polish 评估数随收敛浮动。因此本图只描述量级与曲线形状，
+**不作机制归因、不给相对快慢比值**。
 
 数据来源：``metrics.json`` 的 ``scales[].t_{hint,selection,build,muas}_ms``
 与 ``lazy_edges``。
@@ -163,9 +164,11 @@ def plot_r03_time_breakdown(
     fig.tight_layout(rect=(0, 0.06, 1, 0.93))
     footnote(fig,
              "数据来源：results/metrics.json 的 scales[]。t_hint/t_selection/t_build/t_muas "
-             "为 perf_counter 分段计时；lazy_edges = LazyPairwiseCost 实际现算边数"
-             "（按需估算 + 缓存，值与全量 eager 建表逐位一致）。全量对照三个规模"
-             "全测。单 seed（42）。")
+             "为单进程单 seed 单次 perf_counter 分段计时；lazy_edges = 惰性表现算边数"
+             "（按需估算 + 缓存，值与全量 eager 建表逐位一致）。两臂均走同一惰性表"
+             "与同一距离函数，只差是否调用选择层。distance_fn 记忆化跨格共享，"
+             "先跑格承担冷启动、后跑格命中缓存，故墙钟存在先后偏倚，只描述量级、"
+             "不作机制归因。参照臂三个规模全测。单 seed（42）。")
 
     stem = Path(out_dir) / "R03_time_breakdown"
     return save_figure(fig, stem, formats, dpi=dpi)

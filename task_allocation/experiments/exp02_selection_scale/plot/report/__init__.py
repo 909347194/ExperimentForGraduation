@@ -1,17 +1,17 @@
 # -*- coding: utf-8 -*-
-"""exp02_selection_scale 图组：**report 层——结论与论文插图**。
+"""exp02_selection_scale 图组：**report 层——描述性观测图**。
 
-放进本层的判断标准：**可以直接放进论文/汇报**，画的是「实验说明什么」，
-而不是「实验长什么样」或「这一轮怎么回事」。
+放进本层的判断标准：画的是「规模变化下观测到了什么」，只登记量级与结构。
+本实验**不产结论图**：方法/档位优劣、完成约束验收、标定选型、机制归因
+都不在本层职责内（见同目录 ``notes.md``）。
 
-本实验的全部图件都是 report 层：单周期变体扫描（N × variant 矩阵），
-数值产物只有一份 ``metrics.json``（``scales`` 列表），图回答四个问题：
+数值产物只有一份 ``metrics.json``（``scales`` 列表，N × 档位矩阵）：
 
-    r01_tradeoff       吞吐—耗时—质量的全局权衡（核心图）
-    r02_compression    规模压缩是否发生、与 N 是否解耦
-    r03_time_breakdown 耗时分解与惰性边数：O(n²) 瓶颈是否已除（成功标准 2）
-    r04_bottleneck     瓶颈定位：选择名额 max_ratio·K 还是 α
-    r05_capability     能力驱动标定：k≈cap(t) 的平衡点（成功标准 3/4）
+    r01_tradeoff       规模—耗时曲线 + 任务去向分账（论文可扩展性主图）
+    r02_compression    压缩是否发生、选择数是否随 N 解耦
+    r03_time_breakdown 分段计时与现算边数随 N 的变化（不作归因）
+    r04_bottleneck     名额族候选规模、选择数封顶与任务去向（结构观察）
+    r05_capability     能力档位阶梯的选择规模、墙钟与任务去向
 """
 
 from .r01_tradeoff import plot_r01_tradeoff

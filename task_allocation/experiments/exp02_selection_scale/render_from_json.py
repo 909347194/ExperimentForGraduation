@@ -4,6 +4,8 @@
 exp02 是单周期变体扫描，数值产物只有 ``results/metrics.json``
 （无 solution.json）。求解全部完成后才调 make_plots；若绘图阶段被
 工具超时打断（600s），用本脚本按格式/图 id 补出，不必重跑求解。
+与 build_tables.py 共用 ``validate_metrics`` 门禁：收窄前旧档、分账
+不闭合的档一律拒绝补图，避免图与表的口径不一致。
 
 用法::
 
@@ -38,10 +40,23 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
 
     results = EXP_DIR / args.results
+    src = results / "metrics.json"
+    if not src.exists():
+        print(f"[render] 缺少 {src}；请先跑 run.py 生成数值产物", flush=True)
+        return 1
+    metrics = json.loads(src.read_text(encoding="utf-8"))
+
+    # 补图与出表走同一口径门禁：收窄前旧档不得绕过 scope / 分账校验出图。
+    from build_tables import validate_metrics
+
+    try:
+        validate_metrics(metrics)
+    except ValueError as exc:
+        print(f"[render][门禁拒绝] {exc}", flush=True)
+        return 2
+
     figures = results / "figures"
     figures.mkdir(parents=True, exist_ok=True)
-
-    metrics = json.loads((results / "metrics.json").read_text(encoding="utf-8"))
 
     fmts = tuple(
         f.strip().lower().lstrip(".")

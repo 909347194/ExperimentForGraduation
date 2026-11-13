@@ -3,10 +3,13 @@
 
 【setup 层 · 实验设置】
 
-回答「实验设了多大问题、扫了哪些变体、求解预算多少」。
+回答「实验设了多大问题、扫了哪些档位、求解预算多少、职责边界在哪」。
 读者不翻 ``config.yaml`` 就能判断实验设定；也是全部报告图的口径基准
 （例如看懂 r04_bottleneck 需要知道 max_ratio·K，看懂 r05_capability
 需要知道 budget_scale 与 cap(t) 的定义）。
+
+本实验是**单周期任务规模可扩展性台**，只描述规模、墙钟量级与任务去向，
+不产方法/档位优劣、质量高低或完成约束结论；完整边界见同目录 ``notes.md``。
 
 三联面板（等宽字体参数表，与 exp01 S01 同风格；本实验无地图小图——
 单周期扫描没有场景空间图件）::
@@ -43,14 +46,28 @@ __all__ = ["plot_setup_params"]
 
 
 def _load_config(out_dir: Path) -> dict[str, Any]:
-    """读实验目录下的 config.yaml；失败返回空 dict（各面板自行降级）。"""
-    cfg = Path(out_dir).resolve().parent.parent / "config.yaml"
+    """读实验目录下的 config.yaml；失败返回空 dict（各面板自行降级）。
+
+    优先按**模块自身位置**定位实验根，而不是从 ``out_dir`` 反推两级：
+    旧实现假定 ``out_dir = <实验根>/results/figures``，一旦 ``--out`` /
+    ``--results`` 指到别的目录就静默读不到配置，``plot_setup_params``
+    返回空列表 ⇒ S01 被静默跳过、少出一张图却不报错（2026-11-13 预演实测）。
+    """
+    exp_root = Path(__file__).resolve().parents[2]
+    candidates = (
+        exp_root / "config.yaml",
+        Path(out_dir).resolve().parent.parent / "config.yaml",
+    )
     try:
         import yaml
-
-        return yaml.safe_load(cfg.read_text(encoding="utf-8")) or {}
-    except Exception:
+    except ImportError:  # pragma: no cover
         return {}
+    for cfg in candidates:
+        try:
+            return yaml.safe_load(cfg.read_text(encoding="utf-8")) or {}
+        except Exception:
+            continue
+    return {}
 
 
 def _fmt(v: Any) -> str:
@@ -111,7 +128,7 @@ def plot_setup_params(
     rows_a = [
         ("可用无人机 K", f"{k_avail} 架"),
         ("机巢数 / 容量", f"{problem.get('n_nests', '—')} 个 / 每巢 {problem.get('nest_capacity', '—')} 架"),
-        ("满电航程", f"{max_range_km:g} km（每周期末充电恢复）"),
+        ("满电航程", f"{max_range_km:g} km（同构 6 架，单周期快照）"),
         ("任务规模 N", " / ".join(str(s) for s in scales)),
         ("任务撒点", (
             f"{tasks_cfg.get('domain', 'nest_anchored')}，"
@@ -133,11 +150,13 @@ def plot_setup_params(
         mode = str(cap_d.get("mode", "intersect"))
         bs = cap_d.get("budget_scale")
         alpha = v.get("alpha")
-        fam = "名额族" if str(name).startswith("quota") else (
-            "能力族" if str(name).startswith("cap") else "对照")
+        # 值文本必须很短：右对齐长串会向左溢出被裁掉、并压住参数名
+        # （2026-11-12 干跑实测）。这里只给区分档位的最小信息，完整
+        # 参数见 config.yaml 的 variants 段。
         rows_b.append((
             name,
-            f"{fam}｜α={_fmt(alpha)}｜{mode}｜budget_scale={_fmt(bs)}",
+            f"α={_fmt(alpha)}·{mode}" if bs is None
+            else f"b={_fmt(bs)}·{mode}",
         ))
     if not rows_b:
         rows_b = [("（config 未定义 variants）", "—")]
@@ -150,19 +169,22 @@ def plot_setup_params(
         ("polish", f"≤{stage.get('polish_max_rounds', '—')} 轮 / ≤{stage.get('polish_max_evals', '—')} 评估"),
         ("选择机制", "优先级→预筛→可行性→边际收益"),
         ("名额系数 α", _fmt(sel_cfg.get('alpha'))),
+        ("选择封顶", f"max_ratio={_fmt((sel_cfg.get('marginal') or {}).get('max_ratio', 2.0))}"),
         ("capability", "cap(t)=floor(budget·B/c)"),
         ("距离口径", "DEM + 建筑包络三维航程"),
-        ("适应度", "加权标量 f（F3 已移除）"),
-        ("全量对照", f"N ∈ {sorted(cfg.get('run', {}).get('full_muas_baseline_scales') or [])}"),
+        ("适应度", "加权标量 f（F1 不进 f）"),
+        ("职责", "规模/墙钟/任务去向（描述性）"),
+        ("不负责", "优劣/完成约束/选型/滚动"),
+        ("参照臂", f"N ∈ {sorted(cfg.get('run', {}).get('full_muas_baseline_scales') or [])}"),
     ]
 
     fig, axes = plt.subplots(1, 3, figsize=(FIG_WIDE, 4.6))
     _draw_param_table(axes[0], "(a) 场景与问题参数", rows_a)
-    _draw_param_table(axes[1], "(b) 变体矩阵（两个标定族）", rows_b)
-    _draw_param_table(axes[2], "(c) 求解预算与口径", rows_c)
+    _draw_param_table(axes[1], "(b) 档位矩阵（给定压缩水平）", rows_b)
+    _draw_param_table(axes[2], "(c) 求解预算与口径边界", rows_c)
     fig.suptitle(
         f"exp02_selection_scale 实验设定：K={k_avail}，N ∈ {scales}，"
-        f"{len(variants)} 个变体",
+        f"{len(variants)} 个档位",
         fontsize=FS["suptitle"],
     )
     fig.tight_layout(rect=(0, 0, 1, 0.94))

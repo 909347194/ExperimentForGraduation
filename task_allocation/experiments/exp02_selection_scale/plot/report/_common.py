@@ -75,12 +75,28 @@ def muas_of(row: dict[str, Any]) -> dict[str, Any]:
     return row.get("muas") or {}
 
 
-def f1(row: dict[str, Any]) -> float:
-    return float(muas_of(row).get("f1_reward", 0.0))
+def f1_descriptive(row: dict[str, Any]) -> float:
+    """F1 原始值（**仅描述性**，门禁口径下不进搜索标量 f，不作质量判据）。
+
+    兼容收窄前旧档的 ``f1_reward`` 键名；旧档按 README §7 已归档，
+    此处回退只为读档排错，不用于出正式表。
+    """
+    m = muas_of(row)
+    return float(m.get("f1_reward_descriptive", m.get("f1_reward", 0.0)) or 0.0)
 
 
 def f2_km(row: dict[str, Any]) -> float:
     return float(muas_of(row).get("f2_cost", 0.0)) / 1000.0
+
+
+def acc_of(row: dict[str, Any]) -> dict[str, Any]:
+    """任务去向分账（收窄前旧档为空 dict，调用方需容忍）。"""
+    return row.get("accounting") or {}
+
+
+def sel_active(row: dict[str, Any]) -> bool:
+    """该格是否真的触发了选择层截断（N=10 时五档逐位相同，为 False）。"""
+    return bool(acc_of(row).get("selection_active", False))
 
 
 def t_muas_s(row: dict[str, Any]) -> float:
@@ -119,6 +135,10 @@ def sel_n(row: dict[str, Any]) -> int:
 
 
 def exec_n(row: dict[str, Any]) -> int:
+    """交付任务数：优先读任务去向分账，旧档回退 muas.n_executed。"""
+    a = acc_of(row)
+    if a.get("n_done") is not None:
+        return int(a["n_done"])
     return int(muas_of(row).get("n_executed", 0))
 
 

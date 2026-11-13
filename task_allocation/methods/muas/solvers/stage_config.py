@@ -374,7 +374,9 @@ class MUASStageConfig:
     #   phase="l1" 解码期（decode_repair / decode_constructive）
     #   phase="l3" 交付期（route_polish.post_cost_polish / post_polish）
     # 取值："nearest"＝最近合法巢确定性投影（零费用比较，_choose_end_nests_
-    # projection）；"mcf"＝给定路径下终点机巢的条件最优分配（非全局最优）。
+    # projection）；"mcf"＝给定路径下终点机巢的条件最优分配（非全局最优）；
+    # "home"＝强制返回本航次起飞的机巢（P5 exp11 对照臂，_choose_end_nests_home），
+    # 容量账不变、末任务→原巢不可达时照常交付并由模型判违约（不静默降级）。
     # 为什么不能拿 projection_only 做 MCF 对照：它同时剥掉 _consolidate
     # 成本合并、_best_order 的 NN / 航程裁决，是复合档，归因不纯。
     end_nest_l1_mode: str = "auto"
@@ -487,9 +489,9 @@ class MUASStageConfig:
                 f"当前为 {self.compare_mode!r}"
             )
         for _key in ("end_nest_l1_mode", "end_nest_l3_mode"):
-            if getattr(self, _key) not in ("auto", "nearest", "mcf"):
+            if getattr(self, _key) not in ("auto", "nearest", "mcf", "home"):
                 raise ValueError(
-                    f'{_key} 必须是 "auto"/"nearest"/"mcf"，'
+                    f'{_key} 必须是 "auto"/"nearest"/"mcf"/"home"，'
                     f"当前为 {getattr(self, _key)!r}"
                 )
         if self.epsilon0 < 0:

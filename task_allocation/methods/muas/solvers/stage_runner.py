@@ -14,7 +14,7 @@ import itertools
 import math
 import sys
 from dataclasses import dataclass, field, replace
-from typing import Any, Sequence
+from typing import Any, Sequence, Set
 
 import numpy as np
 
@@ -71,6 +71,54 @@ def _assignment_change_count(
 
     a, b = _amap(old), _amap(new)
     return sum(1 for tid in set(a) | set(b) if a.get(tid) != b.get(tid))
+
+
+def _nearest_endpoint_cost(
+    tours: Sequence[Any], problem: Any, *, excluded: Set[int],
+) -> float:
+    """同解换终点反事实：同一组路径、终点按「逐机就近 + 泊位先到先得」。
+
+    与 ``decode_repair._choose_end_nests_projection``（nearest 臂）同一规则：
+    机 id 升序、批量起飞让位、逐机落位占位、只看 ``available`` 且未被
+    ``excluded`` 的巢。**不做交付可行性判定**，只算返航段费用；
+    全超容时回退到最近的巢（不静默降级，费用照算）。
+
+    用途：与 ``return_leg_m`` 相减得到「就近 − 本臂实选」。MCF 若真为该
+    解上的条件最优，则差值应恒 ≥ 0；出现负值即说明分配器次优（须查）。
+    """
+    fleet = list(problem.fleet_uavs or problem.uavs)
+    nests = [n for n in problem.nests
+             if getattr(n, "available", True) and n.id not in excluded
+             and int(getattr(n, "capacity", 0) or 0) > 0]
+    if not nests:
+        return 0.0
+    loads: dict[int, int] = {}
+    for u in fleet:
+        if u.nest_id is not None:
+            loads[u.nest_id] = loads.get(u.nest_id, 0) + 1
+    active = [t for t in tours if t.task_ids and t.uav_id is not None]
+    by_id = {int(u.id): u for u in fleet}
+    for t in active:
+        u = by_id.get(int(t.uav_id))
+        if u is not None and u.nest_id is not None:
+            loads[u.nest_id] = loads.get(u.nest_id, 0) - 1
+    total = 0.0
+    for t in sorted(active, key=lambda x: int(x.uav_id)):
+        last = t.task_ids[-1]
+        best_c, best_id = float("inf"), None
+        fb_c, fb_id = float("inf"), None
+        for n in nests:
+            c = float(problem.costs.cost(last, problem.costs.nest_key(n.id)))
+            if c < fb_c:
+                fb_c, fb_id = c, n.id
+            if loads.get(n.id, 0) < int(n.capacity) and c < best_c:
+                best_c, best_id = c, n.id
+        chosen = best_id if best_id is not None else fb_id
+        if chosen is None:
+            continue
+        loads[chosen] = loads.get(chosen, 0) + 1
+        total += float(best_c if best_id is not None else fb_c)
+    return total
 
 
 # 小 N 近精确枚举参照（exp04 B3）
@@ -666,7 +714,43 @@ def run_selective_muas(
                 for t in final.tours
                 if t.task_ids and t.end_nest_id is not None
             )),
-            # 可行率口径：check_nest_capacity 逐巢 overflow 之和
+            # P5 exp11：**同解换终点反事实**（纯观测）。
+            # 对同一组已交付路径，若强制每条航次返回本航次起飞巢
+            # （tour.start_nest_id），返航段代价是多少。与 return_leg_m
+            # 相减即「终点决策自由度在该解上的净收益」，用于把
+            # 「终点策略效应」与「搜索轨迹差异」分开：
+            #   * 该值是**费用反事实**，不做容量可行性检查——起飞巢占用
+            #     之和可能超过 nest_capacity（跨周期换巢后尤其如此）。
+            #     故只作费用对照，不能当作「home 臂可交付」的证据。
+            #   * 不做任何几何重算，与 return_leg_m 同一 costs.cost 口径。
+            "return_leg_if_home_m": float(sum(
+                problem.costs.cost(
+                    t.task_ids[-1], problem.costs.nest_key(t.start_nest_id)
+                )
+                for t in final.tours
+                if t.task_ids and t.start_nest_id is not None
+            )),
+            # 同解反事实的可行性旁证：若把上述路径的终点全部改回起飞巢，
+            # 容量是否仍然可行（0 = 可行）。>0 说明该周期 home 分配本身
+            # 超容，MCF 的可行域并不包含这个 home 分配，同解差额只能作
+            # 费用下界读，不能作「home 臂也能这么飞」的证据。
+            "home_endpoint_overflow": int(sum(
+                int(v.get("overflow", 0))
+                for v in check_nest_capacity(
+                    problem.fleet_uavs or problem.uavs,
+                    problem.nests,
+                    {t.uav_id: t.start_nest_id for t in final.tours
+                     if t.task_ids and t.start_nest_id is not None},
+                ).per_nest.values()
+            )),
+            # 同解换终点（对照口径 2）：同一组路径上把终点改按「逐机就近
+            # + 泊位先到先得」（与 nearest 臂同一规则）的返航段代价。
+            # 与 return_leg_m 之差 = nearest − 本臂实选：
+            #   >0 ⇒ 本臂终点分配优于就近贪心（MCF 应恒 >0 或 =0）；
+            #   <0 ⇒ 本臂实选比就近贪心更贵，说明分配器次优（可疑，须查）。
+            "return_leg_if_nearest_m": float(_nearest_endpoint_cost(
+                final.tours, problem, excluded=set(),
+            )),
             # （0 = 终点机巢分配可行；>0 = 超容架次）。
             "nest_overflow": int(sum(
                 int(v.get("overflow", 0))
