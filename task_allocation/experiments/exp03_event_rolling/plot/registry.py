@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable
 
+from .event_response_timeline import plot_event_response_timeline
 from .event_overview import plot_event_overview
 from .completion_comparison import plot_completion_comparison
 from .replan_comparison import plot_replan_comparison
@@ -33,6 +34,7 @@ class Figure:
 
 #: 图清单（顺序 = 叙事线）
 FIGURES: list[Figure] = [
+    Figure("event_response_timeline", plot_event_response_timeline),  # 核心图
     Figure("event_overview", plot_event_overview),
     Figure("completion_comparison", plot_completion_comparison),
     Figure("replan_comparison", plot_replan_comparison),
