@@ -58,9 +58,8 @@ paper/reference/**/*.pdf
 
 # 建筑矢量数据（.dbf/.shp）+ DEM（与 path_planning 约定一致：原始数据走外部源，不入库）
 # 注：忽略后全新 clone 需从外部数据源补全 building/ 与 DEM，代码方能跑
-task_allocation/data/**/building/
-task_allocation/data/**/*.tif
-task_allocation/data/*.tif
+
+task_allocation/data/lasa_chengguan/**/*.tif
 
 # 其他实验产物（动画等）
 path_planning/experiments/**/*.gif
