@@ -1,0 +1,74 @@
+<Slide style={{ width: 1280, height: 720, background: '#FFFFFF', position: 'relative', fontFamily: 'Source Han Sans CN, Microsoft YaHei, sans-serif' }}>
+  <Box style={{ position: 'absolute', top: 0, left: 0, width: 960, height: 12, background: '#1E4FA8' }} />
+  <Box style={{ position: 'absolute', top: 0, right: 0, width: 320, height: 12, background: '#3D7BD9' }} />
+  <Box style={{ position: 'absolute', top: 30, left: 60, width: 1160, flexDirection: 'column', gap: 6 }}>
+    <Text style={{ fontSize: 15, color: '#3D7BD9', letterSpacing: 2 }}>01 问题与总体框架 · 场景实例化</Text>
+    <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#0E3F8C', lineHeight: 1.3 }}>场景实例化：3 巢 6 机异构机队 × 5 km 研究区</Text>
+    <Text style={{ fontSize: 18, color: '#4A5568', lineHeight: 1.4 }}>把「多机巢、异源起降、三维 DEM 代价、机队状态异构」落到一张可读的图上</Text>
+  </Box>
+  <Box style={{ position: 'absolute', top: 148, left: 60 }}>
+    <svg width={1160} height={430} viewBox='0 0 1160 430'>
+      <defs>
+    <marker id='ah' markerWidth='9' markerHeight='9' refX='8' refY='3' orient='auto' markerUnits='strokeWidth'>
+      <path d='M0,0 L0,6 L8,3 z' fill='#1E4FA8' />
+    </marker>
+    <marker id='ahg' markerWidth='9' markerHeight='9' refX='8' refY='3' orient='auto' markerUnits='strokeWidth'>
+      <path d='M0,0 L0,6 L8,3 z' fill='#8B97A8' />
+    </marker>
+  </defs>
+      <rect x='20' y='18' width='740' height='392' rx='12' fill='#F7F9FC' stroke='#D6DCE5' strokeWidth='1' />
+      <text x='34' y='40' font-size='13' fill='#8B97A8'>研究区 region.geojson ≈ 4.85 km × 4.79 km（对角 6815 m）</text>
+      <path d='M40,120 C160,80 250,150 360,110 S600,90 740,140' fill='none' stroke='#DCE6F3' strokeWidth='2' />
+      <path d='M40,180 C170,140 260,210 380,170 S620,150 740,200' fill='none' stroke='#DCE6F3' strokeWidth='2' />
+      <path d='M40,250 C180,210 280,280 400,240 S640,220 740,270' fill='none' stroke='#DCE6F3' strokeWidth='2' />
+      <path d='M40,330 C170,290 270,350 390,310 S630,300 740,340' fill='none' stroke='#DCE6F3' strokeWidth='2' />
+      <text x='52' y='398' font-size='12' fill='#8B97A8'>DEM 三维地形等高线（航程代价按三维曲面采样，非平面直线距离）</text>
+      <rect x='92' y='292' width='106' height='42' rx='8' fill='#1E4FA8' />
+      <text x='145' y='318' font-size='15' font-weight='bold' fill='#FFFFFF' text-anchor='middle'>机巢 N0</text>
+      <rect x='330' y='76' width='106' height='42' rx='8' fill='#1E4FA8' />
+      <text x='383' y='102' font-size='15' font-weight='bold' fill='#FFFFFF' text-anchor='middle'>机巢 N1</text>
+      <rect x='588' y='292' width='106' height='42' rx='8' fill='#1E4FA8' />
+      <text x='641' y='318' font-size='15' font-weight='bold' fill='#FFFFFF' text-anchor='middle'>机巢 N2</text>
+      <text x='383' y='136' font-size='12' fill='#4A5568' text-anchor='middle'>两两相距 2.4–2.8 km · 容量 2 架/巢</text>
+      <circle cx='225' cy='210' r='7' fill='#E8A33D' /><circle cx='300' cy='128' r='7' fill='#E8A33D' />
+      <circle cx='470' cy='196' r='7' fill='#E8A33D' /><circle cx='520' cy='270' r='7' fill='#E8A33D' />
+      <circle cx='190' cy='352' r='7' fill='#E8A33D' /><circle cx='660' cy='210' r='7' fill='#E8A33D' />
+      <circle cx='420' cy='345' r='7' fill='#E8A33D' /><circle cx='560' cy='140' r='7' fill='#E8A33D' />
+      <text x='225' y='196' font-size='11' fill='#4A5568' text-anchor='middle'>任务</text>
+      <text x='470' y='182' font-size='11' fill='#4A5568' text-anchor='middle'>任务</text>
+      <line x1='198' y1='313' x2='225' y2='218' stroke='#1E4FA8' strokeWidth='2.4' markerEnd='url(#ah)' />
+      <line x1='232' y1='210' x2='470' y2='196' stroke='#1E4FA8' strokeWidth='2.4' markerEnd='url(#ah)' />
+      <line x1='477' y1='190' x2='520' y2='262' stroke='#1E4FA8' strokeWidth='2.4' markerEnd='url(#ah)' />
+      <line x1='527' y1='272' x2='588' y2='305' stroke='#3D7BD9' strokeWidth='2.2' strokeDasharray='6,4' markerEnd='url(#ah)' />
+      <text x='330' y='170' font-size='12' font-weight='bold' fill='#0E3F8C'>起点固定（N0 停靠）→ 访问序列</text>
+      <text x='600' y='272' font-size='12' font-weight='bold' fill='#3D7BD9'>终点巢择优 → N2</text>
+      <rect x='784' y='18' width='356' height='392' rx='12' fill='#E8EFF8' />
+      <text x='804' y='48' font-size='17' font-weight='bold' fill='#0E3F8C'>机队实例化：3 巢 6 机（异构）</text>
+      <rect x='800' y='64' width='324' height='72' rx='8' fill='#FFFFFF' stroke='#3D7BD9' strokeWidth='1' />
+      <text x='814' y='88' font-size='14' font-weight='bold' fill='#1E4FA8'>远程 long × 2</text>
+      <text x='814' y='110' font-size='13' fill='#4A5568'>10 km · 20 m/s → 派生 500 s　驻 N0 / N1</text>
+      <text x='814' y='128' font-size='12' fill='#8B97A8'>负责跨巢与较远任务</text>
+      <rect x='800' y='146' width='324' height='72' rx='8' fill='#FFFFFF' stroke='#3D7BD9' strokeWidth='1' />
+      <text x='814' y='170' font-size='14' font-weight='bold' fill='#1E4FA8'>近程 short × 3</text>
+      <text x='814' y='192' font-size='13' fill='#4A5568'>6 km · 15 m/s → 派生 400 s　驻 N0 / N1 / N2</text>
+      <text x='814' y='210' font-size='12' fill='#8B97A8'>近域高频次服务</text>
+      <rect x='800' y='228' width='324' height='72' rx='8' fill='#FFFFFF' stroke='#3D7BD9' strokeWidth='1' />
+      <text x='814' y='252' font-size='14' font-weight='bold' fill='#1E4FA8'>中程 × 1（逐机覆盖）</text>
+      <text x='814' y='274' font-size='13' fill='#4A5568'>8 km · 15 m/s → 派生 533 s　驻 N2</text>
+      <text x='814' y='292' font-size='12' fill='#8B97A8'>保留异构度，避免同构退化</text>
+      <line x1='800' y1='314' x2='1124' y2='314' stroke='#C9D6E8' strokeWidth='1' />
+      <text x='804' y='338' font-size='13' fill='#1A2230'>满电航程逐机可配，由 fleet_spec 接入；</text>
+      <text x='804' y='358' font-size='13' fill='#1A2230'>2026-11-12 按研究区尺度重标定为</text>
+      <text x='804' y='378' font-size='13' font-weight='bold' fill='#0E3F8C'>10 / 8 / 6 km（旧 25/12/6 km 作废）</text>
+      <text x='804' y='398' font-size='12' fill='#8B97A8'>来源：uav_config.json + design_fleet_spec_2026-11-11.md</text>
+    </svg>
+  </Box>
+  <Box style={{ position: 'absolute', top: 592, left: 60, width: 1160, height: 62, background: '#E8EFF8', padding: 12, gap: 4 }}>
+    <Text style={{ fontSize: 17, color: '#0E3F8C', fontWeight: 'bold' }}>读图要点：起点由停靠机巢唯一给定，终点机巢是决策变量 z；「异源起飞—异巢终止」使返航腿进入完整评价。</Text>
+    <Text style={{ fontSize: 15, color: '#4A5568' }}>本页是方法实例化示意，不含实验结论；机队参数来自代码配置，航程/速度/续航逐机显式写出。</Text>
+  </Box>
+  <Box style={{ position: 'absolute', top: 672, left: 60, width: 1160, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+    <Text style={{ fontSize: 14, color: '#8B97A8' }}>动态滚动的多机巢多无人机协同任务分配 · 进展汇报（合并版）　方法事实按 master c837568 代码核对</Text>
+    <Text style={{ fontSize: 14, color: '#8B97A8' }}>14 / 29</Text>
+  </Box>
+</Slide>

@@ -1,0 +1,42 @@
+<Slide style={{ width: 1280, height: 720, background: '#FFFFFF', position: 'relative', fontFamily: 'Source Han Sans CN, Microsoft YaHei, sans-serif' }}>
+  <Box style={{ position: 'absolute', top: 0, left: 0, width: 1280, height: 12, background: '#1E4FA8' }} />
+  <Box style={{ position: 'absolute', top: 30, left: 40, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+    <Box style={{ width: 6, height: 34, background: '#1E4FA8' }} />
+    <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#0E3F8C' }}>研究意义</Text>
+  </Box>
+  <Text style={{ position: 'absolute', top: 78, left: 60, fontSize: 15, color: '#8B97A8' }}>工程要答案、方法要框架、理论要定位——意义不在单点更优，而在把「任务集固定 / 全部执行 / 平面距离」三个被默认的前提放进模型</Text>
+
+  <Box style={{ position: 'absolute', top: 140, left: 40, width: 1200, flexDirection: 'row', gap: 22 }}>
+    {[
+      {
+        tag: '工程意义', sub: '从「能飞」到「能调度」',
+        d: '现有工程方案普遍是「聚类分区 + 每机独立优化 + 简单优先规则」\n巡检、应急派送、态势感知三条线各自造轮子，缺少统一模型与可复算口径\n目标是给出可迁移、可复算、可审计的机队调度口径',
+      },
+      {
+        tag: '方法意义', sub: '四类决策进同一框架',
+        d: '是否执行 y × 归属 x × 访问顺序 π × 终点机巢 z 联合确定\n直接回答每个周期「哪些飞、哪些不飞、谁飞、落哪个巢」\n把「允许暂缓」从工程经验升级为模型内的合法决策',
+      },
+      {
+        tag: '理论意义', sub: '六条研究线的交叉处',
+        d: '任务分配 / 选择性 OP-TOP / 滚动时域 / 三维地形 / 多机巢 MTSP / 应急物流，六条线各自成熟\n交叉处缺一个「动态到达 × 允许不执行 × 多机巢起降 × 三维 DEM × 滚动」五维合一的问题定义与分层求解框架\n本工作定位为问题定义与框架整合，而非单维创新',
+      },
+    ].map((c) => (
+      <Box key={c.tag} style={{ flex: 1, background: '#F7F9FC', border: '1px solid #D6DCE5', borderRadius: 10, padding: '18px 22px', flexDirection: 'column' }}>
+        <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#1E4FA8' }}>{c.tag}</Text>
+        <Text style={{ fontSize: 17, fontWeight: 'bold', color: '#0E3F8C', marginTop: 6 }}>{c.sub}</Text>
+        <Text style={{ fontSize: 13, color: '#4A5568', lineHeight: 1.75, marginTop: 10 }}>{c.d}</Text>
+      </Box>
+    ))}
+  </Box>
+
+  <Box style={{ position: 'absolute', top: 470, left: 40, width: 1200, background: '#0E3F8C', borderRadius: 10, padding: '16px 24px' }}>
+    <Text style={{ fontSize: 15.5, fontWeight: 'bold', color: '#FFFFFF', lineHeight: 1.7 }}>
+      一句话意义：在任务供过于求、机队能力有限、地形代价真实的广域持续作业里，把「这一周期该飞哪些、不飞哪些、落在哪」变成一个有模型、有算法、有口径的求解问题。
+    </Text>
+  </Box>
+
+  <Box style={{ position: 'absolute', bottom: 0, left: 0, width: 1280, height: 44, background: '#F7F9FC', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: '0 40px', borderTop: '1px solid #E5E7EB' }}>
+    <Text style={{ fontSize: 13, color: '#8B97A8' }}>动态滚动的多机巢多无人机协同任务分配 · 进展汇报（合并版）</Text>
+    <Text style={{ fontSize: 15, color: '#1E4FA8', fontWeight: 'bold' }}>04 / 29</Text>
+  </Box>
+</Slide>

@@ -1,0 +1,84 @@
+<Slide style={{ width: 1280, height: 720, background: '#FFFFFF', position: 'relative', fontFamily: 'Source Han Sans CN, Microsoft YaHei, sans-serif' }}>
+  <Box style={{ position: 'absolute', top: 0, left: 0, width: 960, height: 12, background: '#1E4FA8' }} />
+  <Box style={{ position: 'absolute', top: 0, right: 0, width: 320, height: 12, background: '#3D7BD9' }} />
+  <Box style={{ position: 'absolute', top: 30, left: 60, width: 1160, flexDirection: 'column', gap: 6 }}>
+    <Text style={{ fontSize: 15, color: '#3D7BD9', letterSpacing: 2 }}>03 第二阶段 · 口径对照</Text>
+    <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#0E3F8C', lineHeight: 1.3 }}>方法事实 ↔ 代码入口：逐条对齐 master c837568</Text>
+    <Text style={{ fontSize: 18, color: '#4A5568', lineHeight: 1.4 }}>本 deck 全部公式、开关默认值与机制顺序以当前代码为准，不采用历史命名或定稿拟议值</Text>
+  </Box>
+  <Box style={{ position: 'absolute', top: 150, left: 60, width: 1160, height: 452, flexDirection: 'column', gap: 0 }}>
+    <Box style={{ width: 1160, height: 42, background: '#0E3F8C', flexDirection: 'row', alignItems: 'center', paddingLeft: 14 }}>
+      <Text style={{ width: 190, fontSize: 17, color: '#FFFFFF', fontWeight: 'bold' }}>方法环节</Text>
+      <Text style={{ width: 380, fontSize: 17, color: '#FFFFFF', fontWeight: 'bold' }}>代码入口</Text>
+      <Text style={{ width: 300, fontSize: 17, color: '#FFFFFF', fontWeight: 'bold' }}>当前默认档</Text>
+      <Text style={{ width: 270, fontSize: 17, color: '#FFFFFF', fontWeight: 'bold' }}>边界与对照档</Text>
+    </Box>
+    <Box style={{ width: 1160, height: 40, background: '#F7F9FC', borderBottom: '1px solid #D6DCE5', flexDirection: 'row', alignItems: 'center', paddingLeft: 14 }}>
+      <Text style={{ width: 190, fontSize: 15, color: '#0E3F8C', fontWeight: 'bold' }}>动态任务选择</Text>
+      <Text style={{ width: 380, fontSize: 14, color: '#4A5568' }}>methods/selection/pipeline.py</Text>
+      <Text style={{ width: 300, fontSize: 14, color: '#1E4FA8', fontWeight: 'bold' }}>n_cand=⌈αK⌉ · n_sel 卡 cap(t)</Text>
+      <Text style={{ width: 270, fontSize: 13, color: '#8B97A8' }}>两道可行性闸门；落选留池</Text>
+    </Box>
+    <Box style={{ width: 1160, height: 40, background: '#FFFFFF', borderBottom: '1px solid #D6DCE5', flexDirection: 'row', alignItems: 'center', paddingLeft: 14 }}>
+      <Text style={{ width: 190, fontSize: 15, color: '#0E3F8C', fontWeight: 'bold' }}>单周期主入口</Text>
+      <Text style={{ width: 380, fontSize: 14, color: '#4A5568' }}>methods/muas/solvers/stage_runner.py</Text>
+      <Text style={{ width: 300, fontSize: 14, color: '#1E4FA8', fontWeight: 'bold' }}>run_selective_muas</Text>
+      <Text style={{ width: 270, fontSize: 13, color: '#8B97A8' }}>搜索期 best_fitness / 交付 final_fitness 分离</Text>
+    </Box>
+    <Box style={{ width: 1160, height: 40, background: '#F7F9FC', borderBottom: '1px solid #D6DCE5', flexDirection: 'row', alignItems: 'center', paddingLeft: 14 }}>
+      <Text style={{ width: 190, fontSize: 15, color: '#0E3F8C', fontWeight: 'bold' }}>适应度</Text>
+      <Text style={{ width: 380, fontSize: 14, color: '#4A5568' }}>methods/muas/problem.py</Text>
+      <Text style={{ width: 300, fontSize: 14, color: '#1E4FA8', fontWeight: 'bold' }}>scalar_fitness 五项加权</Text>
+      <Text style={{ width: 270, fontSize: 13, color: '#8B97A8' }}>无 F3、无 −m·F1；F1 只作事后指标</Text>
+    </Box>
+    <Box style={{ width: 1160, height: 40, background: '#FFFFFF', borderBottom: '1px solid #D6DCE5', flexDirection: 'row', alignItems: 'center', paddingLeft: 14 }}>
+      <Text style={{ width: 190, fontSize: 15, color: '#0E3F8C', fontWeight: 'bold' }}>比较算子</Text>
+      <Text style={{ width: 380, fontSize: 14, color: '#4A5568' }}>methods/muas/compare_spec.py</Text>
+      <Text style={{ width: 300, fontSize: 14, color: '#1E4FA8', fontWeight: 'bold' }}>compare_mode = penalty</Text>
+      <Text style={{ width: 270, fontSize: 13, color: '#8B97A8' }}>deb / epsilon / lagaros 为显式对照档</Text>
+    </Box>
+    <Box style={{ width: 1160, height: 40, background: '#F7F9FC', borderBottom: '1px solid #D6DCE5', flexDirection: 'row', alignItems: 'center', paddingLeft: 14 }}>
+      <Text style={{ width: 190, fontSize: 15, color: '#0E3F8C', fontWeight: 'bold' }}>解码修复链</Text>
+      <Text style={{ width: 380, fontSize: 14, color: '#4A5568' }}>methods/muas/solvers/decode_repair.py</Text>
+      <Text style={{ width: 300, fontSize: 14, color: '#1E4FA8', fontWeight: 'bold' }}>coverage_first = False</Text>
+      <Text style={{ width: 270, fontSize: 13, color: '#8B97A8' }}>单趟 _complete_coverage；EDD 不动点为对照档</Text>
+    </Box>
+    <Box style={{ width: 1160, height: 40, background: '#FFFFFF', borderBottom: '1px solid #D6DCE5', flexDirection: 'row', alignItems: 'center', paddingLeft: 14 }}>
+      <Text style={{ width: 190, fontSize: 15, color: '#0E3F8C', fontWeight: 'bold' }}>终点机巢</Text>
+      <Text style={{ width: 380, fontSize: 14, color: '#4A5568' }}>methods/muas/constraints/nest_capacity.py</Text>
+      <Text style={{ width: 300, fontSize: 14, color: '#1E4FA8', fontWeight: 'bold' }}>end_nest_*_mode = auto → MCF</Text>
+      <Text style={{ width: 270, fontSize: 13, color: '#8B97A8' }}>nearest 投影为分层对照档</Text>
+    </Box>
+    <Box style={{ width: 1160, height: 40, background: '#F7F9FC', borderBottom: '1px solid #D6DCE5', flexDirection: 'row', alignItems: 'center', paddingLeft: 14 }}>
+      <Text style={{ width: 190, fontSize: 15, color: '#0E3F8C', fontWeight: 'bold' }}>遗传回写</Text>
+      <Text style={{ width: 380, fontSize: 14, color: '#4A5568' }}>methods/muas/solvers/dmde_solver.py</Text>
+      <Text style={{ width: 300, fontSize: 14, color: '#1E4FA8', fontWeight: 'bold' }}>repair_replacement = 0（纯 Baldwin）</Text>
+      <Text style={{ width: 270, fontSize: 13, color: '#8B97A8' }}>连续比例可选；lamarckian=True 为旧 config 兼容</Text>
+    </Box>
+    <Box style={{ width: 1160, height: 40, background: '#FFFFFF', borderBottom: '1px solid #D6DCE5', flexDirection: 'row', alignItems: 'center', paddingLeft: 14 }}>
+      <Text style={{ width: 190, fontSize: 15, color: '#0E3F8C', fontWeight: 'bold' }}>交付后精修</Text>
+      <Text style={{ width: 380, fontSize: 14, color: '#4A5568' }}>methods/muas/solvers/route_polish.py</Text>
+      <Text style={{ width: 300, fontSize: 14, color: '#1E4FA8', fontWeight: 'bold' }}>l3b_enabled 默认开</Text>
+      <Text style={{ width: 270, fontSize: 13, color: '#8B97A8' }}>四道门只接受严格成本改进</Text>
+    </Box>
+    <Box style={{ width: 1160, height: 40, background: '#F7F9FC', borderBottom: '1px solid #D6DCE5', flexDirection: 'row', alignItems: 'center', paddingLeft: 14 }}>
+      <Text style={{ width: 190, fontSize: 15, color: '#0E3F8C', fontWeight: 'bold' }}>滚动闭环</Text>
+      <Text style={{ width: 380, fontSize: 14, color: '#4A5568' }}>methods/rolling/horizon.py</Text>
+      <Text style={{ width: 300, fontSize: 14, color: '#1E4FA8', fontWeight: 'bold' }}>service_patience = 4</Text>
+      <Text style={{ width: 270, fontSize: 13, color: '#8B97A8' }}>DORMANT / pool_empty / no_progress</Text>
+    </Box>
+    <Box style={{ width: 1160, height: 40, background: '#FFFFFF', borderBottom: '1px solid #D6DCE5', flexDirection: 'row', alignItems: 'center', paddingLeft: 14 }}>
+      <Text style={{ width: 190, fontSize: 15, color: '#0E3F8C', fontWeight: 'bold' }}>一致性契约</Text>
+      <Text style={{ width: 380, fontSize: 14, color: '#4A5568' }}>decision_ledger.py · independent_audit.py</Text>
+      <Text style={{ width: 300, fontSize: 14, color: '#1E4FA8', fontWeight: 'bold' }}>ledger_enabled = True</Text>
+      <Text style={{ width: 270, fontSize: 13, color: '#8B97A8' }}>S_raw / S_repair / S_final 与 selection_object 留痕</Text>
+    </Box>
+  </Box>
+  <Box style={{ position: 'absolute', top: 612, left: 60, width: 1160, height: 48, background: '#E8EFF8', padding: 10, gap: 4 }}>
+    <Text style={{ fontSize: 16, color: '#0E3F8C', fontWeight: 'bold' }}>口径纪律：文档里的定稿目标 ≠ 代码跑的默认档。定稿 §6 拟把 compare_mode 切到 deb，代码与实验注释均标为「待拍板」。</Text>
+  </Box>
+  <Box style={{ position: 'absolute', top: 672, left: 60, width: 1160, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+    <Text style={{ fontSize: 14, color: '#8B97A8' }}>动态滚动的多机巢多无人机协同任务分配 · 进展汇报（合并版）　方法事实按 master c837568 代码核对</Text>
+    <Text style={{ fontSize: 14, color: '#8B97A8' }}>28 / 29</Text>
+  </Box>
+</Slide>

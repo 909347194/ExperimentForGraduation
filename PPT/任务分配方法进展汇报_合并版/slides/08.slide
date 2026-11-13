@@ -1,0 +1,42 @@
+<Slide style={{ width: 1280, height: 720, background: '#FFFFFF', position: 'relative', fontFamily: 'Source Han Sans CN, Microsoft YaHei, sans-serif' }}>
+  <Box style={{ position: 'absolute', top: 0, left: 0, width: 1280, height: 12, background: '#1E4FA8' }} />
+  <Box style={{ position: 'absolute', top: 30, left: 40, flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+    <Box style={{ width: 6, height: 34, background: '#1E4FA8' }} />
+    <Text style={{ fontSize: 32, fontWeight: 'bold', color: '#0E3F8C' }}>研究进展与下一步</Text>
+  </Box>
+  <Text style={{ position: 'absolute', top: 78, left: 60, fontSize: 15, color: '#8B97A8' }}>方法链各环节均已实现并有代码口径一一对应——本报告只讲方法，不含任何实验结论</Text>
+
+  <Box style={{ position: 'absolute', top: 140, left: 40, width: 1200, flexDirection: 'row', gap: 22 }}>
+    {[
+      {
+        tag: '已完成', sub: '问题模型与两阶段方法链',
+        d: '问题模型：y / x / π / z 四类决策 + 时间窗 · 航程 · 机巢容量等约束集\n两阶段：任务选择缩空间 → 选择性 MUAS 精优化；外层滚动闭环 + 防饥饿\n第二阶段完整链路：统一编码 → 逆映射四步 → 解码修复链 → 覆盖门禁单一加权标量 f → 可选回写（默认关） → 交付前 polish\n终点机巢子问题用最小费用流精确求解；场景实例化为三维 DEM 代价场 + 3 巢 6 机异构机队（fleet_spec）',
+      },
+      {
+        tag: '已固化', sub: '默认档与对照档边界',
+        d: '默认 coverage_first=False：_complete_coverage 单趟装载 + 覆盖门禁终态校验；EDD 不动点仅对照档\n选择层 n_cand=⌈αK⌉ 与 n_sel=min(⌈max_ratio·K⌉, cap(t)) 已实现，两道可行性闸门保留\n默认档已拍板：compare_mode=penalty、repair_replacement=0（纯 Baldwin）、coverage_first=False\nCompareSpec 四档算子与 DecisionLedger 一致性契约已落地；定稿 §6 拟切 deb 仍待拍板',
+      },
+      {
+        tag: '下一步', sub: '固化 → 外扩 → 成文',
+        d: '第一步：把默认档与对照档的 A/B 结论固化到论文叙述\n第二步：把实例化迁到应急派送 / 态势感知，检验问题定义与口径的可迁移性\n第三步：拉齐论文叙述与代码实现的表述，保证公式 · 模块 · 口径三者相互可回溯',
+      },
+    ].map((c) => (
+      <Box key={c.tag} style={{ flex: 1, background: '#F7F9FC', border: '1px solid #D6DCE5', borderRadius: 10, padding: '18px 22px', flexDirection: 'column' }}>
+        <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#1E4FA8' }}>{c.tag}</Text>
+        <Text style={{ fontSize: 16.5, fontWeight: 'bold', color: '#0E3F8C', marginTop: 6 }}>{c.sub}</Text>
+        <Text style={{ fontSize: 12.5, color: '#4A5568', lineHeight: 1.75, marginTop: 10 }}>{c.d}</Text>
+      </Box>
+    ))}
+  </Box>
+
+  <Box style={{ position: 'absolute', top: 470, left: 40, width: 1200, background: '#0E3F8C', borderRadius: 10, padding: '15px 24px' }}>
+    <Text style={{ fontSize: 14.5, fontWeight: 'bold', color: '#FFFFFF', lineHeight: 1.7 }}>
+      诚实口径：本次汇报只讲方法——问题定义、模型、机制与口径均可回溯到论文方法章与代码实现；方法效果另由实验环节给出，不在本 deck 范围内。
+    </Text>
+  </Box>
+
+  <Box style={{ position: 'absolute', bottom: 0, left: 0, width: 1280, height: 44, background: '#F7F9FC', flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: '0 40px', borderTop: '1px solid #E5E7EB' }}>
+    <Text style={{ fontSize: 13, color: '#8B97A8' }}>动态滚动的多机巢多无人机协同任务分配 · 进展汇报（合并版）</Text>
+    <Text style={{ fontSize: 15, color: '#1E4FA8', fontWeight: 'bold' }}>08 / 29</Text>
+  </Box>
+</Slide>
