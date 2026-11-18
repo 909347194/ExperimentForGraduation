@@ -46,32 +46,9 @@ from task_allocation.methods.muas.solvers.evaluator import (
     EvalResult,
     MUASAssignmentEvaluator,
 )
-from task_allocation.methods.muas.solvers.local_search import (
-    DEFAULT_MOVES,
-    MOVE_POSITION,
-    MOVE_RELOCATE,
-    MOVE_SWAP,
-    PolishResult,
-    polish_assignment,
-)
-from task_allocation.methods.muas.solvers.participating import (
-    _argmin_share,
-    _capacity_served_count,
-    _covering_cost,
-    _greedy_demand_coverage,
-    _resolve_tour_cap,
-    _select_by_lexicographic_marginal,
-    _select_by_marginal_takeoff,
-    select_participating_uavs,
-)
-from task_allocation.methods.muas.solvers.stage_config import (
-    POLICY_CHEAPEST,
-    POLICY_DEMAND,
-    POLICY_DEMAND_MARGINAL,
-    POLICY_FIRST,
-    POLICY_MARGINAL,
-    MUASStageConfig,
-)
+from task_allocation.methods.muas.solvers.local_search import polish_assignment
+from task_allocation.methods.muas.solvers.participating import select_participating_uavs
+from task_allocation.methods.muas.solvers.stage_config import MUASStageConfig
 from task_allocation.methods.muas.solvers.stage_runner import (
     MUASStageResult,
     enumerate_reference_participating,
