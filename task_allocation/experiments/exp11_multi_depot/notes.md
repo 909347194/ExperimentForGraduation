@@ -21,7 +21,7 @@
 
 纪律：三臂在同一次运行里用 `dataclasses.replace` 只翻
 `end_nest_l1_mode / end_nest_l3_mode` 两个字段，其余字段逐位相同
-（`summary.config_purity` + `audit_correctness.py` 双重核对）。
+（`summary.config_purity` + `audit_correctness.py` 双重核对；一次性核对脚本已清理，见 §7）。
 
 ## 2. 梯度（跨周期累积）
 
@@ -235,7 +235,7 @@ MCF 的 `cross_nest_share = 0`，即全部回本巢。）
 `PRESETS["makespan"]` 预算同 formal 24×60），1 个种子（7）先探。新指标：
 `makespan_s`（最后一个任务交付时刻）、`mean_completion_s`、`p90_completion_s`、
 `n_cycles_with_delivery`（`v11_multi_depot/metrics.py`），汇总脚本
-`analyze_makespan.py --profile makespan`。
+`analyze_makespan.py`（一次性脚本已清理）。
 
 | 臂 | 完工时刻 s | 平均交付 s | p90 s | 完成率 | 按时率 | 交付周期数 | 总航程 km |
 |---|---|---|---|---|---|---|---|
@@ -374,7 +374,7 @@ mid 预算、T6、seed 7、无事件的实测（`results/probes/probe_sameroutes
 
 ### 5.14 方法级对照（7 seed 正式档）：构造式贪心 vs 本文 DMDE
 
-`probe_greedy_baseline.py` + `build_probe_tables.py`（cwd = 本目录）。同场景 /
+`probe_greedy_baseline.py` + `build_probe_tables.py`（一次性探针已清理，产物留存）。同场景 /
 同到达流 / 3 巢 / 每周期 10 任务、7 seed × 4 档；产物
 `results/probes/probe_greedy_formal.{json,log}`、`tables_baseline.{tex,md}`、
 `tables_baseline_preview.pdf`。
@@ -466,24 +466,20 @@ python run.py --preset smoke --seeds 7 --tiers 2
 # 正式档（84 run，24×60，约 95 min）
 python run.py --preset formal --seeds 7,11,23,5,13,17,19 --tiers 2,4,6,10
 
-# 审计 / 表格 / 图
-python audit_correctness.py --preset formal
+# 表格 / 图（一次性审计/重建脚本已清理，git 历史可回溯）
 python build_tables.py --preset formal
 python plot/compare.py --preset formal      # cwd 必须在本目录
-# 只重建汇总（改了聚合字段、不想重跑求解时）
-python rebuild_summary.py --preset formal
 
 # 容量压力探针 / 完工时间档（§5.8、§5.9，均 1 seed 探针，不进正式表）
 python run.py --preset pressure --seeds 7 --tiers 4 --set tasks.n_tasks=30 --set problem.nest_capacity=1 --set problem.n_uavs=3
 python run.py --preset makespan --seeds 7 --tiers 10 --set tasks.n_tasks=100 --set rolling.arrivals.initial_only=true
-python analyze_makespan.py --profile makespan
 
 # 同解 nearest 诊断（§5.10）/ 关巢档（§5.11，必须留泊位余量）
 python run.py --preset mid --seeds 7 --tiers 6
 python run.py --preset mid --seeds 7 --tiers 6 --set problem.n_uavs=4 --set "rolling.nest_closures.4=[0]"
 
 # 方法级对照探针（§5.14）：构造式贪心 vs 本文 DMDE，2×2 拆解
-python probe_greedy_baseline.py --seeds 7 --tiers 6
+# （一次性探针脚本已清理，结论与产物见 §5.14）
 ```
 
 注意 `--set` 传 JSON 时 PowerShell 会剥掉双引号，含引号的写法会静默变成字符串；

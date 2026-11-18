@@ -397,7 +397,7 @@ DE 在搜索期最小化 `f(S_eval(x))`,而最终交付的是 `f(S_final(x))`。
    在生产链里只在单个点上被求值过,第二个 `argmin` 从未被真正执行。
    这正是「每项收益可独立验证」在现有耦合下做不到的原因。
 
-零侵入探针 `probe_selection_gap.py` 把本次 run **每个被评价过的基因**离线重放
+零侵入探针 `probe_selection_gap.py`（一次性脚本已清理，产物 `selection_gap_report.md` 留存）把本次 run **每个被评价过的基因**离线重放
 交付映射(D1 重解码 / D2 叠加 `post_cost_polish`,四道门与 ε=1.0 同生产),
 实测 top1 重合率、regret、排序反转率、Spearman/Kendall、**并列最优数**与
 「选择价值」(相对随机挑一个候选的收益),并以「关掉交付后成本优化总闸」
@@ -485,7 +485,7 @@ DE 在搜索期最小化 `f(S_eval(x))`,而最终交付的是 `f(S_final(x))`。
 (M2-1 巡游序回写开关对照)、ab_optimization_attribution
 (进化/修复/精修三级嵌套归属)、ab_order_marginal(基因顺序边际贡献)、
 ab_mechanism_3steps(优化器机制三步诊断:基因型→表型 / 进化×精修 2×2 / 模块拆分;
-另含 `probe_selection_gap.py` 搜索—交付口径对齐探针,见 §4.10)。
+另含 `probe_selection_gap.py` 搜索—交付口径对齐探针(一次性脚本已清理),见 §4.10)。
 
 ---
 
