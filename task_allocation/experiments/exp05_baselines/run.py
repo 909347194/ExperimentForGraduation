@@ -1,32 +1,33 @@
 # -*- coding: utf-8 -*-
-"""exp05_baselines v3 入口：方法主张检验台（2026-11-09 重新设计）。
+"""exp05_baselines E1 入口：「不是随便一个可行分配也能做到整体有效性」（2026-11-13 收窄）。
 
-设计定稿：``task_allocation/docs/exp05_redesign_2026-11-09.md``。
-v3 不再问「我们是否比启发式更好」，而检验五条可证伪主张（C1–C5）。
+设计定稿：``task_allocation/docs/exp05_e1_design_2026-11-13.md``。
+只检验**一条主张 E1**，4 个对照方法（M0 / B1 / B2 / D0）。这不是排行榜，
+只证「整体有效性不是平凡可达」，不产生任何「优于 / 性能提升」结论。
 
-与 v2 的三处关键差异：
+相对 v3（C1–C5 五主张 / 7 方法 / 两把尺子）的三处收窄：
 
-1. **评价端统一**：所有方法的交付解一律按 DEM 有向三维航程重评；
-   同一批交付解再用两把尺子各算一次，检验尺子本身是否改变结论；
-2. **独立重评**：逐周期几何重建重评（``post_eval.IndependentEvalHook``），
-   自报 vs 重评逐位一致性留档；
-3. **配对统计与单源主表**：同 seed 配对差 + 精确 p + 三态结论，
-   主表/附表全部由落盘结果生成，``notes.md`` 只引用不抄数。
+1. **单尺统一**：4 个方法的交付解一律按**同一把** DEM 有向三维航程
+   几何重算（``path_m_audit``）后比较；删去 v3 的「两把尺子」主张与
+   ``ruler_effect`` 主判据，三维直线重算仅诊断留档、不进主表；
+2. **单一推断主判据**：``M0 − B1`` 的每完成 DEM 航程配对差 → 精确 p +
+   三态结论；B2 / D0 只作描述性梯度、不出 verdict；
+3. **门槛层 + 独立重评**：完成率/恒等式/eliminating/硬违约/自报与几何重建
+   DEM 重评逐位一致性由第 0 层硬断言承担，不是成绩、不排序。
 
-产物（``results_v3/``；v2 旧档已归档到
-``_archive/exp05_baselines__results_v1v2_2026-10-25/``）::
+产物（``results_e1/``；旧 7 臂 v3 档与 v1/v2 档一律冻结、不进主文）::
 
     <ID>/seed_<s>/{metrics,run_meta,solution,audit}.json
     <ID>/summary.json                 跨 seed mean±std
-    summary_primary.csv               论文主表（primary=true）
-    summary_appendix.csv              异口径/双因素附表（primary=false）
-    claims_report.json                逐主张证据 + 三态结论 + 红线
-    paired_report.json                配对明细（claims_report 的配对子集）
+    summary_primary.csv               论文主表（4 方法，primary=true）
+    summary_appendix.csv              空（收窄后无附表方法，保留空表兼容）
+    claims_report.json                E1 主判据 + 门槛 + 一致性 + 红线
+    paired_report.json                E1 配对明细（claims_report 的配对子集）
     summary.csv                       全量逐 seed 明细（兼容旧脚本）
 
 命令行覆盖（调试入口）：
 
-    --arms M0,B2        只跑指定方法
+    --arms M0,B1        只跑指定方法
     --seeds 42-46       覆盖 experiment.seeds（42 / 42,43 / 42-46 均可）
     --set evaluation.profile=smoke   跑冒烟档（结论不可外推正式档）
 """
@@ -69,7 +70,7 @@ from metrics import (
     summary_csv_row,
     write_json,
 )
-# v3：实验自持模块（不跨实验 import，见 experiments/README.md §1）
+# E1：实验自持模块（不跨实验 import，见 experiments/README.md §1）
 from claims import build_claims_report
 from post_eval import IndependentEvalHook, recompute_two_rulers, summarize_audits
 
@@ -200,16 +201,21 @@ def run_once(
         "arm": arm.id,
         "solver": arm.solver,
         "cost_model": arm.cost_model,
-        # 求解端口径（欧氏组单独注明）；评价端口径见 distance_definition_review
+        # 求解端口径（欧氏组单独注明）；评价端唯一比较尺见 primary_ruler
         "distance_definition": (
             "dem_vertical_section_3d" if use_dem else "euclidean_3d"
         ),
-        "distance_definition_review": "dem_vertical_section_3d",
-        "comparator_ruler": "euclidean_3d",
+        # E1 单尺：4 个方法的交付解一律用 DEM 有向三维航程几何重算后比较；
+        # 三维直线（path_m_euclid3d）仅诊断留档，不参与任何主张/主表。
+        "primary_ruler": str(
+            bundle.evaluation.get("primary_ruler", "dem_vertical_section_3d")
+        ),
+        "comparator_ruler": None,  # v3 两把尺子对照已删除
         "coordinate_precision": "full",
         "primary": bool(arm.primary),
         "solver_budget": budget,
-        "design": "task_allocation/docs/exp05_redesign_2026-11-09.md",
+        "design": "task_allocation/docs/exp05_e1_design_2026-11-13.md",
+        "design_version": "e1_single_ruler_4arm_2026-11-13",
         "evaluation_profile": str(bundle.evaluation.get("profile", "formal")),
         "seed": seed,
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
@@ -261,7 +267,7 @@ def run_once(
         ],
     }
 
-    # ---- 两把尺子：同一批交付解，按实际飞行方向逐腿重算 -----------------
+    # ---- 唯一 DEM 尺 + euclid 诊断：同一批交付解按实际飞行方向逐腿重算 ----
     rulers = recompute_two_rulers(
         solution,
         dem_distance_fn=dem_distance_fn,
@@ -299,10 +305,15 @@ def run_once(
         "seed": seed,
         "reports": audit_reports,
         "columns": audit_cols,
-        "two_rulers": {
+        # E1 单尺：path_m_audit 是唯一比较尺；path_m_euclid3d / ruler_gap_m
+        # 仅为几何重算的诊断留档，不进任何主张 / 主表 / 参照表。
+        "ruler_recompute": {
+            "primary_ruler": str(
+                bundle.evaluation.get("primary_ruler", "dem_vertical_section_3d")
+            ),
             "path_m_audit": rulers.path_m_audit,
-            "path_m_euclid3d": rulers.path_m_euclid3d,
-            "ruler_gap_m": rulers.ruler_gap_m,
+            "path_m_euclid3d_diagnostic": rulers.path_m_euclid3d,
+            "ruler_gap_m_diagnostic": rulers.ruler_gap_m,
             "n_legs": rulers.n_legs,
             "n_tours": rulers.n_tours,
             "n_missing_end_nest": rulers.n_missing_end_nest,
@@ -456,28 +467,34 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit(f"没有匹配的对照方法（--arms {arm_ids}）；可用：{known}")
 
     verbose = bundle.verbose
-    out_root = EXP_DIR / str(bundle.experiment.get("output_dir", "results_v3"))
+    out_root = EXP_DIR / str(bundle.experiment.get("output_dir", "results_e1"))
     out_root.mkdir(parents=True, exist_ok=True)
 
     eval_cfg = dict(bundle.evaluation)
     claims_cfg = dict(bundle.claims)
     profile = str(eval_cfg.get("profile", "formal"))
     audit_enabled = bool(eval_cfg.get("independent_audit", True))
-    two_rulers = bool(eval_cfg.get("two_rulers", True))
+    # E1 单尺：DEM 有向三维航程是唯一比较尺（恒构建）；三维直线重算仅诊断留档。
+    compute_euclid_diagnostic = bool(
+        eval_cfg.get("compute_euclid_diagnostic", True)
+    )
+    primary_ruler = str(
+        eval_cfg.get("primary_ruler", "dem_vertical_section_3d")
+    )
 
     # ── 场景（与 seed / 方法无关，只构建一次）────────────────────────
     scenario = build_scenario(raw_cfg)
     nests = scenario.nests
     terrain = build_terrain(scenario, raw_cfg)
     estimator = build_cost_estimator(terrain, raw_cfg)
-    # 两把尺子：d_DEM（有向，生产口径）与 d_euclid3d（历史朴素口径）。
+    # E1 唯一比较尺：d_DEM（垂直切面 DEM 有向三维航程）—— 恒构建，
+    # 所有 4 个方法的交付解一律用它几何重算（path_m_audit）。
+    # 三维直线 d_euclid3d 仅诊断留档（零额外求解），不进任何主张/主表/参照表；
+    # 关闭时返回 0，path_m_euclid3d 落盘为 0 且标注「仅留档」。
     # 缓存跨方法/seed 复用（精确坐标键，不同任务不会误命中）。
-    dem_distance_fn = (
-        make_distance_fn(estimator, cache={}) if two_rulers
-        else (lambda a, b: 0.0)
-    )
+    dem_distance_fn = make_distance_fn(estimator, cache={})
     euclid_distance_fn = (
-        make_distance_fn(None, cache={}) if two_rulers
+        make_distance_fn(None, cache={}) if compute_euclid_diagnostic
         else (lambda a, b: 0.0)
     )
     nest_xyz = {
@@ -488,7 +505,8 @@ def main(argv: list[str] | None = None) -> int:
             f"[exp05] 场景：{scenario.count} 机巢 × 容量 {nests[0].capacity}，"
             f"DEM={'已接入' if terrain is not None else '未接入'}；"
             f"方法：{', '.join(a.id for a in arms)}；seeds={seeds}；"
-            f"profile={profile}；两把尺子={two_rulers}；独立重评={audit_enabled}",
+            f"profile={profile}；唯一比较尺={primary_ruler}；"
+            f"euclid诊断留档={compute_euclid_diagnostic}；独立重评={audit_enabled}",
             flush=True,
         )
 
@@ -549,10 +567,10 @@ def main(argv: list[str] | None = None) -> int:
                     f"[exp05] {arm.id:<4} seed={seed}：完成率(final) "
                     f"{summary['completion_rate_final']:.3f} / 奖励产出 "
                     f"{summary['reward_yield']:.3f} / 按时(交付集) "
-                    f"{summary['on_time_rate_final']:.3f} / 自报航程 "
+                    f"{summary['on_time_rate_final']:.3f} / 自报航程(留档) "
                     f"{summary['total_path_m'] / 1000:.1f} km / "
-                    f"重评DEM {summary.get('path_m_audit', 0.0) / 1000:.1f} km / "
-                    f"尺子差 {summary.get('ruler_gap_m', 0.0):.1f} m / "
+                    f"唯一尺DEM {summary.get('path_m_audit', 0.0) / 1000:.1f} km / "
+                    f"euclid诊断差(留档) {summary.get('ruler_gap_m', 0.0):.1f} m / "
                     f"独立重评 {summary.get('n_audit_ok', 0)} 周期 / "
                     f"{time.time() - t0:.1f}s",
                     flush=True,
@@ -606,7 +624,7 @@ def main(argv: list[str] | None = None) -> int:
     _write_csv(out_root / "summary_primary.csv", rows_primary)
     _write_csv(out_root / "summary_appendix.csv", rows_appendix)
 
-    # ── 主张检验：逐主张配对统计 + 三态结论 + 红线 ───────────────────
+    # ── E1 主张检验：单一推断主判据 + 三态结论 + 门槛 + 红线 ──────────
     rows_by_method: dict[str, dict[int, dict[str, Any]]] = {
         a.id: {int(s["seed"]): s for s in per_arm[a.id]} for a in arms
     }
@@ -620,31 +638,39 @@ def main(argv: list[str] | None = None) -> int:
         seeds=seeds,
         primary_methods=primary_methods,
         profile=profile,
+        primary_pair=tuple(claims_cfg.get("primary_pair", ["M0", "B1"])),
+        descriptive_pairs=tuple(claims_cfg.get("descriptive_pairs", ["B2", "D0"])),
+        primary_metric=str(
+            claims_cfg.get("primary_metric", "path_m_audit_per_completion")
+        ),
+        primary_ruler=primary_ruler,
+        min_abs_dz=float(claims_cfg.get("min_abs_dz", 0.5)),
     )
     write_json(out_root / "claims_report.json", report)
-    c2 = report["claims"]["C2"]
-    c4 = report["claims"]["C4"]
+    e1 = report["claims"]["E1"]
     write_json(
         out_root / "paired_report.json",
         {
             "experiment": "exp05_baselines",
-            "design": "task_allocation/docs/exp05_redesign_2026-11-09.md",
+            "design": "task_allocation/docs/exp05_e1_design_2026-11-13.md",
+            "design_version": report["design_version"],
             "profile": profile,
             "seeds": seeds,
+            "primary_ruler": report["primary_ruler"],
             "paired_seeds": [
                 int(s) for s in seeds if int(s) not in report["unpaired_seeds"]
             ],
             "unpaired_seeds": report["unpaired_seeds"],
             "all_pairs_complete": report["all_pairs_complete"],
             "primary_gates_passed": report["primary_gates_passed"],
-            "primary_criterion": c2["primary_criterion"],
-            "ruler_effect": c2["ruler_effect"],
-            "ruler_gap": c2["ruler_gap"],
-            "ruler_changes_direction": c2["ruler_changes_direction"],
-            "ruler_bias_by_method": c2["ruler_bias_by_method"],
-            "M0_vs_D0_descriptive": c2["method_pair_descriptive"],
-            "M0_vs_B2_descriptive": c4["pairs"].get("B2", {}),
-            "M0_vs_B1_descriptive": c4["pairs"].get("B1", {}),
+            "primary_criterion": e1["primary_criterion"],
+            "primary_pair": e1["primary_pair"],
+            "descriptive_pairs": e1["descriptive_pairs"],
+            "M0_vs_B2_descriptive": e1["pairs"].get("B2", {}),
+            "M0_vs_D0_descriptive": e1["pairs"].get("D0", {}),
+            "consistency_m0_all_equal": report["consistency"]["m0_all_equal"],
+            "gate_failed_cells": report["gate_failed_cells"],
+            "wording": e1["wording"],
             "caveats": report["caveats"],
             "red_lines": report["red_lines"],
         },
@@ -653,7 +679,7 @@ def main(argv: list[str] | None = None) -> int:
     if verbose:
         print(
             f"[exp05] 主表 {out_root / 'summary_primary.csv'} / "
-            f"附表 {out_root / 'summary_appendix.csv'} / "
+            f"附表 {out_root / 'summary_appendix.csv'}（收窄后为空）/ "
             f"主张报告 {out_root / 'claims_report.json'}",
             flush=True,
         )
@@ -661,8 +687,8 @@ def main(argv: list[str] | None = None) -> int:
             f"[exp05] 全部 {len(arms)} 方法 × {len(seeds)} seed 完成；"
             f"门槛={report['primary_gates_passed']} "
             f"配对完整={report['all_pairs_complete']} "
-            f"M0一致性={report['claims']['C3']['m0_all_equal']} "
-            f"尺子改变方向={c2['ruler_changes_direction']}",
+            f"M0一致性={report['consistency']['m0_all_equal']} "
+            f"E1主判据={e1['primary_pair']['verdict']['state']}",
             flush=True,
         )
     return 0

@@ -1,8 +1,15 @@
 # -*- coding: utf-8 -*-
-"""exp05 v3 重新设计的纯函数回归测试（不跑求解、不写产物）。
+"""exp05 E1 收窄设计的纯函数回归测试（不跑求解、不写产物）。
 
-守护口径：精确 p 值 / 零方差不检验 / 三态判据 / 两把尺子的有向逐腿重算 /
-门槛恒等式 / 独立重评 failures 分类 / 主张报告结构。
+文件名沿用历史命名，内容守护 2026-11-13 定稿
+``docs/exp05_e1_design_2026-11-13.md``：
+
+- 单一主张 E1 / 4 方法（M0/B1/B2/D0）/ 单一 DEM 三维尺；
+- 唯一推断主判据 = M0−B1 的每完成 DEM 航程（逐 seed 归一后配对）；
+- 描述性档（B2 / D0 / 绝对量 / 代价）不得产出 verdict；
+- 门槛恒等式 / eliminating / 独立重评一致性 / failures 分类；
+- 精确 Student-t p 值 / 零方差不检验 / 三态判据；
+- 唯一比较尺的逐腿有向几何重算（euclid 侧仅诊断留档）。
 """
 
 from __future__ import annotations
@@ -19,9 +26,75 @@ for p in (str(REPO), str(EXP05)):
 
 import pytest  # noqa: E402
 
-from claims import CLAIMS, build_claims_report, check_invariants  # noqa: E402
-from paired_stats import paired_stats, t_critical, two_sided_p, verdict  # noqa: E402
+from claims import (  # noqa: E402
+    CLAIMS,
+    RED_LINES,
+    build_claims_report,
+    check_invariants,
+)
+from paired_stats import (  # noqa: E402
+    CAVEATS,
+    paired_stats,
+    t_critical,
+    two_sided_p,
+    verdict,
+)
 from post_eval import recompute_two_rulers, summarize_audits  # noqa: E402
+
+E1_DESIGN_VERSION = "e1_single_ruler_4arm_2026-11-13"
+E1_METHODS = ("M0", "B1", "B2", "D0")
+
+
+def _row(audit: float, completed: int, *, evals: float = 100.0) -> dict:
+    """恒等式闭合的最小 summary 行（航程列同时给出自报尺与诊断尺）。"""
+    return {
+        "n_arrived": 60,
+        "n_completed": completed,
+        "n_unreachable": 1,
+        "n_dormant_end": 0,
+        "n_remaining_pool": 60 - completed - 1,
+        "completion_rate_final": 1.0,
+        "n_eliminated": 0,
+        "n_hard_violations_total": 0,
+        "path_m_audit": audit,               # 唯一比较尺
+        "path_m_euclid3d": audit * 0.9,      # 诊断留档
+        "ruler_gap_m": audit * 0.1,          # 诊断留档
+        "f_audit": audit * 0.1,              # 混尺子，禁进主表
+        "total_path_m": audit,               # 自报尺，禁进主表
+        "on_time_rate_final": 0.9,
+        "reward_yield": 0.8,
+        "n_evals_total": evals,
+        "wall_seconds": 1.0,
+        "consistency_equal_all": 1,
+        "audit_errors": [],
+        "audit_failure_counts": {},
+    }
+
+
+def _e1_rows() -> dict:
+    """4 方法 × 3 seed；M0 每完成航程恒 20，B1 依次 40 / 38.18 / 36.67。"""
+    return {
+        "M0": {42: _row(1000.0, 50), 43: _row(1100.0, 55), 44: _row(1200.0, 60)},
+        "B1": {42: _row(2000.0, 50), 43: _row(2100.0, 55), 44: _row(2200.0, 60)},
+        "B2": {42: _row(1200.0, 60), 43: _row(1320.0, 60), 44: _row(1440.0, 60)},
+        "D0": {42: _row(1050.0, 50), 43: _row(1150.0, 55), 44: _row(1250.0, 60)},
+    }
+
+
+def _e1_report(rows: dict | None = None) -> dict:
+    return build_claims_report(
+        rows if rows is not None else _e1_rows(),
+        seeds=[42, 43, 44],
+        primary_methods=list(E1_METHODS),
+        profile="formal",
+        primary_pair=("M0", "B1"),
+        descriptive_pairs=("B2", "D0"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# 精确 p / 三态结论（数值实现不变，E1 继续复用）
+# ---------------------------------------------------------------------------
 
 
 def test_exact_student_t_p_value():
@@ -55,7 +128,12 @@ def test_verdict_three_states():
     assert verdict(paired_stats([-1.0, 2.0, -1.0]), expected="negative")["state"] == "inconclusive"
 
 
-def test_two_rulers_are_directional_and_count_legs():
+# ---------------------------------------------------------------------------
+# 唯一比较尺：逐腿有向几何重算（euclid 仅诊断留档）
+# ---------------------------------------------------------------------------
+
+
+def test_unique_ruler_is_directional_and_counts_legs():
     sol = {
         "tasks": [
             {"id": 1, "xyz": [10.0, 0.0, 0.0]},
@@ -70,6 +148,7 @@ def test_two_rulers_are_directional_and_count_legs():
             }]
         }],
     }
+
     # 有向：爬升方向多算 10 m，反向不算；若实现把 a/b 对调就会少算。
     def dem(a, b):
         return 100.0 + (10.0 if float(b[0]) > float(a[0]) else 0.0)
@@ -82,12 +161,12 @@ def test_two_rulers_are_directional_and_count_legs():
     )
     assert r.n_legs == 3                  # 起点→T1→T2→终点巢
     assert r.n_missing_end_nest == 0
-    assert r.path_m_audit == pytest.approx(320.0)   # 110 + 110 + 100
-    assert r.path_m_euclid3d == pytest.approx(30.0)
-    assert r.ruler_gap_m == pytest.approx(290.0)
+    assert r.path_m_audit == pytest.approx(320.0)   # 唯一比较尺：110 + 110 + 100
+    assert r.path_m_euclid3d == pytest.approx(30.0)  # 仅诊断
+    assert r.ruler_gap_m == pytest.approx(290.0)     # 仅诊断
 
 
-def test_two_rulers_missing_end_nest_is_counted():
+def test_unique_ruler_missing_end_nest_is_counted():
     sol = {
         "tasks": [{"id": 1, "xyz": [1.0, 0.0, 0.0]}],
         "cycles": [{"tours": [{
@@ -107,6 +186,11 @@ def test_two_rulers_missing_end_nest_is_counted():
     assert r.n_legs == 1                 # 只算到最后一个任务，返航腿不猜 0
 
 
+# ---------------------------------------------------------------------------
+# 门槛层硬断言
+# ---------------------------------------------------------------------------
+
+
 def test_invariants_identity_and_eliminating():
     good = {
         "n_arrived": 60, "n_completed": 58, "n_unreachable": 1,
@@ -121,58 +205,6 @@ def test_invariants_identity_and_eliminating():
     assert res["checks"]["eliminating_zero"] is False
     broken = dict(good, n_remaining_pool=0)
     assert check_invariants(broken)["checks"]["identity_closed"] is False
-
-
-def test_c2_primary_criterion_is_difference_in_differences():
-    """尺子主判据必须是「两把尺子下 M0−D0 差值之差」，不是恒真的绝对差。"""
-    def row(audit: float, euclid: float) -> dict:
-        return {
-            "n_arrived": 60, "n_completed": 58, "n_unreachable": 1,
-            "n_dormant_end": 0, "n_remaining_pool": 1,
-            "completion_rate_final": 1.0, "n_eliminated": 0,
-            "n_hard_violations_total": 0,
-            "path_m_audit": audit, "path_m_euclid3d": euclid,
-            "f_audit": audit * 0.1, "on_time_rate_final": 0.8,
-            "reward_yield": 0.9, "n_evals_total": 100,
-            "wall_seconds": 1.0, "consistency_equal_all": True,
-        }
-
-    rows = {
-        "M0": {
-            42: row(1000.0, 900.0),
-            43: row(1100.0, 1000.0),
-            44: row(1200.0, 1100.0),
-        },
-        "D0": {
-            42: row(1050.0, 940.0),
-            43: row(1150.0, 1030.0),
-            44: row(1250.0, 1120.0),
-        },
-    }
-    report = build_claims_report(
-        rows, seeds=[42, 43, 44], primary_methods=["M0", "D0"], profile="formal",
-    )
-    c2 = report["claims"]["C2"]
-    assert c2["primary_criterion"] == "ruler_effect"
-    # (M0−D0)@dem = −50 恒定；(M0−D0)@euclid = −40/−30/−20
-    assert c2["ruler_effect"]["delta_dem_m_per_seed"] == [-50.0, -50.0, -50.0]
-    assert c2["ruler_effect"]["delta_euclid3d_m_per_seed"] == [-40.0, -30.0, -20.0]
-    assert c2["ruler_effect"]["per_seed"] == [-10.0, -20.0, -30.0]
-    assert c2["ruler_effect"]["stats"]["mean"] == pytest.approx(-20.0)
-    assert c2["ruler_effect"]["verdict"]["expected_direction"] == "any"
-    # 定义性事实只报量级，不出三态结论
-    assert all("verdict" not in v for v in c2["ruler_gap"].values())
-    # 第 3 条「偏差因方法而异」已落地
-    assert "M0_minus_D0_ratio" in c2["ruler_bias_by_method"]
-    assert c2["ruler_bias_by_method"]["M0"]["ratio_per_seed"][0] == pytest.approx(
-        1000 / 900, abs=1e-8
-    )
-    # C4 描述性档不得产出 verdict
-    for other in report["claims"]["C4"]["pairs"].values():
-        for key, entry in other.items():
-            assert "verdict" not in entry, key
-    # 主张句不得声称已证明求解端必须用 DEM
-    assert "且必须同时用于求解与评价" not in CLAIMS[1].statement
 
 
 def test_audit_failure_classification():
@@ -197,7 +229,7 @@ def test_audit_failure_classification():
 
 
 def test_invariants_dormant_is_subset_of_remaining_pool():
-    """休眠任务仍在池中；恒等式不得把 dormant_end 重复相加（正式档 M0/44）。"""
+    """休眠任务仍在池中；恒等式不得把 dormant_end 重复相加。"""
     row = {
         "n_arrived": 60, "n_completed": 51, "n_unreachable": 4,
         "n_dormant_end": 5, "n_remaining_pool": 5,
@@ -212,19 +244,115 @@ def test_invariants_dormant_is_subset_of_remaining_pool():
 
 def test_consistency_flag_accepts_int_from_json():
     """metrics 落盘 consistency_equal_all 为 0|1；`is True` 会误报失败。"""
-    row = {
-        "n_arrived": 60, "n_completed": 58, "n_unreachable": 1,
-        "n_dormant_end": 0, "n_remaining_pool": 1,
-        "completion_rate_final": 1.0, "n_eliminated": 0,
-        "n_hard_violations_total": 0,
-        "path_m_audit": 1000.0, "path_m_euclid3d": 900.0,
-        "f_audit": 100.0, "total_path_m": 1000.0,
-        "on_time_rate_final": 0.8, "reward_yield": 0.9,
-        "n_evals_total": 100, "wall_seconds": 1.0,
-        "consistency_equal_all": 1,
-        "audit_errors": [], "audit_failure_counts": {},
-    }
-    report = build_claims_report(
-        {"M0": {42: row}}, seeds=[42], primary_methods=["M0"], profile="formal",
+    report = _e1_report({"M0": {42: _row(1000.0, 58)}})
+    assert report["consistency"]["m0_all_equal"] is True
+    assert report["consistency"]["anchor_method"] == "M0"
+
+
+# ---------------------------------------------------------------------------
+# E1：单一主张 / 单一推断主判据 / 描述性档无 verdict / 单尺落盘
+# ---------------------------------------------------------------------------
+
+
+def test_e1_is_the_only_claim_and_declares_single_ruler():
+    assert len(CLAIMS) == 1
+    assert CLAIMS[0].id == "E1"
+    assert CLAIMS[0].pair == ("M0", "B1")
+    assert CLAIMS[0].primary_metric == "path_m_audit_per_completion"
+
+    report = _e1_report()
+    assert set(report["claims"]) == {"E1"}          # C1–C5 / C4 已删除
+    assert report["design_version"] == E1_DESIGN_VERSION
+    assert report["design"] == "docs/exp05_e1_design_2026-11-13.md"
+    assert report["primary_ruler"] == "dem_vertical_section_3d"
+    assert report["methods"] == list(E1_METHODS)
+    assert report["primary_pair"] == ["M0", "B1"]
+    assert report["all_pairs_complete"] is True
+    assert report["unpaired_seeds"] == []
+    assert report["primary_gates_passed"] is True
+    assert report["gate_failed_cells"] == []
+
+    joined_lines = " ".join(RED_LINES)
+    for banned in ("性能提升", "SOTA", "完成率恒 100%", "旧 7 臂", "单组件"):
+        assert banned in joined_lines
+    joined_caveats = " ".join(CAVEATS)
+    assert "仅一条推断主判据" in joined_caveats
+    assert "旧 7 臂" in joined_caveats
+
+
+def test_e1_single_primary_criterion_is_normalized_per_seed():
+    report = _e1_report()
+    e1 = report["claims"]["E1"]
+    assert e1["primary_criterion"] == "M0_minus_B1.path_m_audit_per_completion"
+
+    pp = e1["primary_pair"]
+    assert pp["pair"] == ["M0", "B1"]
+    assert pp["expected"] == "negative"
+    assert pp["descriptive_only"] is False
+    assert "verdict" in pp                       # 唯一带三态结论的主判据
+    assert pp["ruler"] == "dem_vertical_section_3d"
+    # M0 每完成恒 20；B1 = 40 / 38.18 / 36.67 ⇒ 逐 seed 归一化差值
+    assert pp["per_seed"] == pytest.approx(
+        [-20.0, -18.181818, -16.666667], abs=1e-5
     )
-    assert report["claims"]["C3"]["m0_all_equal"] is True
+    assert pp["paired_seeds"] == [42, 43, 44]
+    assert pp["stats"]["mean"] == pytest.approx(-18.282828, abs=1e-5)
+    assert pp["verdict"]["state"] == "supported"
+
+
+def test_e1_descriptive_pairs_and_absolute_levels_have_no_verdict():
+    report = _e1_report()
+    e1 = report["claims"]["E1"]
+    assert e1["descriptive_pairs"] == ["B2", "D0"]
+    # pairs 含 B1（主判据对照，描述性呈现）+ B2 / D0，一律无 verdict
+    assert set(e1["pairs"]) == {"B1", "B2", "D0"}
+    for other, entry in e1["pairs"].items():
+        for key, item in entry.items():
+            assert "verdict" not in item, (other, key)
+    for block in e1["reference"].values():
+        for st in block["metrics"].values():
+            assert "verdict" not in st
+            assert "p_two_sided" not in st
+
+
+def test_e1_table_spec_locks_single_ruler_and_excludes_mixed_columns():
+    spec = _e1_report()["claims"]["E1"]["table_spec"]
+    assert spec["role"] == "effectiveness_reference"
+    assert spec["primary_ruler"] == "path_m_audit"
+    assert spec["normalized_ruler"] == "path_m_audit_per_completion"
+    assert spec["inference"] == "single_primary_criterion"
+    excluded = set(spec["excluded_columns"])
+    assert {"f_audit", "total_path_m", "path_per_completion_m",
+            "path_m_euclid3d", "ruler_gap_m"} <= excluded
+
+
+def test_e1_reference_only_four_methods_on_single_ruler():
+    ref = _e1_report()["claims"]["E1"]["reference"]
+    assert sorted(ref) == ["B1", "B2", "D0", "M0"]
+    for block in ref.values():
+        assert block["ruler"] == "dem_directed_3d"
+        assert "path_m_euclid3d" not in block["metrics"]
+        assert "f_audit" not in block["metrics"]
+        for st in block["metrics"].values():
+            assert set(st) == {"n", "mean", "std", "ci95"}
+    assert ref["M0"]["metrics"]["path_m_audit"]["mean"] == pytest.approx(1100.0)
+    assert ref["M0"]["n_missing_denominator"] == 0
+
+
+def test_e1_normalized_pair_bad_denominator_is_not_silently_zeroed():
+    rows = {
+        "M0": {42: _row(1000.0, 0)},
+        "B1": {42: _row(2000.0, 60)},
+        "B2": {42: _row(1200.0, 60)},
+        "D0": {42: _row(1050.0, 60)},
+    }
+    report = _e1_report(rows)
+    pp = report["claims"]["E1"]["primary_pair"]
+    assert pp["paired_seeds"] == []
+    # 本用例只给 seed 42 的行，协议里的 3 个 seed 全部显式登记为未配对
+    # （42 是分母 n_completed<=0，43/44 是缺行）；一律不静默补 0、不丢弃。
+    assert pp["unpaired_seeds"] == [42, 43, 44]
+    assert pp["stats"]["n_pairs"] == 0
+    assert pp["per_seed"] == []
+    assert report["all_pairs_complete"] is False
+    assert report["unpaired_seeds"] == [42, 43, 44]

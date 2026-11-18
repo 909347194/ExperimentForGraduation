@@ -8,7 +8,10 @@
 口径与 exp01 逐字段一致（同一 metrics 语言，跨实验可直接对比）：
     - 迟到不是废飞：晚到计完成与吞吐，按 L/W 折减有效奖励；
     - 废飞 = 完成闸门弹回的物理不可行交付（infeasible_ids）；
-    - 三维航程 = 各周期交付解 final_path_m 之和（欧氏臂注明距离定义）。
+    - 自报列 total_path_m / path_per_completion_m = 各周期交付解
+      final_path_m 之和（求解端口径）。E1 主文比较一律改用独立几何重算的
+      path_m_audit（唯一 DEM 有向三维尺，见 docs/exp05_e1_design_2026-11-13.md §4），
+      自报列与 path_m_euclid3d / ruler_gap_m 只留档、不进主表 / 参照表。
 """
 
 from __future__ import annotations
@@ -80,11 +83,11 @@ CSV_COLUMNS = (
     "wall_seconds",
     # 审查 L4：尾插不移位旧列，兼容按列位置解析的下游 CSV 脚本
     "n_oper_cycles",
-    # ── v3 统一事后评价器新增列（一律尾插，见 docs/exp05_redesign_2026-11-09.md §4）──
-    "path_m_audit",              # 两把尺子几何重算：DEM 有向三维航程（唯一生产口径）
-    "path_m_euclid3d",           # 两把尺子几何重算：三维直线（历史朴素口径）
-    "ruler_gap_m",               # 同一解、两把尺子的差
-    "f_audit",                   # 逐周期 problem 重评 f 之和
+    # ── E1 统一事后评价器列（一律尾插，见 docs/exp05_e1_design_2026-11-13.md §4）──
+    "path_m_audit",              # 唯一比较尺：交付解按 DEM 有向三维航程逐腿几何重算（m）
+    "path_m_euclid3d",           # 诊断留档：三维直线重算；不进主张 / 主表 / 参照表
+    "ruler_gap_m",               # 诊断留档：path_m_audit − path_m_euclid3d；不进主表
+    "f_audit",                   # 诊断留档：逐周期 problem 重评 f 之和（混尺子，禁进主表）
     "late_s_audit",
     "n_hard_audit",
     "n_skip_audit",

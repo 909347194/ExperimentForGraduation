@@ -55,7 +55,7 @@ class MethodArm:
     """一个对照方法（methods: 段的一行）。
 
     Attributes:
-        id:         方法 ID（结果目录名，如 M0 / D0 / B1 / B2 / Q0）。
+        id:         方法 ID（结果目录名，E1 为 M0 / B1 / B2 / D0）。
         solver:     求解器名：dmde（本文方法）或 baselines.REGISTRY 的 key。
         cost_model: dem（三维地形代价，生产口径）| euclidean（同架构欧氏对照）。
         params:     求解器构造参数（透传给 baseline 构造器，如 seed）。
@@ -67,14 +67,15 @@ class MethodArm:
     cost_model: str = "dem"
     params: dict[str, Any] = field(default_factory=dict)
     label: str = ""
-    # v3：是否进论文主表。异口径（B3 硬时间窗）与双因素（B2e）只进附表。
+    # E1：四方法全部进主表（同软时间窗口径、都不主动跳任务）。
     primary: bool = True
-    # v3：该方法的配对对象（主张报告用），None 表示不参与跨方法配对。
+    # E1：该方法的配对对象（描述性梯度用）；主判据配对由 claims.primary_pair 决定。
     pair_with: str | None = None
-    # v3 预留：arm 级问题/阶段配置覆盖（P1「经典全集指派」档用）。
-    # 只覆盖显式列出的键，禁止静默改写其它口径；本轮不启用。
+    # 预留：方法级问题/阶段配置覆盖。只覆盖显式列出的键，
+    # 禁止静默改写其它口径；E1 不启用。
     overrides: dict[str, Any] = field(default_factory=dict)
-    # v3：DMDE 搜索预算覆盖（Q0 等预算档）；空 dict = 用 solver: 段主预算。
+    # 预留：DMDE 搜索预算覆盖；空 dict = 用 solver: 段主预算。E1 不启用
+    # （旧 Q0 小预算档已删除）。
     solver_budget: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -128,12 +129,12 @@ class ConfigBundle:
 
     @property
     def evaluation(self) -> dict[str, Any]:
-        """v3 统一事后评价器配置（两把尺子 / 独立重评 / profile）。"""
+        """E1 统一事后评价器配置（唯一 DEM 三维尺 / euclid 诊断 / 独立重评 / profile）。"""
         return _section(self.raw, "evaluation")
 
     @property
     def claims(self) -> dict[str, Any]:
-        """v3 主张检验配置（seed 协议、profile、主表方法）。"""
+        """E1 主张检验配置（单一推断主判据、描述性梯度、主表方法）。"""
         return _section(self.raw, "claims")
 
     @property

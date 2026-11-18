@@ -1,12 +1,16 @@
 # -*- coding: utf-8 -*-
-"""exp05 v3 统一事后评价器：两把尺子 + 独立几何重建重评。
+"""exp05 E1 统一事后评价器：单一 DEM 三维尺 + 独立几何重建重评。
 
-对应 ``docs/exp05_redesign_2026-11-09.md`` §4。两条能力都**不改生产代码**：
+对应 ``docs/exp05_e1_design_2026-11-13.md`` §4。两条能力都**不改生产代码**：
 
 1. :func:`recompute_two_rulers` —— 从落盘 ``solution.json`` 的逐周期 tours
    几何，按**实际飞行方向**逐腿重算两把尺子的总航程：
-   ``d_DEM``（唯一生产口径，垂直切面三维有向）与 ``d_euclid3d``（历史朴素口径）。
-   同一批交付解、两把尺子 ⇒ 直接检验「换尺子会不会改变方法间结论」（C2 主证据）。
+   ``d_DEM``（**唯一比较尺** ``path_m_audit``，垂直切面三维有向）与
+   ``d_euclid3d``（三维直线，仅诊断留档）。
+   E1 收窄后只有 ``path_m_audit`` 进主张 / 主表 / 参照表；
+   ``path_m_euclid3d`` 与 ``ruler_gap_m`` 只作诊断留档，v3 的
+   ``ruler_effect`` 两把尺子主判据已删除。函数名沿用历史命名以免破坏
+   调用方，语义已按 E1 单尺口径改变。
    坐标必须用全精度（铁律：落盘不得 round）。
 
 2. :class:`IndependentEvalHook` —— 运行期包装，逐周期捕获真正使用的
@@ -18,7 +22,7 @@
    不接触搜索链缓存、不改任何判定。异常**只记账不中断**，如实落盘。
 
 门槛归属：``independent_audit`` 的完成率门槛是单周期口径，在有
-``n_skip`` / ``n_shortfall`` 的正常周期会假失败，故 v3 只取其**独立数字**
+``n_skip`` / ``n_shortfall`` 的正常周期会假失败，故只取其**独立数字**
 与 ``consistency``；完成率 / 恒等式 / eliminating 由实验层硬断言承担
 （见 ``claims.check_invariants``）。
 """
@@ -39,7 +43,7 @@ __all__ = [
 
 @dataclass(frozen=True)
 class RulerPath:
-    """同一批交付解在两把尺子下的总航程（米）。"""
+    """同一批交付解在唯一 DEM 尺与 euclid 诊断尺下的总航程（米）。"""
 
     path_m_audit: float
     path_m_euclid3d: float
@@ -67,15 +71,18 @@ def recompute_two_rulers(
     euclid_distance_fn,
     nest_xyz: Mapping[int, tuple[float, float, float]],
 ) -> RulerPath:
-    """逐周期、逐航次、逐腿按**有向**方向重算两把尺子的总航程。
+    """逐周期、逐航次、逐腿按**有向**方向重算唯一 DEM 尺 + euclid 诊断尺。
 
     航次腿序：``UAV 起点 → task[0] → … → task[-1] → 终点机巢``。
     终点巢缺失时退回起飞机巢；两者都缺则跳过返航腿并计数（不静默补 0）。
+    只有 ``path_m_audit`` 进 E1 的主张 / 主表 / 参照表；euclid 侧只诊断留档。
 
     Args:
-        solution: ``results_v3/<ID>/seed_<s>/solution.json`` 的解析结果。
-        dem_distance_fn: ``make_distance_fn(estimator)``（有向，不可对称化）。
-        euclid_distance_fn: ``make_distance_fn(None)``（三维直线）。
+        solution: ``results_e1/<ID>/seed_<s>/solution.json`` 的解析结果。
+        dem_distance_fn: ``make_distance_fn(estimator)``（有向，不可对称化），
+            唯一比较尺。
+        euclid_distance_fn: ``make_distance_fn(None)``（三维直线），仅诊断；
+            ``evaluation.compute_euclid_diagnostic=False`` 时调用方传零函数。
         nest_xyz: ``{nest_id: (x, y, z)}``，全精度。
     """
     task_xyz = {
@@ -179,7 +186,7 @@ class IndependentEvalHook:
                 reports.append({
                     "status": "no_problem_captured",
                     "note": "该周期未捕获 problem 实例（预构建解通道），"
-                            "几何重建重评不可用；两把尺子重算仍独立有效",
+                            "几何重建重评不可用；唯一 DEM 尺重算仍独立有效",
                 })
                 return stage
             try:
@@ -271,8 +278,9 @@ def summarize_audits(reports: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
         # 供交叉校验：几何重算（post_eval）与 problem 重评应同量级；
         # 差异不为 0 时先查坐标/终点巢口径，不得改数字抹平。
         "audit_vs_geometry_note": (
-            "path_m_audit 来自两把尺子几何重算；path_m_audit_from_problem "
-            "来自 problem.path_cost 重评，二者口径不同须并列留档"
+            "path_m_audit 来自唯一 DEM 有向三维尺的逐腿几何重算；"
+            "path_m_audit_from_problem 来自 problem.path_cost 重评，"
+            "二者口径不同须并列留档；euclid3d 只作诊断"
         ),
         "_math_sanity": math.isfinite(totals["fitness"]),
     }

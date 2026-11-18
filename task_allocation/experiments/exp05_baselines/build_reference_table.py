@@ -1,32 +1,36 @@
 # -*- coding: utf-8 -*-
-"""exp05 C4 外部量级参照表生成器（单源：``claims_report.json``）。
+"""exp05 E1 整体有效性参照表生成器（单源：``claims_report.json``）。
 
-把 C4 从「散在报告里的描述性数字」收口成一份可直接进论文的参照表：
+把 E1 从「散在报告里的描述性数字」收口成一份可直接进论文的参照表：
 唯一尺子 ``path_m_audit``（垂直切面 DEM 三维有向航程）＋逐 seed 归一的
 每完成航程，评估次数与墙钟并列，**只给估计量与区间、不作方法优劣结论**。
+E1 只证「整体有效性不是随便一个可行分配也能做到」，不排名、不宣称优越。
 
 用法::
 
     python build_reference_table.py \
-        --claims results_v3/claims_report.json \
-        --out-dir results_v3 \
+        --claims results_e1/claims_report.json \
+        --out-dir results_e1 \
         --scenario lasa_chengguan \
-        --source-label "exp05 v3 正式档"
+        --source-label "exp05 E1 正式档"
 
-门禁（不满足直接拒绝出表，绝不拿未闭合档冒充正式档）：
+门禁（不满足直接拒绝出表，绝不拿未闭合档/旧档冒充正式档）：
 
+- ``design_version`` 必须等于 E1 收窄版本（**拒绝旧 7 臂 / v3 / v1v2 档**）；
+- ``methods`` 必须恰为 4 个（M0/B1/B2/D0），主判据配对也须落在这 4 个方法内；
 - ``profile`` 必须是 ``formal``；冒烟 / mid 档不出表；
 - ``all_pairs_complete`` 为真且 ``unpaired_seeds`` 为空；
-- C4 必须 ``descriptive_only``，且 ``table_spec.role`` 为外部量级参照；
+- ``E1.table_spec.role`` 为整体有效性参照、主尺为 ``path_m_audit``、
+  ``f_audit`` 等混尺子列在排除清单；出表部分一律描述性、不含 verdict；
 - ``primary_gates_passed`` 为假**不拒绝**，但必须在表注如实声明反例。
 
 产出（写到 ``--out-dir``）：
 
-- ``reference_table.csv`` 长表：绝对量 + 配对差，含名义 p 留档列；
+- ``reference_table.csv`` 长表：绝对量 + 描述性配对差，含名义 p 留档列；
 - ``reference_table.tex`` 一个浮动表：方法绝对量 + 描述性配对差 + 表注。
 
-对应 ``task_allocation/docs/exp05_redesign_2026-11-09.md`` §2 / §6 与
-``notes.md``「C4 外部量级参照表」。本脚本不跑算法、不改写任何结果档。
+对应 ``task_allocation/docs/exp05_e1_design_2026-11-13.md`` §3 / §4 / §6。
+本脚本不跑算法、不改写任何结果档。
 """
 
 from __future__ import annotations
@@ -63,19 +67,38 @@ PAIRED_COLUMNS = (
 
 #: 表注固定段（红线口径，删改等于偷偷加强结论）
 TABLE_NOTE = (
-    "注：航程列一律为交付解按垂直切面 DEM 三维有向航程独立几何重算所得"
-    "（\\texttt{path\\_m\\_audit}）；每完成航程为该值除以完成数、逐 seed 归一"
-    "后再跨 seed 汇总，完成数只随 CSV 留档。表中航程单位由米换算为千米，"
-    "只改单位、不改尺子。各方法自报 \\texttt{total\\_path\\_m}、"
-    "\\texttt{path\\_per\\_completion\\_m} 与逐周期重评 \\texttt{f\\_audit} "
-    "存在尺子或量纲差异，未列入本表。本表为外部量级参照，不作方法优劣结论："
-    "跨方法差异同时包含整条求解范式（解码修复链、交付后精修、终点机巢分层）"
-    "与求解端代价模型，不是单因素效应；评估次数与墙钟同列以示求解代价。"
-    "完成是可完成任务的硬约束，不作为成绩排序项。单场景、单到达流、"
-    "5 个 seed（df=4），名义 $p$ 未做多重比较校正、仅随 CSV 留档、不进本表，"
-    "描述性档不产出推断结论；$p$ 不显著处一律表述为「本实验未检出差异」。"
-    "$\\pm$ 为跨 seed 标准差，95\\% 置信区间随 CSV 一同落盘。"
+    "注：本表服务主张 E1——「整体有效性不是随便一个可行分配也能做到」，"
+    "不排名、不宣称方法优越。航程列一律为交付解按垂直切面 DEM 三维有向航程"
+    "独立几何重算所得（\\texttt{path\\_m\\_audit}），4 个方法共用这一把尺；"
+    "每完成航程为该值除以完成数、逐 seed 归一后再跨 seed 汇总，完成数只随 CSV "
+    "留档。表中航程单位由米换算为千米，只改单位、不改尺子。各方法自报 "
+    "\\texttt{total\\_path\\_m}、\\texttt{path\\_per\\_completion\\_m}、"
+    "逐周期重评 \\texttt{f\\_audit} 与三维直线重算 \\texttt{path\\_m\\_euclid3d} "
+    "存在尺子或量纲差异，未列入本表。本表为整体有效性参照，不作方法优劣结论："
+    "B1/B2 与 M0 的差异是整条求解范式（解码修复链、交付后精修、终点机巢分层），"
+    "D0 是复合档（连 ETA/时间窗动力学一起换），均不是单因素效应；评估次数与"
+    "墙钟同列以示求解代价。完成是可完成任务的硬约束，不作为成绩排序项，"
+    "seed 反例须逐格归因。唯一推断主判据为 M0$-$B1 的每完成 DEM 航程配对差，"
+    "其精确 $p$、效应量与三态结论在 \\texttt{claims\\_report.json} 单独给出；"
+    "本表所有配对与绝对量只给估计量与区间、不出推断结论。单场景、单到达流、"
+    "5 个 seed（df=4）、仅一条推断主判据故无多重比较，名义 $p$ 仅随 CSV 留档、"
+    "不进本表；$p$ 不显著处一律表述为「本实验未检出差异」。旧 7 臂与 v1/v2 "
+    "数字一律不进主文。$\\pm$ 为跨 seed 标准差，95\\% 置信区间随 CSV 一同落盘。"
 )
+
+
+#: E1 收窄版本标识 & 期望的 4 个方法（防止旧 7 臂 / v3 / v1v2 档混入主文）
+E1_DESIGN_VERSION = "e1_single_ruler_4arm_2026-11-13"
+E1_METHODS = frozenset({"M0", "B1", "B2", "D0"})
+
+
+def _anchor(report: Mapping[str, Any]) -> str:
+    """主判据的锚点方法（所有配对差恒为 ``anchor − other``）。"""
+    pair = list(report.get("primary_pair") or [])
+    if pair:
+        return str(pair[0])
+    e1 = (report.get("claims") or {}).get("E1") or {}
+    return str(((e1.get("primary_pair") or {}).get("pair") or ["M0"])[0])
 
 
 def validate_report(report: Mapping[str, Any]) -> list[str]:
@@ -83,6 +106,18 @@ def validate_report(report: Mapping[str, Any]) -> list[str]:
     def _fail(msg: str) -> None:
         raise SystemExit(f"[exp05 参照表] 拒绝出表：{msg}")
 
+    # 版本门禁：拒绝旧 7 臂 / v3 / v1v2 档（落实「旧数字一律不进主文」）
+    if report.get("design_version") != E1_DESIGN_VERSION:
+        _fail(f"design_version={report.get('design_version')!r} 不是 E1 收窄版 "
+              f"（应为 {E1_DESIGN_VERSION!r}）；旧 7 臂 / v3 / v1v2 档不得出表")
+    methods = set(report.get("methods") or [])
+    if methods != set(E1_METHODS):
+        _fail(f"方法集 {sorted(methods)} 不是 E1 的 4 方法 {sorted(E1_METHODS)}")
+    pair = list(report.get("primary_pair") or [])
+    if len(pair) != 2 or set(map(str, pair)) - set(E1_METHODS):
+        _fail(f"primary_pair={pair!r} 异常，须为 E1 四方法中的两项 (A, B)")
+    if report.get("primary_ruler") not in ("dem_vertical_section_3d", "path_m_audit"):
+        _fail(f"唯一比较尺声明异常：{report.get('primary_ruler')!r}")
     if report.get("profile") != "formal":
         _fail(f"profile={report.get('profile')!r}，冒烟 / mid 档不可外推正式档")
     if report.get("all_pairs_complete") is not True:
@@ -90,19 +125,26 @@ def validate_report(report: Mapping[str, Any]) -> list[str]:
     if report.get("unpaired_seeds"):
         _fail(f"存在未配对 seed：{report['unpaired_seeds']}")
 
-    c4 = (report.get("claims") or {}).get("C4") or {}
-    if c4.get("descriptive_only") is not True:
-        _fail("C4 未锁 descriptive_only，可能被误读成方法优劣结论")
-    spec = c4.get("table_spec") or {}
-    if spec.get("role") != "external_magnitude_reference":
-        _fail("缺少 C4.table_spec.role=external_magnitude_reference；"
+    e1 = (report.get("claims") or {}).get("E1") or {}
+    spec = e1.get("table_spec") or {}
+    if spec.get("role") != "effectiveness_reference":
+        _fail("缺少 E1.table_spec.role=effectiveness_reference；"
               "请先用当前 claims.py 重算 claims_report.json")
     if spec.get("primary_ruler") != "path_m_audit":
-        _fail(f"主尺子被改为 {spec.get('primary_ruler')!r}，与统一 DEM 口径冲突")
+        _fail(f"主尺子被改为 {spec.get('primary_ruler')!r}，与单尺 DEM 口径冲突")
     if "f_audit" not in set(spec.get("excluded_columns") or ()):
         _fail("f_audit 未列入排除列，混尺子列可能混入参照表")
-    if not c4.get("reference"):
-        _fail("C4.reference 为空，无法出绝对量表")
+    if spec.get("inference") != "single_primary_criterion":
+        _fail("E1 必须是单一推断主判据，描述性档不得产出结论")
+    if "verdict" not in (e1.get("primary_pair") or {}):
+        _fail("E1.primary_pair 缺少 verdict，主判据未落盘")
+    # 描述性配对与绝对量一律不得含 verdict（防下游误读成方法优劣结论）
+    for other, entry in (e1.get("pairs") or {}).items():
+        for key, item in entry.items():
+            if isinstance(item, dict) and "verdict" in item:
+                _fail(f"描述性配对 {other}.{key} 含 verdict，越权产出结论")
+    if not e1.get("reference"):
+        _fail("E1.reference 为空，无法出绝对量表")
 
     notes: list[str] = []
     if report.get("primary_gates_passed") is not True:
@@ -127,11 +169,12 @@ def _stats(entry: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def collect_rows(report: Mapping[str, Any]) -> list[dict[str, Any]]:
-    """把 C4 的绝对量与配对差整理成长表行（CSV 单源）。"""
-    c4 = report["claims"]["C4"]
+    """把 E1 的绝对量与描述性配对差整理成长表行（CSV 单源）。"""
+    e1 = report["claims"]["E1"]
+    anchor = _anchor(report)
     rows: list[dict[str, Any]] = []
 
-    for method, block in sorted((c4.get("reference") or {}).items()):
+    for method, block in sorted((e1.get("reference") or {}).items()):
         metrics = block.get("metrics") or {}
         for key, header, unit, digits, scale in LEVEL_COLUMNS + CSV_ONLY_COLUMNS:
             entry = metrics.get(key) or {}
@@ -156,7 +199,7 @@ def collect_rows(report: Mapping[str, Any]) -> list[dict[str, Any]]:
                 ),
             })
 
-    for other, block in sorted((c4.get("pairs") or {}).items()):
+    for other, block in sorted((e1.get("pairs") or {}).items()):
         for key, header, unit, digits, scale in PAIRED_COLUMNS:
             entry = block.get(key)
             if not entry or entry.get("not_for_table"):
@@ -164,7 +207,7 @@ def collect_rows(report: Mapping[str, Any]) -> list[dict[str, Any]]:
             st = _stats(entry)
             rows.append({
                 "section": "paired",
-                "method": f"M0−{other}",
+                "method": f"{anchor}−{other}",
                 "metric": key,
                 "label": header,
                 "unit": unit,
@@ -221,10 +264,11 @@ def render_tex(
     extra_notes: Sequence[str],
 ) -> str:
     """渲染一个浮动表：方法绝对量 + 描述性配对差 + 表注。"""
-    c4 = report["claims"]["C4"]
-    ref = c4.get("reference") or {}
+    e1 = report["claims"]["E1"]
+    ref = e1.get("reference") or {}
     methods = sorted(ref)
-    pairs = sorted(c4.get("pairs") or {})
+    pairs = sorted(e1.get("pairs") or {})
+    anchor = _anchor(report)
     levels = _by_metric(rows, "levels")
     paired = _by_metric(rows, "paired")
 
@@ -233,7 +277,7 @@ def render_tex(
         r"\begin{table}[!htb]",
         r"    \centering",
         r"    \footnotesize",
-        r"    \caption{完成约束下的方法外部量级参照（描述性）}"
+        r"    \caption{完成约束下的整体有效性参照（描述性）}"
         r"\label{tab:exp05_reference}",
         r"    \setlength{\tabcolsep}{4pt}",
         r"    \begin{tabular}{l" + "r" * len(LEVEL_COLUMNS) + "}",
@@ -264,11 +308,11 @@ def render_tex(
     for other in pairs:
         cells: list[str] = []
         for key, header, unit, digits, scale in PAIRED_COLUMNS:
-            r = paired.get((f"M0−{other}", key), {})
+            r = paired.get((f"{anchor}−{other}", key), {})
             cells.append(_fmt(r.get("mean"), digits, scale))
             cells.append(_ci(r, digits, scale))
         lines.append(
-            "        M0$-$" + _tex_escape(other) + " & "
+            "        " + _tex_escape(anchor) + "$-$" + _tex_escape(other) + " & "
             + " & ".join(cells) + r" \\"
         )
     lines += [
@@ -291,15 +335,15 @@ def render_tex(
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description="exp05 C4 外部量级参照表生成器")
+    ap = argparse.ArgumentParser(description="exp05 E1 整体有效性参照表生成器")
     ap.add_argument(
         "--claims", type=Path,
-        default=paths.EXP_DIR / "results_v3" / "claims_report.json",
+        default=paths.EXP_DIR / "results_e1" / "claims_report.json",
         help="claims_report.json 路径（须由当前 claims.py 重算）",
     )
     ap.add_argument("--out-dir", type=Path, default=None, help="产出目录，缺省与 --claims 同目录")
     ap.add_argument("--scenario", default="lasa_chengguan", help="场景名（仅作表注来源标签）")
-    ap.add_argument("--source-label", default="exp05 v3 正式档", help="来源档标签")
+    ap.add_argument("--source-label", default="exp05 E1 正式档", help="来源档标签")
     args = ap.parse_args(argv)
 
     claims_path = Path(args.claims).resolve()
@@ -337,8 +381,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     print(
         f"[exp05 参照表] {csv_path} / {tex_path}\n"
-        f"  profile={report['profile']} seeds={len(report.get('seeds', []))} "
-        f"方法={len(report['claims']['C4']['reference'])} "
+        f"  design_version={report['design_version']} "
+        f"profile={report['profile']} seeds={len(report.get('seeds', []))} "
+        f"方法={len(report['claims']['E1']['reference'])} "
         f"门槛通过={report.get('primary_gates_passed')} "
         f"表注附加声明={len(notes)} 条",
         flush=True,

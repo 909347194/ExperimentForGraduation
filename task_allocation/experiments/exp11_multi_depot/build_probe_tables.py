@@ -1,10 +1,8 @@
 """方法级对照：构造式贪心 vs 本文 DMDE，7 seed 汇总出三线表。
 
-读 ``results/probes/probe_greedy_formal.json``，输出
-``results/probes/tables_baseline.tex`` / ``.md``：
-
-- 表 A：四方法 × 四档 × （总航程 / 按时率 / 违约 / 航次），均值 ± 标准差
-- 表 B：配对差（本文 DMDE+MCF − 构造式贪心），带精确 t 双尾 p
+读 ``results/probes/probe_greedy_formal.json``，输出可直接进稿的
+``results/probes/tables_baseline.tex``（两个 ``table`` 环境：主表 + 配对差）
+与 ``.md``；``.tex`` 可被 ``tables_baseline_preview.tex`` 直接 ``\\input``。
 
 用法（cwd = exp11 目录）：
     python build_probe_tables.py --in results/probes/probe_greedy_formal.json
@@ -22,31 +20,30 @@ HERE = pathlib.Path(__file__).resolve().parent
 
 METHODS = ("greedy(home)", "dmde+home", "dmde+nearest", "dmde+mcf")
 LABEL = {
-    "greedy(home)": "构造式贪心（返原巢）",
-    "dmde+home": "DMDE + 返原巢",
-    "dmde+nearest": "DMDE + 就近终点",
-    "dmde+mcf": "DMDE + MCF 终点（本文）",
+    "greedy(home)": r"构造式贪心（返原巢）",
+    "dmde+home": r"DMDE + 返原巢",
+    "dmde+nearest": r"DMDE + 就近终点",
+    "dmde+mcf": r"DMDE + MCF 终点（本文）",
 }
 METRICS = ("path", "ontime", "viol", "sorties")
 METRIC_LABEL = {
-    "path": "总航程/km",
+    "path": "总航程 / km",
     "ontime": "按时率",
-    "viol": "违约/超容",
+    "viol": "违约+超容 / 次",
     "sorties": "航次",
 }
 TIERS = ("T2", "T4", "T6", "T10")
 
 
 def _two_sided_p(t: float, df: int) -> float | None:
-    """Student t 双尾 p（不完全 beta 精确实现，与 metrics 同式）。"""
+    """Student t 双尾 p（不完全 beta 精确实现，与 metrics 同式，不依赖 scipy）。"""
     if df <= 0 or not math.isfinite(t):
         return None
 
     def _betacf(a: float, b: float, x: float) -> float:
         MAXIT, EPS, FPMIN = 200, 3e-9, 1e-300
         qab, qap, qam = a + b, a + 1.0, a - 1.0
-        c = 1.0
-        d = 1.0 - qab * x / qap
+        c, d = 1.0, 1.0 - qab * x / qap
         if abs(d) < FPMIN:
             d = FPMIN
         d = 1.0 / d
@@ -100,8 +97,7 @@ def _paired_p(diffs: list[float]) -> float | None:
     sd = statistics.stdev(diffs)
     if sd == 0.0:
         return 1.0 if mean == 0.0 else 0.0
-    t = mean / (sd / math.sqrt(n))
-    return _two_sided_p(t, n - 1)
+    return _two_sided_p(mean / (sd / math.sqrt(n)), n - 1)
 
 
 def _value(group: dict, method: str, metric: str) -> float:
@@ -118,6 +114,18 @@ def _value(group: dict, method: str, metric: str) -> float:
     raise KeyError(metric)
 
 
+def _star(p: float | None) -> str:
+    if p is None:
+        return ""
+    if p < 0.001:
+        return r"$^{***}$"
+    if p < 0.01:
+        return r"$^{**}$"
+    if p < 0.05:
+        return r"$^{*}$"
+    return ""
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--in", dest="inp",
@@ -127,79 +135,94 @@ def main() -> None:
 
     data = json.loads((HERE / args.inp).read_text(encoding="utf-8"))
     tiers = [t for t in TIERS if any(k.startswith(t + "_") for k in data)]
-    seeds_per_tier = {t: sorted(int(k.split("_seed")[1]) for k in data
-                                if k.startswith(t + "_")) for t in tiers}
+    seeds = {t: sorted(int(k.split("_seed")[1]) for k in data
+                       if k.startswith(t + "_")) for t in tiers}
+    n_seed = min(len(v) for v in seeds.values())
 
-    # ── 表 A：均值 ± 标准差 ─────────────────────────────────────────
-    lines_tex: list[str] = []
-    lines_md: list[str] = []
-    head_tex = " & ".join(tiers)
-    lines_tex.append(r"\begin{tabular}{l" + "c" * len(tiers) + "}")
-    lines_tex.append(r"\toprule")
-    lines_tex.append("方法 / 指标 & " + head_tex + r" \\")
-    lines_tex.append(r"\midrule")
-    lines_md.append("| 方法 | 指标 | " + " | ".join(tiers) + " |")
-    lines_md.append("|---|---|" + "|".join(["---"] * len(tiers)) + "|")
+    def _cell(mean: float, sd: float, metric: str) -> str:
+        if metric == "ontime":
+            return f"{mean:.3f} $\\pm$ {sd:.3f}"
+        return f"{mean:.1f} $\\pm$ {sd:.1f}"
 
-    fmt = {"path": lambda v: f"{v:.1f}", "ontime": lambda v: f"{v:.3f}",
-           "viol": lambda v: f"{v:.1f}", "sorties": lambda v: f"{v:.1f}"}
+    # ── 主表 ────────────────────────────────────────────────────────
+    tex: list[str] = [r"\begin{table}[htbp]", r"  \centering",
+                      r"  \caption{构造式贪心与本文方法在四个滚动梯度上的对比"
+                      rf"（{n_seed} 个随机种子均值 $\pm$ 标准差）" r"}",
+                      r"  \label{tab:exp11-baseline}",
+                      r"  \footnotesize",
+                      r"  \setlength{\tabcolsep}{3.5pt}",
+                      r"  \begin{tabular}{llrrrr}", r"    \toprule",
+                      "    方法 & 指标 & " + " & ".join(f"$T={t[1:]}$" for t in tiers)
+                      + r" \\", r"    \midrule"]
+    md: list[str] = ["| 方法 | 指标 | " + " | ".join(f"T={t[1:]}" for t in tiers) + " |",
+                     "|---|---|" + "|".join(["---"] * len(tiers)) + "|"]
 
     for mi, method in enumerate(METHODS):
-        lines_tex.append(r"\midrule" if mi else "")
-        lines_md.append(f"| **{LABEL[method]}** | | " + " | ".join("" for _ in tiers) + " |")
+        if mi:
+            tex.append(r"    \addlinespace[2pt]")
+        tex.append(r"    \multicolumn{" + str(len(tiers) + 2) + r"}{l}{\textit{"
+                   + LABEL[method] + r"}} \\")
+        md.append(f"| **{LABEL[method]}** | | " + " | ".join([""] * len(tiers)) + " |")
         for metric in METRICS:
             cells_tex, cells_md = [], []
             for t in tiers:
-                vals = [_value(data[f"{t}_seed{s}"], method, metric)
-                        for s in seeds_per_tier[t]]
+                vals = [_value(data[f"{t}_seed{s}"], method, metric) for s in seeds[t]]
                 mean = statistics.fmean(vals)
                 sd = statistics.stdev(vals) if len(vals) > 1 else 0.0
-                cells_tex.append(f"{fmt[metric](mean)}±{sd:.2f}" if metric != "ontime"
-                                 else f"{mean:.3f}±{sd:.3f}")
-                cells_md.append(f"{fmt[metric](mean)} ± {sd:.2f}")
-            lines_tex.append(f"{METRIC_LABEL[metric]} & " + " & ".join(cells_tex) + r" \\")
-            lines_md.append(f"| | {METRIC_LABEL[metric]} | " + " | ".join(cells_md) + " |")
-    lines_tex.append(r"\bottomrule")
-    lines_tex.append(r"\end{tabular}")
+                cells_tex.append(_cell(mean, sd, metric))
+                cells_md.append(f"{mean:.3f} ± {sd:.3f}" if metric == "ontime"
+                                else f"{mean:.1f} ± {sd:.1f}")
+            tex.append("     & " + METRIC_LABEL[metric] + " & " + " & ".join(cells_tex)
+                       + r" \\")
+            md.append(f"| | {METRIC_LABEL[metric]} | " + " | ".join(cells_md) + " |")
+    tex += [r"    \bottomrule", r"  \end{tabular}", r"  \par\vspace{2pt}",
+            r"  {\footnotesize 注：贪心为单次成型的构造式基线（无全局搜索），"
+            r"其终点恒为起飞巢，故只能与「DMDE + 返原巢」对齐读求解器质量；"
+            r"终点自由度在 DMDE 三臂间单独读。贪心的目标值被硬违约罚项主导"
+            r"（$10^{7}$ 量级），故不列 $f$，只比航程 / 按时率 / 违约 / 航次。",
+            r"  每格为独立跑批（各 $n\_cycles=T$），短梯度解不等于长梯度解的前缀。}",
+            r"\end{table}"]
 
-    clean_tex = [l for l in lines_tex if l]
-
-    # ── 表 B：配对差（本文 − 贪心）──────────────────────────────────
-    diffs_all: dict[str, dict[str, list[float]]] = {}
-    texb = [r"\begin{tabular}{l" + "c" * len(tiers) + "}", r"\toprule",
-            "指标（本文 − 贪心） & " + head_tex + r" \\", r"\midrule"]
-    mdb = ["| 指标（本文 − 贪心） | " + " | ".join(tiers) + " |",
-           "|---|" + "|".join(["---"] * len(tiers)) + "|"]
+    # ── 配对差表 ────────────────────────────────────────────────────
+    texb: list[str] = [r"\begin{table}[htbp]", r"  \centering",
+                       r"  \caption{配对差（本文 DMDE+MCF $-$ 构造式贪心；负值表示本文更省）"
+                       rf"（{n_seed} 个随机种子）" r"}",
+                       r"  \label{tab:exp11-baseline-pair}",
+                       r"  \footnotesize",
+                       r"  \setlength{\tabcolsep}{4pt}",
+                       r"  \begin{tabular}{l" + "r" * len(tiers) + "}", r"    \toprule",
+                       "    指标 & " + " & ".join(f"$T={t[1:]}$" for t in tiers) + r" \\",
+                       r"    \midrule"]
+    mdb: list[str] = ["| 指标 | " + " | ".join(f"T={t[1:]}" for t in tiers) + " |",
+                      "|---|" + "|".join(["---"] * len(tiers)) + "|"]
+    notes = []
     for metric in METRICS:
-        cells_tex, cells_md = [], []
+        cells, cells_md = [], []
         for t in tiers:
             d = [_value(data[f"{t}_seed{s}"], "dmde+mcf", metric)
                  - _value(data[f"{t}_seed{s}"], "greedy(home)", metric)
-                 for s in seeds_per_tier[t]]
-            diffs_all.setdefault(metric, {})[t] = d
-            mean = statistics.fmean(d)
-            p = _paired_p(d)
-            star = "***" if p is not None and p < 0.001 else (
-                "**" if p is not None and p < 0.01 else (
-                    "*" if p is not None and p < 0.05 else ""))
-            p_txt = "—" if p is None else f"{p:.3f}"
+                 for s in seeds[t]]
+            mean, p = statistics.fmean(d), _paired_p(d)
             sign = "+" if mean > 0 else ""
-            cells_tex.append(f"{sign}{fmt[metric](mean)}{star} (p={p_txt})")
-            cells_md.append(f"{sign}{fmt[metric](mean)} (p={p_txt})")
-        texb.append(f"{METRIC_LABEL[metric]} & " + " & ".join(cells_tex) + r" \\")
+            fmt = "{:+.3f}" if metric == "ontime" else "{:+.1f}"
+            p_txt = "--" if p is None else (f"{p:.3f}" if p >= 0.001 else r"$<0.001$")
+            cells.append(fmt.format(mean) + _star(p) + f" ($p={p_txt}$)")
+            cells_md.append(f"{fmt.format(mean)} (p={p_txt})")
+            notes.append((t, metric, mean, p))
+        texb.append("    " + METRIC_LABEL[metric] + " & " + " & ".join(cells) + r" \\")
         mdb.append(f"| {METRIC_LABEL[metric]} | " + " | ".join(cells_md) + " |")
-    texb += [r"\bottomrule", r"\end{tabular}"]
+    texb += [r"    \bottomrule", r"  \end{tabular}", r"  \par\vspace{2pt}",
+             r"  {\footnotesize 注：$^{*}$ $p<0.05$，$^{**}$ $p<0.01$，$^{***}$ $p<0.001$"
+             r"（配对 t 检验，$df=6$）。$p$ 不显著只表示「不显著」，不表示「无差异」。}",
+             r"\end{table}"]
 
     out_tex = HERE / (args.out_prefix + ".tex")
     out_md = HERE / (args.out_prefix + ".md")
-    out_tex.write_text("\n".join(clean_tex + [""] + texb) + "\n", encoding="utf-8")
-    out_md.write_text("\n".join(lines_md + [""] + mdb) + "\n", encoding="utf-8")
+    out_tex.write_text("\n".join(tex + [""] + texb) + "\n", encoding="utf-8")
+    out_md.write_text("\n".join(md + [""] + mdb) + "\n", encoding="utf-8")
     print(f"[tables] 写入 {out_tex}\n[tables] 写入 {out_md}")
-    for tier in tiers:
-        for metric in METRICS:
-            d = diffs_all[metric][tier]
-            print(f"  {tier} {METRIC_LABEL[metric]:>10}: mean {statistics.fmean(d):+.3f} "
-                  f"p={_paired_p(d)} n={len(d)}")
+    for t, metric, mean, p in notes:
+        print(f"  {t} {METRIC_LABEL[metric]:>12}: {mean:+.3f}  p={p}")
 
 
 if __name__ == "__main__":

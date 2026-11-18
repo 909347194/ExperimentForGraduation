@@ -88,8 +88,8 @@ expXX_<name>/
 | `exp02_selection_scale` | **单周期任务规模可扩展性台**：N=10/50/100 的压缩比、分段墙钟、现算边数与任务去向分账（描述性）；11-12 收窄职责、旧档归档，11-13 正式档 18 格跑完并验收（6 图 4 表） | active（正式档就绪） |
 | `exp03_event_rolling` | 事件触发重规划 | planned（仅 notes） |
 | `exp04_ablation` | 消融矩阵收编 | planned（仅 notes） |
-| `exp05_baselines` | 主张检验台 C1–C5（同一批解两把尺子、独立重评、配对精确 p）；v3 正式档 35 单元 | active |
-| `exp06_joint_regime` | 联合域（机队规模 × 到达率 × 能力衰减） | active |
+| `exp05_baselines` | E1 单主张「不是随便一个可行分配也能做到整体有效性」（4 方法、单一 DEM 三维尺、`M0−B1` 配对精确 p）；正式档待跑批 `results_e1/`，旧 7 臂 / v1v2 数字不进主文 | active（顶层 `results_v3/` 半截档 11-13 已清理，完整档在 `_archive/`） |
+| `exp06_joint_regime` | 联合域（机队规模 × 到达率 × 能力衰减） | active（10-26 旧口径 `results/` 11-13 已清理，重跑见 §7） |
 | `exp07_polish_accept` | 采纳判据统一 `f` + L3b 开/关对照 | active（定稿 §11.8/§11.9） |
 | `exp08_gain_decomposition` | 交付后成本优化收益拆分 2×2 | active（§11.10） |
 | `exp09_mcf_layers` | 终点机巢层 1 × 层 3 四档 | active（§11.11） |
@@ -126,6 +126,16 @@ planned 目录只放 `notes.md`（有意占位），**不要删**。四个 `ab_*
 - 结果表由各实验自持的 `build_tables.py` 从 `results/metrics.json` **单源生成**，
   产物落 `results/tables/`（CSV + LaTeX 三线表 `.tex` 片段）；**禁手写数字**。
   出图与出表都在求解完成后单独执行，不占求解进程（跑批纪律：求解时不出图）。
+- **例外（2026-11-13，用户裁定覆盖「归档不删」）**：本轮按用户明确要求
+  「删除旧的、历史的结果」清理了两个**已作废**档——`exp05_baselines/results_v3/`
+  （15/35 半截档，归档区已有完整 35 单元副本）与
+  `exp06_joint_regime/results/`（10-26 最老、8 巢旧口径作废，无归档副本、
+  删后不可恢复，重跑入口 `exp06_joint_regime/run.py`）；同时清掉顶层 `.log`、
+  `__pycache__`/`.pyc` 与仓库根 `experiments/` 空壳。**`_archive/` 整体保留、
+  全部 `.py` 脚本保留、9 个当前有效正式档 `results/` 保留**。全部结果目录
+  均被 gitignore、git 跟踪数为 0，删除后无法用 git 恢复。逐项清单、引用
+  核对与验证见 `_archive/CLEANUP_2026-11-13.md`。此为例外，不改变其余批次
+  「历史数据一律归档」的默认纪律。
 
 ## 8. 运行
 
