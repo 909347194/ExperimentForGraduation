@@ -62,10 +62,21 @@ FACTOR_DEFS: dict[str, dict[str, Any]] = {
     },
     "E2": {
         "description": "突发高优先级任务（t=6，2 个 burst）",
-        "events": {"enabled": True, "on_uav_fault": False, "on_nest_unavailable": False, "on_urgent_task": True},
+        # E2 专属阈值（2026-11-19 重新设计修正）：
+        #   常规任务 reward∈[1,10]、deadline 窗口 2–4 周期，若沿用默认
+        #   reward_threshold=8 / slack_threshold=900，约 20% 常规任务 + 所有
+        #   临近 deadline 任务都会判 URGENT_TASK，触发泛滥（smoke 实测事件=27、
+        #   重规划=13），burst 的 2 个真任务被淹没、无法归因。
+        #   修正：burst reward 提到 12（>常规上限 10），threshold=11（>10、<12），
+        #   slack_threshold=1s（关闭 slack 误触发路径），使 E2 事件≈注入 burst 数。
+        "events": {
+            "enabled": True, "on_uav_fault": False,
+            "on_nest_unavailable": False, "on_urgent_task": True,
+            "reward_threshold": 11.0, "slack_threshold": 1.0,
+        },
         "schedule": {
             "faults": [],
-            "burst_tasks": [{"cycle": 6, "n": 2, "reward": 9.5, "deadline_cycles": 1.0}],
+            "burst_tasks": [{"cycle": 6, "n": 2, "reward": 12.0, "deadline_cycles": 1.0}],
             "nest_closures": [],
         },
     },

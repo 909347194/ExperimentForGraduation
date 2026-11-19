@@ -163,6 +163,16 @@ def _run_single(
     """单 seed 完整链路：配置 → 场景 → 滚动闭环 → 指标 + 解。"""
     t0 = time.time()
 
+    # 3a0. 重置共享场景的可变副作用（2026-11-19 设计修正）。
+    # nests 在 main 里只建一次、跨因子/跨 seed 共享；而机巢闭塞会把
+    # nest.available 置 False。若不在每次 run 前恢复，E3 闭塞 nest0 后
+    # E4 的 t=10 闭塞因 `nest.available` 已 False 被跳过，NEST_UNAVAILABLE
+    # 事件丢失（正式档 E4 审计 FAIL 根因）。每个 seed 从干净场景起步。
+    for _n in nests:
+        _n.available = True
+        if _n.meta and "close_reason" in _n.meta:
+            _n.meta.pop("close_reason", None)
+
     # 3a. seed 级配置（实验种子 + 求解器种子同步）
     seed_cfg = copy.deepcopy(dict(raw_cfg))
     seed_cfg.setdefault("experiment", {})["seed"] = seed

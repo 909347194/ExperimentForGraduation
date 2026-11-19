@@ -1,6 +1,6 @@
 # exp03_event_rolling
 
-**status:** design-v2 + 前置修正已落地（2026-11-03：F1–F6 补丁完成并回归；`run.py` / `config.yaml` 待实现）
+**status:** design-v2 已实现并跑通（2026-11-19：F1–F6 补丁 + `run.py`/`config.yaml` 全部落地；修复 E2 紧急事件误触发、E4 机巢闭塞事件丢失两处缺陷；全因子 E0–E4 × 3 seed 正式档跑完，事件协议审计全通过；详见 `results/REDESIGN.md`、`results/RESULTS_ANALYSIS.md`）
 **论文锚点:** §3.5.6 动态滚动场景下的适应性分析  
 **不负责:** 算法性能排名、选择层规模扫、完整基线竞赛（见 exp02 / exp05）
 
