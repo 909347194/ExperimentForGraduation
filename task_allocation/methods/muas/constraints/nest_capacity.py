@@ -1,31 +1,10 @@
 # -*- coding: utf-8 -*-
-"""nest_capacity.py — 机巢容量约束（规划期软约束 / 落地期硬约束共用一份判定）
+"""nest_capacity.py — 机巢容量约束与终点机巢分配。
 
-对应论文 §4.3「机巢容量或可用性约束」，实现依据 ``docs/design_nest_state.md``。
-
-三条设计原则（设计文档 §0）：
-
-    1. 机巢只存静态属性 + 可用性，不存占用计数；
-    2. "占用"从 ``uav.nest_id`` 推导，不落第二份状态；
-    3. ``nest_id`` 的唯一写点是分配决策 ``z_ub``，起飞 / 降落一律不改。
-
-容量语义（设计文档 §3）：
-
-    occupied_b = |{ u : u.nest_id == b }|      # 含飞行中的、含尚未降落的
-    约束：occupied_b ≤ capacity_b              # 恒成立
-
-关键结论：**降落与容量无关**。名额在决策时即预占，否则滚动时域会超卖
-（设计文档 §1.2）。因此判定必须按「周期末归属」而非「返回架数」：
-
-    occupied_b_after = occupied_b_now - departures_b + arrivals_b
-
-本模块同时提供两种 ``z_ub`` 决策器（设计文档 §7 处理链第 ① 步）：
-
-- :func:`solve_end_nest_assignment`：**方案 A 内层子问题的精确求解器**
-  （最小费用流，容量约束下全局最优），默认使用；
-- :func:`choose_end_nests`：贪心基线（"最难安置优先"），保留供
-  阶段二对比实验（固定终点 / 最近合法巢 / 贪心改派 / 最优分配）使用。
-"""
+职责：按周期末归属计算各机巢占用，判定容量约束；提供终点机巢的精确分配（最小费用流）
+与贪心基线。容量从 uav.nest_id 现算，不另存占用计数。
+边界：只管机巢容量与终点分配，不判航程/时间窗。
+相关：coop_constraints.py、single_constraints.py、muas/coverage_gate.py、rolling/horizon.py。"""
 
 from __future__ import annotations
 

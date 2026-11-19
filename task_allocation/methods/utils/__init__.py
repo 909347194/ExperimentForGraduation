@@ -1,21 +1,7 @@
 # -*- coding: utf-8 -*-
-"""方法层工具集：WGS84 经纬度与米制平面坐标互转、GeoTIFF DEM 地理参考查询。
+"""方法层工具集：坐标转换、DEM 地理参考查询与建筑图层。
 
-两个模块：
-
-- :mod:`.coordinates`：文本坐标解析、WGS84 <-> 局部 ENU 米制平面 / UTM、大地线距离
-- :mod:`.dem_geotiff`：无 GDAL 依赖的 GeoTIFF DEM 读取、像素 <-> 经纬度、高程采样
-
-典型用法（把机巢经纬度转成 ``common.types.Nest`` 需要的米制 x / y）::
-
-    from task_allocation.methods.utils import GeoTIFFDEM, LocalFrame, parse_coordinate
-
-    dem = GeoTIFFDEM("task_allocation/data/lasa_chengguan/Chengguan_DEM.tif")
-    frame = LocalFrame.from_geodetic_points(lats, lons)   # 取机巢群中心为原点
-    lat, lon = parse_coordinate("29.6472N 91.136532E")
-    x, y = frame.to_enu(lat, lon)[:2]
-    z = dem.sample_elevation(lat, lon)                    # 机巢处地形高程
-"""
+相关模块：coordinates.py（坐标互转）、dem_geotiff.py（DEM 读取）、building_layer.py（建筑高度）。"""
 
 from .coordinates import (
     WGS84_A,

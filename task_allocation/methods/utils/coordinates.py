@@ -1,31 +1,9 @@
 # -*- coding: utf-8 -*-
-"""coordinates.py — WGS84 经纬度与米制平面坐标互转工具。
+"""coordinates.py — WGS84 经纬高与米制平面坐标互转。
 
-背景：
-    DEM（``task_allocation/data/lasa_chengguan/Chengguan_DEM.tif``）的空间参考为
-    地理坐标系 WGS 1984（EPSG:4326，角度单位：度，长半轴 6378137.0，
-    反扁率 298.257223563）；
-    而 task_allocation 内部模型（``common/types.py`` 的 Task / UAV / Nest）与
-    垂直切面代价估算（``methods/muas/cost``）统一使用米制平面坐标 (x, y, z)。
-    本模块补齐两者之间的坐标转换。
-
-内容：
-    1. ``parse_coordinate`` / ``format_coordinate``
-       解析 / 生成 "29.6472N 91.136532E" 这类文本坐标（兼容度分秒）
-    2. ``LocalFrame``
-       WGS84 经纬高 <-> 局部 ENU 米制平面；经椭球 ECEF 精确互转，非近似展开
-    3. ``latlon_to_utm`` / ``utm_to_latlon``
-       WGS84 <-> UTM（如 EPSG:32646），用于与 ArcGIS 等 GIS 软件交换数据
-    4. ``geodesic_distance``
-       WGS84 椭球大地线距离（Vincenty 反解），用于校核平面距离的投影变形
-
-约定：
-    x = 东向（east，米），y = 北向（north，米），z = 垂向（up，米），
-    与 ``common/types.py`` 中 ``Task.x/y/z`` 的口径一致。
-    输入角度单位为度，输出距离单位为米。
-
-依赖：仅 numpy（无 GDAL / pyproj）。
-"""
+职责：解析/生成文本坐标；WGS84 与局部 ENU 平面、UTM 的双向转换；椭球大地线距离。
+边界：纯几何换算，不读取 DEM，不涉及代价计算；仅依赖 numpy。
+相关：utils/dem_geotiff.py、utils/building_layer.py 使用本模块的坐标约定（x 东、y 北、z 上，米）。"""
 
 from __future__ import annotations
 

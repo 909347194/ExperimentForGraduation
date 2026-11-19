@@ -1,15 +1,10 @@
 # -*- coding: utf-8 -*-
-"""inverse_mapper.py — 连续到离散的反映射协调器 φ'（公式 3-7）
+"""inverse_mapper.py — 连续到离散的反映射协调器。
 
-改进记录：
-    - 温度自适应反映射：top_k 随温度动态调节（早期探索多、后期开发多）。
-    - 匹配后扰动：swap + reassign，概率与温度正相关。
-    - SRP 巡游扰动：swap/insert/reverse，打破贪心顺序。
-    - 基因长度：balanced/overloaded = n_uavs，SRP = N（方案 A，无终止基因）。
-
-方案 A 口径：反映射只解码「UAV 归属 + 访问顺序」；终点机巢不进编码，
-由解码后内层最小费用流精确求解（见 solvers.muas_stage._choose_end_nests）。
-"""
+职责：把差分后的连续代价向量还原为可行个体，经匹配与扰动生成 UAV 归属与访问顺序；匹配
+强度随温度自适应，并对巡游航次做扰动。终点机巢不进编码，由解码后内层分配求解。
+边界：只做反映射与冲突消解，不评价解。
+相关：muas/representation/encoder.py、mapper.py、repair_rules/、solvers/dmde_solver.py。"""
 
 from __future__ import annotations
 

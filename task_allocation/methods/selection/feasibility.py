@@ -1,24 +1,11 @@
 # -*- coding: utf-8 -*-
-"""feasibility.py — 快速可行性检查（论文 3.5）。
+"""feasibility.py — 任务选择阶段的快速可行性检查。
 
-1. prefilter — 初步过滤（候选预筛选之后、边际选择之前）
-2. static_unreachable — 入池时的静态物理不可达判定（往返航程口径）
-3. postcheck — 候选集粗预算检查（边际选择之后）
-
-行进代价口径（两套几何合一）：``travel = cost_hint[t.id]``（三维地理代价，
-与基础优先级 C_i(t)、ΔC 插入式估计、postcheck 预算同源）优先，缺省回退
-欧氏距离。**航程检查按往返口径**（2×travel vs range_margin×remaining_range）：
-航次必须返航，单程可达 ≠ 可服务。
-
-拒绝理由只有物理/终态原因（用户原则「任务不被完成只有物理约束
-被违反」）：无机可用、往返超航程（prefilter）、状态终局 ``status_*``（入池已判
-EXPIRED/UNREACHABLE/DONE）、机群预算超限 ``exceed_fleet_budget``（postcheck）。
-时间窗不是拒绝理由——迟到的定价走适应度：覆盖门禁主口径下 F1 为纯完成计数、
-迟到经 ``w_late·L`` 单一软计价；兼容口径（非 gate）才按
-``eff = R×max(0, 1−L/W)`` 折减计 F1（见 muas/config.py 的
-late_reward_decay_seconds）。时间窗预筛仅在 ``check_time_window=True`` 的
-消融口径保留。
-"""
+职责：入池静态不可达判定、候选预筛 prefilter、边际选择后的预算检查 postcheck。航程按
+往返口径判定；拒绝只基于物理/终态原因（无机可用、超航程、状态终局、超预算），时间窗不
+作为拒绝理由。
+边界：只做粗粒度可行性过滤，不定义目标函数、不做能力上界推导。
+相关：selection/capability.py、selection/priority.py、selection/pipeline.py。"""
 
 from __future__ import annotations
 

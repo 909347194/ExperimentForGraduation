@@ -1,39 +1,11 @@
 # -*- coding: utf-8 -*-
-"""local_search.py — 解码后局部搜索 polish（relocate / swap / 插入位）。
+"""local_search.py — 解码后分配解的局部搜索。
 
-动机：
-
-    big-M 字典序适应度是**任务粒度的阶梯函数**——单任务收益的量级远超全程
-    路径的优化空间，于是 DMDE 的差分算子对 relocate 级改善是盲的：换机/
-    换序省下的航程折成适应度相对单任务收益是小量，搜索永远看不见。叠加
-    Lamarckian 回写只改写起始基因通道（归属逐代复现、闲置槽成死维度），
-    收敛曲线早期即躺平。
-
-本模块在 DMDE 搜索结束后对 **assignment 本身**做局部搜索：
-
-    relocate   任务换机（含换到空闲机；目标机的插入位枚举）
-    swap       两机任务对换（各自位置不变）
-    position   机内插入位移动（改访问顺序，不改归属）
-
-每个候选都过 ``evaluator.evaluate``——即与 DMDE 个体**完全相同**的
-``build_solution`` 修复链（consolidate / repair_range / choose_end_nests /
-complete_coverage / reorder_for_deadlines / prune_zero_reward / 交付前
-三道航程闸），仅当适应度**严格改进**（< 当前值 − eps）才接受。修复链
-会把不可行/亏本的候选打回原形（任务被删 → F1 降 → 适应度变差 → 自然
-拒绝），因此 polish 不会产出「纸面可行、执行弹回」的幽灵解——安全语义
-与搜索期逐位一致。
-
-策略：first-improvement + 邻域重启；整轮无改进即收敛。全程无随机数，
-同输入逐位可复现。预算由 ``polish_max_rounds`` / ``polish_max_evals``
-双重封顶（后者按**真实评估数**计，缓存命中不计）。
-
-覆盖守护（口径约定「不减少已装集合」）：覆盖盲判据下
-（coverage_first / coverage_gate / coverage_audit 任一开启，
-此时 ``f`` 不含 ``−m·F1``），候选若经修复链卸掉任务、只降成本，
-会被无守护的 polish 接受 ⇒ 覆盖被 polish 侵蚀（E1E2 实证的缺口之一）。
-守护判据：候选的 executed 任务集必须**包含**当前最优的解集
-（``cand_exec >= best_exec``），否则拒绝。非门禁口径逐位不变。
-"""
+职责：DMDE 搜索结束后对 assignment 做局部优化：任务换机（relocate）、两机任务对换
+（swap）、机内插入位移动（position）；候选经同一评价链，仅当适应度严格改进才接受，且
+不减少已装任务集。全程无随机数。
+边界：只优化已有解，不重新搜索分配。
+相关：muas/solvers/muas_stage.py（调用 polish_assignment）、solvers/evaluator.py。"""
 
 from __future__ import annotations
 

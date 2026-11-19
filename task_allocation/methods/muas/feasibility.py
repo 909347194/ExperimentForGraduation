@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
 """feasibility.py — 解可行性校验与约束惩罚聚合（编排层）。
 
-从 ``problem.py`` 拆出：给定问题实例与一个解，按 ``ConstraintConfig``
-的开关逐类检查并聚合违约 / 惩罚。本模块不做单条约束的判据（判据在
-``constraints`` 包），也不定义目标函数（目标在 ``problem.py``）
-——只做「哪些检查参与、按什么权重聚合」的编排。
-"""
+职责：给定问题实例与解，按 ConstraintConfig 开关逐类检查并聚合违约/惩罚。
+边界：不做单条约束判据（在 constraints/），不定义目标函数（在 problem.py）；只编排
+"哪些检查参与、按什么权重聚合"。
+相关：muas/constraints/、muas/problem.py。"""
 
 from __future__ import annotations
 

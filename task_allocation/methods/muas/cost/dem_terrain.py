@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
 """dem_terrain.py — DEM 高程与垂直切面地形剖面。
 
-从参考实现 environment_dmde/dem_terrain 精简而来：
-    - from_array 无需 rasterio，便于仿真
-    - extract_profile：沿 S-T 水平连线采样高程，映射到切面二维坐标
-坐标默认按米制平面（输电巡检场景）；不依赖经纬度换算。
-"""
+职责：from_array 从数组构建高程网格（无需 rasterio）；extract_profile 沿 S-T 水平连线采样
+高程并映射到切面二维坐标。
+边界：只处理米制平面高程剖面，不做经纬度换算或路径规划。
+相关：utils/dem_geotiff.py（提供米制网格）、muas/cost/vertical_section.py（消费剖面）。"""
 
 from __future__ import annotations
 

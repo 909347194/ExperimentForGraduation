@@ -1,14 +1,11 @@
 # -*- coding: utf-8 -*-
-"""invalid_mutator.py — 规则 3.6：越界、重复及无效值随机变异修补
+"""invalid_mutator.py — 无效差分值的随机修补规则。
 
-对应论文：
-    规则 3.6：在按规则 3.4 和 3.5 匹配完合理的差分临时结果之后，
-    对剩余的无效差分值（零值、负值、越界值）和未匹配的矩阵位置，
-    利用局部随机变异的方法进行匹配。
-
-    具体方法：对无效值，依次随机匹配一个未被映射到新个体中的代价值，
-    按规则 3.5 修改矩阵，继续匹配其他无效值，直到全部任务匹配完。
-"""
+职责：对零值/负值/越界等无效差分值与未匹配位置，依次随机匹配未使用的代价值并更新矩阵，
+直到全部任务匹配完成。
+边界：只修补无效值，不做最近邻匹配或独占屏蔽。
+相关：muas/representation/inverse_mapper.py、repair_rules/unique_filter.py、
+repair_rules/nearest_match.py。"""
 
 from __future__ import annotations
 

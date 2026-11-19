@@ -1,33 +1,10 @@
 # -*- coding: utf-8 -*-
-"""compare_spec.py — CompareSpec：统一比较/选择算子（第二阶段 P1）。
+"""compare_spec.py — 统一的候选比较算子。
 
-来源：定稿 §6 要素 2「可行性优先的 DMDE 竞争」+ §5.2 一致性契约：
-DE 替换 / 邻域接受 / 档案择优最终全部走同一比较算子。P1 落地 **DE 替换**
-一处（要素 2 范围）；邻域/档案采纳统一在 P3（定稿 §4.2）。
-
-四种模式（全部作用在**内部选择标量** ``F_sel``，问题目标 ``f`` 一律不动，
-定稿 §1 / §7 勘误 3）：
-
-- ``penalty``（默认，= 现行硬贪婪 ``child.fitness < parent.fitness``）：
-  与 `method-phase1` 逐位可比；big-M 标定下可行优于不可行自动成立；
-- ``deb``：Deb 三规则——可行优于不可行 / 两可行比 f / 两不可行比违反量
-  （违反量同则比违约条数、再比 f）。定稿 §6 要素 2 的候选默认档；
-- ``epsilon``：ε-constrained（Lagaros §3.3，新变体 EconstNEW 采用
-  Fan et al. 2018 **Eq.12** 调度，定稿 §9 第 2 项拍板）。P2-e 已实装为
-  状态机：``ε(0)=ϕ_θ``（θ=γ·Npop 第 θ 大违反量），``FEs<TC`` 且 ``rk<α``
-  时 ``ε(k)=ε(k-1)·(1−FEs/TC)^cp`` 收紧、``rk≥α`` 时 ``ε(k)=(1+τ)·ϕ_max``
-  放松反馈、``FEs≥TC`` 归 0。对照档定位 **EconstOR**（Eq.10 比较规则 +
-  Eq.12 调度）。默认参数 γ=0.5 / TC=0.4·maxFEs / cp=5 / τ=0 / α=0.5。
-- ``lagaros``：FeasRulesNEW 乘积式 F_sel 重标定（Eq. 9b：
-  ``F_sel(x) = max(f_best_feasible, f(x)) × p_violation``；可行时 F_sel=f）。
-  ``p_violation`` 默认 Eq. 8a（最大违反量，原文不含违反条数）；
-  8b/8c/8d（最大/均值/中位数 ×(1 + 违反条数/约束总数)）需显式声明
-  ``n_constraints``。⚠️ 勘误 3：原文是乘性**适应度重标定**（评价层），
-  不是纯比较算子；此处只作用于 ``F_sel``。
-
-诚实口径（§2.3）：「剥掉解码期优化 + 换比较器 ⇒ 精英更新上升」仍是
-**待验证假设**，由 P1 前置闸门（step1 口径）实测裁定；本模块不保证收益。
-"""
+职责：把 DE 替换等场景的"谁更优"判定收敛到 CompareSpec，作用在内部选择标量上，支持
+penalty / deb / epsilon / lagaros 等模式。
+边界：只做比较，不改问题目标函数。
+相关：muas/problem.py（目标与适应度）、solvers/dmde_solver.py（进化选择时调用）。"""
 
 from __future__ import annotations
 

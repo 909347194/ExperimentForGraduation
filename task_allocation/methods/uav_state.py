@@ -1,29 +1,10 @@
 # -*- coding: utf-8 -*-
-"""uav_state.py - 无人机运行状态管理(可用识别、状态更新、故障 / 释放)。
+"""uav_state.py — UAV 机队状态管理（可用识别、状态更新、故障/释放）。
 
-对应论文 3.1(2) 与第 6 节的闭环反馈:
-
-    U_t^avail = { u ∈ U : u 处于空闲且可用 }     K_avail(t) = |U_t^avail|
-
-状态机(common.types.UAVStatus)::
-
-    IDLE ──assign──► BUSY ──任务全部完成──► IDLE
-      │                │
-      ├──mark_charging─► CHARGING ──restore──► IDLE
-      └──mark_fault────► FAULT ──restore────► IDLE
-                           │
-                           └── 未完成任务释放回任务池(论文 T_t^release)
-
-与相邻模块的衔接:
-
-    available()        ->  methods.selection.run / muas.SelectiveMUASProblem
-                          (两者都自带 u.is_available 过滤,传全量列表即可)
-    apply_solution()   <-  common.types.AllocationSolution / UAVTour
-    mark_fault()       ->  返回未完成 task_id,交给 methods.task_pool.TaskPool.release()
-
-与 ``task_pool`` 不互相 import:故障→释放任务这一步由滚动层(methods/rolling)
-或实验脚本显式串联,避免两个状态机互相耦合。
-"""
+职责：维护 UAV 状态机（空闲/在途/充电/故障），提供可用机识别、状态更新；apply_solution
+回写绑定关系，mark_fault 返回未完成任务交给任务池。
+边界：不直接改任务池；故障→释放由滚动层显式串联，避免两状态机耦合。
+相关：task_pool.py、rolling/horizon.py、muas/constraints/nest_capacity.py。"""
 
 from __future__ import annotations
 

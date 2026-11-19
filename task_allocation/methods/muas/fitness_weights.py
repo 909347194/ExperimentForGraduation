@@ -1,15 +1,9 @@
 # -*- coding: utf-8 -*-
-"""fitness_weights.py — 适应度层权重推导与分层统计（mixin）。
+"""fitness_weights.py — 适应度分层权重推导与统计（mixin）。
 
-从 ``problem.py`` 拆出：集中「四层准字典序 + 覆盖门禁」的各层权重如何从
-问题数据推导（big-M 自动推导 / T0 支配权重 / T0.5 门禁权重 / 层内
-tie-break），以及分层计数基（硬违约条数、航程超限米、软违约秒数）如何取。
-
-由 :class:`~task_allocation.methods.muas.problem.SelectiveMUASProblem`
-混入，``problem.hard_weight()`` 等 API 与拆分前完全一致（muas_stage 与
-测试直接消费）。契约（由混入方提供）：``config`` / ``tasks`` / ``uavs`` /
-``nests`` / ``costs`` / ``check_feasible(solution)``。
-"""
+职责：推导各适应度层的权重（硬违约、覆盖门禁、软违约、层内 tie-break）与分层计数基。
+边界：由 SelectiveMUASProblem 混入，自身不单独构造解；对外 API 与混入前一致。
+相关：muas/problem.py、muas/config.py。"""
 
 from __future__ import annotations
 

@@ -1,22 +1,10 @@
 # -*- coding: utf-8 -*-
-"""约束集合（论文 §3.3 / §4.3 / §5(4) 约束处理）。
+"""约束包：单机性能、任务协同、机巢容量三类约束判定与违背聚合。
 
-把约束判定与惩罚从 ``problem.check_feasible`` 拆出，形成可单测的独立模块；
-规划期（软约束，进 penalty）与落地期（硬约束，拒绝并告警）共用同一份判定，
-避免两道校验的口径漂移（见 ``docs/design_nest_state.md`` §6）。
-
-三类约束（参考借鉴 Experiments-For-Dissertation 的 single / coop / evaluator 结构，
-并按本 MUAS 模型裁剪）：
-
-    single_constraints  单机飞行性能约束：航程、飞行时间（可选）
-    coop_constraints 任务侧协同约束：时间窗、时序（落地，
-                        只判同一航次内访问顺序）、同时到达（本模型 N/A）
-    nest_capacity      机巢容量 / 可用性约束（终点机巢决策 z_ub 的硬约束）
-    evaluator          以上三类违背量的统一聚合（ConstraintReport）
-
-``problem.check_feasible`` 调用这些模块并把结果汇入 ``ConstraintReport``，
-其 ``as_details()`` 透出 ``{violations, penalty, nest_capacity}`` 供滚动层与指标消费。
-"""
+职责：把约束判定从 problem.check_feasible 拆出为可单测模块；规划期软约束与落地期硬约束
+共用同一份判定。
+相关：single_constraints.py（单机）、coop_constraints.py（协同）、nest_capacity.py（机巢）、
+evaluator.py（聚合为 ConstraintReport）；调用方为 muas/problem.py。"""
 
 from .nest_capacity import (
     CapacityReport,

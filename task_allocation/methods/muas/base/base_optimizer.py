@@ -1,20 +1,10 @@
 # -*- coding: utf-8 -*-
-"""base_optimizer.py — 求解器统一接口约定。
+"""base_optimizer.py — 求解器统一接口。
 
-职责：
-    定义主算法（DMDE）与所有对比算法必须遵守的统一接口，
-    保证输出口径一致，便于 experiments 横向对比与复现。
-
-约定：
-    1. 凡进入对比表的求解器，均须继承 BaseOptimizer 并实现 name / solve。
-    2. solve 的返回值必须是 SolverResult，字段含义固定，禁止私自增删必填字段。
-    3. 扩展信息只放入 SolverResult.extra，不污染必填字段。
-    4. 本模块只放接口与结果结构，不放任何具体算法逻辑。
-
-对应：
-    主算法：methods/muas/solvers/dmde_solver.py
-    对比算法：task_allocation/baselines/
-"""
+职责：定义主算法与对比算法共同遵守的接口（BaseOptimizer.name / solve）及结果结构
+SolverResult，保证横向对比口径一致。
+边界：只放接口与结果结构，不含任何算法逻辑。
+相关：muas/solvers/dmde_solver.py（主算法）、task_allocation/baselines/（对比算法）。"""
 
 from __future__ import annotations
 

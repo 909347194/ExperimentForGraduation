@@ -1,17 +1,9 @@
 # -*- coding: utf-8 -*-
-"""single_constraints.py — 单机飞行性能约束（论文 §3.3 / §5(4)）。
+"""single_constraints.py — 单机飞行性能约束判定。
 
-单机维度的硬约束，作用于单条 UAVTour：
-
-    * 航程约束：航次总代价 ≤ 剩余航程（``remaining_range``）
-    * 飞行时间约束（可选能力）：航次耗时 ≤ 最大飞行时间（``UAV.max_time``）
-
-与 :mod:`coop_constraints` / :mod:`nest_capacity` 一起构成 constraints 包的
-三类约束，统一汇入 :mod:`evaluator` 的 :class:`ConstraintReport`。
-
-参考借鉴 Experiments-For-Dissertation 的 single_constraints 设计
-（range / time 两类单机约束 + 不可变违背量数据类）。
-"""
+职责：作用于单条 UAVTour，判定航程（总代价 ≤ 剩余航程）与可选的飞行时间约束。
+边界：只做单机维度判定，不聚合、不计算目标函数。
+相关：coop_constraints.py、nest_capacity.py；违背量汇入 evaluator.py 的 ConstraintReport。"""
 
 from __future__ import annotations
 

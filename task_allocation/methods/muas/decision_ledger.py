@@ -1,31 +1,9 @@
 # -*- coding: utf-8 -*-
-"""decision_ledger.py — 统一决策台账（第二阶段 P0 契约层，纯观测）。
+"""decision_ledger.py — 求解过程决策台账（纯观测）。
 
-来源：`task_allocation/docs/stage2_final_scheme_2026-11-06.md` §6 要素 6
-「完整搜索轨迹与消融：DecisionLedger 默认开（纯观测）+ ConstraintSpec
-唯一判据 + 三级/2×2 消融」与 §8 P0「台账 reason 字段覆盖率 100%」。
-
-设计纪律（P0 零行为变化）：
-
-- **纯观测**：只追加事件、只累加计数；不参与任何控制流、不改判定、
-  不消耗 RNG ⇒ 无条件 bit-exact（验收探针逐位对照）；
-- **reason 必填**：每次 (算子, 动作) 必须带 ``reason="hard"|"opt"``——
-  hard = 该动作以恢复可行性为目的（修复/投影/构造补全），opt = 该动作的
-  接受判据是目标改进（成本严格下降等）。分类按**接受判据**不按函数名
-  （plan §5 风险与纪律）；混合算子按其接受判据整体归类并在
-  ``gate_reason`` 注明（``_consolidate`` 成本合并 → opt，P1 拆分后细化）；
-- **有界内存**：事件流进 ``deque(maxlen=...)``，计数器恒全量；
-  生产默认开、事件上限可配，超限只丢最旧事件不丢计数。
-
-最小字段（定稿 §6）::
-
-    (代, 层, 算子, constraint_id, action, object, from, to, reason=hard|opt,
-     Δf, Δviolation, accepted, gate_reason,
-     selection_object, inherited_object, ledger_id)
-
-``selection_object`` / ``inherited_object`` 服务于 §5 一致性契约：
-选择看见的对象（S_repair）与实际进入下一代的基因（g_raw / g_repaired）。
-"""
+职责：记录各算子的动作、原因（hard/opt）与前后变化，提供全局台账 get_ledger。
+边界：只追加事件、累加计数；不参与控制流、不改判定、不消耗随机数；事件流有界、计数全量。
+相关：solvers/evaluator.py 与解码/修复算子写入事件；实验层读取做轨迹与消融分析。"""
 
 from __future__ import annotations
 

@@ -1,35 +1,10 @@
 # -*- coding: utf-8 -*-
-"""task_pool.py — 动态任务池管理（remain / new / release）。
+"""task_pool.py — 动态任务池：维护当前周期任务的 remain/new/release 集合与状态流转。
 
-对应论文 3.1 的任务池定义与第 6 节的闭环更新：
-
-    T_t = T_t^remain ∪ T_t^new ∪ T_t^release
-
-其中：
-
-    T_t^remain   上一周期未执行、继续保留的任务
-    T_t^new     本周期新到达任务
-    T_t^release  因 UAV 故障等原因重新释放的任务
-
-第 6 节的状态流转约定（本模块据此实现）：
-
-    完成任务       从任务池移除（DONE）
-    未选 / 未执行   继续保留（回到 PENDING，下周期算 remain）
-    已分配执行中    与 UAV 绑定（EXECUTING），不再进入本周期任务选择
-    故障未完成     释放回任务池（release，下周期算 release）
-    新到达任务     进入下一周期任务池
-
-与相邻模块的衔接：
-
-    planning_tasks()  ->  methods.selection.run
-                     ->  methods.muas.problem.SelectiveMUASProblem.from_entities
-    apply_solution()  <-  methods.muas 求解得到的 common.types.AllocationSolution
-    release()         <-  methods.uav_state.UAVFleet.mark_fault() 返回的未完成 task_id
-
-注意：``planning_tasks()`` 返回的是**当前周期的 T_t**，是一个已冻结的切面；
-``begin_cycle()`` 之后的新到达任务只进池、不进当前 T_t，符合"新到达任务加入
-下一周期任务池"的约定。
-"""
+职责：冻结当前周期任务切面 planning_tasks 供第一阶段选择；apply_solution 回写求解结果
+（完成出池、未执行留池）；release 接收 UAV 故障释放的未完成任务；begin_cycle 推进周期。
+边界：只维护任务集合与 TaskStatus，不管 UAV 状态、不选任务；与 uav_state 互不 import。
+相关：uav_state.py、rolling/horizon.py（串联两状态机）、selection/、muas/。"""
 
 from __future__ import annotations
 

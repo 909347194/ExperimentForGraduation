@@ -1,24 +1,10 @@
 # -*- coding: utf-8 -*-
-"""decode_repair.py — repair_chain 解码与修复算子组（``DecodeRepairMixin``）。
+"""decode_repair.py — repair_chain 解码与修复算子组（DecodeRepairMixin）。
 
-自 ``muas_stage.py`` 拆出。对应论文 §5(4) 约束处理：
-:func:`build_solution` 按固定管线调用下列算子、修到不动点后装配交付解。
-算子一览（括号内为管线角色）：
-
-- :func:`_consolidate`               合并修复（闲置合法化，任务只改派不删）
-- :func:`_prune`                     经济性剔除 y_j=0（门禁口径下恒关）
-- :func:`_repair_range`              航程修复（移除→reflow 改派→证明性暂缓）
-- :func:`_choose_end_nests`          终点机巢（内层最小费用流精确分配）
-- :func:`_complete_coverage`         覆盖补全（单趟，可达即执行）
-- :func:`_load_coverage_fixed_point` 覆盖优先装载（EDD 序、修到不动点）
-- :func:`_reorder_for_deadlines`     时间窗重排（纯调序、不改任务集）
-- :func:`_repair_sequence`           时序修复（同链按 ``sequence_order`` 升序归位）
-- :func:`_prune_zero_reward`         零奖励剔除（默认关）
-- :func:`_reflow_task`               改派救援（插入 / 开班 / 换机腾位）
-
-各算子的接受纪律：不删除可达任务（「可达即执行」的存在量化口径）、
-修复不制造**新**违约、不可行才记 y_j=0 证明性暂缓。
-"""
+职责：build_solution 按固定管线调用一组修复算子（合并、航程修复、终点机巢、覆盖补全、
+时间窗重排、时序修复、改派救援等），修到不动点后装配交付解。
+边界：只做解码与修复；约束判据在 constraints/，覆盖修复在 coverage_gate.py。
+相关：muas/constraints/、muas/coverage_gate.py、muas/solvers/evaluator.py、route_polish.py。"""
 
 from __future__ import annotations
 

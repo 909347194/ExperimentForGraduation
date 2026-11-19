@@ -1,17 +1,9 @@
 # -*- coding: utf-8 -*-
-"""ablation_prune.py — 选择性剔除算子（消融专用，``AblationPruneMixin``）。
+"""ablation_prune.py — 经济性剔除算子（消融专用，AblationPruneMixin）。
 
-本模块的两个算子**不在生产路径**：生产口径（覆盖门禁）下「完成是约束」，
-经济性剔除与完成约束冲突，相关开关默认关闭。它们仅用于消融对照与压力测试，
-因此与主管线物理隔离，阅读 ``decode_repair`` 主链路时无需确认其开关。
-
-- :meth:`_prune`              经济性剔除（``y_j=0``），门 ``prune_unprofitable``
-- :meth:`_prune_zero_reward`  零奖励剔除，门 ``prune_zero_reward``
-
-算子仍以 Mixin 形式共享评价器的 ``self`` 状态（reflow / 代价原语），
-由 :class:`MUASAssignmentEvaluator` 组合继承。契约见
-``docs/operator_contracts.md`` 第 5 节。
-"""
+职责：提供按经济性剔除任务与剔除零奖励任务两个算子，以 Mixin 形式共享评价器状态。
+边界：不在生产路径；生产口径下"完成是约束"，相关开关默认关闭，仅供消融与压测。
+相关：muas/solvers/decode_repair.py、muas/solvers/evaluator.py。"""
 
 from __future__ import annotations
 

@@ -1,24 +1,10 @@
 # -*- coding: utf-8 -*-
-"""criteria_drift.py — 四层判据漂移测量（P0 基线 → P1/P2 收敛）。
+"""criteria_drift.py — 多套约束判据的一致性测量。
 
-来源：定稿 §8 P0「另需报告一份『四层判据漂移率』基线供 P1/P2 使用」。
-
-测量对象是 plan §4.5 的四处「另写判据」漂移点，均为 :mod:`spec` 中
-具名视图对：
-
-1. **时间窗**：``window_deadline_model``（task_window 元组口径）vs
-   ``window_deadline_decode``（直读 task.latest）；
-2. **时序**：``sequence_decode_violated``（单调判定）vs
-   ``sequence_model_inversions``（逆序对计数）；
-3. **机巢容量三份账**：门禁 ``nest_capacity_gate_loads`` vs 模型
-   ``check_nest_capacity`` vs MCF（``solve_end_nest_assignment`` 的容量可行
-   性，采样按「MCF 输出必可行」对照）；
-4. **采纳判据**：``accept_cost_polish_view``（航程分量门）vs
-   ``accept_f_view``（f + 约束向量不退化，P3 目标判据）。
-
-所有函数只读采样数据、返回分账字典；不改任何判定、不进生产路径
-（实验/测试脚本消费）。
-"""
+职责：比较同一对象在模型/解码/门禁等不同路径下的判定结果（时间窗、时序、机巢容量、
+采纳判据），返回不一致条数。
+边界：只读采样数据，返回分账字典；不改判定、不进生产路径，供实验/测试消费。
+相关：muas/constraints/spec.py（各判据具名视图）、nest_capacity.py。"""
 
 from __future__ import annotations
 

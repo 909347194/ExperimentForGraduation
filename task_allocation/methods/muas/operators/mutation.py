@@ -1,14 +1,10 @@
 # -*- coding: utf-8 -*-
-"""mutation.py — 混合变异策略
+"""mutation.py — 混合变异策略。
 
-职责：
-    在 DMDE 进化过程中，对种群个体执行变异操作。
-    结合动态交叉率和混合差分策略（公式 3-10），在探索
-    (DE/rand/1) 和开发 (DE/best/2) 之间动态平衡。
-
-对应论文：
-    第 3 章 3.4.2 节 —— 混合进化策略的 DMDE 算法。
-"""
+职责：DMDE 进化中对种群执行变异，结合动态交叉率与混合差分策略，在探索（rand/1）与开发
+（best/2）之间动态平衡。
+边界：只做变异，不负责选择、评价与反映射。
+相关：muas/operators/crossover.py、scale_factor.py、solvers/dmde_solver.py。"""
 
 from __future__ import annotations
 

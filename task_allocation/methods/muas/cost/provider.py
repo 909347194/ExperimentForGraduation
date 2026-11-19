@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """provider.py — 节点间代价访问层（pairwise 优先，否则按同向垂直切面现算）。
 
-从 ``problem.py`` 拆出：``CostProvider`` 统一「id→id 代价」与「坐标→坐标
-物理航程」两种访问，``build_cost_provider`` 由实体列表装配。DEM 三维航程
-（``distance_fn``）由滚动层从代价估算器生成后注入；无 DEM 场景回退欧氏。
-"""
+职责：CostProvider 统一 id→id 代价与坐标→坐标物理航程两种访问；build_cost_provider 由
+实体列表装配。DEM 三维航程距离函数由滚动层注入，无 DEM 时回退欧氏。
+边界：只做代价访问，不建矩阵、不改估算器。
+相关：muas/cost/vertical_section.py、muas/cost/cost_matrix.py、muas/problem.py。"""
 
 from __future__ import annotations
 

@@ -1,31 +1,11 @@
 # -*- coding: utf-8 -*-
-"""pipeline.py — 动态任务选择流水线。
+"""pipeline.py — 动态任务选择流水线（第一阶段入口）。
 
-顺序：基础优先级 → 能力上界计算 cap(t) → 候选预筛选（与 cap 解耦）→ [事件驱动 / 防饥饿强制纳入]
-      → 初步可行性过滤 → 边际收益选择（n_sel 卡 cap）→ 候选集检查 → 淘汰原因诊断
-
-规模决策原则（候选/选择**解耦**，论文 3.3 修订）：
-
-  * 候选池 n_cand（机制3 搜索输入）**该富**：n_cand = ⌈α·K⌉，只受计算预算
-    ``capability.max_candidate_pool`` 与任务总数 N 约束；**cap(t) 既不收紧也不
-    扩张**。富池缓解排序误差、给边际增益发现协同留空间；机队越紧张、cap(t) 越小，
-    相对富余越大（纠正旧版"紧张时 n_cand 塌成 cap"的倒挂）。cap 对候选的唯一
-    耦合是可行性下限 n_cand ≥ n_sel（见 pipeline 实现）。
-  * 选择数 n_sel（真实承诺）**该紧**：n_sel = 合成(⌈max_ratio·K⌉, cap(t))，
-    合成方式由 :mod:`.capability` 的 ``mode`` 决定、且**只作用于 n_sel**：
-        intersect（默认）：min{名额, cap(t)} —— 能力只能收紧，绝不超派；
-        primary：以 cap(t) 为主定规模、名额降为兜底（防 c̃ 过小失控）。
-    这里才是能力约束真正该卡住的地方。
-
-符号口径（全文统一）：**K** = 可用 UAV 数，**N** = 任务数，
-**n_cand** = 候选任务数，**n_sel** = 选择任务数，**cap(t)** = 能力承载数。
-名额定义：n_cand = ⌈α·K⌉（能力无关）；n_sel = ⌈max_ratio·K⌉（或 ``max_selected``）。
-cap(t) 已是吞吐上界（⌊Σ remaining_range / 单任务中位代价⌋，见 :mod:`.capability`），
-**仅约束 n_sel**；``capability.fallback_when_disabled=True`` 时即便关闭能力模块
-也按此上界收敛（候选规模上界）。
-注意：事件驱动（``forced_task_ids``）与防饥饿（:class:`AntiStarvationConfig`）的
-强制纳入都会**绕过**上述规模上界追加候选，并在终刀获强优先（防饥饿强制，保证不停饿）。
-"""
+职责：串联优先级 → 能力上界 → 候选预筛 → 强制纳入 → 可行性过滤 → 边际收益选择 →
+候选集检查，输出本周期候选任务集。候选池求富、选择数求紧，两者解耦。
+边界：只产出选择结果，不做任务到 UAV 的分配。
+相关：selection/priority.py、capability.py、feasibility.py、marginal_gain.py；
+入口由 rolling/horizon.py 调用。"""
 
 from __future__ import annotations
 

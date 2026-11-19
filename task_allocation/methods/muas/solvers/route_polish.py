@@ -1,25 +1,10 @@
 # -*- coding: utf-8 -*-
-"""route_polish.py — 交付解成本 polish 算子组（``RoutePolishMixin``）。
+"""route_polish.py — 交付解的成本优化算子组（RoutePolishMixin）。
 
-自 ``muas_stage.py`` 拆出。三组算子 + 两个编排入口：
-
-- :func:`_polish_routes_monotone`  覆盖优先口径的单调成本 polish（relocate/调序）
-- :func:`_cost_polish_routes`      组内 2-opt / Or-opt（顺序维度）
-- :func:`_cost_polish_relocate`    跨机单任务改派（归属维度）
-- :func:`post_polish`              coverage_first 口径的终态后处理编排
-- :func:`post_cost_polish`         生产口径的交付后成本 polish 编排
-
-接受纪律（四道门，各算子同构）：航程门（不超剩余航程）、迟到门
-（不制造新违约、不加深旧违约）、执行集门（覆盖只增不减）、
-成本门（严格下降 > eps）。全程无随机，同输入逐位可复现。
-
-时序交叉：``sequence_group`` 激活时另加两道保守门——
-顺序维度算子加**时序门**（候选同链逆序对不得多于基线，杜绝调序破坏
-``sequence_order`` 的硬违约）；跨机改派对**链成员整体禁迁**
-（``blocked_seq`` 计数）——跨机顺序比对口径尚未实现（constraints 只判
-同航次内），拆链会把顺序语义送进无人判的盲区。``post_cost_polish``
-下游链与 ``build_solution`` 终态同段对齐（``_repair_sequence`` + 逆序兜底）。
-"""
+职责：对已装配解做成本优化，包括单调成本 polish、组内 2-opt/Or-opt 调序、跨机单任务
+改派，并提供覆盖优先与生产两种编排入口；接受需过航程、迟到、执行集、成本四道门。
+边界：只优化成本，不新增任务；顺序组激活时另加时序保护。
+相关：muas/constraints/coop_constraints.py、muas/coverage_gate.py、muas/solvers/evaluator.py。"""
 
 from __future__ import annotations
 

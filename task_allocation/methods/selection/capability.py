@@ -1,70 +1,9 @@
 # -*- coding: utf-8 -*-
-"""capability.py — 机队能力预算与「选择数」的能力驱动上界（论文 3.3）。
+"""capability.py — 机队能力承载数推导。
 
-设计原则（论文修订版）：**候选池与选择数对能力上界 cap(t) 的语义不同，必须解耦**。
-
-- 候选池 n_cand（机制3 的搜索输入）**该富**：只受「计算预算 + 优先级排序质量」
-  约束，cap(t) 既不收紧也不扩张。富一点的池子能缓解排序误差、给边际增益
-  发现协同组合留空间；机队越紧张、cap(t) 越小，越需要更大的相对富余。
-- 选择数 n_sel（真正消耗航程/时间窗的承诺）**该紧**：cap(t) 是其唯一硬卡口，
-  n_sel = min(⌈max_ratio·K⌉, cap(t))（intersect）。这是能力约束真正该卡住的地方。
-
-旧实现把同一个 cap(t) 与同一个 mode 同时作用于 n_cand 与 n_sel：在 intersect 下
-机队紧张时两者一起塌成 cap，候选池失去搜索余量——与「该富」原则相反。本模块现在
-只产出**选择数 n_sel** 的能力上界；n_cand 由 pipeline 直接以 ⌈α·K⌉（受
-``max_candidate_pool`` 计算上限约束）生成，不经此处。
-
-cap(t) 公式不变：
-
-    B(t)  = budget_scale · budget_factor · Σ_{u ∈ U_t^fly} remaining_range(u)
-    c̃     = 粗代价的 quantile 分位数（默认中位数）
-    cap(t) = max(min_cap, ⌊B(t) / c̃⌋)
-
-其中 ``U_t^fly`` 为**可起飞子集**：至多 ``k_op = min(|U_avail|, S_t,
-max_participating)`` 架、按剩余航程降序取前 k_op（见 ``fleet_range_budget``），
-受起降/充电吞吐上限约束、确定无法出动的 UAV 不计入——与论文 3.3 的 B(t)
-口径一致。
-
-选择数 n_sel 与 cap(t) 的合成方式由 ``CapabilityScaleConfig.mode`` 决定（两种）：
-
-  * ``intersect``（默认，紧承诺）：取交集，能力只能**收紧**
-
-        n_sel = min(⌈max_ratio · K⌉, cap(t))
-
-    航程紧张时按 cap(t) 收编（承诺收紧）；航程充裕时仍以机数名额为硬天花板，
-    **绝不超派**，"欠选"问题依旧存在（但候选池不受限，见上）。
-
-  * ``primary``（能力为主，宽松承诺）：cap(t) 直接定规模，名额降为兜底
-
-        n_sel = cap(t)，并按 max_expand_factor · ⌈max_ratio · K⌉ 封顶（未设则不封顶）
-
-    航程紧张时按 cap(t) 收编、航程充裕时允许**超过名额**多选，
-    两种方向的失真同时被修正。``max_expand_factor`` 防止 c̃ 过小时规模失控。
-    （候选池 n_cand 不由此扩展，仅受可行性下限 n_cand ≥ n_sel 抬升。）
-
-合成统一由 :func:`effective_cap` 负责，**仅用于选择数 n_sel**（候选已解耦）。
-两种模式下能力都只在【规模】这一维生效；
-单任务可达性（prefilter）与机群预算硬闸门（postcheck）仍由 feasibility 负责，
-本模块不重复其职责。
-
-成本口径与 ``priority.compute_priorities`` 的 C_i(t) 一致：
-``cost_hint``（滚动层三维代价矩阵到最近可用 UAV 的代价）优先，
-否则最近可用 UAV 的欧氏距离，保证与基础优先级、postcheck 同一语义。
-
-**记账口径与派机约束对齐（被动空闲不计预算）**：``sortie_budget``（起降/
-充电吞吐上限）与 ``max_participating_uavs`` 会把可用机**强行压在地面**，
-其航程是本周期确定用不了的幻影容量，计入 B(t) 会让 cap(t) 对着一个
-不会兑现的容量校准候选规模。故 B(t) 只计**至多 S_t 架**的航程（按剩余
-航程降序取前 k_op，仍是乐观上界——二阶段 cheapest 优先派机实际可能
-更少，偏差由 ``budget_scale`` 吸收）。
-
-两处**故意不计入**：
-
-1. γ 出动经济性停机（``participating_policy="marginal"``）——那是二阶段的
-   主动裁量（"能飞但不值得飞"），属架构设计的自由度，不是记账误差；
-2. SRP 不变式 ``K ≤ N−1`` —— 依赖 N（待定的候选/任务数）有循环性，且任务少时
-   cap 本就不受限，忽略无害。
-"""
+职责：由可出动机群的剩余航程预算与粗代价分位数推导能力上界 cap(t)，并合成选择数 n_sel。
+边界：cap 只约束选择数，不约束候选池规模；单任务可达性与机群预算硬闸门由 feasibility 负责。
+相关：selection/feasibility.py、selection/priority.py、selection/pipeline.py。"""
 
 from __future__ import annotations
 

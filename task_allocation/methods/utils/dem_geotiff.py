@@ -1,23 +1,10 @@
 # -*- coding: utf-8 -*-
-"""dem_geotiff.py — 轻量 GeoTIFF DEM 读取、地理参考与高程查询。
+"""dem_geotiff.py — 轻量 GeoTIFF DEM 读取与高程查询（无 GDAL 依赖）。
 
-针对 ``task_allocation/data/lasa_chengguan/Chengguan_DEM.tif``（城关区 DEM 瓦片）设计，
-对一般的单波段
-GeoTIFF 同样适用。**不依赖 rasterio / GDAL / pyproj**：
-
-    - 栅格解码：PIL（支持 LZW / Deflate / PackBits / 未压缩）
-    - 地理参考：直接读 GeoTIFF 标签
-      （ModelPixelScale + ModelTiepoint + GeoKeyDirectory），
-      得到与 GDAL ``GetGeoTransform`` 一致的仿射参数（PixelIsArea 约定）
-
-能力：
-    1. ``pixel_to_latlon`` / ``latlon_to_pixel``：像素 <-> 经纬度互转
-    2. ``sample_elevation``：经纬度 / 局部平面坐标处双线性高程采样（矢量化）
-    3. ``to_metric_terrain``：把经纬度 DEM 重采样成米制规则网格，
-       直接交给 ``muas.cost.dem_terrain.DEMTerrain`` 用于垂直切面代价估算
-
-坐标约定见 ``utils/coordinates.py``：x 东向、y 北向、z 垂向，单位米。
-"""
+职责：解析 GeoTIFF 标签得到仿射变换；像素与经纬度互转；双线性高程采样；把经纬度 DEM
+重采样为米制网格。
+边界：只做栅格读取与采样，不计算航程；栅格解码用 PIL，坐标约定见 utils/coordinates.py。
+相关：utils/coordinates.py、muas/cost/dem_terrain.py（消费米制地形网格）。"""
 
 from __future__ import annotations
 

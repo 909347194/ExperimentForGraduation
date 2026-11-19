@@ -1,31 +1,10 @@
 # -*- coding: utf-8 -*-
-"""horizon.py — 滚动时域主循环：单周期编排与多周期推进（论文 §6）。
+"""horizon.py — 滚动时域主循环：单周期编排与多周期推进。
 
-一个滚动周期的完整链路::
-
-    T_t = remain ∪ new ∪ release
-      → 当前可用 UAV 确定  U_t^avail / K_avail(t)
-      → 事件检测（UAV 故障 / 突发高优先级任务 / 机巢不可用）
-      → 若命中事件：事件驱动「本期重规划」
-          - 紧急 / 故障释放任务强制纳入第一阶段选择（绕过 Top-αK 预筛）
-          - 不可用机巢从终点候选集剔除（强制异巢终止）
-      → 第一阶段 动态任务选择                → T_t^sel
-      → 第二阶段 选择性多机巢 MUAS          → T_t^exec, U_t^exec
-      → 回写状态（任务池 + 机队）
-      → 执行推进与完成反馈（含执行中故障注入）
-      → T_{t+1}
-
-本层是**唯一的串联点**：``task_pool`` 与 ``uav_state`` 两个状态机互不 import，
-故障 → 释放、解 → 绑定 这些跨模块的状态流转全部在此显式完成。
-
-论文的两个包含关系在本层保证：
-
-    T_t^exec ⊆ T_t^sel ⊆ T_t
-    U_t^exec ⊆ U_t^avail
-
-未纳入本周期执行计划的任务不会被删除，而是保留在任务池中，
-在下一周期以 ``REMAIN`` 身份重新参与分配。
-"""
+职责：串联任务池与 UAV 机队两个状态机，完成可用机确定、事件检测、两阶段求解、状态回写
+与执行推进；保证 T_t^exec ⊆ T_t^sel ⊆ T_t、U_t^exec ⊆ U_t^avail。未选中任务留池下周期重试。
+边界：本层是两个状态机唯一的串联点；task_pool 与 uav_state 互不 import。
+相关：task_pool.py、uav_state.py、event_trigger.py、sequence_group.py、selection/、muas/。"""
 
 from __future__ import annotations
 

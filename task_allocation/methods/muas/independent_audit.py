@@ -1,36 +1,11 @@
 # -*- coding: utf-8 -*-
-"""independent_audit.py — 独立事后评价器（定稿 §4.3 边界 C「独立交付验收」）。
+"""independent_audit.py — 独立事后评价器（交付验收）。
 
-**独立性口径**：本模块不经过搜索链、不读任何缓存。具体地——
-
-- 不接触 ``MUASAssignmentEvaluator._cache``、``cost_history``、
-  ``best_fitness``、``polish`` / ``memetic`` 档案等搜索期状态；
-- 从交付解 ``S_final`` 的 **tours 几何**重建一个全新的
-  :class:`AllocationSolution`，**丢弃全部派生 meta**（``feasibility`` /
-  ``fitness_weights`` / ``gate_stats`` / 台账标记），只保留
-  ``candidate_task_ids`` 与 tours 的几何字段；
-- 用 :class:`SelectiveMUASProblem` 的公开评价入口重新
-  ``evaluate`` / ``scalar_fitness`` / ``hard_stats`` / ``soft_violation`` /
-  ``path_cost``，得到一套完全独立于搜索链的数字。
-
-§4.3 五条门槛中，本模块实现前三条（可代码断言）：
-
-1. 完成率 100% + ``arrived = done + unreachable + remain`` 恒等式成立 +
-   ``eliminating``（非不可达）= 0；
-2. ``gate_mode()`` 恒 True、``coverage_audit``（旧名
-   ``lexicographic_coverage``）开；``coverage_gate`` 因与 §3.3「门禁只作
-   终态校验与补漏」存在张力且生产默认 False，设为**可选严格档**
-   （``require_coverage_gate=True`` 才强制），不静默改默认；
-3. 重建重评数字与搜索链自报（``MUASStageResult.diagnostics``）**逐位一致**。
-
-第 4 条（全量 pytest + exp01 审计 25/25）与第 5 条（与 method-phase1
-同 seed 配对 t 检验）属测试/实验层，由调用方执行，不在本模块内。
-
-⚠️ 跨周期口径：完成率的分母 ``arrived`` 与 ``unreachable`` 名单来自实验层
-的任务生命周期记录（不是单周期解能推出的）。调用方应显式传入
-``arrived_ids`` / ``unreachable_ids``；未传时退化为**单周期口径**
-（``arrived = candidate_task_ids``、不可达为空），并在报告中标注。
-"""
+职责：从交付解的 tours 几何重建一个全新 AllocationSolution，丢弃搜索期缓存与派生字段，
+用问题公开入口重新评价，得到独立于搜索链的数字。
+边界：完成率分母（arrived/unreachable）需调用方显式传入，未传时退化为单周期口径；
+不做实验对比，只提供可代码断言的验收。
+相关：muas/problem.py（评价入口）、solvers/muas_stage.py（搜索链自报结果作对照）。"""
 
 from __future__ import annotations
 

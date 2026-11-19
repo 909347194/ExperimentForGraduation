@@ -1,12 +1,10 @@
 # -*- coding: utf-8 -*-
-"""config.py — MUAS 问题配置：约束开关 + 模型开关与评价权重。
+"""config.py — MUAS 问题配置数据类（约束开关、模型开关与评价权重）。
 
-从 ``problem.py`` 拆出（配置层）：本模块只有数据类，不依赖 muas
-包内其他模块；符号仍从 ``problem.py`` re-export，既有导入路径不变。
-
-    ConstraintConfig    每类约束的独立开关与惩罚权重（论文 §5(4)）
-    MUASProblemConfig   选择性 / 空闲 / 字典序 / 覆盖门禁等模型开关与评价权重
-"""
+职责：ConstraintConfig（各约束开关与惩罚权重）与 MUASProblemConfig（选择性/空闲/字典序/
+覆盖门禁等开关与权重）。
+边界：只有数据类，不依赖 muas 包内其他模块，不含算法逻辑；符号由 problem.py re-export。
+相关：muas/problem.py、muas/constraints/。"""
 
 from __future__ import annotations
 

@@ -1,12 +1,10 @@
 # -*- coding: utf-8 -*-
 """stage_runner.py — 第二阶段主入口与枚举参照。
 
-自 ``muas_stage.py`` 拆出：
-
-- :class:`MUASStageResult`                     第二阶段输出（含诊断量）
-- :func:`enumerate_reference_participating`    小 N 近精确枚举参照（exp04 B3）
-- :func:`run_selective_muas`                   主入口：选机 → DMDE → 交付后择优
-"""
+职责：MUASStageResult（阶段输出与诊断）、run_selective_muas（选机 → DMDE → 交付后择优）
+与小 N 近精确枚举参照。
+边界：只做编排执行与参照对照，不含搜索算子实现。
+相关：muas/solvers/muas_stage.py、dmde_solver.py、participating.py。"""
 
 from __future__ import annotations
 

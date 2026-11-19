@@ -1,22 +1,10 @@
 # -*- coding: utf-8 -*-
-"""encoder.py — 统一三元组基因生成器（规则 3.1 - 3.3）
+"""encoder.py — 离散三元组基因编码。
 
-职责：
-    将 UAV-Target 分配关系编码为三元组基因序列，是 DMDE
-    离散-连续混合求解流程的起点。
-
-对应论文：
-    公式 (3-3): 矩阵关系三元组 g_s = (U_i, T_j, C(i,j))
-    公式 (3-4): 巡游关系三元组 g'_s = (T_j, T_{j+1}, Tc(j,j+1))
-    规则 3.1 (K=N):  U 和 T 均不重复，一一对应。
-    规则 3.2 (K>N):  U 不重复，T 可重复，每个 T 至少出现一次。
-    规则 3.3 (K<N):  U 可重复（巡游），T 不重复，每个 U 至少出现一次。
-
-数据结构：
-    一个个体（Individual）是一组三元组基因的列表。
-    每个基因 (Gene) = (uav_id, target_id, cost_value)。
-    对于 K<N 的巡游关系，额外存储 target-to-target 的代价。
-"""
+职责：把 UAV-目标分配关系编码为三元组基因序列（uav_id, target_id, cost_value），是 DMDE
+离散-连续混合流程的起点；按机数与任务数关系采用一一对应/UAV 不重复/巡游三类规则。
+边界：只做编码，不含映射与评价。
+相关：muas/representation/mapper.py、inverse_mapper.py、muas/operators/、solvers/dmde_solver.py。"""
 
 from __future__ import annotations
 

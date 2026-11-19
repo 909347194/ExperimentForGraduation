@@ -1,66 +1,12 @@
 # -*- coding: utf-8 -*-
-"""problem.py — 选择性多机巢 MUAS 模型（论文 3.3）。
+"""problem.py — 选择性多机巢 MUAS 问题模型与评价核心。
 
-职责（回答）：
-    任务选择、无人机分配、访问顺序、终点机巢之间是什么关系？目标是什么？
-
-决策变量：
-    y_j     任务 j 本周期是否执行
-    x_uj    任务 j 是否分配给 UAV u
-    π_u     UAV u 的访问顺序
-    z_ub    UAV u 的终点机巢
-
-关系：
-    sum_u x_uj = y_j
-    π_u / z_ub 编码在 UAVTour 中
-    允许 y_j=0（选择性）、n_u=0（空闲 UAV）
-
-目标：
-    F1 = Σ_j R_j·y_j  （执行任务奖励和；实现为 f1_reward——门禁口径下为
-                       纯完成计数、只作事后指标，不进搜索适应度，见
-                       :meth:`gate_mode` 与 :meth:`scalar_fitness`）
-    F2 = C(x, π, z, y)   （路径代价 + 惩罚）
-
-适应度（DMDE 最小化标量）—— **覆盖门禁口径为唯一主口径（口径约定）**：
-
-        f(s) = W_hard·n_hard + w_exc·excess_m          # T0 物理违约（硬）
-              + W_skip·n_voluntary_skip                # T0.5 覆盖门禁
-              + w_late·L_tot                           # T2 迟到（软，秒级）
-              + λ·path                                 # T3 航程（含返巢）
-
-  固定表述：**搜索用 f 不含 −m·F1；F1 只作事后指标**。
-  完整推导、与非门禁 big-M 四层口径的对比与移除理由见
-  ``docs/objective_caliber_two_approaches_archive_2026-10-24.md``。
-
-  - **T0**：``W_hard = κ·m·R_pool``（默认自动推导）使任何一次物理违约压倒
-    任意交付收益——幽灵 F1（纸面可行、执行弹回）永不入选；
-    ``excess_m``（超限米数）仅在不可行解之间做层内排序。
-  - **T0.5**：``W_skip = κ·m·R_pool``（同 T0 推导）使「能装却没装」
-    （voluntary_skip）与物理违约等价的非法解；门禁修复模式下 n_skip 恒 0
-    （构造性归零），本层不咬合，仅 audit 模式/防御路径生效。覆盖由门禁
-    （构造修复 + W_skip 层）承担，故 F1 对解无区分度、不进 f。
-  - **T2**：迟到秒数软计价（``w_violation``，0.01/s）——迟到可接受，
-    只与路径同台竞争；迟到与任务数的权衡由门禁（完成是约束）管。
-  - **T3**：``λ·path``（完成等价时最小化航程，含返巢代价）。
-
-注：本模型**不设**最坏机航迹时间 / 负载均衡项（即 Ming et al. 2017 Eq.1 的
-``a·max(Σt)`` 瓶颈机项）。在「机巢按覆盖选址 + 滚动多巢作业」设定下，单周期最小化
-最坏机时间对总目标（覆盖完成 + 成本）贡献有限，且均衡 ≠ 防漂移。防漂移是问题层
-设计关注点，由终点巢选择约束、返航代价（λ·path 已含）与跨周期部署行为（滚动时域
-reposition / 轮转巢）承担，而非目标项。m 仍落 fitness_weights 快照，仅供
-W_hard/W_skip 推导与事后分析，不直接进 f。
-
-模块地图（包内分工；各模块符号仍可从本模块导入，既有路径不变）：
-    config.py            约束开关与评价权重（ConstraintConfig / MUASProblemConfig）
-    cost/provider.py     节点间代价访问（CostProvider / build_cost_provider）
-    feasibility.py       可行性校验与惩罚聚合编排（check_solution_feasibility）
-    fitness_weights.py   层权重推导与分层统计（FitnessWeightsMixin）
-    problem.py（本模块）  问题实例：实体 / 解构造 / 目标分量 / 评价与标量适应度
-    constraints/         单条约束判据与违约聚合（ConstraintReport）
-    coverage_gate.py     覆盖门禁审计与构造性修复
-
-本模块不实现 DMDE 搜索；求解器只负责搜索，本模块负责问题定义与解评价。
-"""
+职责：定义决策变量（任务是否执行、任务分配、访问顺序、终点机巢）、约束与目标，构造解并
+计算标量适应度，供 DMDE 最小化。
+边界：不做搜索（由 solvers/dmde_solver.py 负责）；约束判据在 constraints/，覆盖门禁在
+coverage_gate.py。
+相关：config.py、constraints/、cost/provider.py、coverage_gate.py、feasibility.py、
+fitness_weights.py、solvers/dmde_solver.py。"""
 
 from __future__ import annotations
 

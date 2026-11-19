@@ -1,12 +1,10 @@
 # -*- coding: utf-8 -*-
-"""tour_cost.py — 航次代价 / ETA / 时间窗 / 迟到键原语（``TourCostMixin``）。
+"""tour_cost.py — 航次代价/ETA/时间窗/迟到键原语（TourCostMixin）。
 
-自 ``muas_stage.py`` 拆出。解码修复、构造式解码、成本 polish
-三组算子**共用**这些原语；口径的唯一来源（ETA = DEM 三维航程 / speed，
-早到等待 ``earliest``、离开加服务时间；航程 = 起点→任务链→终点巢），
-任何算子不得自行复制一份实现——历史上「判定与实际两套长度」的缺陷
-（统一口径）正是复制实现造成的。
-"""
+职责：为解码修复、构造式解码、成本 polish 三组算子提供共用的航次代价与 ETA 原语，是
+口径的唯一来源（航程 = 起点→任务链→终点巢，ETA = 三维航程/速度，早到等待）。
+边界：只提供原语，各算子不得自行复制实现。
+相关：muas/solvers/decode_repair.py、decode_constructive.py、route_polish.py。"""
 
 from __future__ import annotations
 

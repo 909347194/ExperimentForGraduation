@@ -1,23 +1,11 @@
 # -*- coding: utf-8 -*-
-"""evaluator.py — ``MUASAssignmentEvaluator``：assignment → 解 → 标量适应度。
+"""evaluator.py — 分配解评价器（MUASAssignmentEvaluator，状态与装配核心）。
 
-自 ``muas_stage.py`` 拆出。本模块是评价器的**状态与装配核心**：
-
-- :meth:`__init__`              实体索引 / 有效收益 / 评估缓存
-- :meth:`_assemble`             routes + end_nests → ``AllocationSolution``
-- :meth:`evaluate`              DMDE 评估接口（缓存 → build_solution → problem）
-- :meth:`lamarckian_reencode`   修复解回写基因（长度不变式；两级：M1 起始 /
-                                M2-1 段内巡游序）
-- :func:`writeback_stats`       回写诊断计数（- 何以知道 M2-1 是否真的触发）
-
-解码 / 修复 / 成本 polish 算子组以 Mixin 拆在同包兄弟模块，共享
-``tour_cost`` 原语：
-
-- :mod:`.tour_cost`            航次代价 / ETA / 时间窗原语
-- :mod:`.decode_repair`        repair_chain 解码与修复算子组
-- :mod:`.decode_constructive`  构造式解码（exp04 B1 对照臂）
-- :mod:`.route_polish`         交付解成本 polish 算子组
-"""
+职责：维护实体索引与评价缓存，把 routes 与终点机巢装配成 AllocationSolution，提供 DMDE
+评价接口，并把修复解回写基因（Lamarckian）。
+边界：只做装配、评价与回写；解码/修复/polish 算子组以 Mixin 拆在兄弟模块，共享 tour_cost。
+相关：muas/solvers/tour_cost.py、decode_repair.py、decode_constructive.py、route_polish.py、
+ablation_prune.py、muas/problem.py。"""
 
 from __future__ import annotations
 

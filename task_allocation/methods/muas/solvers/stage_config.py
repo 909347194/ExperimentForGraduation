@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
-"""stage_config.py — 第二阶段编排参数（``MUASStageConfig``）。
+"""stage_config.py — 第二阶段编排参数（MUASStageConfig）。
 
-自 ``muas_stage.py`` 拆出：本模块只定义**参数**（各开关的
-设计理由、消融出处、默认口径都写在字段注释里），不含算法逻辑；
-``__post_init__`` 只做取值合法性校验。模块常量 ``POLICY_*`` 是
-``participating_policy`` 的取值域。
-"""
+职责：定义各开关参数与设计理由、默认值；__post_init__ 做取值校验。POLICY_* 常量是
+participating_policy 的取值域。
+边界：只定义参数，不含算法逻辑。
+相关：muas/solvers/muas_stage.py、participating.py、stage_runner.py。"""
 
 from __future__ import annotations
 

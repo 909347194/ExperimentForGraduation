@@ -1,15 +1,10 @@
 # -*- coding: utf-8 -*-
-"""priority.py — 基础优先级评价与 Top-α 预筛选（论文 3.2–3.3）。
+"""priority.py — 基础优先级评价与 Top-α 候选预筛。
 
-候选规模的完整规则（论文 3.3 修订，与 cap(t) 解耦）：
-
-    n_cand = ⌈α · K⌉
-
-即"机数名额"仅由机数决定；候选池**不再与能力上界 cap(t) 取交**（cap 既不收紧
-也不扩张），富余完全由计算预算（``capability.max_candidate_pool``）与任务总数约束。
-``hard_cap`` 在生产流水线中已不再传入（恒为 None）；保留该形参仅作独立调用兼容，
-非 None 时仍按 min(⌈αK⌉, cap) 收紧（仅供消融 / 单测）。
-"""
+职责：按紧急度、等待补偿、协同增益算任务基础优先级；按 ⌈α·K⌉ 预筛候选（规模只由机数
+决定，不与能力上界取交）。
+边界：只算优先级与候选名额，不检查可行性、不做能力裁剪。
+相关：selection/capability.py（能力上界与代价口径）、selection/pipeline.py（编排调用）。"""
 
 from __future__ import annotations
 

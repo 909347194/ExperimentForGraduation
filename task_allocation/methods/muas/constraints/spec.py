@@ -1,34 +1,10 @@
 # -*- coding: utf-8 -*-
-"""spec.py — ConstraintSpec：约束唯一判据注册表（第二阶段 P0 契约层）。
+"""spec.py — 约束判据注册表。
 
-来源：`task_allocation/docs/stage2_final_scheme_2026-11-06.md` §6 要素 6 /
-§8 P0「ConstraintSpec 唯一 judge() 接口；四处另写判据统一到该接口但**保持
-现有语义不变**，语义漂移先记录进台账、修复后移 P1/P2」。
-
-本模块只做三件事，**零行为变化**（bit-exact）：
-
-1. **注册表**：每条约束一个 :class:`ConstraintSpec`（唯一 id / 对象层级 /
-   硬软 / 单位 / 归属层 / 处置 / ``judge()``）。``judge()`` 一律**委托**既有
-   实现（``single_constraints`` / ``coop_constraints`` / ``nest_capacity``），
-   不重写任何判定；
-2. **另写判据收口**（plan §4.5 的四处漂移点）：把散落在
-   ``decode_repair._best_order``（直读 ``task.latest``）、``decode_repair.
-   _seq_violation``（单调下降判定）、``coverage_gate``（自写容量/航程账）与
-   ``stage_runner``（四个采纳判据表达式）的「第二套判据」以**具名视图
-   （view）**收口到本模块——各视图保留调用点的现语义原样（包一层，不改判），
-   统一入口便于 P1/P2 消除漂移时只动一处；
-3. **漂移测量辅助**：提供各视图对的比较函数（:mod:`criteria_drift` 消费），
-   使「同一对象两套判据的不一致条数」可量化。
-
-判据归属矩阵与漂移消解计划见定稿 §4.5 / §8；本模块不决定语义，
-只让语义**可寻址**。
-
-视图命名约定：
-- ``*_model``：问题模型口径（``problem.check_feasible`` 一链，唯一产出口径）；
-- ``*_decode``：解码/修复链内的另写判据（现状语义，P1/P2 收敛到 model）；
-- ``*_gate``：覆盖门禁自写账（``coverage_gate``，现状语义）；
-- ``accept_*_view``：采纳判据（``stage_runner`` 各后处理点，现状语义）。
-"""
+职责：为每条约束提供 ConstraintSpec（id/层级/硬软/单位/judge），judge 一律委托既有判定
+实现，不重写判据；并把散落各处的另一套判据以具名视图收口，便于统一测量一致性。
+边界：只做注册与寻址，不决定语义、不参与生产判定。
+相关：single_constraints.py、coop_constraints.py、nest_capacity.py、criteria_drift.py。"""
 
 from __future__ import annotations
 

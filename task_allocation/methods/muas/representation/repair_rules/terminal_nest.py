@@ -1,25 +1,10 @@
 # -*- coding: utf-8 -*-
-"""terminal_nest.py — SRP 航次分段结构支持（方案 A 口径）
+"""terminal_nest.py — 巡游航次分段结构支持。
 
-master 分支 = 方案 A（分层求解）：
-
-    DMDE 编码只表达「UAV 归属 + 任务访问顺序」；终点机巢 **不进编码**，由
-    解码后内层最小费用流（``constraints.nest_capacity.solve_end_nest_assignment``）
-    在末态容量约束下精确求解，返航代价进入完整适应度评价（F2），间接作用于
-    进化方向。
-
-    因此本模块不产生「终止基因」，基因序列只有两类：
-
-        ``uav_id >= 0``   起始基因（UAV → 任务）
-        ``uav_id == -1``  巡游基因（任务 → 任务）
-
-    SRP 不变式：每机一段、每段非空、每任务恰出现一次；基因总数恒为 ``N``。
-
-「终点机巢进编码」的联合变体（终止基因 ``uav_id == -2``，``target_id`` 为
-机巢下标，其代价随 ``cost_vector`` 末尾 K 个分量参与差分变异）已从 master
-分支移除，在 pro 分支实现。恢复时以 git 历史中本模块含 ``TERMINAL_UAV_ID`` /
-``repair_terminal_genes`` / ``normalize_srp_segments(n_nests=...)`` 的版本为准。
-"""
+职责：维护"每机一段、每段非空、每任务恰出现一次"的巡游基因结构，提供航次分段、代价
+重算与规范化。终点机巢不进编码，由解码后内层最小费用流精确求解。
+边界：不产生终止基因，不分配终点机巢。
+相关：muas/representation/encoder.py、inverse_mapper.py、muas/constraints/nest_capacity.py。"""
 
 from __future__ import annotations
 

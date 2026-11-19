@@ -1,20 +1,10 @@
 # -*- coding: utf-8 -*-
-"""cost_matrix.py — 构建任务/UAV/机巢节点间三维近似代价矩阵。
+"""cost_matrix.py — 构建任务/UAV/机巢节点间的三维近似代价矩阵。
 
-对接 problem.CostProvider：pairwise[(id_a,id_b)] = cost
-UAV 起点虚拟键：-(1+uav_id)；机巢键：nest_offset + nest_id
-
-两种建表口径：
-
-- **eager（默认）**：对传入的 tasks 全量建 O(n²) 表，适合第二阶段
-  （候选集已小）与测试基线；
-- **惰性源**（``pairwise_source=``）：pairwise 值从
-  :class:`~task_allocation.methods.muas.cost.lazy_pairwise.LazyPairwiseCost`
-  按需读/算并共享缓存，只对**传入的 tasks**（候选子集）建 4 个矩阵。
-  滚动层据此把全量 O(n²) 建矩阵从第一阶段之前挪到第一阶段之后、
-  且只覆盖候选集，端到端耗时随任务规模的增长由 O(n²) 降为 O(n)。
-  值与 eager 全量建表逐位一致（同估算器/同坐标/同方向）。
-"""
+职责：对接 CostProvider，把 pairwise 代价装配成 uav_target / task_task / task_nest /
+uav_nest 四个矩阵；支持全量建表与以 LazyPairwiseCost 为惰性源只对候选子集建表。
+边界：只装配矩阵，不定义代价口径（由估算器提供）。
+相关：muas/cost/provider.py、lazy_pairwise.py、vertical_section.py、nest_keys.py。"""
 
 from __future__ import annotations
 

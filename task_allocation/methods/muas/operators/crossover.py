@@ -1,21 +1,10 @@
 # -*- coding: utf-8 -*-
-"""crossover.py — 动态交叉率 CR 与混合差分策略（公式 3-9 / 3-10）
+"""crossover.py — 动态交叉率 CR 与混合差分策略。
 
-对应论文：
-    公式 (3-9): 动态交叉率
-        CR(x) = 1 - (log(x) / log(S))^ζ
-        x = 1,2,...,S (当前代数), S 为总代数, ζ 为曲率指数。
-
-    公式 (3-10): 混合差分策略产生新个体
-        C'(i)_j(t) = C(r1)_j(t) + F·(C(r2)_j(t) - C(r3)_j(t)),
-            if CR(t) >= rand[0,1]      (DE/rand/1 探索)
-        C'(i)_j(t) = C(best)_j(t) + F·(C(r1)_j(t) + C(r2)_j(t)
-                                         - C(r3)_j(t) - C(r4)_j(t)),
-            if CR(t) < rand[0,1]       (DE/best/2 开发)
-
-    当 CR 较大时偏向探索（rand/1），较小时偏向开发（best/2），
-    实现搜索过程中探索与开发的动态平衡。
-"""
+职责：按进化进度计算动态交叉率，并提供 rand/1（探索）与 best/2（开发）等差分策略生成
+临时代价向量；CR 大偏探索、小偏开发。
+边界：只产连续代价值，不直接改个体。
+相关：muas/operators/scale_factor.py、mutation.py、solvers/dmde_solver.py。"""
 
 from __future__ import annotations
 

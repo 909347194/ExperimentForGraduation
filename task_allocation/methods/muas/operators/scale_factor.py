@@ -1,21 +1,10 @@
 # -*- coding: utf-8 -*-
-"""scale_factor.py — 动态缩放因子 F（公式 3-11）
+"""scale_factor.py — 动态缩放因子 F。
 
-对应论文（Zhao Ming 等, 2017, 离散映射差分进化 DMDE）公式 (3-11)：
-    F(t) = CR(t),          if rand[0,1] <= CR(t)
-    F(t) = (1 - CR(t))/2,   if rand[0,1] >  CR(t)
-
-说明：
-    F 与动态交叉率 CR 联动，使差分比例因子在整个进化过程中动态变化：
-    前期 CR 高（探索为主）→ F ≈ CR，步长接近 1；
-    后期 CR 低（开发为主）→ F 落到 (1-CR)/2，步长进一步收窄以细化搜索。
-    因此 F 的取值范围为 [0, 1]。
-
-    判据严格按原文写作 `rand <= CR`（scalar 与 batch 两个入口保持一致）。
-
-    注：GMR（世代灭绝，公式 3-12）在实现上额外引入了阈值 delta，
-        使灭绝主要发生在搜索后期，属本文的实现取舍，不改变本文件的 F 定义。
-"""
+职责：按当前交叉率 CR 计算差分缩放因子（标量 batch 两个入口），使步长随进化由大变小，
+取值范围 [0,1]。
+边界：只算 F，不参与变异或选择。
+相关：muas/operators/crossover.py（提供 CR）、mutation.py（使用 F）。"""
 
 from __future__ import annotations
 

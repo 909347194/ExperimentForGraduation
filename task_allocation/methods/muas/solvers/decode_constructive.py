@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
-"""decode_constructive.py — 构造式解码（``ConstructiveDecodeMixin``，exp04 B1）。
+"""decode_constructive.py — 构造式解码（ConstructiveDecodeMixin）。
 
-自 ``muas_stage.py`` 拆出。``decode_mode="constructive"`` 对照臂：
-把「救援」前置为主解码，逐任务做可行性内联插入；与 repair_chain 共用
-``tour_cost`` 原语与 ``_choose_end_nests`` / ``_reorder_for_deadlines`` /
-``_assemble``，口径一致。三条红线见 ``MUASStageConfig.decode_mode`` 注释。
-"""
+职责：decode_mode="constructive" 的对照解码：把救援前置为主解码，逐任务做可行性内联插入；
+与 repair_chain 共用 tour_cost 原语与终点机巢/时间窗重排/装配逻辑。
+边界：只是一条对照解码路径，不是生产默认口径。
+相关：muas/solvers/tour_cost.py、decode_repair.py、stage_config.py。"""
 
 from __future__ import annotations
 

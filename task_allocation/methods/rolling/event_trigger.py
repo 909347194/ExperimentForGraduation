@@ -1,16 +1,9 @@
 # -*- coding: utf-8 -*-
-"""event_trigger.py — 事件驱动的提前重规划触发（论文 §6）。
+"""event_trigger.py — 事件驱动的提前重规划判定。
 
-滚动周期之外，以下事件触发**局部/提前**重规划，而不是等下一个周期：
-
-    1. UAV 故障           → 其未完成任务释放回任务池（T_t^release）
-    2. 突发高优先级任务   → 立即纳入本周期重新选择
-    3. 机巢不可用         → 在途 / 计划降落的 UAV 改降其它机巢
-
-本模块只做**事件识别与判定**，不直接改动状态：
-真正的状态流转由 :mod:`methods.rolling.horizon` 显式执行，保持
-``task_pool`` 与 ``uav_state`` 两个状态机互不 import。
-"""
+职责：识别 UAV 故障、突发高优先级任务、机巢不可用三类事件，判定是否提前重规划。
+边界：只做事件识别与判定，不改状态；状态流转由 rolling/horizon.py 执行。
+相关：rolling/horizon.py、task_allocation/common/types.py。"""
 
 from __future__ import annotations
 

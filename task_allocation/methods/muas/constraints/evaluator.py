@@ -1,22 +1,10 @@
 # -*- coding: utf-8 -*-
-"""evaluator.py — 约束违背的统一聚合（论文 §5(4) 约束处理）。
+"""evaluator.py — 约束违背的统一聚合。
 
-把 single / coop / nest_capacity 三类约束的违背量聚合成
-:class:`ConstraintReport`，作为 ``problem.check_feasible`` 的唯一产出口径，保证：
-
-    * ``violations``（违规标签列表）与 ``penalty``（标量惩罚）强一致——
-      ``total_violation`` 为全部违背量之和；
-    * ``is_feasible`` 恒等价于 ``n_hard == 0``（物理可行；迟到是软违约，
-      不判不可行，硬/软分桶）；
-    * 各约束分量可独立归因（:meth:`ConstraintReport.violation_breakdown`）；
-    * :meth:`ConstraintReport.as_details` 透出
-      ``{violations, penalty, nest_capacity}``，供滚动层 (horizon) 与指标
-      (metrics) 消费，行为完全向后兼容。
-
-参考借鉴 Experiments-For-Dissertation 的 ``FitnessResult`` 设计
-（``total_violation`` 为唯一判据 + ``violation_breakdown`` 归因），
-但本模块只负责「约束违背聚合」，不重复计算目标函数（目标在 ``problem.py``）。
-"""
+职责：把单机/协同/机巢容量三类违背量聚合成 ConstraintReport，作为 check_feasible 的唯一
+产出口径；is_feasible 等价于无硬违约，迟到为软违约不判不可行，并支持按约束归因。
+边界：只聚合违背量，不计算目标函数（在 problem.py）。
+相关：single_constraints.py、coop_constraints.py、nest_capacity.py；调用方为 problem.py。"""
 
 from __future__ import annotations
 

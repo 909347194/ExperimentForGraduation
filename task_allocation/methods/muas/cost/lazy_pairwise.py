@@ -1,26 +1,11 @@
 # -*- coding: utf-8 -*-
-"""lazy_pairwise.py — 按需计算 + 缓存的 pairwise 代价表（dict 的 drop-in 替代）。
+"""lazy_pairwise.py — 按需计算并缓存的 pairwise 代价表。
 
-背景：
-``build_pairwise_costs`` 曾在**第一阶段之前**对**全量** T_t 建 O(n²)
-三维代价矩阵，而任务选择只触碰其中 O(n·K + k²) 条边（cost_hint 的
-UAV→任务、边际插入的候选任务对）。大规模下全量建矩阵占端到端绝对
-主导，Top-αK 压缩省下的搜索时间被它吃光。
-
-本模块把「先全算再用」改为「用到才算 + 缓存」：
-
-- :class:`LazyPairwiseCost` 实现 ``Mapping[(id_a, id_b) -> float]``，
-  未命中的键按**有序对**调 ``estimator.estimate(pos_a, pos_b, weight)``
-  现算并缓存；值口径与全量 eager 建表**逐位一致**（同估算器、同坐标、
-  同方向、同权重），因此替换后数值行为不变、只是少算绝大多数边。
-- :func:`make_lazy_pairwise` 由 tasks/uavs/nests 装配位置注册表，
-  供 horizon 在一阶段前创建活视图；二阶段再对候选子集建 4 个矩阵
-  （``build_pairwise_costs(..., pairwise_source=lazy)``），两者共享
-  同一张表——一阶段算过的边直接命中，不重复估算。
-
-线程/生命周期：单周期内位置固定，缓存即周期内有效；跨周期复用由
-调用方（RollingHorizon）自持。
-"""
+职责：LazyPairwiseCost 以 Mapping[(id_a,id_b)]->float 提供代价，未命中键按有序对现算并
+缓存；make_lazy_pairwise 由 tasks/uavs/nests 装配位置注册表。
+边界：值口径与全量建表一致；缓存仅在单周期内有效，跨周期复用由调用方自持。
+相关：muas/cost/cost_matrix.py（惰性源）、vertical_section.py（底层估算器）、
+rolling/horizon.py。"""
 
 from __future__ import annotations
 

@@ -1,13 +1,11 @@
 # -*- coding: utf-8 -*-
-"""unique_filter.py — 规则 3.5：独占分配与掩码(Inf)行/列剔除
+"""unique_filter.py — 独占分配与代价矩阵行/列屏蔽规则。
 
-对应论文：
-    规则 3.5a (K=N): 匹配后删除该基因所在行列（用 Inf 掩码）。
-    规则 3.5b (K>N): 匹配后删除该基因对应行（UAV 不重复）。
-    规则 3.5c (K<N): 匹配后删除目标列，用目标行替换 UAV 行。
-
-    实际计算中用 Inf 重置行列，避免删除操作降低效率。
-"""
+职责：按机数与任务数关系，匹配后用 Inf 屏蔽代价矩阵相应行/列，避免资源被重复选中；用置
+Inf 代替删除以保留矩阵形状。
+边界：只做屏蔽，不修补剩余无效值。
+相关：muas/representation/inverse_mapper.py、repair_rules/nearest_match.py、
+repair_rules/invalid_mutator.py。"""
 
 from __future__ import annotations
 

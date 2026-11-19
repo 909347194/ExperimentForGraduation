@@ -1,14 +1,9 @@
 # -*- coding: utf-8 -*-
-"""participating.py — 参与 UAV 选择（``U_t^exec`` 候选，论文 3.4 选机层）。
+"""participating.py — 参与规划的 UAV 选择。
 
-自 ``muas_stage.py`` 拆出：负责「本周期派哪些机进精细规划」。
-
-- :func:`select_participating_uavs` 三层裁剪：SRP 不变式（K ≤ N−1）→
-  运营预算（sortie_budget / max_participating_uavs）→ 出动经济性；
-- 参与策略：cheapest / first / marginal / demand / demand_marginal；
-  选机只做**效率预筛**——「不漏可达任务」由解码端安全网保证
-  （``reflow_rescue_scope="fleet"`` / 构造式原生覆盖）。
-"""
+职责：决定本周期派哪些 UAV 进入精细规划，按巡游不变式、运营预算与出动经济性逐层裁剪。
+边界：只做效率预筛；"不漏可达任务"由解码端安全网保证。
+相关：muas/solvers/stage_config.py、muas/solvers/muas_stage.py。"""
 
 from __future__ import annotations
 

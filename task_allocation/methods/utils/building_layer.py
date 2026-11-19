@@ -1,24 +1,10 @@
 # -*- coding: utf-8 -*-
-"""building_layer.py — 建筑轮廓/高度图层：城市垂直切面代价的障碍包络源。
+"""building_layer.py — 建筑轮廓/高度图层，为垂直切面代价提供障碍包络。
 
-城市环境中三维航程的主导竖向结构是**建筑**而非地形：垂直切面采样的障碍
-包络 = max(地面高程, 建筑屋顶)。本模块把 ``data/<scenario>/building/`` 的
-分类建筑 shapefile（WGS84 经纬度多边形 + ``Height`` 属性）载入局部 ENU
-米制平面（与机巢/任务同一坐标框），提供按点查询的屋顶高度：
-
-    heights_at(xs, ys) -> np.ndarray   不在任何建筑内 = 0，重叠取最高
-
-高度语义（数据口径假设）：
-    ``Height`` = 屋顶相对**当地地面**的高度（米，广州实测 1~225）。
-    绝对屋顶高程 = 地面高程 + Height；无 DEM 时地面按 0 平面。
-
-实现要点：
-    * shapefile 读取用 pyshp（DBF 中文字段需 ``encoding='gbk'``）；
-    * 顶点经 :meth:`LocalFrame.to_enu` **批量**转局部平面（向量化，
-      2 万栋级一次性载入秒级）；
-    * 查询内核 :class:`shapely.STRtree`（R-tree）：一次构建、批量点查询
-      O(log n)，覆盖点取最高屋顶。
-"""
+职责：载入 data/<scenario>/building/ 的建筑 shapefile，转到局部 ENU 平面；按点查询屋顶
+高度（不在建筑内为 0，重叠取最高）。
+边界：只提供高度查询，不做地形采样或路径规划；Height 为屋顶相对当地地面的高度。
+相关：utils/coordinates.py（顶点转 ENU）、muas/cost/vertical_section.py（消费障碍包络）。"""
 
 from __future__ import annotations
 

@@ -1,18 +1,11 @@
 # -*- coding: utf-8 -*-
-"""coop_constraints.py — 任务侧协同约束（论文 §3.3 / §5(4) / §6）。
+"""coop_constraints.py — 任务侧协同约束判定。
 
-任务维度的耦合约束，作用于 AllocationSolution 整体：
-
-    * 时间窗约束：任务须在 [earliest, latest] 内被访问（latest 为绝对时刻，
-      由滚动周期 ``current_time`` 起的到达游标判定）
-    * 时序约束（落地）：同一 ``sequence_group`` 内、``sequence_order``
-      小的任务须先于大的被访问（**当前只判同一航次内**）
-    * 同时到达约束（本模型恒为 0）：一任务一机，无多机协作攻击，故不适用
-
-参考借鉴 Experiments-For-Dissertation 的 coop_constraints 设计
-（seq / window / sync 三类协同约束），并按本 MUAS 模型裁剪成
-「时间窗 + 时序」两类可激活约束。
-"""
+职责：作用于 AllocationSolution 整体，判定时间窗（访问时刻在 [earliest, latest]）与时序
+（同 sequence_group 内按 sequence_order 访问，当前只判同一航次内）。同时到达约束在本模型
+不适用。
+边界：只判同航次内顺序；调度层的组原子性在 rolling/sequence_group.py。
+相关：single_constraints.py、nest_capacity.py；违背量汇入 evaluator.py。"""
 
 from __future__ import annotations
 

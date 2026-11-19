@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
-"""nearest_match.py — 规则 3.4：最近邻空间欧氏距离匹配
+"""nearest_match.py — 最近邻欧氏距离匹配规则。
 
-改进记录：
-    - nearest_match_stochastic: top-k 采样匹配。
-    - nearest_match_adaptive: 温度自适应匹配，
-      top_k 随温度动态调节，早期探索多、后期开发多。
-"""
+职责：按空间最近邻把连续代价匹配到基因型，支持 top-k 采样与温度自适应两种变体。
+边界：只做单步匹配，不处理无效值与独占冲突。
+相关：muas/representation/inverse_mapper.py、repair_rules/unique_filter.py、
+repair_rules/invalid_mutator.py。"""
 
 from __future__ import annotations
 

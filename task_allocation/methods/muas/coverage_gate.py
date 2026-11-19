@@ -1,47 +1,11 @@
 # -*- coding: utf-8 -*-
-"""覆盖门禁（coverage gate）：一阶插入可行性检验 + 终态不动点修复。
+"""coverage_gate.py — 覆盖门禁：插入可行性检验与终态修复。
 
-合法解定义（口径约定，与物理硬约束等价）：
-
-    1. 物理硬约束；
-    2. 覆盖门禁：不存在「任务 j∈S 未进入任何 tour，且存在空闲机可开班
-       或某航次在硬约束下可插入 j」——违者 voluntary_skip，解非法；
-       已选但经一阶检验确无任何可行插入的任务允许不交付，记
-       capacity_shortfall（能力不足，不算 voluntary_skip）。
-
-口径（口径约定：无超期淘汰、迟到软约束、shortfall 非永久丢失）：
-
-- **窗口不否决**（``window_mode="soft"``）：可装判据只剩硬约束
-  （航程 / 巢容量等）；deadline 是软偏好，迟到交付合法（计迟到、
-  计完成），由 ``w_late·L`` 计价（T2）。旧「自身窗硬约束」（D1/D2）
-  已废除——否则 blown-deadline 任务永远判 shortfall、无法交付，
-  「shortfall 非永久丢失」不成立。
-- 航程判据 = :meth:`problem.SelectiveMUASProblem.tour_path_cost` 全航程
-  （起点 → 任务链 → 终点巢）≤ ``uav.remaining_range``——与
-  ``check_range_constraint(margin=1.0)``、``muas_stage._repair_range``
-  同一口径。
-- ETA 口径与 ``muas_stage._arrival_time_of`` 同源：DEM 三维航程 / speed，
-  早到等待 ``earliest``（仅用于 EDD 救援排序，不再判废）。
-- 开班（模式 A）终点巢名额：容量账按「起飞释放原巢名额、落地占终点巢
-  名额」现算（design_nest_state.md §0：容量从 uav.nest_id 现算，
-  不落第二份状态）；``constraints.nest_capacity`` 关闭时不查容量。
-- 开班（模式 A）终点巢名额：容量账按「起飞释放原巢名额、落地占终点巢
-  名额」现算（design_nest_state.md §0：容量从 uav.nest_id 现算，
-  不落第二份状态）；``constraints.nest_capacity`` 关闭时不查容量。
-
-一阶不完备边界（**显式声明，随 gate_stats.window_mode 一同落盘**）：
-只判「单任务插入（模式 B）」与「空闲机开班（模式 A）」两种模式，查不到
-「j 单独装不下、与另一未覆盖任务拼一班才装得下」的组合可行；``n_shortfall``
-记录的是**一阶检验**的失败，不是全局不可行的证明。
-
-用法：
-
-- :func:`audit_coverage` —— 纯检验不改解，返回分账（voluntary_skip /
-  capacity_shortfall），供适应度 W_skip 层与诊断落盘；
-- :func:`repair_coverage` —— 能救必救（插入现有航次 / 空闲机开班），
-  修到不动点；voluntary_skip 由构造归零，残值仅在轮数耗尽时非零
-  （防御信号 = 修复未收敛）。
-"""
+职责：审计"能装却没装"的非法解（audit_coverage），并对可插入任务执行修复到不动点
+（repair_coverage）；迟到按软约束计价，完成是硬约束。
+边界：只判单任务插入与空闲机开班两种模式，不做组合可行的全局证明；不定义目标函数。
+相关：muas/constraints/（物理硬约束）、muas/problem.py（适应度消费分账）、
+solvers/decode_repair.py。"""
 
 from __future__ import annotations
 
