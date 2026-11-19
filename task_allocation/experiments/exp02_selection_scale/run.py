@@ -97,6 +97,83 @@ def _write_json_atomic(path: Path, obj: Any) -> None:
     tmp.replace(path)
 
 
+# ── 逐格增量检查点（2026-11-19 补）──────────────────────────────
+# 背景：原实现 18 格全算完才一次性原子落盘三份 json，中途中断（会话切换、
+# 超时、OOM）会丢掉全部已完成格。notes.md §6.5 列为技术债。这里在不改任何
+# 求解 / 口径逻辑的前提下，增加「每格算完即落盘、重跑可续接」的旁路：
+#   * checkpoint 是独立文件 _checkpoint.json，格式与正式产物解耦；
+#   * 每格 row 算完、打印后立刻原子写入；process 被杀最多丢最后一格；
+#   * 重跑启动时若 checkpoint 的 effective_config_sha256 与本次一致，则
+#     已完成的格直接复用、跳过求解；否则丢弃旧 checkpoint 从头算（防串档）；
+#   * 全部格子齐全后，才按原逻辑原子落盘正式三份 json，并删除 checkpoint。
+# 注意：checkpoint 只影响「中断恢复能力」，不进入 metrics/run_meta 的数值
+# 口径；正式产物字段、命名、分账门禁与出图链完全不变。
+CKPT_NAME = "_checkpoint.json"
+
+
+def _ckpt_key(n_tasks: int, vname: str) -> str:
+    """单格唯一键：(规模, 档位名)。档位名全局唯一（含 full_baseline）。"""
+    return f"{n_tasks}|{vname}"
+
+
+def _expected_ckpt_keys(cfg: dict, variants: list, baseline_scales: set) -> list[str]:
+    """按主循环顺序枚举全部期望格键，用于判断「是否全部算完」。"""
+    keys: list[str] = []
+    for scale in cfg["scales"]:
+        n = int(scale)
+        for v in variants:
+            keys.append(_ckpt_key(n, str(v.get("name", "default"))))
+        if n in baseline_scales:
+            keys.append(_ckpt_key(n, "full_baseline"))
+    return keys
+
+
+def _read_ckpt(path: Path, effective_sha256: str) -> dict[str, dict]:
+    """读取检查点，返回 key -> row 的已完成格。
+
+    配置指纹不符 / 版本不匹配 / 文件损坏时返回空，调用方据此从头求解。
+    复用格清单（skipped_keys）由调用方基于返回的 done_rows 重建，保证与
+    本次实际复用的格严格一致，不依赖文件里可能过期的 skipped_keys 字段。
+    """
+    if not path.exists():
+        return {}
+    try:
+        obj = json.loads(path.read_text(encoding="utf-8"))
+        if obj.get("version") != 1:
+            return {}
+        if obj.get("effective_config_sha256") != effective_sha256:
+            print("[exp02][ckpt] 配置指纹不符，丢弃旧 checkpoint 从头算", flush=True)
+            return {}
+        rows = obj.get("rows") or {}
+        if not isinstance(rows, dict):
+            return {}
+        return rows
+    except (OSError, ValueError, TypeError) as exc:
+        print(f"[exp02][ckpt] checkpoint 读取失败（忽略）：{exc!r}", flush=True)
+        return {}
+
+
+def _write_ckpt(
+    path: Path,
+    effective_sha256: str,
+    rows: dict[str, dict],
+    expected_keys: list[str],
+    skipped_keys: list[str],
+) -> None:
+    """原子写检查点：已完成 rows + 期望键清单 + 配置指纹 + 元数据。"""
+    payload = {
+        "version": 1,
+        "effective_config_sha256": effective_sha256,
+        "updated_utc": datetime.now(timezone.utc).isoformat(),
+        "expected_keys": expected_keys,
+        "completed": len(rows),
+        "total": len(expected_keys),
+        "skipped_keys": skipped_keys,
+        "rows": rows,
+    }
+    _write_json_atomic(path, payload)
+
+
 def load_config(path: Path) -> dict:
     if yaml is None:
         raise RuntimeError("需要 PyYAML")
@@ -206,6 +283,8 @@ def main(argv: list[str] | None = None) -> int:
         help="覆盖 config.yaml 任意键，如 --set solver.max_generations=500；支持多次。")
     ap.add_argument("--dry-run", action="store_true",
                     help="只打印生效配置与派生口径，不建场景、不求解、不落盘")
+    ap.add_argument("--restart", action="store_true",
+                    help="忽略已有 checkpoint 从头重算（缺省：指纹一致则续接）")
     args = ap.parse_args(argv)
 
     cfg_path = EXP_DIR / "config.yaml"
@@ -247,6 +326,20 @@ def main(argv: list[str] | None = None) -> int:
 
     out_dir = EXP_DIR / cfg["experiment"]["output_dir"]
     out_dir.mkdir(parents=True, exist_ok=True)
+
+    ckpt_path = out_dir / CKPT_NAME
+    if args.restart and ckpt_path.exists():
+        ckpt_path.unlink()
+        print("[exp02][ckpt] --restart：已删除旧 checkpoint", flush=True)
+
+    done_rows: dict[str, dict] = {}
+    skipped_keys: list[str] = []
+    if not args.restart:
+        done_rows = _read_ckpt(ckpt_path, effective_sha256)
+        skipped_keys = list(done_rows.keys())
+        if skipped_keys:
+            print(f"[exp02][ckpt] 续接：已 {len(done_rows)} 格完成，"
+                  f"跳过 {len(skipped_keys)} 格（指纹一致）", flush=True)
 
     # 三份 json 在求解全部完成、分账门禁通过后同一时点原子落盘：
     # 旧实现在最开头就写 effective_config.json，场景构建/求解中途失败会
@@ -384,6 +477,9 @@ def main(argv: list[str] | None = None) -> int:
     print(f"[exp02] K={n_uavs}, n_nests={problem_cfg['n_nests']}, "
           f"max_range={max_range/1000:.0f}km, variants={[v['name'] for v in variants]}")
 
+    # expected_keys 需在主循环用到的 variants / baseline_scales 就绪后计算
+    expected_keys = _expected_ckpt_keys(cfg, variants, baseline_scales)
+
     results: list[dict[str, Any]] = []
     for scale in cfg["scales"]:
         n_tasks = int(scale)
@@ -409,6 +505,12 @@ def main(argv: list[str] | None = None) -> int:
 
         for variant in variants:
             vname = str(variant.get("name", "default"))
+            ckey = _ckpt_key(n_tasks, vname)
+            if ckey in done_rows:
+                results.append(done_rows[ckey])
+                print(f"[exp02] N={n_tasks:>4} {vname:<12} | "
+                      f"[ckpt skip] 复用已算结果", flush=True)
+                continue
             row: dict[str, Any] = {
                 "n_tasks": n_tasks,
                 "n_uav_avail": n_uavs,
@@ -497,6 +599,10 @@ def main(argv: list[str] | None = None) -> int:
                 f"sel {n_tasks}->{row['n_selected']} ({row['compression_ratio']}x) | "
                 f"done={n_done} remain={row['accounting']['n_remain']}"
             )
+            # 每格算完即落盘：把新 row 并入 done_rows，再整表原子写。
+            done_rows[ckey] = row
+            _write_ckpt(ckpt_path, effective_sha256, done_rows,
+                        expected_keys, skipped_keys)
 
         # 5) 参照臂：**只差「不调用选择层」**，其余与选择臂逐位同口径。
         #    旧实现用 eager 全量建表（不传 pairwise_source），而选择臂走惰性
@@ -504,6 +610,12 @@ def main(argv: list[str] | None = None) -> int:
         #    现在两臂都先建惰性表、再用 pairwise_source 建矩阵；唯一差别是
         #    选择臂对 sel.selected 子集建表 + 多走 hint/selection 两步。
         if n_tasks in baseline_scales:
+            bkey = _ckpt_key(n_tasks, "full_baseline")
+            if bkey in done_rows:
+                results.append(done_rows[bkey])
+                print(f"[exp02] N={n_tasks:>4} {'full_baseline':<12} | "
+                      f"[ckpt skip] 复用已算结果", flush=True)
+                continue
             lazy_full = make_lazy_pairwise(
                 tasks, uavs, scenario.nests, estimator=estimator,
             )
@@ -564,6 +676,19 @@ def main(argv: list[str] | None = None) -> int:
                 f"build={t_build:>7.0f} muas={t_muas:>8.0f}ms | "
                 f"done={n_done_full} remain={full_row['accounting']['n_remain']}"
             )
+            done_rows[bkey] = full_row
+            _write_ckpt(ckpt_path, effective_sha256, done_rows,
+                        expected_keys, skipped_keys)
+
+    # ── 检查点完整性门禁：18 格必须齐全，否则不落正式产物 ──────────
+    missing = [k for k in expected_keys if k not in done_rows]
+    if missing:
+        raise RuntimeError(
+            f"[exp02][ckpt] 未算完，缺 {len(missing)} 格，拒绝落盘：{missing}"
+        )
+    # results 的顺序必须与 expected_keys 一致（续接复用时 append 顺序可能
+    # 被打乱），按 expected_keys 重排，保证表格 / 图表的行序稳定可复现。
+    results = [done_rows[k] for k in expected_keys]
 
     # ── 汇总表（终端速览：规模 × 档位的压缩 / 任务去向 / 墙钟）────────
     print("\n[exp02] === 汇总：N × 档位（sel=进入二阶段, done=交付, "
@@ -628,6 +753,18 @@ def main(argv: list[str] | None = None) -> int:
         "wall_clock_s": round(time.perf_counter() - t_start, 3),
         "accounting_summary": acc_summary,
         "scope_kind": "single_cycle_scalability_observation",
+        # 增量检查点元数据：标注本次是否续接、复用了哪些格。这些是运行
+        # 过程信息，不进入任何数值口径与出图；wall_clock_s 仍是本次进程的
+        # 墙钟（续接格不重新计时，故此值只覆盖本次实际求解的格）。
+        "resume": {
+            "used_checkpoint": bool(skipped_keys),
+            "n_reused_cells": len(skipped_keys),
+            "reused_cells": skipped_keys,
+            "note": (
+                "本次若续接，reused_cells 的数值来自同配置指纹的上一次运行；"
+                "距离尺子缓存跨格共享，续接只影响计时偏倚，不改数值口径。"
+            ),
+        },
     }
     # 三份产物同一时点原子落盘：任何一份都不会是半截 json，也不会出现
     # 「配置快照已写、数值产物未写」的孤儿档。
@@ -635,6 +772,10 @@ def main(argv: list[str] | None = None) -> int:
     _write_json_atomic(out_dir / "metrics.json", metrics)
     _write_json_atomic(out_dir / "run_meta.json", run_meta)
     print(f"[exp02] wrote {out_dir / 'metrics.json'}")
+    # 正式产物齐全后删除 checkpoint，避免与后续运行混淆；出图失败也不影响。
+    if ckpt_path.exists():
+        ckpt_path.unlink()
+        print("[exp02][ckpt] 正式产物已落盘，删除 checkpoint", flush=True)
 
     # ── 出图（plot/ 只负责绘制，产物落 figures_dir；--no-plots 只跳绘制）──
     if not args.no_plots:
