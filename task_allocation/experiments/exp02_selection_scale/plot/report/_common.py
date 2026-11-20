@@ -16,16 +16,19 @@ from typing import Any, Iterable
 
 # ── 变体元数据（顺序即图例/绘图顺序）────────────────────────────────
 VARIANT_ORDER: tuple[str, ...] = (
-    "quota_a2.5", "quota_a5", "cap_x0.25", "cap_x0.5", "cap_x1", "full_baseline",
+    "quota_a2.5", "quota_a5", "cap_x0.25", "cap_x0.5", "cap_x1",
+    "cap_x1_win", "cap_c25", "full_baseline",
 )
 
 #: 变体显示名（图例 / 轴刻度 / 标注统一用）
 VARIANT_LABEL: dict[str, str] = {
     "quota_a2.5": "名额 α=2.5",
     "quota_a5": "名额 α=5",
-    "cap_x0.25": "能力 ×0.25",
-    "cap_x0.5": "能力 ×0.5",
-    "cap_x1": "能力 ×1.0",
+    "cap_x0.25": "能力 ×0.25（旧）",
+    "cap_x0.5": "能力 ×0.5（旧）",
+    "cap_x1": "单闸门 cap",
+    "cap_x1_win": "单闸门 + P_i 窗口",
+    "cap_c25": "单闸门 + 算力 25",
     "full_baseline": "全量对照",
 }
 
@@ -36,6 +39,8 @@ VARIANT_COLOR: dict[str, str] = {
     "cap_x0.25": "#f58518",
     "cap_x0.5": "#72b7b2",
     "cap_x1": "#54a24b",
+    "cap_x1_win": "#8c564b",
+    "cap_c25": "#e377c2",
     "full_baseline": "#e45756",
 }
 
@@ -49,6 +54,8 @@ VARIANT_FAMILY: dict[str, str] = {
     "cap_x0.25": "cap",
     "cap_x0.5": "cap",
     "cap_x1": "cap",
+    "cap_x1_win": "cap",
+    "cap_c25": "cap",
     "full_baseline": "full",
 }
 
@@ -95,7 +102,7 @@ def acc_of(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def sel_active(row: dict[str, Any]) -> bool:
-    """该格是否真的触发了选择层截断（N=10 时五档逐位相同，为 False）。"""
+    """该格是否真的触发了选择层截断（N=10 时各档逐位相同，为 False）。"""
     return bool(acc_of(row).get("selection_active", False))
 
 
@@ -211,3 +218,4 @@ def iter_variant_rows(
             if row is not None:
                 out.append(row)
     return out
+

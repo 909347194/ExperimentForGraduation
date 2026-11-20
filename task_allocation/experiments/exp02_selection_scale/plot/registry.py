@@ -163,9 +163,9 @@ FIGURES: tuple[Figure, ...] = (
         id="r05_capability",
         group="report",
         topic="structure",
-        title="档位观察：cap_x* 阶梯的选择规模、墙钟与任务去向",
+        title="档位观察：单闸门族与旧口径的选择规模、墙钟与任务去向",
         needs=("metrics",),
-        source="metrics.json 的 scales[]（cap_x* 阶梯的 n_sel / t_muas / accounting）",
+        source="metrics.json 的 scales[]（cap_x1 / cap_x1_win / cap_c25 的 n_sel / t_muas / accounting）",
         func=plot_r05_capability,
     ),
 )

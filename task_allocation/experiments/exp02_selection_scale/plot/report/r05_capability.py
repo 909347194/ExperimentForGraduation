@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
-"""图 ``r05_capability``——档位观察：cap_x* 阶梯的规模、墙钟与任务去向。
+"""图 ``r05_capability``——档位观察：单闸门族与旧口径的规模、墙钟与任务去向。
 
 【report 层 · 描述性观测】
 
-登记能力驱动口径（``mode=primary``，选择数接到
-cap(t)=⌊budget_scale·B/c̃⌋）三档在给定任务规模下的选择规模、二阶段墙钟
-与任务去向，全部描述性：
+登记单闸门口径（``mode=single``，选择数 = min{cap(t), n_compute}）与旧口径
+（``mode=intersect``，选择数 = min{⌈αK⌉, ⌈max_ratio·K⌉}）在给定任务规模下的
+选择规模、二阶段墙钟与任务去向，全部描述性：
 
     (a) 二阶段墙钟 vs 选择规模    x = n_sel（对数轴），y = t_muas
                       （s，对数轴）；红色虚线为同 N 参照臂的 t_muas 水平。
@@ -16,7 +16,7 @@ cap(t)=⌊budget_scale·B/c̃⌋）三档在给定任务规模下的选择规模
 本图不判断哪一档更好、不给选型结论、不给相对快慢比值；cap(t) 灰带只是
 结构参考位置，不是「拐点」或取值建议。
 
-数据来源：``metrics.json`` 的 ``scales[]``（cap_x* 阶梯 + 全部档位 +
+数据来源：``metrics.json`` 的 ``scales[]``（单闸门族 + 旧口径族 +
 full_baseline 参照）。
 """
 
@@ -56,11 +56,11 @@ from ._common import (
 __all__ = ["plot_r05_capability"]
 
 _FULL = "full_baseline"
-_CAP_POINTS = ("cap_x0.25", "cap_x0.5", "cap_x1")
+_CAP_POINTS = ("cap_x1", "cap_x1_win", "cap_c25")
 
 
 def _cap_t_of(metrics: dict[str, Any]) -> int:
-    """cap(t) 代表值：cap_x* 各行 capability_cap 的中位数。
+    """cap(t) 代表值：单闸门族各行 capability_cap 的中位数。
 
     无 capability_cap 字段时按机队规模推导（⌈max_ratio·K⌉ 量级），
     不写死旧场景数值。
@@ -176,7 +176,7 @@ def plot_r05_capability(
 
     budget_km = (float(metrics.get("K", 0) or 0)
                  * float(metrics.get("uav_max_range_m", 0.0) or 0.0) / 1000.0)
-    fig.suptitle("档位观察：cap_x* 阶梯的选择规模、墙钟与任务去向",
+    fig.suptitle("档位观察：单闸门族与旧口径的选择规模、墙钟与任务去向",
                  fontsize=FS["suptitle"])
     fig.tight_layout(rect=(0, 0.135, 1, 0.93))
     footnote(fig,
@@ -200,3 +200,4 @@ if __name__ == "__main__":
         sys.path.insert(0, str(_r))
     from plot import run_script
     run_script(_P(__file__).stem, sys.argv[1:])
+

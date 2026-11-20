@@ -14,7 +14,7 @@
     (c) 压缩比 N/sel   随 N 的变化。
 
 只登记规模与结构，不判断哪一档更好；N=10 时 N 小于全部上限、选择层
-不触发，五档逐位相同，是「未压缩」参照点而非档位差异的证据。
+不触发，各档逐位相同，是「未压缩」参照点而非档位差异的证据。
 
 数据来源：``metrics.json`` 的
 ``scales[].selection.{capability_n_cand,n_selected}`` +
@@ -168,7 +168,7 @@ def plot_r02_compression(
              "（Top-α 预筛后候选规模）；sel = n_selected（最终参与 MUAS）；done = accounting.n_done"
              "（真正交付）。漏斗为 N → 候选 → 选择 → 交付；未选中与选中未交付一律记"
              " remain（单周期快照无后续周期），不叫暂缓/顺延，本实验不评价完成约束。"
-             "N=10 时选择层不触发、五档逐位相同。各档实测值以本次 metrics 为准；"
+             "N=10 时选择层不触发、各档逐位相同。各档实测值以本次 metrics 为准；"
              "单 seed（42），只描述结构、不作档位比较或机制归因。")
 
     stem = Path(out_dir) / "R02_compression"
@@ -183,3 +183,4 @@ if __name__ == "__main__":
         sys.path.insert(0, str(_r))
     from plot import run_script
     run_script(_P(__file__).stem, sys.argv[1:])
+

@@ -213,6 +213,24 @@ def selection_config_from(
             None if cap_d.get("max_expand_factor") is None
             else float(cap_d["max_expand_factor"])
         ),
+        # 单闸门配套旋钮：
+        #   n_compute = 算力闸门：本周期二阶段最多允许求解多少条任务，
+        #               单位「条/周期」；由本实验 n_sel→墙钟曲线反推，
+        #               None = 不设算力上限（规模完全由 cap(t) 决定）
+        #   candidate_window_ratio = 候选窗口倍率（None = 全池参选，Δ 判据
+        #               在整池上挑 n_sel；给值 = 只取 P_i 前 ⌈ratio·n_sel⌉ 条）
+        n_compute=(
+            None if cap_d.get("n_compute") is None
+            else int(cap_d["n_compute"])
+        ),
+        candidate_window_ratio=(
+            None if cap_d.get("candidate_window_ratio") is None
+            else float(cap_d["candidate_window_ratio"])
+        ),
+        max_candidate_pool=(
+            None if cap_d.get("max_candidate_pool") is None
+            else int(cap_d["max_candidate_pool"])
+        ),
     )
     # 选择封顶 max_ratio 显式从 yaml 的 selection.marginal 段读取：
     # 旧实现用 MarginalConfig 的代码默认 2.0，写成 config 键是「死键」
@@ -285,11 +303,32 @@ def main(argv: list[str] | None = None) -> int:
                     help="只打印生效配置与派生口径，不建场景、不求解、不落盘")
     ap.add_argument("--restart", action="store_true",
                     help="忽略已有 checkpoint 从头重算（缺省：指纹一致则续接）")
+    ap.add_argument("--scales", default=None,
+                    help="只跑给定规模子集（逗号分隔，如 10,50）；缺省跑 scales 全表")
+    ap.add_argument("--only", default=None,
+                    help="只跑给定档位子集（逗号分隔档位名）；缺省跑全部档位")
     args = ap.parse_args(argv)
 
     cfg_path = EXP_DIR / "config.yaml"
     cfg = load_config(cfg_path)
     _apply_dotted_set(cfg, args.set)
+
+    # 子集开关（冒烟与单档重跑用）：只允许收窄规模与档位，
+    # 不动其它键 → 正式整档（不带开关）的配置指纹仍逐位可复现。
+    if args.scales:
+        keep_n = [int(x) for x in str(args.scales).split(",") if x.strip()]
+        cfg["scales"] = [n for n in (cfg.get("scales") or []) if int(n) in keep_n]
+        run_d = cfg.get("run") or {}
+        if run_d.get("full_muas_baseline_scales"):
+            run_d["full_muas_baseline_scales"] = [
+                n for n in run_d["full_muas_baseline_scales"]
+                if int(n) in keep_n
+            ]
+    if args.only:
+        keep_v = {x.strip() for x in str(args.only).split(",") if x.strip()}
+        cfg["variants"] = [
+            v for v in (cfg.get("variants") or []) if str(v.get("name")) in keep_v
+        ]
 
     # 有效配置快照：--set 覆盖后的**全量**配置 + 派生口径，供复现核对。
     # 落盘在 out_dir，与 metrics.json 同源；键路径必须与代码实际读取的一致。
@@ -308,6 +347,19 @@ def main(argv: list[str] | None = None) -> int:
             "selection_marginal_max_ratio": (
                 (cfg.get("selection") or {}).get("marginal") or {}
             ).get("max_ratio", 2.0),
+            # 规模口径（2026-11-20）：单闸门族逐档覆盖，这里记录 yaml 的缺省值
+            # 与逐档生效值，避免"档位名与真实口径对不上"的死档。
+            "selection_mode_default": (
+                (cfg.get("selection") or {}).get("capability") or {}
+            ).get("mode", "intersect"),
+            "variant_modes": {
+                str(v.get("name")): {
+                    k: (v.get("capability") or {}).get(k)
+                    for k in ("mode", "budget_scale", "n_compute",
+                              "candidate_window_ratio")
+                }
+                for v in (cfg.get("variants") or [])
+            },
             "solver": dict(cfg.get("solver") or {}),
             "full_baseline_scales": list(
                 (cfg.get("run") or {}).get("full_muas_baseline_scales") or []

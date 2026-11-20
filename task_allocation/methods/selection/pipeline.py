@@ -102,6 +102,13 @@ def run(
             ``no_uav_in_range``（几何可达但当前无可用机——机队漂移空巢）。
     """
     cfg = config or SelectionConfig()
+    if str(cfg.capability.mode) == "single" and not cfg.capability.enabled:
+        # 单闸门的唯一规模来源就是 cap(t)；关掉能力模块会让 n_sel 静默退回机数
+        # 名额，等于把刚修掉的旧口径又装回来。宁可显式报错。
+        raise ValueError(
+            "capability.mode='single' 需要 capability.enabled=True："
+            "单闸门的规模只能来自 cap(t)，不接受名额兜底"
+        )
     n_avail = sum(1 for u in uavs if u.is_available)
     diagnostics: dict[str, Any] = {
         "n_tasks_in": len(tasks),
@@ -161,16 +168,15 @@ def run(
         diagnostics["capability_fallback"] = True
     diagnostics["capability_enabled"] = cfg.capability.enabled
 
-    # ── 选择数 n_sel（真实承诺，该紧）：cap(t) 在此真正卡住 ───────────────
-    # 直白口径：n_sel 是**两道闸门取小**，不是一个旋钮 ——
-    #   ① 名额闸门 marginal.max_selected（给值则用它；否则 max_ratio × K）
-    #   ② 能力闸门 capability_cap（capability.enabled=True 时；否则 None）
-    # 组合规则由 effective_cap(quota, cap, mode) 决定；intersect（默认）取 min。
-    # ⇒ 想「让本周期尽量多装」必须**同时**放松两处
-    #    （MarginalConfig(max_selected=…) 且 CapabilityScaleConfig(enabled=False)），
-    #    只动一处会被另一处继续压住。这是两个 historically 不同来源的量，无自动联动。
-    # intersect（默认）：min{名额, cap(t)}，能力只能收紧、绝不超派；
-    # primary：cap(t) 可超过机数名额（宽松承诺）。两种 mode 见 capability.effective_cap。
+    # ── 选择数 n_sel（真实承诺，该紧）：规模只有两道闸门 ───────────────────
+    # 直白口径：n_sel = min{cap(t), n_compute}，不是一个旋钮 ——
+    #   ① 能力闸门 cap(t)：这些剩余里程跑得完多少条任务（可行性上界）；
+    #   ② 算力闸门 n_compute：本周期二阶段最多允许求解多少条任务，单位「条/周期」。
+    #      它与机队规模无关（二阶段预算逐周期固定，单次评估开销随 |S| 增长），
+    #      取值由 exp02 的 (n_sel → 单周期墙钟) 曲线反推。
+    # 旧口径的机数名额 marginal_quota（⌈max_ratio·K⌉）在 single 下**不参与合成**，
+    # 只落 diagnostics.n_sel_quota 供回溯；intersect（默认）仍取 min{名额, cap}，
+    # primary 允许 cap 超过名额。三种 mode 的合成见 capability.effective_cap。
     if marginal.max_selected is not None:
         marginal_quota = int(marginal.max_selected)
     else:
@@ -179,6 +185,16 @@ def run(
         )
     n_sel = effective_cap(marginal_quota, capability_cap, cfg.capability)
     diagnostics["capability_n_sel"] = n_sel
+    diagnostics["scale_mode"] = str(cfg.capability.mode)
+    diagnostics["n_sel_quota"] = int(marginal_quota)
+    if str(cfg.capability.mode) == "single" and capability_cap is not None:
+        n_cmp = cfg.capability.n_compute
+        diagnostics["n_compute"] = None if n_cmp is None else int(n_cmp)
+        diagnostics["n_sel_binding"] = (
+            "compute"
+            if (n_cmp is not None and int(n_cmp) < capability_cap)
+            else "cap"
+        )
 
     # ── 候选池 n_cand（机制3 搜索输入，该富）：与 cap(t) 解耦 ─────────────
     # n_cand = ⌈α·K⌉，只受计算预算上限 max_candidate_pool 与任务总数 N 约束；
@@ -186,17 +202,39 @@ def run(
     # （primary 模式 cap 超过机数名额时触发），保证候选池装得下承诺数；
     # 默认 intersect 模式 n_sel ≤ ⌈max_ratio·K⌉ < ⌈αK⌉，下限自然满足，cap
     # 完全不触碰候选——纠正了旧版"机队紧张时 n_cand 塌成 cap"的倒挂。
+    #
+    # single（单闸门）：候选不再设"第二道名额"。默认全池参选
+    # （candidate_window_ratio=None），让 Δ 判据在整池上挑 n_sel —— 这是本次
+    # 改造的核心：n_sel 由 min{cap(t), n_compute} 定死，P_i 只负责排序与并列
+    # 裁决，不再借 ⌈αK⌉ 抢先裁掉一批任务。给 candidate_window_ratio 时退化为
+    # "P_i 前 ⌈ratio·n_sel⌉ 条参选"，仅用于隔离优先级窗口自身的漏选效应。
     alpha_quota = (
         max(1, int(math.ceil(cfg.priority.alpha * n_avail))) if n_avail > 0 else 0
     )
-    n_cand = alpha_quota
-    if n_avail > 0:
-        n_cand = max(n_cand, n_sel)
-    if cfg.capability.max_candidate_pool is not None:
-        n_cand = min(n_cand, int(cfg.capability.max_candidate_pool))
-    n_cand = min(n_cand, len(scored_all))
+    if str(cfg.capability.mode) == "single":
+        rho = cfg.capability.candidate_window_ratio
+        if rho is None:
+            n_cand = len(scored_all)
+        else:
+            n_cand = max(n_sel, int(math.ceil(float(rho) * max(1, n_sel))))
+        if cfg.capability.max_candidate_pool is not None:
+            n_cand = min(n_cand, max(1, int(cfg.capability.max_candidate_pool)))
+        n_cand = min(n_cand, len(scored_all))
+        diagnostics["candidate_window"] = (
+            "full_pool" if rho is None else f"rho={float(rho):g}"
+        )
+        diagnostics["candidate_cap_independent"] = rho is None
+    else:
+        n_cand = alpha_quota
+        if n_avail > 0:
+            n_cand = max(n_cand, n_sel)
+        if cfg.capability.max_candidate_pool is not None:
+            n_cand = min(n_cand, int(cfg.capability.max_candidate_pool))
+        n_cand = min(n_cand, len(scored_all))
+        diagnostics["candidate_cap_independent"] = (
+            capability_cap is None or n_cand >= alpha_quota
+        )
     diagnostics["capability_n_cand"] = n_cand
-    diagnostics["candidate_cap_independent"] = capability_cap is None or n_cand >= alpha_quota
 
     preselected = top_alpha_preselect(
         scored_all,

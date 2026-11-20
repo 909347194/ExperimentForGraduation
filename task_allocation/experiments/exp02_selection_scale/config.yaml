@@ -157,18 +157,29 @@ selection:
   marginal:
     max_ratio: 2.0
 
-# 给定的压缩档位（**不是待选方法，不做口径选型结论**）——
-#   quota_*：纯机数名额，k = ⌈α·K⌉，与机队吞吐能力脱钩
-#            （capability=intersect 只能收紧不能放宽）；
-#   cap_x*：能力驱动（capability mode=primary），规模 = min(cap(t), 扩张上限)，
-#           cap(t) = ⌊budget_scale·Σ remaining_range / 单任务中位代价⌋。
-# 五档只是扫描自变量的不同水平，本实验不回答「哪一档更好」；
+# 给定的档位（**不是待选方法，不做口径选型结论**）——
+# 2026-11-20 改口径：旧 quota / primary 两族保留为「旧口径参照」，新增单闸门族。
+#
+#   quota_*（旧口径，mode=intersect）：k = min{⌈α·K⌉, ⌈max_ratio·K⌉}。
+#      纯机数名额，与机队吞吐能力脱钩；K=6 ⇒ 15/30 与 12 取小 = 12。
+#      N=50/100 时它把承诺数压在 12，是"规模由手调常数决定"的参照臂。
+#   cap_x1（单闸门，mode=single，候选=全池）：n_sel = cap(t)，
+#      cap(t) = ⌊budget_scale·Σ remaining_range / 单任务代价中位⌋；
+#      候选不再有 ⌈αK⌉ 第二道名额，ΔB/ΔC 直接在全池上挑 n_sel。
+#   cap_x1_win（单闸门 + 优先级窗口，candidate_window_ratio=1.0）：
+#      n_sel 同 cap_x1，但候选只取 P_i 前 n_sel 条 —— 隔离"P_i 窗口"本身
+#      造成的漏选，与 cap_x1 只差这一个自变量。
+#   cap_c25（单闸门 + 算力闸门，n_compute=25）：
+#      n_sel = min{cap(t), 25}；算力闸门 = 本周期二阶段最多允许求解多少条任务
+#      （单位「条/周期」），与机队规模无关，取值 25 对应约 60 s 单周期预算，
+#      由本实验 n_sel→墙钟曲线反推，见 notes §6）。
+#
+# 各档只是扫描自变量的不同水平，本实验不回答"哪一档更好"；
 # 档位选型归 exp04 / exp06，本目录只登记各档的规模与墙钟观测。
-# max_expand_factor 防 c̃ 过小时规模失控。B = 6×10 km = 60 km；
-# cap(t) 实际量级由 metrics.json 的 selection.capability_cap 现算。
-# 旧档「B=640 km / cap≈42 / 20/40 交错」的取点说明全部作废。
-# 注意 N=10 时 N 小于全部上限，选择层不触发、五档逐位相同，
-# 该规模是「未压缩」参照点，不作为档位间差异的证据。
+# B = 6×10 km = 60 km；cap(t) 实际量级由 metrics.json 的
+# selection.capability_cap 现算。
+# 注意 N=10 时 N 小于全部上限，选择层不触发、各档逐位相同，
+# 该规模是"未压缩"参照点，不作为档位间差异的证据。
 variants:
   - name: quota_a2.5
     alpha: 2.5
@@ -178,24 +189,23 @@ variants:
     alpha: 5.0
     capability:
       mode: intersect
-  - name: cap_x0.25
-    alpha: 2.5
-    capability:
-      mode: primary
-      budget_scale: 0.25
-      max_expand_factor: 25
-  - name: cap_x0.5
-    alpha: 2.5
-    capability:
-      mode: primary
-      budget_scale: 0.5
-      max_expand_factor: 25
   - name: cap_x1
     alpha: 2.5
     capability:
-      mode: primary
+      mode: single
       budget_scale: 1.0
-      max_expand_factor: 25
+  - name: cap_x1_win
+    alpha: 2.5
+    capability:
+      mode: single
+      budget_scale: 1.0
+      candidate_window_ratio: 1.0
+  - name: cap_c25
+    alpha: 2.5
+    capability:
+      mode: single
+      budget_scale: 1.0
+      n_compute: 25
 
 # 第二阶段只对候选集求解；全格同预算（pop × gens 固定）。
 # 但墙钟是单进程单 seed 单次观测、跨格共享 DEM 段长记忆化缓存，

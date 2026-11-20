@@ -48,8 +48,23 @@ class CapabilityScaleConfig:
     max_participating_uavs: int | None = None
     # 机数名额与 cap(t) 的合成方式：
     #   "intersect"（默认）取交集 min{名额, cap(t)}：能力只能收紧，绝不超名额；
-    #   "primary"  以 cap(t) 为主定规模、名额降为兜底：充裕时允许超名额。
+    #   "primary"  以 cap(t) 为主定规模、名额降为兜底：充裕时允许超名额；
+    #   "single"   单闸门：n_sel = min{cap(t), n_compute}，机数名额彻底退出
+    #              选择路径（quota 只作 diagnostics 记录，不参与合成）。
     mode: str = "intersect"
+    # 仅 mode="single" 生效：算力闸门 —— 本周期二阶段最多允许求解多少条任务，
+    # 单位是「条/周期」。它与机队规模无关：二阶段预算（pop×gen + polish 上限）
+    # 逐周期固定，机队变大只改变可行域形状，而单次评估开销随进入求解的任务条数
+    # 增长（组合规模阶乘级、链上插入位置平方级）⇒ 耗时由 |S| 而非机队架数决定。
+    # 取值由 exp02 实测的 (n_sel → 单周期墙钟) 曲线反推：60 s ≈ 25 条、
+    # 400 s ≈ 48 条。None = 不设算力上限（规模完全由 cap(t) 决定）。
+    n_compute: int | None = None
+    # 仅 mode="single" 生效：候选窗口倍率（相对 n_sel）。
+    #   None（推荐）= 全池参与边际选择：Δ 判据在整池上挑 n_sel，P_i 只负责
+    #                 排序与并列裁决，不再充当"第二道闸门"；
+    #   给值       = 只取 P_i 前 ⌈ratio·n_sel⌉ 条作为候选（隔离"优先级窗口"
+    #                 自身造成的漏选效应，用于消融）。
+    candidate_window_ratio: float | None = None
     # 仅 mode="primary" 生效：相对机数名额的最大扩张倍数，防止 c̃ 过小时规模失控。
     # None = 不设扩张上限（规模完全由 cap(t) 决定）。
     max_expand_factor: float | None = None
@@ -173,7 +188,8 @@ def effective_cap(
     故本函数只产出"紧承诺"规模，保证选择口径一致。
 
     Args:
-        quota: 机数名额（⌈max_ratio·K⌉ / ``max_selected``）。
+        quota: 机数名额（⌈max_ratio·K⌉ / ``max_selected``）。``mode="single"``
+            时该值只落 diagnostics，不参与合成。
         cap:   :func:`capability_task_cap` 的能力承载数；``None`` 表示能力未启用。
         config: 旋钮；``mode`` 决定合成方式。
 
@@ -181,20 +197,29 @@ def effective_cap(
         ``mode="intersect"``：``max(1, min(quota, cap))`` —— 能力只能收紧。
         ``mode="primary"``  ：``max(1, cap)``，并按
             ``max_expand_factor × quota`` 封顶（``max_expand_factor`` 为 None 不封顶）。
+        ``mode="single"``   ：``max(1, min(cap, n_compute))`` —— 能力门槛与算力门槛
+            取小，机数名额不参与（``cap`` 为 None 时退回 quota 兜底）。
 
     Raises:
-        ValueError: ``mode`` 非 ``intersect`` / ``primary``（防配置拼写错误静默降级）。
+        ValueError: ``mode`` 不在 ``intersect`` / ``primary`` / ``single``
+            （防配置拼写错误静默降级）。
     """
     cfg = config or CapabilityScaleConfig()
     mode = str(cfg.mode)
-    if mode not in ("intersect", "primary"):
+    if mode not in ("intersect", "primary", "single"):
         raise ValueError(
-            f"unknown capability mode {mode!r}; expect 'intersect' or 'primary'"
+            f"unknown capability mode {mode!r}; "
+            "expect 'intersect', 'primary' or 'single'"
         )
     quota = max(1, int(quota))
     if cap is None:
         return quota
     cap = max(1, int(cap))
+    if mode == "single":
+        n = cap
+        if cfg.n_compute is not None:
+            n = min(n, max(1, int(cfg.n_compute)))
+        return max(1, n)
     if mode == "primary":
         n = cap
         if cfg.max_expand_factor is not None:

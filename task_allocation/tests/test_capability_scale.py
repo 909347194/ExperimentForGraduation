@@ -416,3 +416,74 @@ def test_pipeline_primary_still_shrinks_when_tight():
     assert d["capability_cap"] == 3
     assert d["n_after_priority"] == 5
     assert d["candidate_cap_independent"] is True
+
+
+# ---------------------------------------------------------------------------
+# single（单闸门，2026-11-20）：n_sel = min{cap(t), n_compute}，机数名额退出；
+# 候选默认全池参选（P_i 只排序，不再当第二道闸门）
+# ---------------------------------------------------------------------------
+
+
+def test_effective_cap_single_takes_cap_and_compute_min():
+    """单闸门：cap 与算力闸门取小；quota 不参与合成。"""
+    assert effective_cap(5, 48, CapabilityScaleConfig(mode="single")) == 48
+    assert effective_cap(5, 48, CapabilityScaleConfig(mode="single", n_compute=25)) == 25
+    assert effective_cap(5, 12, CapabilityScaleConfig(mode="single", n_compute=25)) == 12
+    # cap 未启用 → quota 兜底（此时单闸门没有规模来源）
+    assert effective_cap(5, None, CapabilityScaleConfig(mode="single")) == 5
+
+
+def test_pipeline_single_requires_capability_enabled():
+    """single 关掉能力模块会让 n_sel 静默退回名额，必须显式报错。"""
+    tasks, uavs = _many_tasks_setup()
+    cfg = SelectionConfig()
+    cfg.capability.mode = "single"
+    cfg.capability.enabled = False
+    with pytest.raises(ValueError, match="single"):
+        run(tasks, uavs, cfg)
+
+
+def test_pipeline_single_uses_whole_pool_as_candidates():
+    """单闸门：n_sel 由 cap(t) 定（3），候选池是全池 12（不再被 ⌈αK⌉=5 裁）。"""
+    tasks, uavs = _many_tasks_setup(rng_each=1000.0)  # B=2000 → cap=3
+    cfg = SelectionConfig()
+    cfg.capability.mode = "single"
+    result = run(tasks, uavs, cfg)
+    d = result.diagnostics
+    assert d["scale_mode"] == "single"
+    assert d["capability_cap"] == 3
+    assert d["capability_n_sel"] == 3
+    assert d["n_sel_binding"] == "cap"
+    assert d["capability_n_cand"] == 12  # 全池参选
+    assert d["candidate_window"] == "full_pool"
+    assert d["n_sel_quota"] == 4  # 名额只落 diagnostics，不参与合成
+    assert d["n_after_priority"] == 12
+    assert len(result.selected) <= 3
+
+
+def test_pipeline_single_compute_gate_binds():
+    """算力闸门比 cap 更紧时，n_sel 由 k_compute 决定。"""
+    tasks, uavs = _many_tasks_setup(rng_each=1e6)  # cap 远大于 12
+    cfg = SelectionConfig()
+    cfg.capability.mode = "single"
+    cfg.capability.n_compute = 4
+    result = run(tasks, uavs, cfg)
+    d = result.diagnostics
+    assert d["n_compute"] == 4
+    assert d["n_sel_binding"] == "compute"
+    assert d["capability_n_sel"] == 4
+    assert len(result.selected) <= 4
+
+
+def test_pipeline_single_with_priority_window_is_an_ablation():
+    """candidate_window_ratio=1.0 → 候选退回 P_i 前 n_sel 条（旧 n_cand 语义）。"""
+    tasks, uavs = _many_tasks_setup(rng_each=1000.0)  # cap=3
+    cfg = SelectionConfig()
+    cfg.capability.mode = "single"
+    cfg.capability.candidate_window_ratio = 1.0
+    result = run(tasks, uavs, cfg)
+    d = result.diagnostics
+    assert d["candidate_window"] == "rho=1"
+    assert d["capability_n_cand"] == 3
+    assert d["n_after_priority"] == 3
+    assert d["candidate_cap_independent"] is False

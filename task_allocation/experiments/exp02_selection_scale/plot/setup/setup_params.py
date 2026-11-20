@@ -15,7 +15,7 @@
 单周期扫描没有场景空间图件）::
 
     (a) 场景与问题参数      K / 机巢 / 航程 / 任务规模与生成 / 种子
-    (b) 变体矩阵            两个标定族的名额与能力参数（intersect / primary）
+    (b) 变体矩阵            旧口径名额族与单闸门族（intersect / single）
     (c) 求解预算与口径      DMDE 超参 / polish 预算 / 距离与适应度口径
 
 数据来源：同目录 ``config.yaml`` + ``metrics.json`` 的 ``scales[].selection``。
@@ -78,6 +78,26 @@ def _fmt(v: Any) -> str:
     if isinstance(v, float):
         return f"{v:g}"
     return str(v)
+
+
+def _variant_brief(cap_d: dict[str, Any], alpha: Any, mode: str) -> str:
+    """档位矩阵右栏的最小标识串（须短：右对齐长串会向左溢出）。
+
+    旧口径：``α=2.5·intersect``；
+    单闸门：``b=1.0·k=25·single`` / ``b=1.0·win=1·single``，
+    把算力闸门 k 与优先级窗口 win 显式写进图里，避免各档看起来只差一个数。
+    """
+    if mode != "single":
+        bs = cap_d.get("budget_scale")
+        return f"α={_fmt(alpha)}·{mode}" if bs is None else f"b={_fmt(bs)}·{mode}"
+    parts: list[str] = []
+    if cap_d.get("budget_scale") is not None:
+        parts.append(f"b={_fmt(cap_d['budget_scale'])}")
+    if cap_d.get("n_compute") is not None:
+        parts.append(f"k={_fmt(cap_d['n_compute'])}")
+    if cap_d.get("candidate_window_ratio") is not None:
+        parts.append(f"win={_fmt(cap_d['candidate_window_ratio'])}")
+    return "·".join(parts + ["single"])
 
 
 def _draw_param_table(ax, title: str, rows: list[tuple[str, str]]) -> None:
@@ -155,8 +175,7 @@ def plot_setup_params(
         # 参数见 config.yaml 的 variants 段。
         rows_b.append((
             name,
-            f"α={_fmt(alpha)}·{mode}" if bs is None
-            else f"b={_fmt(bs)}·{mode}",
+            _variant_brief(cap_d, alpha, mode),
         ))
     if not rows_b:
         rows_b = [("（config 未定义 variants）", "—")]
@@ -167,9 +186,10 @@ def plot_setup_params(
     rows_c = [
         ("DMDE", f"pop={solver.get('pop_size', '—')} × gens={solver.get('max_generations', '—')}"),
         ("polish", f"≤{stage.get('polish_max_rounds', '—')} 轮 / ≤{stage.get('polish_max_evals', '—')} 评估"),
-        ("选择机制", "优先级→预筛→可行性→边际收益"),
-        ("名额系数 α", _fmt(sel_cfg.get('alpha'))),
-        ("选择封顶", f"max_ratio={_fmt((sel_cfg.get('marginal') or {}).get('max_ratio', 2.0))}"),
+        ("选择机制", "P_i 排序 → Δ 判据 → cap(t)/算力闸门"),
+        ("规模口径", "单闸门 min{cap(t), k_compute}"),
+        ("名额系数 α（旧）", _fmt(sel_cfg.get('alpha'))),
+        ("选择封顶（旧）", f"max_ratio={_fmt((sel_cfg.get('marginal') or {}).get('max_ratio', 2.0))}"),
         ("capability", "cap(t)=floor(budget·B/c)"),
         ("距离口径", "DEM + 建筑包络三维航程"),
         ("适应度", "加权标量 f（F1 不进 f）"),
@@ -201,3 +221,4 @@ if __name__ == "__main__":
         sys.path.insert(0, str(_r))
     from plot import run_script
     run_script(_P(__file__).stem, sys.argv[1:])
+

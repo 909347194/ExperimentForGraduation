@@ -14,7 +14,7 @@
                       选中未交付（堆叠柱），仅登记结构。
 
 本图只描述结构，不判断 α 是否是「有效旋钮」、不给档位选型结论
-（选型归 exp04 / exp06）。能力驱动口径的结构见图 r05。
+（选型归 exp04 / exp06）。单闸门口径的结构见图 r05。
 
 数据来源：``metrics.json`` 的
 ``scales[].selection.{capability_n_cand,n_selected,capability_n_sel}``
@@ -143,10 +143,20 @@ def plot_r04_bottleneck(
                xlabel="任务规模 N", ylabel="任务数（三项之和 = 到达 N）")
     ax_b.set_xticks(xs, [str(n) for n in ns])
     ax_b.set_ylim(bottom=0, top=max(ns) * 1.12)
-    # 去向类别（实色方块）与左右柱对应档位（细边菱形）分两行图例
+    # 去向类别（实色方块）与左右柱对应档位（细边菱形）分两行图例。
+    # 全零类别不进图例：本档 quota 两档没有"入选未交付"，
+    # 留着空图例项会让读者以为该类别存在但极小。
+    totals = {
+        key: sum(
+            int(acc_of(g[n].get(v, {})).get(key, 0) or 0)
+            for v in _QUOTA for n in ns if v in g[n]
+        )
+        for key, _, _ in palette
+    }
     handles = [
         Patch(facecolor=c, edgecolor="white", label=name)
-        for _, c, name in palette
+        for key, c, name in palette
+        if totals.get(key, 0) > 0
     ]
     handles += [
         Line2D([], [], marker="D", linestyle="", markersize=5,
@@ -167,7 +177,7 @@ def plot_r04_bottleneck(
              f"选择封顶（本次 capability_n_sel={lim_v}）均以本次 metrics 为准。"
              "分账：单周期快照无后续周期，未选中与选中未交付一律记 remain（未完成），"
              "本实验不评价完成约束。两档只作结构登记，不作档位选型结论；"
-             "能力驱动口径的结构见图 r05。单 seed（42）。")
+             "单闸门口径的结构见图 r05。单 seed（42）。")
 
     stem = Path(out_dir) / "R04_bottleneck"
     return save_figure(fig, stem, formats, dpi=dpi)
@@ -181,3 +191,4 @@ if __name__ == "__main__":
         sys.path.insert(0, str(_r))
     from plot import run_script
     run_script(_P(__file__).stem, sys.argv[1:])
+
