@@ -13,12 +13,18 @@ from task_allocation.methods.muas.solvers.evaluator import (
 )
 from task_allocation.methods.muas.solvers.local_search import polish_assignment
 from task_allocation.methods.muas.solvers.participating import (
+    _resolve_tour_cap,
     _select_by_lexicographic_marginal,
+    _select_by_marginal_takeoff,
     select_participating_uavs,
 )
 from task_allocation.methods.muas.solvers.stage_config import (
     MUASStageConfig,
+    POLICY_CHEAPEST,
+    POLICY_DEMAND,
     POLICY_DEMAND_MARGINAL,
+    POLICY_FIRST,
+    POLICY_MARGINAL,
 )
 from task_allocation.methods.muas.solvers.stage_runner import (
     MUASStageResult,
@@ -35,6 +41,12 @@ __all__ = [
     "run_selective_muas",
     "polish_assignment",
     "enumerate_reference_participating",
+    "POLICY_CHEAPEST",
+    "POLICY_DEMAND",
     "POLICY_DEMAND_MARGINAL",
+    "POLICY_FIRST",
+    "POLICY_MARGINAL",
+    "_resolve_tour_cap",
     "_select_by_lexicographic_marginal",
+    "_select_by_marginal_takeoff",
 ]
