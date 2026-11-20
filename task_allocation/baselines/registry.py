@@ -11,8 +11,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from .genetic import GeneticSolver
 from .greedy import GreedySolver
+from .pmx_de import PmxDESolver
 from .random_assign import RandomAssignSolver
+from .sort_de import SortDESolver
 from .vrptw import VRPTWInsertionSolver
 
 if TYPE_CHECKING:
@@ -22,6 +25,10 @@ REGISTRY: dict[str, type] = {
     "random": RandomAssignSolver,
     "greedy": GreedySolver,
     "vrptw": VRPTWInsertionSolver,
+    # 演化类文献基线（exp12_literature_baselines）
+    "genetic": GeneticSolver,
+    "pmx_de": PmxDESolver,
+    "sort_de": SortDESolver,
 }
 
 
