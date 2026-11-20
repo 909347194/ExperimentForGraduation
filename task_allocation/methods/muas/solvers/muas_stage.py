@@ -12,8 +12,14 @@ from task_allocation.methods.muas.solvers.evaluator import (
     MUASAssignmentEvaluator,
 )
 from task_allocation.methods.muas.solvers.local_search import polish_assignment
-from task_allocation.methods.muas.solvers.participating import select_participating_uavs
-from task_allocation.methods.muas.solvers.stage_config import MUASStageConfig
+from task_allocation.methods.muas.solvers.participating import (
+    _select_by_lexicographic_marginal,
+    select_participating_uavs,
+)
+from task_allocation.methods.muas.solvers.stage_config import (
+    MUASStageConfig,
+    POLICY_DEMAND_MARGINAL,
+)
 from task_allocation.methods.muas.solvers.stage_runner import (
     MUASStageResult,
     enumerate_reference_participating,
@@ -29,4 +35,6 @@ __all__ = [
     "run_selective_muas",
     "polish_assignment",
     "enumerate_reference_participating",
+    "POLICY_DEMAND_MARGINAL",
+    "_select_by_lexicographic_marginal",
 ]

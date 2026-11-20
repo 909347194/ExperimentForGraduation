@@ -70,21 +70,28 @@ methods:
       pair_with: M0
 
 # data/<scenario>/ 下的实测与共享数据（跨实验复用，不随实验改）
+# 【2026-11-19 场景切换】原 lasa_chengguan 的 Chengguan_DEM.tif 从未入库
+# （浅克隆起即缺失，项目网盘也无），唯一比较尺 path_m_audit 依赖 DEM，导致
+# 场景构建 FileNotFoundError。经用户裁定切到 guangzhou（仓库自带 dem.tif，
+# exp01/exp02 已验证的干净场景）。注意：这违背 E1 定稿「场景不随收窄改」，
+# 故与 v3 历史档数值不可比（v3 本就不进主文）；E1 内部四方法仍逐位同口径。
 data:
-    scenario: lasa_chengguan # 场景数据目录 data/<scenario>/（新增场景 = 新目录 + 改此键）
+    scenario: guangzhou # 场景数据目录 data/<scenario>/（原 lasa_chengguan，11-19 切换）
     source: file
     path: nest_location_data.csv # 相对 data/<scenario>/
-    dem: Chengguan_DEM.tif # 城关区 DEM；不需要高程时置 null
-    region_geojson: Chengguan_district.geojson # 任务撒点区域门禁（城关区多边形）
+    dem: dem.tif # 原 Chengguan_DEM.tif；guangzhou 场景用 dem.tif
+    region_geojson: region.geojson # 原 Chengguan_district.geojson；广州研究区多边形
     coordinate_column: Coordinate
 
 # 本实验的问题规模设定（做规模/容量灵敏度改这里，不动数据文件）
 problem:
-    n_nests: 6 # 用前 6 个机巢（城关区 CSV 共 6 条）
-    nest_capacity: 4 # 单机巢容量（架）
-    n_uavs: 10 # 机队规模（<= n_nests × nest_capacity 才不初始超容；6×4=24）
+    # 【11-19 适配 guangzhou】原 lasa 口径 6 巢/容量4/10 机/20km → guangzhou
+    # 口径 3 巢/容量2/6 机/10km（CSV 实际 3 条；与 exp01/exp02 正式档一致）。
+    n_nests: 3 # guangzhou CSV 共 3 条机巢（原 6）
+    nest_capacity: 2 # 单机巢容量（架）（原 4）；3×2=6
+    n_uavs: 6 # 机队规模（<= 3×2=6；原 10）
     uav_speed: 15.0 # m/s
-    uav_max_range: 20000.0 # 满电航程（m）；20 km（城关区口径，与 exp01 一致）
+    uav_max_range: 10000.0 # 满电航程（m）；10 km（guangzhou 口径，原 20 km）
     uav_max_time: null # 最大飞行时间（秒）；null=自动派生 uav_max_range/uav_speed（与航程预算自洽，不新增淘汰）。显式给更小值即成独立绑定约束。
 
 # 合成任务点（暂无实测任务数据；后续换 data/task_location_data.csv 时
@@ -95,10 +102,12 @@ tasks:
     # nest_anchored = 绕机巢 spread_m 半径内撒点（人为缩小问题，仅作消融对照）。
     # 全域撒点后约 30% 任务因违反时间窗而天然不可达（航程 100% 可达），
     # 这是约束的真实选择性压力，见 common/task_scenario.py 模块文档里的实测数据。
-    domain: dem_extent
-    dem_inset_m: 0.0 # DEM 包络内缩（m）；>0 可避开边缘半像素/插值外推区
-    max_reject_trials: 8 # 落点出 DEM 时的拒绝采样重试轮数
-    n_tasks: 30 # 第 1 周期到达的初始任务数；后两周期到达 10、20（见 rolling.arrivals），共 60
+    # 【11-19 适配 guangzhou】domain dem_extent→region（广州研究区多边形内撒点，
+    # 与 exp01/exp02 正式档一致），n_tasks 30→20。
+    domain: region
+    dem_inset_m: 0.0 # DEM 包络内缩（m）；仅 domain=dem_extent 生效
+    max_reject_trials: 8 # 落点出区域多边形时的拒绝采样重试轮数
+    n_tasks: 20 # 第 1 周期到达的初始任务数（原 30，适配 guangzhou 生产口径）
     spread_m: 12000.0 # 相对锚点机巢的散布半径（m）；仅 domain=nest_anchored 生效
     reward_min: 1.0
     reward_max: 10.0
@@ -132,8 +141,10 @@ tasks:
     #   4.5~9.0 → 95%（19/20）  ← 当前默认：4.2~9.0 区间完成率平台期，
     #                                  任取其中值均可；保留选择性压力（仍有淘汰）
     #   5.0~10.0 → 100% 但零淘汰（时间窗失效），代价 +16%、求解 +57%，不取
-    deadline_cycles_min: 4.5
-    deadline_cycles_max: 9.0
+    # 【11-19 适配 guangzhou】原 lasa 全域撒点 4.5~9.0 → guangzhou 生产口径
+    # 2.0~4.0（与 exp01 正式档一致；10km 航程下任务航时更短，窗口相应收紧）。
+    deadline_cycles_min: 2.0
+    deadline_cycles_max: 4.0
     anchor_to_nests: true # 遗留别名，仅 domain=nest_anchored 时生效
 
 # 算法开关（对齐 Chapter3_README §8 技术路线）
@@ -378,8 +389,10 @@ rolling:
     # 注意：fixed 的 counts 长度必须 = n_cycles-1，否则延长周期只补 0 到达空转；
     # 长程协议必须用 poisson/uniform 才有「持续到达」。
     arrivals:
-        mode: fixed # 确定性到达：周期2到达10、周期3到达20（周期1初始=30，共60）；周期4起补0无新到达
-        counts: [10, 20]
+        # 【11-19 适配 guangzhou】周期1初始=20，后两周期各5（共30，与 exp01 一致）；
+        # 原 lasa 口径周期2=10/周期3=20（共60）。
+        mode: fixed
+        counts: [5, 5]
     # 收敛早停（口径约定，与 exp01 同步；审查 M2
     # 修正旧注释）：主判据是「池空」——到达全部注入后，池内不存在
     # 「能被完成却没被完成」的任务即自然收敛停机（stop_reason=pool_empty）；

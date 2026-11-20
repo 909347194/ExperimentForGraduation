@@ -50,9 +50,17 @@ def _tag(K: int, lam: float, lc: float, seed: int) -> str:
 
 
 def run_cell(K: int, lam: float, lc: float, seed: int, n_cycles: int,
-             smoke: bool) -> Path:
-    """单格：子进程驱动 exp01 滚动外壳，产物落 exp06/results/<tag>/。"""
-    tag = _tag(K, lam, lc, seed)
+             smoke: bool, force: bool = False) -> Path:
+    """单格：子进程驱动 exp01 滚动外壳，产物落 exp06/results/<tag>/。
+
+    断点保护：已有 ``metrics.json`` 的格默认跳过（exp02 曾因会话回收白跑 18 格）；
+    ``--force`` 强制重跑。smoke 用独立 tag 后缀，避免污染正式档。
+    """
+    tag = _tag(K, lam, lc, seed) + ("_smoke" if smoke else "")
+    tag_dir = RESULTS / tag
+    if not force and (tag_dir / "metrics.json").exists():
+        print(f"[exp06] 格 {tag} 已有产物，跳过（--force 强制重跑）")
+        return tag_dir
     out_rel = f"../exp06_joint_regime/results/{tag}"  # 相对 exp01 的 EXP_DIR
     cmd = [
         sys.executable, "-u", str(EXP01_RUN),
@@ -270,6 +278,7 @@ def main() -> None:
     ap.add_argument("--lcs", default=None, help="逗号分隔覆盖 matrix.lambda_cost")
     ap.add_argument("--seeds", default=None, help="逗号分隔覆盖 experiment.seeds")
     ap.add_argument("--smoke", action="store_true", help="plumbing 冒烟（3 代 × 3 周期）")
+    ap.add_argument("--force", action="store_true", help="强制重跑已有产物的格（默认跳过）")
     ap.add_argument("--analyze-only", action="store_true", help="不跑，只聚合")
     args = ap.parse_args()
 
@@ -289,7 +298,7 @@ def main() -> None:
             for lam in cfg["matrix"]["arrival_lambda"]:
                 for lc in cfg["matrix"]["lambda_cost"]:
                     for seed in cfg["experiment"]["seeds"]:
-                        run_cell(K, lam, lc, seed, n_cycles, args.smoke)
+                        run_cell(K, lam, lc, seed, n_cycles, args.smoke, args.force)
         print(f"\n[exp06] 全部格完成 {args and ''}")
     aggregate(cfg)
 

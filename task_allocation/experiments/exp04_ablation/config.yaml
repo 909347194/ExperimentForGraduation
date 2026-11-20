@@ -1,0 +1,125 @@
+# exp04_ablation —— 单周期机制消融台（B1 构造式解码 / B2 三层选机 / B3 枚举参照）
+#
+# 职责（唯一）：固定生产问题口径与单周期快照场景，对第二阶段 MUAS 求解器做
+#   **单因素机制消融**，量化各内部机制（解码方式、参与机选择策略）对交付解的
+#   边际贡献，并用小 N 近精确枚举量化启发式选机离同预算最优的 gap。全部描述性。
+# 不负责：方法排名/优劣结论、完成约束验收（归 exp01 滚动闭环）、选择层规模
+#   （归 exp02）、事件响应（归 exp03）、外部基线竞赛（归 exp05）、显著性检验。
+# 完整边界见本目录 notes.md。
+#
+# 口径继承：problem / solver / tasks / data 逐位继承 exp02_selection_scale
+#   正式档（同为 guangzhou 单周期快照），保证 A0 基线 = exp02 的同口径解；
+#   四臂之间只差消融开关这一个自变量，其余逐位同口径。
+#
+# 2026-11-19 从零搭建（README 原标 "planned（仅 notes）"，实际连 notes 都没有）。
+
+experiment:
+  name: exp04_ablation
+  seed: 42
+  output_dir: results
+  figures_dir: results/figures
+  seeds: [42, 43, 44]          # 多种子描述性稳健性（不做显著性检验）
+
+data:
+  scenario: guangzhou
+  source: file
+  path: nest_location_data.csv
+  dem: dem.tif
+  buildings: building
+  region_geojson: region.geojson
+  coordinate_column: Coordinate
+
+problem:
+  n_nests: 3
+  nest_capacity: 2
+  n_uavs: 6
+  uav_speed: 15.0
+  uav_max_range: 10000.0
+  uav_max_time: null
+  allow_unassigned: true
+  allow_idle_uav: true
+  lambda_cost: 1.0e-1
+  w_penalty: 1.0
+  w_violation: 0.01
+  w_nest_capacity: 1.0
+  w_hard_violation: 1.0
+  hard_violation_kappa: 10.0
+  coverage_audit: true
+  coverage_gate: true
+  coverage_gate_max_rounds: 8
+  constraints:
+    single_constraints: true
+    coop_constraints: true
+    nest_capacity: true
+    time_window: false
+    endurance: true
+
+# 单周期任务快照（与 exp02 同口径）
+tasks:
+  n_tasks: 20
+  domain: nest_anchored
+  spread_m: 25000.0
+  reward_min: 1.0
+  reward_max: 10.0
+  deadline_min: 3600.0
+  deadline_max: 28800.0
+  anchor_to_nests: true
+  region_geojson: region.geojson
+
+# 第二阶段固定口径（四臂共用；仅 arms[].overrides 里的键逐臂翻转）
+stage:
+  participating_policy: demand       # A0 生产口径
+  participation_cost: 0.0
+  reflow_rescue_scope: fleet
+  prune_unprofitable: true
+  prune_max_rounds: 8
+  prune_margin: 0.0
+  prune_wait_bonus: 1.0
+  wait_scale: 3600.0
+  demand_coverage_radius: null
+  demand_range_factor: 0.5
+  demand_provision_serving: true
+  demand_serve_margin: 0.95
+  decode_mode: repair_chain          # A0 生产口径
+  repair_max_passes: 6
+  constructive_max_passes: 3
+  polish_enabled: true
+  polish_max_rounds: 30
+  polish_max_evals: 2000
+  polish_eps: 1.0e-6
+  coverage_first: false
+  memetic_max_rounds: 6
+
+solver:
+  pop_size: 20
+  max_generations: 40
+
+# ── 消融臂定义（唯一自变量 = overrides 里的机制开关）─────────────────
+# A0                     : 生产基线（repair_chain + demand）
+# B1_constructive_decode : 只把解码改成构造式
+# B2_three_layer_select  : 只把参与机策略改成 demand_marginal（三层选机）
+# B3_enum_reference      : 小 N 近精确选机参照（枚举同架次预算子集，量化 gap）
+arms:
+  - name: A0_baseline
+    enabled: true
+    overrides: {}
+  - name: B1_constructive_decode
+    enabled: true
+    overrides:
+      stage.decode_mode: constructive
+  - name: B2_three_layer_select
+    enabled: true
+    overrides:
+      stage.participating_policy: demand_marginal
+  - name: B3_enum_reference
+    enabled: true
+    enum: true                       # 走 B3 枚举路径（小规模防护）
+    overrides:
+      # B3 语义即「小 N 近精确参照」：任务数压到枚举防护上限内（≤ max_tasks=10）
+      tasks.n_tasks: 8
+
+# B3 枚举参照的组合爆炸防护参数（传给 enumerate_reference_participating）
+enum_reference:
+  max_avail: 12
+  max_tasks: 10
+  max_subsets: 5000
