@@ -1,9 +1,9 @@
 {
+  "_note": "exp01_smoke 机队清单（多机多轮、无巢口径）：起点/途经点/终点全是 ENU 绝对坐标，起始点由本实验设计并在 [4,4,2] 局部场上实测（SDF/棱柱 ≥ 8 m、agl ∈ [3,100]），选址依据见 PIPELINE.md。round=轮次（周期决策节拍），t0 必须等于 (round-1)×cycle_length_s。终点 = end，途经 = via（service_time_s=0 的途经点不产生悬停段，结构上并入相邻 leg）。",
   "uavs": [
     {
       "id": 1,
       "model": "M30T",
-      "nest_id": 0,
       "mass_kg": 9.5,
       "v_max_mps": 15.0,
       "v_up_mps": 6.0,
@@ -13,27 +13,88 @@
       "f_min_n": 78.0,
       "max_range_m": 20000.0,
       "max_time_s": 1200.0,
-      "budget": {
-        "endurance_remaining_s": 900.0,
-        "range_remaining_m": 16000.0
-      }
+      "budget": {"endurance_remaining_s": 900.0, "range_remaining_m": 4000.0}
+    },
+    {
+      "id": 2,
+      "model": "M30T",
+      "mass_kg": 9.5,
+      "v_max_mps": 15.0,
+      "v_up_mps": 6.0,
+      "v_dn_mps": 3.0,
+      "a_max_mps2": 3.0,
+      "f_max_n": 200.0,
+      "f_min_n": 78.0,
+      "max_range_m": 20000.0,
+      "max_time_s": 1200.0,
+      "budget": {"endurance_remaining_s": 700.0, "range_remaining_m": 5000.0}
+    },
+    {
+      "id": 3,
+      "model": "M30T",
+      "mass_kg": 9.5,
+      "v_max_mps": 15.0,
+      "v_up_mps": 6.0,
+      "v_dn_mps": 3.0,
+      "a_max_mps2": 3.0,
+      "f_max_n": 200.0,
+      "f_min_n": 78.0,
+      "max_range_m": 20000.0,
+      "max_time_s": 1200.0,
+      "budget": {"endurance_remaining_s": 600.0, "range_remaining_m": 5000.0}
+    },
+    {
+      "id": 4,
+      "model": "M30T",
+      "mass_kg": 9.5,
+      "v_max_mps": 15.0,
+      "v_up_mps": 6.0,
+      "v_dn_mps": 3.0,
+      "a_max_mps2": 3.0,
+      "f_max_n": 200.0,
+      "f_min_n": 78.0,
+      "max_range_m": 20000.0,
+      "max_time_s": 1200.0,
+      "budget": {"endurance_remaining_s": 500.0, "range_remaining_m": 3000.0}
     }
   ],
   "tours": [
     {
       "uav_id": 1,
+      "round": 1,
       "t0": 0.0,
-      "stops": [
-        {
-          "id": 101,
-          "kind": "nest",
-          "at": {
-            "nest": 1,
-            "agl_m": 18.0
-          },
-          "service_time_s": 30.0
-        }
-      ]
+      "start": {"enu": [-699.2, -268.4, 60.0]},
+      "via": [
+        {"id": 101, "at": {"enu": [-655.8, -514.6, 60.0]}, "service_time_s": 60.0}
+      ],
+      "end": {"id": 102, "at": {"enu": [-587.8, -756.5, 60.0]}, "service_time_s": 500.0}
+    },
+    {
+      "uav_id": 2,
+      "round": 1,
+      "t0": 0.0,
+      "start": {"enu": [-601.4, -149.6, 60.0]},
+      "via": [
+        {"id": 201, "at": {"enu": [-575.3, -297.4, 60.0]}, "service_time_s": 120.0},
+        {"id": 202, "at": {"enu": [-638.5, -613.1, 60.0]}, "service_time_s": 0.0}
+      ],
+      "end": {"id": 203, "at": {"enu": [-560.3, -1056.3, 60.0]}, "service_time_s": 0.0}
+    },
+    {
+      "uav_id": 3,
+      "round": 2,
+      "t0": 240.0,
+      "start": {"enu": [-699.2, -268.4, 60.0]},
+      "via": [],
+      "end": {"id": 301, "at": {"enu": [-560.3, -1056.3, 60.0]}, "service_time_s": 0.0}
+    },
+    {
+      "uav_id": 4,
+      "round": 2,
+      "t0": 240.0,
+      "start": {"enu": [-650.0, -259.8, 60.0]},
+      "via": [],
+      "end": {"id": 401, "at": {"enu": [-606.6, -506.0, 60.0]}, "service_time_s": 30.0}
     }
   ]
 }

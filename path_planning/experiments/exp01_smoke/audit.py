@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
-"""exp01_smoke 审计：单机单航次。
+"""exp01_smoke 审计：多机多轮（两轮四机、无巢口径）。
 
-通用五项在 ``support/audit_checks.py``（覆盖 / 复核 / 真几何 / 预算 /
-冲突）；单机专属三项在 ``support/quality_report.py``（时间来源 /
-运动学裕度 / 稠密净空），并附**逐 leg** 明细与整条时间账。
+核心项在 ``support/audit_checks.py``（覆盖 / 票自洽 / 复核 / 真几何 / 预算 /
+端点净空 / 必撞触发 / 旧侧冻结 / 在飞中规划 / 冲突归零 / 状态账）；
+逐机质量项在 ``support/quality_report.py``（时间来源 / 运动学裕度 / 稠密净空 /
+分段边界 / 单机质量账）。
 
-本实验只有一条航段（巢0 → 巢1，终点真高 18 m、栖停 30 s），所以逐 leg 表只有
-一行——多段航迹（巢→任务A→任务B→巢）的逐 leg 账由 ``exp05_multileg`` 覆盖。
+本实验端点**无豁免**（``endpoint_exempt_radius_m=0``）：起始点由实验选址、
+实测 SDF ≥ 8 m，端点与全域同判 6 m——比单机冒烟的"端点豁免球"更严。
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ import json
 import sys
 from pathlib import Path
 
-from .support.audit_checks import Check, audit_run, report
+from .support.audit_checks import Check, audit_rounds, report
 from .support.quality_report import trajectory_quality
 from .support.result_store import trajectory_from_dict
 from .support.runtime import load_runtime
@@ -25,25 +26,27 @@ _HERE = Path(__file__).resolve().parent
 
 
 def quality_checks(runtime, fleet, run_dir: Path) -> list[Check]:
-    payload = json.loads((run_dir / "solution.json").read_text(encoding="utf-8"))
+    """逐机质量项：从落盘航迹复算（键 "轮:机号"）。"""
+    raw = json.loads((run_dir / "round_trajectories.json").read_text(encoding="utf-8"))
+    requests = {int(r.uav_id): r for r in fleet.requests}
     checks: list[Check] = []
-    for uid_key, res in sorted(payload["results"].items()):
-        if res.get("trajectory") is None:
-            continue
-        uid = int(uid_key)
-        req = next(r for r in fleet.requests if r.uav_id == uid)
+    for key in sorted(raw, key=lambda k: (int(k.split(":")[0]), int(k.split(":")[1]))):
+        r_idx, uid = (int(v) for v in key.split(":"))
+        traj = trajectory_from_dict(raw[key])
+        req = requests[uid]
         qr = trajectory_quality(
             uid,
-            trajectory_from_dict(res["trajectory"]),
+            traj,
             vehicle=fleet.vehicles[uid],
             field=runtime.field,
             clearance_m=float(runtime.config.params.clearance_m),
             cfg_step_m=float(runtime.config.params.clearance_sample_step_m),
-            time_source=res["trajectory"].get("time_source"),
+            time_source=raw[key].get("time_source"),
             stops=[(tuple(s.position), float(s.service_time_s)) for s in req.stops],
             endpoint_exempt_radius_m=float(runtime.config.endpoint_exempt_radius_m),
             endpoint_clearance_m=runtime.config.endpoint_clearance_m,
         )
+        print(f"--- 质量账 轮{r_idx} 机{uid} ---")
         for line in qr.lines:
             print(line)
         checks.extend(qr.checks)
@@ -64,7 +67,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.run
         else runtime.config.results_dir / f"seed_{runtime.config.seeds[0]}"
     )
-    checks = audit_run(runtime, fleet, run_dir, extra=quality_checks(runtime, fleet, run_dir))
+    checks = audit_rounds(runtime, fleet, run_dir) + quality_checks(runtime, fleet, run_dir)
     return report(checks)
 
 

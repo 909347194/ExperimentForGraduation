@@ -1,4 +1,8 @@
-# exp01_smoke —— 单机单航次冒烟：真实 Guangzhou 场景下把"走廊→RRT→NLP→复核→交付"跑通。
+# exp01_smoke —— 多机多轮 tour 冒烟：真实 Guangzhou 场景下把"走廊→RRT→NLP→复核→交付→
+# 冲突协调→跨轮既有航迹约束"整条链跑通。两轮四机：
+#   轮1（t0=0）：UAV1/UAV2 同批规划 + 新-新协调（设计必撞：UAV2 掠过 UAV1 的终点悬停）；
+#   轮2（t0=240，即 cycle_length_s）：UAV3/UAV4 起飞，约束 = DEM + 建筑 + 轮1 已发布航迹
+#   （设计必撞：UAV3 掠过仍在悬停的 UAV1 → 新-旧冲突，旧侧冻结、新侧让路）。
 #
 # 这份文件是本实验**唯一**的参数来源：不继承、不覆盖、不设代码默认值。
 # 任何一个数字改动都必须改在这里，结果目录里的 effective_config.json 是它的快照。
@@ -6,6 +10,7 @@
 # 运行（项目根下）：
 #   $env:PYTHONPATH="."
 #   & ".\.venv\Scripts\python.exe" -m path_planning.experiments.exp01_smoke.run
+#   & ".\.venv\Scripts\python.exe" -m path_planning.experiments.exp01_smoke.audit
 
 experiment:
   name: exp01_smoke
@@ -14,7 +19,7 @@ experiment:
 scenario:
   data_dir: path_planning/data/guangzhou
   name: guangzhou
-  nest_count: null          # null = 全部机巢（当前 3 个）
+  nest_count: null          # null = 全部机巢（本实验不使用机巢概念，巢只是场景数据）
   terrain_step_m: 30.0
   bbox_margin_m: 5.0
 
@@ -29,15 +34,15 @@ field:
 
 corridor:
   half_width_m: null          # 不给具体半宽 → 按宽比算
-  width_ratio: 0.10           # 总宽 = 10% 水平距离；2.8 km 航段 → 半宽 ~140 m
+  width_ratio: 0.10           # 总宽 = 10% 水平距离
   margin_m: 10.0
 
 runtime:
   agl_range_m: [3.0, 100.0]   # RRT 真高带（与建场带同源，取建场带内的可飞部分）
-  endpoint_clearance_m: 2.0   # 机巢 SDF 实测 +1.63 / −0.63 / +1.47，圈内必须放宽
-  endpoint_exempt_radius_m: 25.0
+  endpoint_clearance_m: 6.0   # 端点无豁免：起始点由本实验选址（实测 SDF ≥ 8 m），与全域同判
+  endpoint_exempt_radius_m: 0.0   # 0 = 不设豁免球，端点按全量 6 m 判（比单机冒烟更严）
   e_geo_m: 0.5                # 检测半径的几何误差标量（DEM 像元/棱柱化/AGL 舍入）
-  takeoff_agl_m: 8.0          # 起点 z = 机巢地面 + 8 m
+  cycle_length_s: 240.0       # 决策节拍：轮 r 的 t0 = (r-1) × cycle_length_s
   results_dir: path_planning/experiments/exp01_smoke/results
 
 planning:
@@ -57,12 +62,12 @@ planning:
   rrt_dedup_tol_m: 8.0
   clearance_sample_step_m: 2.0
 
-  n_nodes: 120          # 2.8 km 航段下节点间距 ~24 m：60 节点时 min ΣΔt 会在节点间掏出 5–11 m 的洞
+  n_nodes: 120          # km 级航段必须 120 节点 + 段内 8 采样（60/3 会在节点间掏出 5–11 m 的洞）
   dt_min_s: 0.3
   dt_max_s: 20.0
   max_iter: 400
   solver_tol: 0.0001
-  clearance_samples_per_segment: 8   # 段内约束间距 ~2.6 m，与复核的 2 m 采样同量级（实测 3 点时节点间穿楼 −9.7 m）
+  clearance_samples_per_segment: 8
   arc_subintervals: 8
   gauss_points: 2
 
@@ -82,4 +87,3 @@ planning:
   local_replan_guide_radius_m: 2.0
 
   hover_weight: 1.0
-

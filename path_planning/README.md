@@ -227,7 +227,7 @@ path_planning/
 │   ├── planning/     单 tour 编排（tour_planner + delivery_gate）、批处理
 │   └── trajectory_registry.py   跨周期航迹注册
 ├── experiments/      一个实验一个目录，各自带完整配置、机队清单与私有 support/
-│   ├── exp01_smoke/      单机巢间航段（十项审计，含分段边界、质量账与端点豁免）
+│   ├── exp01_smoke/      多机多轮 tour 冒烟（两轮四机、无巢口径：新-新/新-旧协调，逐轮+跨轮审计）
 │   └── exp07_two_rounds/ 单机两轮链式（轮1 停在任务点，轮2 从该点续飞，16 项审计）
 ├── data/guangzhou/   已拷入：20 670 建筑 / 3 机巢 / dem.tif / region.geojson（机巢坐标是**数据**，不是代码常量）
 ├── docs/             architecture / module_map / time_mapping / conflict_model
@@ -236,7 +236,7 @@ path_planning/
 
 `experiments/` 的约定是**一个实验一份数值、一份私有代码**：`config.yaml`（本实验完整参数，不继承不覆盖）、`uav_config.json`（机队清单）、`support/`（本实验私有的装配、配置解析、建场缓存、机队清单、指标、审计与落盘）、`run.py`（本实验流程）、`audit.py`（本实验判据）、`build_figures.py` / `build_tables.py`（图 / 表）、`PIPELINE.md`、`results/`。实验之间**不共享 `experiments/` 下的代码**，避免一个实验的口径改动悄悄影响另一个。
 
-每个实验目录只有 `config.yaml` 与 `uav_config.json` 两份数据文件；跑完的 `results/seed_*/` 下固定四个 JSON：`solution.json`（完整段表）、`metrics.json`、`run_meta.json`、`effective_config.json`（本次实际解析后的快照，含场网格与飞行带）。多轮实验 `exp07_two_rounds` 另记 `round_trace.json` + `round_trajectories.json`（键都是 `"段:机号"`，可直接喂本实验 `support/scene_3d.py`），并保留 `run_meta.json` 作参数快照。
+每个实验目录只有 `config.yaml` 与 `uav_config.json` 两份数据文件（`exp07_two_rounds` 另有 `rounds.json`）；跑完的 `results/seed_*/` 下固定四个 JSON：`solution.json`（完整段表）、`metrics.json`、`run_meta.json`、`effective_config.json`（本次实际解析后的快照，含场网格与飞行带）。多轮实验（`exp01_smoke` / `exp07_two_rounds`）另记 `round_trace.json` + `round_trajectories.json`（键都是 `"轮:机号"`，可直接喂本实验 `support/scene_3d.py`）。
 
 **图、表也归实验结果目录**（与 `task_allocation/experiments/*` 同一套布局，不往项目根另开 `figures/`）：
 
@@ -260,11 +260,11 @@ path_planning/
 
 ### 7.1 机巢位置会变：哪些东西跟着变，哪些不变
 
-**代码里不写死机巢坐标。** 机巢来自场景数据（`data/guangzhou` 的机巢 CSV，单字段、**纬度在前**），实验只通过 `uav_config.json` 的 `home_nest` 声明"这台机挂哪个巢"，坐标在装配时从 `rt.scenario.nests[i].position` 读、起飞点由 `nest_above(nest_id, nests, takeoff_agl_m)` 抬 8 m 得到。
+**代码里不写死机巢坐标。** 机巢来自场景数据（`data/guangzhou` 的机巢 CSV，单字段、**纬度在前**），实验只通过 `uav_config.json` 的 `home_nest` 声明"这台机挂哪个巢"，坐标在装配时从 `rt.scenario.nests[i].position` 读、起飞点由 `nest_above(nest_id, nests, takeoff_agl_m)` 抬 8 m 得到。**无巢口径**：`exp01_smoke` 的清单里根本没有巢字段（`start`/`via`/`end` 全是裸 ENU 坐标），起始点由实验自己选址并实测净空——path_planning 的规划契约本来就是"起点 + 停留点序列"，机巢只是上层概念（见 `experiments/exp01_smoke/PIPELINE.md`）。
 
 换巢时**必须跟着改**（这五项都在各实验自己的文件里，不改代码）：
 
-1. **各实验 `uav_config.json`**：`home_nest` 指向 + `tours` 里的起终点坐标（`exp01`/`exp05` 的巢间与多段航次端点都写在这里）；`exp07_two_rounds` 的起点由 `home_nest` 决定、两轮的停靠点写在同目录的 `rounds.json`；
+1. **各实验 `uav_config.json`**：`home_nest` 指向 + `tours` 里的起终点坐标（`exp07_two_rounds` 的起点由 `home_nest` 决定、两轮的停靠点写在同目录的 `rounds.json`；`exp01_smoke` 为无巢口径，起始点直接写坐标，不涉机巢）；
 2. **`exp06_cycles` 的投放任务点**：当前 210/220/221 是照"巢0 侧 / 巢1 侧的空柱"选的（210 柱在 z=40–90 m 稳定 15.3 m），换巢后要重新按 SDF 选点，否则会出现"任务点本身贴着楼"；
 3. **端点豁免阈值**：`endpoint_exempt_radius_m=25 m` / `endpoint_clearance_m=2 m` 是按当前三个巢的地面 SDF（+1.63 / −0.63 / +1.47 m）定的，新巢点要重测该点 SDF，别默认还成立；
 4. **数据侧结论**：`exp03` 的"巢2↔巢0 走廊被楼群切断、只能走巢2↔巢1"是**当前三巢**下的连通性结论，换巢必须重跑 6 m 净空的连通性检查，不能照抄；

@@ -117,13 +117,14 @@ class ExperimentConfig:
     params: PlanParams
     #: RRT 真高带（AGL，米），与 ``field`` 的建场带同源
     agl_range_m: tuple[float, float]
-    #: 端点豁免（机巢 SDF 实测偏低，见 architecture §4）
+    #: 端点净空口径（本实验端点由自选航点构成，无豁免：``endpoint_clearance_m``
+    #: 与全域同判、``endpoint_exempt_radius_m`` 恒为 0）
     endpoint_clearance_m: float | None
     endpoint_exempt_radius_m: float
     #: 检测半径的几何误差标量（DEM 像元 / 棱柱化 / AGL 舍入合成）
     e_geo_m: float
-    #: 起飞与降落基准离地高度（起点平台 z = 地面 + 该值）
-    takeoff_agl_m: float
+    #: 决策节拍（秒）：轮 r 的 ``t0 = (r-1) × cycle_length_s``
+    cycle_length_s: float
     results_dir: Path
     #: 多周期实验的环参数；单周期实验为 None
     loop: LoopSettings | None = None
@@ -173,10 +174,12 @@ def load_experiment_config(path: str | Path) -> ExperimentConfig:
     )
     _reject_unknown(cor, {"half_width_m", "width_ratio", "margin_m"}, p)
     _reject_unknown(run, {"agl_range_m", "endpoint_clearance_m", "endpoint_exempt_radius_m",
-                          "e_geo_m", "takeoff_agl_m", "results_dir"}, p)
+                          "e_geo_m", "cycle_length_s", "results_dir"}, p)
 
     params = _build_params(plan, p)
     params.validate()
+    if float(run["cycle_length_s"]) <= 0.0:
+        raise ValueError(f"cycle_length_s 必须为正：{run['cycle_length_s']}")
 
     return ExperimentConfig(
         name=str(exp["name"]),
@@ -210,7 +213,7 @@ def load_experiment_config(path: str | Path) -> ExperimentConfig:
         ),
         endpoint_exempt_radius_m=float(run["endpoint_exempt_radius_m"]),
         e_geo_m=float(run["e_geo_m"]),
-        takeoff_agl_m=float(run["takeoff_agl_m"]),
+        cycle_length_s=float(run["cycle_length_s"]),
         results_dir=_resolve(run["results_dir"]),
         loop=_build_loop(raw.get("loop"), p),
     )
