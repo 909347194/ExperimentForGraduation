@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import math
 import unittest
 
 import numpy as np
@@ -16,9 +17,13 @@ from path_planning.methods.spatial.occupancy_sdf import (
     build_occupancy,
     build_sdf,
 )
+from path_planning.methods.spatial.sdf_casadi import SdfOnGrid
+from path_planning.methods.timeline import trajectory_optimizer as _optimizer_mod
 from path_planning.methods.timeline.splines import segment_velocity
 from path_planning.methods.timeline.trajectory_optimizer import (
     NlpConfig,
+    NlpResult,
+    adaptive_dt_min_s,
     optimize_trajectory,
 )
 
@@ -69,6 +74,41 @@ class TestNlpConfig(unittest.TestCase):
         self.assertAlmostEqual(cfg.v_max_plan_mps, 13.5, places=6)
         self.assertAlmostEqual(cfg.thrust_max_per_mass, 16.0, places=6)
         self.assertEqual(cfg.endpoint_exempt_segments, 1)
+
+
+class TestAdaptiveDtFloor(unittest.TestCase):
+    """短航段的时长地板不能顶住 min ΣΔt（exp01_smoke 302→202 诊断回归）。"""
+
+    def test_short_leg_shrinks_and_long_leg_unchanged(self) -> None:
+        fw = _window_field([FAR_PILLAR])
+        cfg = _cfg(fw, PlanParams(n_nodes=120, dt_min_s=0.05))
+        short = np.array([START, GOAL], dtype=float)
+        dt_short = adaptive_dt_min_s(short, cfg)
+        self.assertLess(dt_short, cfg.dt_min_s)
+        t_lower = 2.0 * math.sqrt(40.0 / 3.0)
+        self.assertLess((cfg.n_nodes - 1) * dt_short, t_lower)
+        # km 级航段：梯形剖面的时间下界很大，配置值原样保留（零行为变化）。
+        long = np.array([[0.0, 0.0, 10.0], [5000.0, 0.0, 10.0]])
+        self.assertEqual(adaptive_dt_min_s(long, cfg), cfg.dt_min_s)
+
+    def test_short_leg_not_time_floored(self) -> None:
+        # 配置 0.3 s × 119 段 = 35.7 s 地板，会把 40 m 航段的 ΣΔt 顶死并拱起 z。
+        window = corridor_window(
+            START, GOAL, CorridorRule(half_width_m=10.0, margin_m=2.0),
+            SPACING, 0.0, 100.0,
+        )
+        occ = build_occupancy([FAR_PILLAR], window.grid)
+        field = SdfField(window.grid, build_sdf(occ, SPACING))
+        params = PlanParams(n_nodes=120, dt_min_s=0.3, max_iter=300)
+        cfg = _cfg((field, window), params, alt_range_m=(0.0, 100.0))
+        res = optimize_trajectory(np.array([START, GOAL], dtype=float), field, cfg)
+        self.assertIsNotNone(res.trajectory, f"求解失败：{res.solver_status} {res.message}")
+        traj = res.trajectory
+        # 乐观下界约 7.3 s；修复后远低于 35.7 s 地板。
+        self.assertLess(traj.duration, 15.0)
+        zs = [float(seg.p0[2]) for seg in traj.segments] + [float(traj.segments[-1].p1[2])]
+        # 数值残差允许厘米级，但不接受原退化下的米级拱起。
+        self.assertLessEqual(max(zs), max(START[2], GOAL[2]) + 0.05)
 
 
 class TestOptimizeStraight(unittest.TestCase):
@@ -124,6 +164,38 @@ class TestOptimizeWall(unittest.TestCase):
         self.assertGreater(zmax, 15.0, "墙顶 14 + 净空 2，必须翻到 15 m 以上")
         np.testing.assert_allclose(traj.start_position, START, atol=1e-2)
         np.testing.assert_allclose(traj.end_position, GOAL, atol=1e-2)
+
+
+class TestSdfCache(unittest.TestCase):
+    """同一场对象跨候选复用插值器：只构建一次，不碰求解结果口径。"""
+
+    def test_field_object_reuse(self) -> None:
+        fw = _window_field([FAR_PILLAR])
+        field, _ = fw
+        params = PlanParams(n_nodes=10, max_iter=1, retreat_node_ladder=())
+        cfg = _cfg(fw, params, half_width_m=None,
+                   corridor_normal_xy=None, corridor_pivot_xy=None)
+        path = np.array([START, (20.0, 0.0, 12.0), GOAL], dtype=float)
+
+        original_init = SdfOnGrid.__init__
+        original_solve = _optimizer_mod._solve_once
+        built = [0]
+
+        def counting_init(self, arg):
+            built[0] += 1
+            original_init(self, arg)
+
+        _optimizer_mod._solve_once = lambda *a, **k: NlpResult(None, "stub", 0, 0.0)
+        SdfOnGrid.__init__ = counting_init
+        try:
+            cache: dict = {}
+            optimize_trajectory(path, field, cfg, sdf_cache=cache)
+            optimize_trajectory(path, field, cfg, sdf_cache=cache)
+            self.assertEqual(built[0], 1, "同一场对象应只构建一次 CasADi 插值器")
+            self.assertEqual(len(cache), 1)
+        finally:
+            SdfOnGrid.__init__ = original_init
+            _optimizer_mod._solve_once = original_solve
 
 
 if __name__ == "__main__":  # pragma: no cover

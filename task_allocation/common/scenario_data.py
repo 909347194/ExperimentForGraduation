@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
-"""scenario_data.py — 场景数据注册与加载（``task_allocation/data/<scenario>/``）。
+"""scenario_data.py — 场景数据注册与加载（``data/<scenario>/``）。
 
-``task_allocation/data/`` 是**场景注册表**：每个场景一个目录（目录名即场景 id），
+``data/`` 是**场景注册表**：每个场景一个目录（目录名即场景 id），
 目录内放该场景的实测 / 共享数据（机巢 CSV、DEM 瓦片、区域门禁 geojson…）。
 当前场景：
 
@@ -26,8 +26,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-#: 场景注册表根（task_allocation/data/）
-DATA_ROOT: Path = Path(__file__).resolve().parents[1] / "data"
+#: 场景注册表根（仓库根 ``data/``，task_allocation 与 path_planning 共用）
+DATA_ROOT: Path = Path(__file__).resolve().parents[2] / "data"
 
 #: 默认场景（未显式声明 data.scenario 时使用）
 DEFAULT_SCENARIO: str = "lasa_chengguan"

@@ -99,6 +99,39 @@ class TestCoordinateConflicts(unittest.TestCase):
         self.assertEqual(out.rounds[0].replanned, ())
         self.assertEqual(out.detail["rounds_used"], 0)
 
+    def test_explicit_movable_ids_freeze_old_even_with_larger_id(self) -> None:
+        """跨周期：旧机机号更大也必须冻结，只让新机改几何（不靠机号序）。"""
+        params = PlanParams(n_nodes=30, max_iter=500, retreat_node_ladder=(20,))
+        old = _line(9, (0.0, 0.0, 10.0), (40.0, 0.0, 10.0), 4.0)
+        new = _line(3, (20.0, -45.0, 10.0), (20.0, 45.0, 10.0), 8.0)
+        out = coordinate_conflicts(
+            [new, old], field=_field(), params=params, vehicle=_vehicle(),
+            detection=DetectionConfig.from_params(params, _vehicle()),
+            nlp_for=lambda _i: _nlp(params), prisms=None,
+            movable_ids=frozenset({3}),
+        )
+        self.assertTrue(out.ok, out.reason)
+        self.assertEqual(out.rounds[0].replanned, (3,))
+        self.assertIs(out.trajectories[9], old)      # 旧侧对象逐位未变
+        self.assertIsNot(out.trajectories[3], new)   # 新侧几何确实被改
+        self.assertEqual(out.detail["frozen_ids"], [9])
+        self.assertTrue(out.pre_report is not None and out.pre_report.conflicts)
+
+    def test_all_frozen_conflict_is_reported_not_silently_moved(self) -> None:
+        """白名单为空时冲突不可消解：如实报失败，绝不偷改旧侧。"""
+        params = PlanParams(n_nodes=20, max_iter=300)
+        a = _line(1, (0.0, 0.0, 10.0), (40.0, 0.0, 10.0), 4.0)
+        b = _line(2, (20.0, -45.0, 10.0), (20.0, 45.0, 10.0), 8.0)
+        out = coordinate_conflicts(
+            [a, b], field=_field(), params=params, vehicle=_vehicle(),
+            detection=DetectionConfig.from_params(params, _vehicle()),
+            nlp_for=lambda _i: _nlp(params), movable_ids=frozenset(),
+        )
+        self.assertFalse(out.ok)
+        self.assertEqual(out.reason.value, "CONFLICT_UNRESOLVED")
+        self.assertIs(out.trajectories[1], a)
+        self.assertIs(out.trajectories[2], b)
+
     def test_duplicate_ids_raise(self) -> None:
         params = PlanParams()
         with self.assertRaises(ValueError):

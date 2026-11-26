@@ -36,6 +36,7 @@ __all__ = [
     "segment_derivative",
     "segment_velocity",
     "segment_acceleration",
+    "segment_command_acceleration",
     "segment_arc_length",
     "trajectory_arc_length",
     "position_at",
@@ -80,7 +81,6 @@ def _basis_second_derivative(s: np.ndarray) -> tuple[np.ndarray, ...]:
         -12.0 * s + 6.0,
         6.0 * s - 2.0,
     )
-
 
 def _as_s(s) -> tuple[np.ndarray, bool]:
     arr = np.atleast_1d(np.asarray(s, dtype=np.float64))
@@ -147,11 +147,15 @@ def _gauss_nodes_weights(k: int) -> tuple[np.ndarray, np.ndarray]:
 
 
 def segment_acceleration(seg: HermiteSegment, s) -> np.ndarray:
-    """真实加速度 ``p''/Δt²``（m/s²）；标量入参返回 ``(3,)``。
+    """**插值曲线**的二阶导 ``p''/Δt²``（m/s²）；标量入参返回 ``(3,)``。
 
-    Hermite 只在 C¹，``p''`` 在节点两侧一般**不相等**（C² 不成立），所以加速度
-    复核必须**逐段取端点**（``s=0`` 与 ``s=1`` 各自得单边极限），不能把相邻两点
-    拼成"节点加速度"再判一次——那样会漏掉跳变。这是模型已知限制，不是 bug。
+    三次 Hermite 只在 C¹，``p''`` 在节点两侧一般**不相等**（C² 不成立），所以取
+    端点要各自当单边极限看，别把相邻两点拼成"节点加速度"再判一次。
+
+    这条量与指令加速度不是同一个东西：``p''`` 由位置/速度拼出（端点
+    ``p''(0)=6(p0−p1)/Δt²+(4v0+2v1)/Δt``），与优化器节点 ``a`` 有 ``O(δ/Δt²)``
+    的离散差。判"飞得动吗"用 ``segment_command_acceleration``；这条只作插值形状
+    的参考量（画曲率、诊断隆起）。
     """
     s_arr, scalar = _as_s(s)
     basis = _basis_second_derivative(s_arr)
@@ -165,6 +169,23 @@ def segment_acceleration(seg: HermiteSegment, s) -> np.ndarray:
         + basis[2][:, None] * p1
         + basis[3][:, None] * v1
     ) / (seg.duration * seg.duration)
+    return out[0] if scalar else out
+
+
+def segment_command_acceleration(seg: HermiteSegment, s) -> np.ndarray:
+    """**指令**加速度（m/s²）：段端点带 ``a0/a1`` 时按端点线性插值，否则退到 ``p''``。
+
+    这是判据该用的量。``a0/a1`` 就是优化器的决策变量（``opti.variable(3, n)``，
+    已被 ``a ≤ a_max``、推力上下界直接约束过），所以拿它判"飞得动吗"是**同源**的，
+    不会出现"约束算节点、复核算 p''"的 0.5% 假超限。段内线性插值只是采样手段：
+    模长、比推力都对 ``a`` 凸，最大值必在端点取到，插值不会漏判。
+    """
+    if seg.a0 is None:
+        return segment_acceleration(seg, s)
+    s_arr, scalar = _as_s(s)
+    a0 = np.asarray(seg.a0, dtype=np.float64)
+    a1 = np.asarray(seg.a1, dtype=np.float64)
+    out = (1.0 - s_arr)[:, None] * a0 + s_arr[:, None] * a1
     return out[0] if scalar else out
 
 

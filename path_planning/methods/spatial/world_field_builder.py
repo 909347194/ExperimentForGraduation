@@ -26,28 +26,27 @@ from path_planning.methods.spatial.occupancy_sdf import (
 from path_planning.methods.spatial.world_field import WorldField
 
 __all__ = [
-    "DEFAULT_AGL_MAX_M",
-    "DEFAULT_AGL_MIN_M",
+    "DEFAULT_ALT_MAX_M",
     "build_world_field",
-    "z_envelope_from_ground",
+    "field_z_envelope",
 ]
 
-#: 飞行真高带下界（AGL，米）。0 = 从地面起算，保证起降段也在场内。
-DEFAULT_AGL_MIN_M = 0.0
-#: 飞行真高带上界（AGL，米）；更高部分由"最高楼顶"兜住。
-DEFAULT_AGL_MAX_M = 120.0
+#: 飞行绝对高度上界（ENU 绝对 z，米）。低空作业口径：不论地形高低，
+#: 轨迹的绝对 z 一律不超过该值；真高随地面起伏而变化。
+DEFAULT_ALT_MAX_M = 120.0
 
 
-def z_envelope_from_ground(
-    ground_min_m: float, agl_min_m: float, agl_max_m: float
+def field_z_envelope(
+    ground_min_m: float, alt_max_m: float
 ) -> tuple[float, float]:
-    """真高带 → 绝对 z 包络。
+    """飞行绝对高度带 → 建场竖直包络的**下界与上界候选**。
 
-    天花板按**场内最低地面**算（而不是最高）：任何一列都飞不到``agl_max``以上，
-    高地只会更保守。按最高地面算会把层数从 121 撑到 190+，SDF 成本翻倍。
-    代价是高地可用真高低于 ``agl_max``，属已知取舍。
+    ``z_lo`` 取场内最低地面（地面在 SDF 中当实体，低于地面的格点被占据）；
+    ``z_hi`` 先取飞行绝对上界 ``alt_max_m``。真正的建场上界还要由
+    :func:`build_world_field` 在下面用"最高地面"和"最高楼顶"兜底抬高——
+    那一步保证高楼被完整建进场、SDF 不乐观，与飞行上界是两件事。
     """
-    return float(ground_min_m) + float(agl_min_m), float(ground_min_m) + float(agl_max_m)
+    return float(ground_min_m), float(alt_max_m)
 
 
 def obstacle_prisms(
@@ -115,8 +114,7 @@ def build_world_field(
     scenario,
     *,
     spacing: tuple[float, float, float] = (4.0, 4.0, 2.0),
-    agl_min_m: float = DEFAULT_AGL_MIN_M,
-    agl_max_m: float = DEFAULT_AGL_MAX_M,
+    alt_max_m: float = DEFAULT_ALT_MAX_M,
     pad_m: float = 0.0,
     include_static_nofly: bool = True,
     keep_occupancy: bool = True,
@@ -128,7 +126,7 @@ def build_world_field(
     Args:
         scenario: ``common.scenario_types.Scenario``
         spacing:  体素间距 ``(dx, dy, dz)``
-        agl_min_m / agl_max_m: 飞行真高带，决定竖直包络下界与上界
+        alt_max_m: 飞行绝对高度上界（ENU 绝对 z）；建场上界另按最高地面/楼顶兜底
         pad_m:    水平额外外扩（须为间距的公倍数，否则全网格点整体平移）
         include_static_nofly: 静态禁飞区是否作为障碍
         keep_occupancy: 是否保留布尔占位（约多占 1 字节/节点，供离线检查）
@@ -169,7 +167,9 @@ def build_world_field(
     ground_min = float(ground_m.min())
     ground_max = float(ground_m.max())
 
-    z_lo, z_hi = z_envelope_from_ground(ground_min, agl_min_m, agl_max_m)
+    z_lo, z_hi = field_z_envelope(ground_min, alt_max_m)
+    # 建场上界必须盖住最高地面与最高楼顶：高楼被裁掉一截会让 SDF 乐观（漏报穿楼）。
+    # 这一步只影响"场建多高"，不放宽飞行上界 alt_max_m——后者由 NLP/复核单独卡。
     z_hi = max(z_hi, ground_max) + dz
 
     prisms = obstacle_prisms(
@@ -185,7 +185,7 @@ def build_world_field(
     if nx * ny * nz > max_nodes:
         raise ValueError(
             f"全域场节点数 {nx * ny * nz} 超过上限 {max_nodes}"
-            f"（shape={(nx, ny, nz)}）；请放粗 spacing 或收窄 agl 带"
+            f"（shape={(nx, ny, nz)}）；请放粗 spacing 或降低 alt_max_m"
         )
 
     grid = GridSpec(

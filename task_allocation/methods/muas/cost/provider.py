@@ -3,7 +3,8 @@
 
 职责：CostProvider 统一 id→id 代价与坐标→坐标物理航程两种访问；build_cost_provider 由
 实体列表装配。DEM 三维航程距离函数由滚动层注入，无 DEM 时回退欧氏。
-边界：只做代价访问，不建矩阵、不改估算器。
+边界：只做代价访问，不建矩阵、不改估算器；**不判可行性**——不可飞边由代价视图写成一个
+      极大数值，再由任务分配内部航程/续航检查判死，本层不另存边集合。
 相关：muas/cost/vertical_section.py、muas/cost/cost_matrix.py、muas/problem.py。"""
 
 from __future__ import annotations

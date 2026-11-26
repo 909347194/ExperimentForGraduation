@@ -1,19 +1,19 @@
 # -*- coding: utf-8 -*-
-"""结果审计：不信任规划器，从落盘 JSON 重新验一遍（多机多轮口径，本实验私有）。
+"""结果审计：不信任规划器，从落盘 JSON 重新验一遍（多机多周期口径，本实验私有）。
 
-逐轮通用项（每项都能独立否决交付）：
+逐周期通用项（每项都能独立否决交付）：
 1. 覆盖：每条请求都有可交付航迹，起终点对得上请求、段时刻连续；
-2. 票自洽：``round_trace`` 里的时刻/时长与落盘航迹逐位一致；
+2. 航次自洽：``cycle_trace`` 里的时刻/时长与落盘航迹逐位一致；
 3. 复核：独立验证器（不是优化器）按同一净空阈值重验；
 4. 真几何：棱柱净空 ≥ ``clearance_m``；
 5. 预算：按清单里的剩余续航/航程判；
 6. 端点净空：起/终点 25 m 球内 SDF ≥ ``clearance_m``（无豁免口径，端点与全域同判）。
 
-跨轮项（本实验的灵魂）：
-7. 必撞设计生效：轮1 协调前冲突 ≥ 1（新-新）、轮2 协调前新-旧冲突 ≥ 1；
-8. 旧侧冻结：轮2 协调后既有航迹逐段不变（机号小者不许动）；
-9. 在飞中规划：轮2 新航迹与既有航迹时间窗重叠 > 0；
-10. 协调后归零：逐轮交付集重新检测 0 冲突；全局终检（全部航迹）0 冲突；
+跨周期项（本实验的灵魂）：
+7. 必撞设计生效：周期1 协调前冲突 ≥ 1（新-新）、周期2 协调前新-旧冲突 ≥ 1；
+8. 旧侧冻结：周期2 协调后既有航迹逐段不变（旧机机号 5/6 更大也不许动）；
+9. 在飞中规划：周期2 新航迹与既有航迹时间窗重叠 > 0；
+10. 协调后归零：逐周期交付集重新检测 0 冲突；全局终检（全部航迹）0 冲突；
 11. 状态账：``busy_until`` == 航迹 ``t_end``；``prune`` 摘除的航迹确实已落地。
 
 为什么读 JSON 而不读内存：审计要能对**几个月后的结果文件**复跑。若审计依赖
@@ -29,13 +29,13 @@ from typing import Any
 
 import numpy as np
 
+from path_planning.common.flight_budget import Budget
 from path_planning.methods.conflict.conflict_detector import DetectionConfig, detect_conflicts
 from path_planning.methods.planning.leg_segments import sampled_positions
-from .flight_metrics import budget_check
 from .result_store import trajectory_from_dict
 from .runtime import Runtime
 
-__all__ = ["Check", "audit_rounds", "report"]
+__all__ = ["Check", "audit_cycles", "report"]
 
 
 @dataclass(frozen=True)
@@ -55,22 +55,22 @@ def report(checks: list[Check]) -> int:
     return 0 if not failed else 1
 
 
-def audit_rounds(runtime: Runtime, fleet, run_dir: str | Path) -> list[Check]:
-    """跑通用项 + 跨轮项，返回检查表（质量项由 ``audit.py`` 追加）。"""
+def audit_cycles(runtime: Runtime, fleet, run_dir: str | Path) -> list[Check]:
+    """跑通用项 + 跨周期项，返回检查表（质量项由 ``audit.py`` 追加）。"""
     run_dir = Path(run_dir)
     solution = json.loads((run_dir / "solution.json").read_text(encoding="utf-8"))
-    trace = json.loads((run_dir / "round_trace.json").read_text(encoding="utf-8"))
-    traj_raw = json.loads((run_dir / "round_trajectories.json").read_text(encoding="utf-8"))
+    trace = json.loads((run_dir / "cycle_trace.json").read_text(encoding="utf-8"))
+    traj_raw = json.loads((run_dir / "cycle_trajectories.json").read_text(encoding="utf-8"))
 
-    trajs = {k: trajectory_from_dict(v) for k, v in traj_raw.items()}   # "轮:机号"
+    trajs = {k: trajectory_from_dict(v) for k, v in traj_raw.items()}   # "周期:机号"
     requests = {int(r.uav_id): r for r in fleet.requests}
     checks: list[Check] = []
 
-    # ---- 逐轮：覆盖 / 票自洽 / 复核 / 真几何 / 预算 / 端点 ----
-    for r_idx in sorted(fleet.rounds):
-        prefix = f"轮{r_idx}"
+    # ---- 逐周期：覆盖 / 航次自洽 / 复核 / 真几何 / 预算 / 端点 ----
+    for r_idx in sorted(fleet.cycles):
+        prefix = f"周期{r_idx}"
         keys = {k for k in trajs if k.startswith(f"{r_idx}:")}
-        want = {req.uav_id for req in fleet.rounds[r_idx]}
+        want = {req.uav_id for req in fleet.cycles[r_idx]}
         got = {int(k.split(":")[1]) for k in keys}
         missing = sorted(want - got)
         checks.append(Check(
@@ -81,35 +81,51 @@ def audit_rounds(runtime: Runtime, fleet, run_dir: str | Path) -> list[Check]:
         for uid in sorted(want & got):
             traj = trajs[f"{r_idx}:{uid}"]
             req = requests[uid]
+            degraded = traj_raw[f"{r_idx}:{uid}"].get("time_source") == "estimate"
+            # 预算按**清单里这一轮的剩余量**判（不是机体名义能力）：降级航次就是被这份
+            # 剩余量逼死的，只有按它判才看得出"降级后确实超了、且超得被记了账"。
+            bc = Budget(
+                endurance_remaining_s=float(req.budget.endurance_remaining_s),
+                range_remaining_m=float(req.budget.range_remaining_m),
+            ).check(traj.duration, traj.path_len_m, hover_weight=float(traj.hover_weight))
             checks.append(Check(
                 f"预算/{prefix}/机{uid}",
-                bool(budget_check(traj, req.vehicle).ok),
+                (not bc.ok) if degraded else bool(bc.ok),
                 f"时长={traj.duration:.1f}s 弧长={traj.path_len_m:.0f}m "
                 f"剩余续航={req.budget.endurance_remaining_s:.0f}s "
-                f"剩余航程={req.budget.range_remaining_m:.0f}m",
+                f"剩余航程={req.budget.range_remaining_m:.0f}m"
+                + ("（降级交付：超预算必须被记账，不许当成功）" if degraded else ""),
             ))
             checks.append(_endpoint_check(runtime, f"{prefix}/机{uid}", traj))
+            checks.append(_stitch_check(r_idx, uid, traj, req, trace))
+            if degraded:
+                checks.append(_degraded_check(r_idx, uid, traj, trace, solution))
 
-    # ---- 跨轮 ----
+    # ---- 跨周期 ----
     checks.extend(_cross_checks(runtime, fleet, solution, trace, trajs))
 
-    # ---- 冲突：逐轮交付集 + 全局终检 ----
-    det = _detection(runtime, fleet, trajs)
-    for r_idx in sorted(fleet.rounds):
-        keys = sorted(k for k in trajs if k.startswith(f"{r_idx}:"))
+    # ---- 冲突：逐周期交付集 + 全局终检（只算 time_source=trajectory）----
+    # 估算航迹的时间不是优化结果，按它判冲突等于拿估算背书；门面也不把它送进协调。
+    det_trajs = {
+        k: t for k, t in trajs.items()
+        if traj_raw[k].get("time_source") != "estimate"
+    }
+    det = _detection(runtime, fleet, det_trajs)
+    for r_idx in sorted(fleet.cycles):
+        keys = sorted(k for k in det_trajs if k.startswith(f"{r_idx}:"))
         if keys:
-            rep = detect_conflicts(tuple(trajs[k] for k in keys), det)
+            rep = detect_conflicts(tuple(det_trajs[k] for k in keys), det)
             checks.append(Check(
-                f"冲突/{'轮'+str(r_idx)}", len(rep.conflicts) == 0,
+                f"冲突/{'周期'+str(r_idx)}", len(rep.conflicts) == 0,
                 f"对比 {len(rep.pairs)} 对，冲突 {len(rep.conflicts)} 对，"
-                f"涉及机号 {sorted(rep.conflict_ids)}",
+                f"涉及机号 {sorted(rep.conflict_ids)}（已剔除 estimate 航迹）",
             ))
-    if trajs:
-        rep = detect_conflicts(tuple(trajs[k] for k in sorted(trajs)), det)
+    if det_trajs:
+        rep = detect_conflicts(tuple(det_trajs[k] for k in sorted(det_trajs)), det)
         checks.append(Check(
             "冲突/全局终检", len(rep.conflicts) == 0,
             f"对比 {len(rep.pairs)} 对，冲突 {len(rep.conflicts)} 对，"
-            f"涉及机号 {sorted(rep.conflict_ids)}",
+            f"涉及机号 {sorted(rep.conflict_ids)}（已剔除 estimate 航迹）",
         ))
     return checks
 
@@ -120,11 +136,11 @@ def audit_rounds(runtime: Runtime, fleet, run_dir: str | Path) -> list[Check]:
 
 
 def _coverage_checks(prefix, r_idx, want, requests, trajs, trace) -> list[Check]:
-    """覆盖细节：起终点误差、时间断点、票自洽。"""
+    """覆盖细节：起终点误差、时间断点、航次自洽。"""
     out: list[Check] = []
     tickets = {
         int(t["uav_id"]): t
-        for r in trace["rounds"] if int(r["round"]) == r_idx
+        for r in trace["cycles"] if int(r["cycle"]) == r_idx
         for t in r["tickets"]
     }
     bad = []
@@ -157,7 +173,7 @@ def _coverage_checks(prefix, r_idx, want, requests, trajs, trace) -> list[Check]
         if t["duration_s"] is not None and abs(float(t["duration_s"]) - traj.duration) > 1e-2:
             mismatch.append(f"机{uid} 时长 {t['duration_s']}≠{traj.duration:.3f}")
     out.append(Check(
-        f"票自洽/{prefix}", not mismatch,
+        f"航次自洽/{prefix}", not mismatch,
         "trace 时刻与航迹逐位一致" if not mismatch else f"不一致：{mismatch}",
     ))
     return out
@@ -178,40 +194,93 @@ def _endpoint_check(runtime: Runtime, name: str, traj) -> Check:
     )
 
 
+def _degraded_check(r_idx: int, uid: int, traj, trace, solution) -> Check:
+    """降级交付的三条判据（实现与理由见 ``degrade_checks``）。"""
+    from .degrade_checks import degraded_delivery_check
+    return degraded_delivery_check(r_idx, uid, traj, trace, solution)
+
+
+def _stitch_check(r_idx: int, uid: int, traj, req, trace) -> Check:
+    """悬停守恒 + 让路只重解一段：多航段航次被"压段"时这两条必红。
+
+    - 悬停守恒：交付航迹的悬停总时长必须等于清单里所有停靠点的 ``service_time_s``
+      之和。旧实现把整条 tour 压成一条折线重解，途经点的短悬停会被吃掉。
+    - 让路留痕：被协调改过几何的航次，``meta`` 必须带 ``legs`` 与 ``replanned_leg``，
+      且 ``replanned_leg`` 落在 ``[0, legs)`` 内（说明只换了那一段、其余段是拼接的）。
+    """
+    want_hover = sum(float(s.service_time_s) for s in req.stops)
+    changed = any(
+        t["changed_by_coordination"]
+        for c in trace["cycles"] if int(c["cycle"]) == r_idx
+        for t in c["tickets"] if int(t["uav_id"]) == uid
+    )
+    legs = traj.meta.get("legs")
+    leg_ok = (
+        not changed
+        or (legs is not None and int(legs) >= 1
+            and 0 <= int(traj.meta.get("replanned_leg", -1)) < int(legs))
+    )
+    hover_ok = abs(float(traj.hover_duration) - want_hover) <= 1e-3
+    return Check(
+        f"悬停守恒/让路留痕/周期{r_idx}/机{uid}",
+        hover_ok and leg_ok,
+        f"悬停 {traj.hover_duration:.1f} s vs 清单 {want_hover:.1f} s；"
+        + ("让路航次 legs=%s replanned_leg=%s" % (legs, traj.meta.get("replanned_leg"))
+           if changed else "未让路，不要求拼接留痕"),
+    )
+
+
 def _cross_checks(runtime, fleet, solution, trace, trajs) -> list[Check]:
-    """跨轮证据：必撞生效、旧侧冻结、在飞中规划、状态账。"""
+    """跨周期证据：必撞生效、旧侧冻结、在飞中规划、状态账。"""
     out: list[Check] = []
-    rounds_payload = solution["rounds"]
-    cross_rounds = {int(r["round"]): r for r in trace["rounds"]}
+    cross_cycles = {int(r["cycle"]): r for r in trace["cycles"]}
 
     # 7. 必撞设计生效
-    r1 = cross_rounds.get(1)
+    r1 = cross_cycles.get(1)
     if r1 is not None and r1.get("coordination"):
-        before = r1["coordination"]["rounds"][0]["conflicts_before"] if r1["coordination"]["rounds"] else 0
+        iters = r1["coordination"]["iterations"]
+        before = iters[0]["conflicts_before"] if iters else 0
         out.append(Check(
-            "必撞/轮1新-新触发", before >= 1,
-            f"协调前冲突 {before} 对（设计 ≥1，UAV2 掠过 UAV1 终点悬停）",
+            "必撞/周期1新-新触发", before >= 1,
+            f"协调前冲突 {before} 对（设计 ≥1：机6 航段穿过机5 的同层悬停点）",
         ))
-    for r_idx in sorted(cross_rounds):
+    for r_idx in sorted(cross_cycles):
         if r_idx == 1:
             continue
-        pcs = cross_rounds[r_idx].get("pre_conflicts", [])
+        pcs = cross_cycles[r_idx].get("pre_conflicts", [])
         new_old = [p for p in pcs if p["kind"] == "new_old"]
         out.append(Check(
-            f"必撞/轮{r_idx}新-旧触发", len(new_old) >= 1,
+            f"必撞/周期{r_idx}新-旧触发", len(new_old) >= 1,
             f"协调前冲突 {len(pcs)} 对，其中新-旧 {len(new_old)} 对"
-            f"（设计 ≥1，新机掠过既有悬停）；明细 {[(p['pair'], p['min_distance']) for p in pcs]}",
+            f"（设计 ≥1：机3 航段穿过仍在悬停的机5）；明细 "
+            f"{[(p['pair'], p['min_distance']) for p in pcs]}",
         ))
 
         # 8. 旧侧冻结
-        frozen = cross_rounds[r_idx].get("old_changed", [])
+        frozen = cross_cycles[r_idx].get("old_changed", [])
         out.append(Check(
-            f"旧侧冻结/轮{r_idx}", not frozen,
+            f"旧侧冻结/周期{r_idx}", not frozen,
             "既有航迹逐段未变" if not frozen else f"旧侧被改动的机号 {frozen}（不应发生）",
         ))
 
-        # 9. 在飞中规划：本轮新航迹 × 既有航迹的时间窗重叠必须 > 0
-        existing = {int(u) for u in cross_rounds[r_idx].get("existing_before", [])}
+        # 8b. 旧侧冻结必须是显式白名单：冻结集恰好等于 Registry 既有集、且与本批
+        #     请求机号不相交。**不**看机号大小——"旧机号更大仍不动"只作叙事，不作判据；
+        #     判据 4 由此不依赖具体机号布局（换一批机号也照样成立）。
+        frozen_ids = {int(u) for u in cross_cycles[r_idx].get("frozen_ids", [])}
+        existing = {int(u) for u in cross_cycles[r_idx].get("existing_before", [])}
+        new_ids = {int(r.uav_id) for r in fleet.cycles.get(r_idx, ())}
+        explicit_ok = (
+            bool(frozen_ids) and bool(new_ids)
+            and frozen_ids == existing and not (frozen_ids & new_ids)
+        )
+        out.append(Check(
+            f"旧侧显式冻结/周期{r_idx}", explicit_ok,
+            f"冻结 {sorted(frozen_ids)} == 既有 {sorted(existing)}，"
+            f"且与请求机号 {sorted(new_ids)} 不相交"
+            f"（白名单判据，与机号大小无关；本例旧机号恰更大，仅作叙事）",
+        ))
+
+        # 9. 在飞中规划：本周期新航迹 × 既有航迹的时间窗重叠必须 > 0
         overlaps = []
         for key, traj in sorted(trajs.items()):
             if not key.startswith(f"{r_idx}:") or int(key.split(":")[1]) in existing:
@@ -224,13 +293,15 @@ def _cross_checks(runtime, fleet, solution, trace, trajs) -> list[Check]:
                 if hi - lo > 0:
                     overlaps.append((key, uid, round(hi - lo, 1)))
         out.append(Check(
-            f"在飞中规划/轮{r_idx}", bool(overlaps),
+            f"在飞中规划/周期{r_idx}", bool(overlaps),
             f"新航迹与既有航迹时间窗重叠：{overlaps}",
         ))
 
     # 11. 状态账
     bad_busy = []
     for key, traj in sorted(trajs.items()):
+        if traj.time_source.value == "estimate":
+            continue  # 降级航迹不写 Registry，本来就没有 busy 账（见「降级交付」项）
         r_idx, uid = key.split(":")
         busy = _busy_after(solution, int(r_idx), int(uid))
         if busy is not None and abs(busy - traj.t_end) > 1e-3:
@@ -241,9 +312,9 @@ def _cross_checks(runtime, fleet, solution, trace, trajs) -> list[Check]:
     ))
 
     bad_prune = []
-    for r_idx in sorted(cross_rounds):
+    for r_idx in sorted(cross_cycles):
         now = (r_idx - 1) * float(fleet.cycle_length_s)
-        for uid in cross_rounds[r_idx].get("pruned", []):
+        for uid in cross_cycles[r_idx].get("pruned", []):
             key = _find_key(trajs, int(uid))
             if key is not None and trajs[key].t_end > now + 1e-6:
                 bad_prune.append(f"{key}: t_end={trajs[key].t_end:.1f} > {now:g}")
@@ -265,7 +336,7 @@ def _find_key(trajs, uid: int) -> str | None:
 
 
 def _busy_after(solution, r_idx: int, uid: int) -> float | None:
-    payload = solution["rounds"].get(str(r_idx))
+    payload = solution["cycles"].get(str(r_idx))
     if payload is None:
         return None
     busy = payload.get("registry_busy_until") or {}
@@ -278,3 +349,4 @@ def _detection(runtime: Runtime, fleet, trajs) -> DetectionConfig:
     return DetectionConfig.from_params(
         runtime.config.params, vehicle, e_geo_m=runtime.config.e_geo_m
     )
+

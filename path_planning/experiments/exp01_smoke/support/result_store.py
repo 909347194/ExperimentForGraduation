@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""结果落盘：航迹 / 规划结果 / 协调轮次 → 可复现的 JSON。
+"""结果落盘：航迹 / 规划结果 / 协调周期 → 可复现的 JSON。
 
 职责：把 ``Trajectory``、``PlanResult``、``CoordinationOutcome`` 转成纯 JSON 结构，
       并按"一次运行一个目录"的约定写文件（``solution.json`` / ``metrics.json`` /
@@ -51,7 +51,11 @@ def dump_json(path: str | Path, payload: Any) -> None:
 
 
 def trajectory_to_dict(traj: Trajectory) -> dict[str, Any]:
-    """航迹 → 段表（每段的 6 个端点量与时间戳），可完整重建。"""
+    """航迹 → 段表（每段的端点位置/速度/加速度 + 时间戳），可完整重建。
+
+    加速度只优化器的交付段有（五次 Hermite）；降级剖面是三次段，写 ``None``。
+    落盘必须带上它，否则审计从 JSON 重建时只能拿回三次曲线，``p''`` 复核会算错。
+    """
     segs = []
     for k, seg in enumerate(traj.segments):
         segs.append(
@@ -61,8 +65,10 @@ def trajectory_to_dict(traj: Trajectory) -> dict[str, Any]:
                 "t1": _r(seg.t1),
                 "p0": [_r(v) for v in seg.p0],
                 "v0": [_r(v) for v in seg.v0],
+                "a0": None if seg.a0 is None else [_r(v) for v in seg.a0],
                 "p1": [_r(v) for v in seg.p1],
                 "v1": [_r(v) for v in seg.v1],
+                "a1": None if seg.a1 is None else [_r(v) for v in seg.a1],
                 "is_hover": bool(seg.is_hover),
                 "chord_m": _r(seg.chord_m),
             }
@@ -102,7 +108,11 @@ def plan_result_to_dict(result: PlanResult, *, with_trajectory: bool = True) -> 
 
 
 def trajectory_from_dict(payload: Mapping[str, Any]) -> Trajectory:
-    """``trajectory_to_dict`` 的逆：段表 → ``Trajectory``（审计/画图用）。"""
+    """``trajectory_to_dict`` 的逆：段表 → ``Trajectory``（审计/画图用）。
+
+    ``a0/a1`` 缺失（老结果文件）按 ``None`` 处理，段退化为三次——那种文件本来就
+    是三次时代的产物，用它自己的定义复算才自洽。
+    """
     segs = tuple(
         HermiteSegment(
             t0=float(s["t0"]),
@@ -111,6 +121,8 @@ def trajectory_from_dict(payload: Mapping[str, Any]) -> Trajectory:
             p1=tuple(float(v) for v in s["p1"]),
             v0=tuple(float(v) for v in s["v0"]),
             v1=tuple(float(v) for v in s["v1"]),
+            a0=None if s.get("a0") is None else tuple(float(v) for v in s["a0"]),
+            a1=None if s.get("a1") is None else tuple(float(v) for v in s["a1"]),
             is_hover=bool(s["is_hover"]),
         )
         for s in payload["segments"]

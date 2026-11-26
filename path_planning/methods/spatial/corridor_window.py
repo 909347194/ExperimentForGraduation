@@ -35,7 +35,7 @@ __all__ = [
     "corridor_window",
     "required_pad_m",
     "window_area_m2",
-    "z_envelope_from_ground",
+    "field_z_envelope",
 ]
 
 _MIN_HORIZONTAL_M = 1e-6
@@ -51,20 +51,25 @@ class CorridorRule:
     Attributes:
         width_ratio:  走廊**总宽** / 水平起终点距离；半宽 = 0.5·ratio·L
         half_width_m: 直接给半宽（优先于 ``width_ratio``）
-        margin_m:     走廊外扩余量，轴向与横向各加一圈
+        half_width_min_m: 比例口径的**绝对下限**（米）。纯比例口径在短航段上会退化成
+                     一条直线（30 m 航段 0.5·0.1·L = 1.5 m，横向自由度为零），给地板
+                     保住横向自由度；显式 ``half_width_m`` 不受它影响
+        margin_m:     走廊外扩余量，轴向与横向各加一圈（建场取窗用，不是交付约束）
     """
 
     width_ratio: float | None = None
     half_width_m: float | None = None
+    half_width_min_m: float = 0.0
     margin_m: float = 0.0
 
     def half_width_for(self, horizontal_distance_m: float) -> float:
-        """解析半宽（米）。两者都给时以 ``half_width_m`` 为准。"""
+        """解析半宽（米）：显式 ``half_width_m`` 优先，否则 max(0.5·ratio·L, 下限)。"""
         if self.half_width_m is not None:
             return float(self.half_width_m)
         if self.width_ratio is not None:
-            return 0.5 * float(self.width_ratio) * float(horizontal_distance_m)
-        return 0.0
+            return max(0.5 * float(self.width_ratio) * float(horizontal_distance_m),
+                       float(self.half_width_min_m))
+        return float(self.half_width_min_m)
 
 
 @dataclass(frozen=True)
@@ -208,11 +213,14 @@ def window_area_m2(window: CorridorWindow) -> float:
     return (nx - 1) * sx * (ny - 1) * sy
 
 
-def z_envelope_from_ground(
-    ground_min_m: float, agl_min_m: float, agl_max_m: float
+def field_z_envelope(
+    ground_min_m: float, alt_max_m: float
 ) -> tuple[float, float]:
-    """真高带 → 绝对 z 包络（航段与试跑脚本共用这一处口径）。"""
-    return float(ground_min_m) + float(agl_min_m), float(ground_min_m) + float(agl_max_m)
+    """飞行绝对高度带 → 建场竖直包络（航段与试跑脚本共用这一处口径）。
+
+    下界取最低地面，上界先取飞行绝对上界；建场时再按最高楼顶兜底抬高。
+    """
+    return float(ground_min_m), float(alt_max_m)
 
 
 def required_pad_m(

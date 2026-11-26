@@ -146,6 +146,10 @@ class Scenario:
     def ground_height_at(self, x: float, y: float) -> float:
         return float(self.ground_height(np.array([x]), np.array([y]))[0])
 
+    def roof_height_at(self, x: float, y: float) -> float:
+        """单点屋顶高程；建筑外退化为地面高程。"""
+        return float(self.roof_height(np.array([x]), np.array([y]))[0])
+
     def roof_height(self, xs, ys) -> np.ndarray:
         """屋顶高程 = 地面 + 建筑 AGL。建筑外即地面。"""
         base = self.ground_height(xs, ys)

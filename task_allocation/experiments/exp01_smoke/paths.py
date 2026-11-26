@@ -11,7 +11,7 @@
     EXP_DIR/results/   数值产物（metrics.json / run_meta.json / solution.json）
     EXP_DIR/plot/      可视化模块（代码）
     EXP_DIR/plot/figures/  图产物（png / pdf）
-    DATA_DIR/     场景数据注册表根（task_allocation/data/；场景目录取
+    DATA_DIR/     场景数据注册表根（data/；场景目录取
                   data/<scenario>/，解析统一走 common/scenario_data.py）
 """
 
@@ -24,9 +24,9 @@ from pathlib import Path
 EXP_DIR = Path(__file__).resolve().parent
 #: 仓库根目录
 ROOT = EXP_DIR.parents[2]
-#: 场景数据注册表根（task_allocation/data/；场景目录取 data/<scenario>/，
+#: 场景数据注册表根（data/；场景目录取 data/<scenario>/，
 #: 文件解析用 task_allocation.common.scenario_data.resolve_file）
-DATA_DIR = ROOT / "task_allocation" / "data"
+DATA_DIR = ROOT / "data"
 
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))

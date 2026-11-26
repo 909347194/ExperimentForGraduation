@@ -290,5 +290,48 @@ class TestWorldField(unittest.TestCase):
         np.testing.assert_allclose(got, want, atol=1e-6)
 
 
+class TestWindowForPoints(unittest.TestCase):
+    """局部让路的窗口场：格点对齐 + 与全域数值一致（不是另一套 SDF）。"""
+
+    def test_aligned_window_matches_global(self) -> None:
+        grid = GridSpec(origin=(0.0, 0.0, 0.0), spacing=(4.0, 4.0, 2.0), shape=(20, 15, 8))
+        nx, ny, nz = grid.shape
+        raw = np.empty((nz, nx, ny), dtype=np.float32)
+        for k in range(nz):
+            for i in range(nx):
+                raw[k, i, :] = 3.0 + 2.0 * i + 0.5 * k + 0.01 * np.arange(ny)
+        bias = 1.25
+        field = WorldField(grid, raw, sample_bias_m=bias)
+
+        pts = np.array([[20.0, 20.0, 6.0], [28.0, 24.0, 8.0], [36.0, 28.0, 10.0]])
+        window = field.window_for_points(pts, margin_m=8.0)
+
+        # 原点必须落在全域格点上（浮点数比较用间距整除容差）；窗口必须真变小。
+        gx0, gy0, gz0 = grid.origin
+        sx, sy, sz = grid.spacing
+        for value, origin, spacing in zip(
+            window.grid.origin[:2], (gx0, gy0), (sx, sy)
+        ):
+            self.assertAlmostEqual((value - origin) / spacing,
+                                   round((value - origin) / spacing), places=9)
+        self.assertAlmostEqual(window.grid.origin[2], gz0, places=9)
+        self.assertLess(window.grid.node_count, grid.node_count)
+
+        # 窗口节点值 = 全域对应格点值（已扣同一偏置）；点插值也必须逐点相等。
+        i0 = round((window.grid.origin[0] - gx0) / sx)
+        j0 = round((window.grid.origin[1] - gy0) / sy)
+        wi, wj, wk = window.grid.shape
+        expected = raw[:wk, i0:i0 + wi, j0:j0 + wj] - np.float32(bias)
+        np.testing.assert_array_equal(window.sdf, expected.transpose(1, 2, 0))
+        np.testing.assert_allclose(window.at(pts), field.at(pts), atol=1e-5)
+
+    def test_outside_points_raise(self) -> None:
+        grid = GridSpec(origin=(0.0, 0.0, 0.0), spacing=(4.0, 4.0, 2.0), shape=(10, 10, 5))
+        raw = np.ones((5, 10, 10), dtype=np.float32)
+        field = WorldField(grid, raw)
+        with self.assertRaises(WindowOutsideField):
+            field.window_for_points(np.array([[1000.0, 0.0, 2.0]]))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

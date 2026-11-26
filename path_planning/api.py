@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """对外唯一入口：``PathPlanner``。
 
-职责：上层（``horizon`` / ``closed_loop``）只从这里进，做两件事——排一条 tour、
+职责：上层（``horizon`` / ``orchestration``）只从这里进，做两件事——排一条 tour、
       把一批 tour 协调到无冲突，并维护 ``TrajectoryRegistry``。
 边界：不实现任何算法；所有能力都在 ``methods/`` 内，本文件只做装配与契约归一。
 相关：``docs/architecture.md`` §1、改造方案 §10.1/§10.2。
@@ -20,9 +20,9 @@ from dataclasses import dataclass, field
 from typing import Mapping, Sequence
 
 from path_planning.common.plan_params import PlanParams
-from path_planning.common.plan_types import PlanRequest, PlanResult, Trajectory
+from path_planning.common.plan_types import PlanRequest, PlanResult, TimeSource, Trajectory
 from path_planning.common.vehicle_spec import VehicleSpec
-from path_planning.methods.conflict.conflict_detector import DetectionConfig
+from path_planning.methods.conflict.conflict_detector import DetectionConfig, DetectionReport
 from path_planning.methods.coordination.global_recheck import (
     CoordinationOutcome,
     coordinate_conflicts,
@@ -40,14 +40,20 @@ class FleetPlan:
     """一批 tour 的规划 + 协调结果。
 
     Attributes:
-        results:  逐机规划结果（含失败码；``ok=False`` 的机不参与协调）
-        changed:  被让路改写过几何的机号 → 新航迹（未改动的机不出现）
-        outcome:  协调结果（全部无冲突时 ``ok=True``；没有可交付航迹时为 None）
+        results:    逐机规划结果（含失败码；``ok=False`` 的机不参与协调）
+        changed:    被让路改写过几何的机号 → 新航迹（旧侧冻结，不会出现在表里）
+        outcome:    协调结果（全部无冲突时 ``ok=True``；没有可交付航迹时为 None）
+        existing:   本轮参与协调的 Registry 旧航迹（新—旧冲突的"旧侧"）
+        pre_report: 协调前检测报告（含新—旧冲突的触发证据）
+        frozen_ids: 旧侧机号（显式冻结，不依赖机号大小）
     """
 
     results: Mapping[int, PlanResult]
     changed: Mapping[int, Trajectory] = field(default_factory=dict)
     outcome: CoordinationOutcome | None = None
+    existing: tuple[Trajectory, ...] = ()
+    pre_report: DetectionReport | None = None
+    frozen_ids: tuple[int, ...] = ()
 
     @property
     def ok(self) -> bool:
@@ -97,27 +103,74 @@ class PathPlanner:
     # --- 多机 ---------------------------------------------------------
 
     def plan_fleet(
-        self, requests: Sequence[PlanRequest], *, max_rounds: int | None = None
+        self,
+        requests: Sequence[PlanRequest], *,
+        max_rounds: int | None = None,
+        include_existing: bool = True,
+        prune_at: float | None = None,
     ) -> FleetPlan:
-        """批量规划 + 协调（同机型分组协调；异构机队见 ``_groups`` 说明）。"""
+        """批量规划 + 协调；默认把 Registry 中仍在飞的旧航迹作为冻结障碍一起检测。
+
+        Args:
+            requests:        本批次新请求（``t0`` 冻结）
+            max_rounds:      协调迭代上限
+            include_existing: True = 新—旧一起检测，旧侧显式冻结；False = 只协调本批
+            prune_at:        规划前落地结算的时刻；None = 取本批最小 ``t0``
+
+        旧侧机号可以与新机任意大小——冻结靠 ``movable_ids`` 白名单，不靠机号序。
+        机型分组协调的边界见 ``coordinate`` 说明（跨机型冲突仍待上层裁决）。
+        """
+        if prune_at is not None:
+            self.registry.prune(prune_at)
+        elif requests:
+            self.registry.prune(min(float(req.t0) for req in requests))
+
         results: dict[int, PlanResult] = {}
         for req in requests:
             results[req.uav_id] = self.plan(req, register=False)
-        deliverable = [r.trajectory for r in results.values() if r.trajectory is not None]
+        # 估算时间的降级航迹（``time_source=estimate``）**不进协调**：它的时间不是
+        # 优化结果，按它判冲突等于拿估算背书；它也不写 Registry（不能当别人的时空障碍）。
+        deliverable = [
+            r.trajectory for r in results.values()
+            if r.trajectory is not None and r.trajectory.time_source is TimeSource.TRAJECTORY
+        ]
+        new_ids = frozenset(results)
+        vehicles: dict[int, VehicleSpec] = {req.uav_id: req.vehicle for req in requests}
+
+        existing: tuple[Trajectory, ...] = ()
+        if include_existing and deliverable:
+            # 同机号旧航迹不能当自己的对手：它会被本批交付覆盖（上层应保证 t0 不重叠）。
+            existing = tuple(
+                t for t in self.registry.trajectories()
+                if int(t.uav_id) not in new_ids and _overlaps_any(t, deliverable)
+            )
+            if existing and vehicles:
+                # 旧航迹没有逐机机体信息（Registry 只存航迹）；取本批最保守机体做
+                # 检测/复核限值。旧侧冻结、不重解时间，取保守值不会放宽约束。
+                conservative = min(vehicles.values(), key=lambda v: v.a_max_mps2)
+                for t in existing:
+                    vehicles.setdefault(int(t.uav_id), conservative)
+
+        movable_ids = new_ids if include_existing else None
         outcome = self.coordinate(
-            deliverable,
-            vehicles={req.uav_id: req.vehicle for req in requests},
-            max_rounds=max_rounds,
+            list(deliverable) + list(existing),
+            vehicles=vehicles, max_rounds=max_rounds, movable_ids=movable_ids,
         )
 
         changed: dict[int, Trajectory] = {}
         final = dict(outcome.trajectories) if outcome is not None else {}
         for uid, traj in final.items():
+            if uid not in new_ids:
+                continue  # 旧侧冻结：只回写本批新机，旧航迹保持 Registry 原对象
             original = results[uid].trajectory
             if original is not None and traj is not original:
                 changed[uid] = traj
             self.registry.replace(traj, source=_source_of(traj))
-        return FleetPlan(results=results, changed=changed, outcome=outcome)
+        return FleetPlan(
+            results=results, changed=changed, outcome=outcome, existing=existing,
+            pre_report=None if outcome is None else outcome.pre_report,
+            frozen_ids=tuple(sorted(int(t.uav_id) for t in existing)),
+        )
 
     def coordinate(
         self,
@@ -127,12 +180,15 @@ class PathPlanner:
         vehicles: Mapping[int, VehicleSpec] | None = None,
         detection: DetectionConfig | None = None,
         max_rounds: int | None = None,
+        movable_ids: frozenset[int] | None = None,
     ) -> CoordinationOutcome | None:
         """对给定航迹集合做冲突消解；``None`` = 没有航迹可协调。
 
-        异构机队说明：``coordinate_conflicts`` 只接受单一 ``vehicle``（复核与真几何闸
-        按它取值），故这里按 ``vehicle.model`` 分组、逐组协调。**同批混机型时跨组冲突
-        不在本函数职责内**——那需要上层按机型裁决，或改成逐机机体检（见架构文档未决项）。
+        ``movable_ids`` 给出允许改几何的机号（跨周期即本批新机），其余航迹即使机号
+        更大也冻结。异构机队说明：``coordinate_conflicts`` 只接受单一 ``vehicle``
+        （复核与真几何闸按它取值），故这里按 ``vehicle.model`` 分组、逐组协调。
+        **同批混机型时跨组冲突不在本函数职责内**——那需要上层按机型裁决，或改成
+        逐机机体检（见架构文档未决项）。
         """
         if not trajectories:
             return None
@@ -141,6 +197,10 @@ class PathPlanner:
         for model, (group_trajs, group_vehicle) in groups.items():
             det = detection or DetectionConfig.from_params(
                 self.context.params, group_vehicle, e_geo_m=self.e_geo_m
+            )
+            group_ids = frozenset(int(t.uav_id) for t in group_trajs)
+            group_movable = (
+                None if movable_ids is None else frozenset(movable_ids & group_ids)
             )
             out = coordinate_conflicts(
                 group_trajs,
@@ -151,6 +211,8 @@ class PathPlanner:
                 nlp_for=lambda uid, v=group_vehicle: _nlp_for(self.context, v),
                 prisms=self.context.prisms,
                 max_rounds=max_rounds,
+                movable_ids=group_movable,
+                sdf_cache=self.context.sdf_cache,
             )
             merged = out if merged is None else _merge_outcomes(merged, out, model)
         return merged
@@ -176,6 +238,13 @@ def _nlp_for(ctx: TourPlanningContext, vehicle: VehicleSpec) -> NlpConfig:
         ctx.params, vehicle,
         clearance_m=float(ctx.params.clearance_m),
         alt_range_m=ctx.alt_range_m,
+    )
+
+
+def _overlaps_any(old: Trajectory, new: Sequence[Trajectory], eps: float = 1e-6) -> bool:
+    """旧航迹是否与任一本批新航迹时间窗重叠（含端点，纯标量预筛）。"""
+    return any(
+        not (old.t0 > t.t_end + eps or t.t0 > old.t_end + eps) for t in new
     )
 
 
@@ -224,4 +293,5 @@ def _merge_outcomes(
         reason=reason,
         report=right.report or left.report,
         detail={**dict(left.detail), **dict(right.detail), "last_group": group},
+        pre_report=left.pre_report or right.pre_report,
     )

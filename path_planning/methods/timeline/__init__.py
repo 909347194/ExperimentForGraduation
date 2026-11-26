@@ -32,6 +32,7 @@ from path_planning.methods.timeline.initial_guess import (
 from path_planning.methods.timeline.splines import (
     position_at,
     segment_acceleration,
+    segment_command_acceleration,
     segment_arc_length,
     segment_position,
     segment_velocity,
@@ -57,6 +58,7 @@ __all__ = [
     "resample_path",
     "position_at",
     "segment_acceleration",
+    "segment_command_acceleration",
     "segment_arc_length",
     "segment_position",
     "segment_velocity",

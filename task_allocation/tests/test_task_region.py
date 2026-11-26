@@ -33,7 +33,7 @@ from task_allocation.common.task_scenario import (  # noqa: E402
     build_synthetic_tasks,
 )
 
-DATA = ROOT / "data" / "lasa_chengguan" # 场景数据目录（data/<scenario>/，按场景分目录）
+DATA = REPO / "data" / "lasa_chengguan"  # 场景数据目录（仓库根 data/<scenario>/）
 DEM = DATA / "Chengguan_DEM.tif"
 NEST_CSV = DATA / "nest_location_data.csv"
 REGION = DATA / "Chengguan_district.geojson"

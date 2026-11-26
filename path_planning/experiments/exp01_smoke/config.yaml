@@ -1,10 +1,16 @@
-# exp01_smoke —— 多机多轮 tour 冒烟：真实 Guangzhou 场景下把"走廊→RRT→NLP→复核→交付→
-# 冲突协调→跨轮既有航迹约束"整条链跑通。两轮四机：
-#   轮1（t0=0）：UAV1/UAV2 同批规划 + 新-新协调（设计必撞：UAV2 掠过 UAV1 的终点悬停）；
-#   轮2（t0=240，即 cycle_length_s）：UAV3/UAV4 起飞，约束 = DEM + 建筑 + 轮1 已发布航迹
-#   （设计必撞：UAV3 掠过仍在悬停的 UAV1 → 新-旧冲突，旧侧冻结、新侧让路）。
+# exp01_smoke —— 多机多周期 tour 冒烟：真实 Guangzhou 场景下把"走廊→RRT→NLP→复核→交付→
+# 冲突协调→跨周期既有航迹约束→降级交付"整条链跑通。两周期五机（两周期均走生产门面 plan_fleet）：
+#   第 1 周期（t0=0）：机5/机6 同批规划 + 新-新协调；必撞设计 = 机5 在 H=(-605.2,-223.5,60)
+#     悬停 500 s，机6 的第二航段（202 停 20 s 之后）同层穿过 H → 协调前必有一对冲突，机6 只重解这一段。
+#   第 2 周期（t0=240，即 cycle_length_s）：机3/机4 起飞，约束 = DEM + 建筑 + 第 1 周期已发布航迹；
+#     必撞设计 = 机3 的第二航段（302 停 15 s 之后）同样穿过仍在悬停的 H → 新-旧冲突，旧侧（机5）显式冻结、新侧（机3）只重解这一段。
+#     旧机机号更大也要冻结——这正是本实验检验的门面接线，不是机号序规则。
 #
-# 这份文件是本实验**唯一**的参数来源：不继承、不覆盖、不设代码默认值。
+# 这份文件是本实验**唯一**的参数来源：`planning` 段每个键都必须显式写出（缺键即报错），
+# 取值默认必须等于 `common/plan_params.py::PlanParams` 的库默认；只有
+# `tests/test_defaults_single_source.py` 的 `_INTENDED_OVERRIDES` 里申报过的项才允许偏离
+# （本实验申报 2 项：max_iter / n_nodes）。走廊几何（宽比 / 显式半宽 / 绝对下限 / 取窗余量）
+# 属场景侧口径，统一在 `corridor` 段；真高带在 `planning.alt_agl_*`，绝对 z 带由运行时派生。
 # 任何一个数字改动都必须改在这里，结果目录里的 effective_config.json 是它的快照。
 #
 # 运行（项目根下）：
@@ -14,19 +20,25 @@
 
 experiment:
   name: exp01_smoke
-  seeds: [0]
+  # 三个 RRT 种子：多初值会因种子不同选中不同的初值候选，"必撞触发"因此不是单点
+  # 而是可重复统计（T03 表按种子并排列）。逐种子跑：run --seed N。
+  seeds: [0, 1, 2]
 
 scenario:
-  data_dir: path_planning/data/guangzhou
+  data_dir: data/guangzhou
   name: guangzhou
   nest_count: null          # null = 全部机巢（本实验不使用机巢概念，巢只是场景数据）
   terrain_step_m: 30.0
   bbox_margin_m: 5.0
+  # 地形空洞 = 水域（DEM 的 nodata=255 是北缘珠江河道）。统一填水面高程 2.0 m，
+  # 而不是最近邻扩散——后者把水面糊成岸边陆地高程。本实验不用机巢概念，但端点
+  # 准入仍按"地表 + 间隙"算，填错会直接影响真高带的判定基准。
+  water_level_m: 2.0
 
 field:
   spacing_m: [4.0, 4.0, 2.0]   # 与 sdf_spacing_cells 对齐：全网格距即最细格距
-  agl_min_m: 0.0
-  agl_max_m: 120.0
+  alt_max_m: 120.0          # 建场竖直上界候选（绝对 z）；实际飞行带由 runtime 按
+                            # ground_min + alt_agl_min/alt_agl_max 派生，上界再受场顶约束
   pad_m: 0.0
   include_static_nofly: true
   sample_bias_m: 0.0
@@ -34,20 +46,33 @@ field:
 
 corridor:
   half_width_m: null          # 不给具体半宽 → 按宽比算
-  width_ratio: 0.10           # 总宽 = 10% 水平距离
-  margin_m: 10.0
+  width_ratio: 0.20           # 总宽 = 20% 水平距离（与 pp1 同口径；其默认 0.2）
+  half_width_min_m: 20.0      # 比例口径的绝对下限：本实验航段只有 30–550 m，
+                              # 纯比例会给 30 m 航段 1.5 m 半宽 → 走廊退化成一条直线
+  margin_m: 10.0              # 只在建场取窗时外扩，不是交付约束
+
+mission_waypoints:
+  # 航点高度的三段规则在 support/waypoint_policy.py：表面基线 → 间隙 → 净空阶梯。
+  #   nest 基线 = 地面与屋顶取大（巢在楼顶就按楼顶）；task 基线 = 屋顶（无建筑即地面）；
+  #   阶梯步长 = field.spacing_m[2]（一格），抬到 ctx.alt_range_m 上界仍不达标就报错换点。
+  # 两条间隙是"离表面多高"，不是真高：必须 ≥ alt_agl_min_m，否则地表点必被端点准入拒。
+  nest_hover_agl_m: 15.0     # 离巢悬停间隙（不建模起降，A4）
+  task_clearance_agl_m: 10.0 # 作业面上方间隙
 
 runtime:
-  agl_range_m: [3.0, 100.0]   # RRT 真高带（与建场带同源，取建场带内的可飞部分）
-  endpoint_clearance_m: 6.0   # 端点无豁免：起始点由本实验选址（实测 SDF ≥ 8 m），与全域同判
+  endpoint_clearance_m: 6.0   # 端点由中间层置于悬停高度；阈值与全域同判
   endpoint_exempt_radius_m: 0.0   # 0 = 不设豁免球，端点按全量 6 m 判（比单机冒烟更严）
   e_geo_m: 0.5                # 检测半径的几何误差标量（DEM 像元/棱柱化/AGL 舍入）
-  cycle_length_s: 240.0       # 决策节拍：轮 r 的 t0 = (r-1) × cycle_length_s
+  cycle_length_s: 240.0       # 决策周期：周期 r 的 t0 = (r-1) × cycle_length_s
+  depart_stagger_s: 10.0      # 同周期同起点（同巢）航次的离巢错峰：第 k 台 t0 = 基准 + k×本值
+                              # 10 s ≈ 10 m/s × 10 s = 100 m 同刻位置差，远超判定半径（20.7 m）；
+                              # 工作区间 10–20 s。0 = 不错峰 ⇒ 同刻同起点必判 0 距离
   results_dir: path_planning/experiments/exp01_smoke/results
 
 planning:
-  clearance_m: 6.0
-  corridor_half_width_m: 20.0     # 只用于参数自洽校验；实际半宽由 corridor 段给
+  clearance_m: 6.0                # 交付/审计口径（真几何）；求解阈值另加 SDF 量化容差 = 竖直格距 2 m
+  alt_agl_min_m: 10.0             # 飞行带真高下限（AGL）；端点由 plan_tour 逐点准入
+  alt_agl_max_m: 120.0            # 飞行带真高上限（AGL）
   grid_cell_m: 60.0
   sdf_spacing_cells: [4, 4, 2]
   bbox_margin_m: 5.0
@@ -63,7 +88,13 @@ planning:
   clearance_sample_step_m: 2.0
 
   n_nodes: 120          # km 级航段必须 120 节点 + 段内 8 采样（60/3 会在节点间掏出 5–11 m 的洞）
-  dt_min_s: 0.3
+  # 步长下限必须远低于"物理上真需要的步长"，否则它是**时长地板**而不是数值护栏：
+  # 120 节点 × 0.3 s = 35.7 s 是 30 m 航段的硬下界（实测交付 35.701 s），盈余时间被求解器
+  # 花成竖直漂移（z 拱到 85.9 m、弧长 163.7 m vs 直飞 107.9 m）。
+  # 取 0.05 s：地板降到 5.95 s（远低于最短航段的 16.6 s），交付曲线的逐段 p'' 峰值从
+  # 3.061（0.01 s）降到 3.016，仍超 a_max 约 0.5%——C¹ 表示层残差，靠放大步长解决等于
+  # 往"时长地板"退，留给验证口径/五次 Hermite 那条线处置（见 PIPELINE.md「已知边界」）。
+  dt_min_s: 0.05
   dt_max_s: 20.0
   max_iter: 400
   solver_tol: 0.0001
@@ -74,7 +105,7 @@ planning:
   eps_a_m: 0.05
   time_eps_s: 0.001
   space_eps_m: 0.001
-  ellipsoid_semiaxes_m: [30.0, 30.0, 15.0]
+  ellipsoid_semiaxes_m: [20.0, 20.0, 10.0]
   cpa_dense_steps: 24
 
   local_region_margin_m: 100.0
@@ -87,3 +118,5 @@ planning:
   local_replan_guide_radius_m: 2.0
 
   hover_weight: 1.0
+
+

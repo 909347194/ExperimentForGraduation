@@ -59,9 +59,14 @@ class FailureCode(str, Enum):
     """失败码枚举。值即对外字符串，禁止改名（上层按字符串匹配）。"""
 
     # --- 空间层 ---------------------------------------------------------
+    #: 请求期准入：航段水平长度超过建场契约的 max_od_length_m。与参考实现
+    #: ``pp1`` 的 ``FailureCode.OD_TOO_LONG`` 同口径——结果码而不是异常。
+    OD_TOO_LONG = "OD_TOO_LONG"
     CORRIDOR_TOO_NARROW = "CORRIDOR_TOO_NARROW"
+    CORRIDOR_OUT_OF_DOMAIN = "CORRIDOR_OUT_OF_DOMAIN"
     RRT_NO_PATH = "RRT_NO_PATH"
     CLEARANCE_VIOLATION = "CLEARANCE_VIOLATION"
+    ENDPOINT_OUT_OF_BAND = "ENDPOINT_OUT_OF_BAND"
 
     # --- 时间层 ---------------------------------------------------------
     OPT_FAILED = "OPT_FAILED"
@@ -102,11 +107,23 @@ class FailureInfo:
 
 #: 码表。新增码必须同时登记 severity——没有默认值，强制想清楚分级。
 FAILURES: dict[FailureCode, FailureInfo] = {
+    FailureCode.OD_TOO_LONG: FailureInfo(
+        code=FailureCode.OD_TOO_LONG,
+        severity=Severity.INFEASIBLE,
+        summary="航段水平长度超过建场契约 max_od_length_m（窗口会超出全域场）",
+        remedy="拆分航段/换终点巢；或调大契约上限并重建场（pad 会按 required_pad_m 同步放大）",
+    ),
     FailureCode.CORRIDOR_TOO_NARROW: FailureInfo(
         code=FailureCode.CORRIDOR_TOO_NARROW,
         severity=Severity.INFEASIBLE,
         summary="走廊在给定半宽下不可构造（建筑过密或通道缺口）",
         remedy="放宽走廊半宽、降低飞行高度层，或改终点机巢",
+    ),
+    FailureCode.CORRIDOR_OUT_OF_DOMAIN: FailureInfo(
+        code=FailureCode.CORRIDOR_OUT_OF_DOMAIN,
+        severity=Severity.INFEASIBLE,
+        summary="轨迹越出走廊计算域（域外未建 SDF，净空无法核验）",
+        remedy="重建/放宽走廊后重规划该段；不要在容差上找空间越过域界",
     ),
     FailureCode.RRT_NO_PATH: FailureInfo(
         code=FailureCode.RRT_NO_PATH,
@@ -119,6 +136,12 @@ FAILURES: dict[FailureCode, FailureInfo] = {
         severity=Severity.INFEASIBLE,
         summary="轨迹净空低于 clearance（含采样点内插校验）",
         remedy="抬高飞行高度层或重规划该段",
+    ),
+    FailureCode.ENDPOINT_OUT_OF_BAND: FailureInfo(
+        code=FailureCode.ENDPOINT_OUT_OF_BAND,
+        severity=Severity.INFEASIBLE,
+        summary="端点真高越出飞行带（不是空中悬停点；起降段不在本模块规划域内）",
+        remedy="改端点高度到真高带内，或改机巢/选址；不要靠放宽真高带来绕过",
     ),
     FailureCode.OPT_FAILED: FailureInfo(
         code=FailureCode.OPT_FAILED,

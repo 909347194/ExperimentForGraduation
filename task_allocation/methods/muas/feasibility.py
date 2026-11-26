@@ -3,8 +3,10 @@
 
 职责：给定问题实例与解，按 ConstraintConfig 开关逐类检查并聚合违约/惩罚。
 边界：不做单条约束判据（在 constraints/），不定义目标函数（在 problem.py）；只编排
-"哪些检查参与、按什么权重聚合"。
-相关：muas/constraints/、muas/problem.py。"""
+"哪些检查参与、按什么权重聚合"。**不另设"不可飞边"闸门**：下层回灌的不可飞边是被
+写进代价的一个极大数值的，含该边的航次在下面的航程检查里自然超限、被判
+``feasible=False``——一个事实一条链路，不再有第二套判据。
+相关：muas/constraints/、muas/problem.py、muas/cost/fact_cost_view.py。"""
 
 from __future__ import annotations
 

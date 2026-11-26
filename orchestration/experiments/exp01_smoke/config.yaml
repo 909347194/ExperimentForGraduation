@@ -1,0 +1,207 @@
+# exp01_smoke —— 真广州数据 + 两侧真方法的编排闭环验证
+#
+# 唯一参数入口：本文件 + uav_config.json + tasks.json。
+# 算法代码（path_planning/methods、task_allocation/methods、orchestration/）一律不改。
+# 建场口径：全城一次建场（data/guangzhou 有数据区 + pad），走廊只在求解时从全域场取样。
+# 高度口径：飞行带 AGL 10–120 m；机巢作业点 = 地面 + 15 m（CSV hover_agl_m）；
+#           任务作业点 = 屋顶/地面 + 10 m，合规由任务产生侧 support/tasks.py 把关。
+experiment:
+  name: exp01_smoke
+  seed: 0
+  # 任务批次数：30 个任务全部在周期 1 投放。运行多少周期不预设（见 loop.max_cycles），
+  # 以"30 个任务都拿到真实航迹"为终止条件。
+  cycles: 1
+
+data:
+  scenario_dir: data/guangzhou
+  nest_csv: nest_location_data.csv
+  nest_count: 3            # 三巢全部加载以固定两侧局部坐标框
+  active_nest_ids: [0, 1, 2]  # 三巢全启用：6 架机按巢两两编组
+  terrain_step_m: 30.0
+  bbox_margin_m: 5.0
+  # 地形空洞 = 水域（DEM 的 nodata=255 就是北缘珠江河道，占 9.44%）。统一填水面
+  # 高程 2.0 m，而不是最近邻扩散——后者把水面糊成岸边陆地高程（8.5–38.8 m），
+  # 使落在水上的任务点名义 AGL=10 m、实际离水面 16.5–46.8 m。
+  # 任务点**不排除水域**：水面也是合法作业面，任务点按"水面 + 10 m"投放即可。
+  # 代价（已量化）：30 m 网格表达不了真实岸坡，岸线呈近垂直台阶，SDF 在水边形成
+  # 围栏，规划器无法贴水面穿行；填值写在这里，改它即触发场缓存重建。
+  water_level_m: 2.0
+
+field:
+  spacing_m: [4.0, 4.0, 2.0]   # 全城栅格；与参考实现 pp1 同口径
+  alt_max_m: 140.0             # 建场上界候选（绝对 z）；实际场顶按最高楼顶抬高
+  include_static_nofly: true
+  sample_bias_m: 0.0
+  # 对角线契约：pad=720 m → 场约 2.93 亿节点（SDF 1.1 GiB）。旧上限 2.2 亿会
+  # 在建场启动阶段直接拒绝；3.2 亿给建场中间数组留余量（机器可用内存约 8.7 GiB）。
+  max_nodes: 320000000
+  cache_dir: orchestration/experiments/exp01_smoke/.cache
+  # ---- 建场契约（对齐参考实现 pp1 的 field contract）----
+  # pad 不写死，由 required_pad_m() 从同一个 OD 上限派生；建场与请求准入共用它。
+  # 曾写死 pad_m=0：任务点贴数据边界，走廊窗口出界 81 m 直接抛 WindowOutsideField。
+  world:
+    # city_diagonal = 场景 bounds_xy 的城市对角线（端点都在城市内，更长 OD 不存在）。
+    # 本城约 6739 m；半宽按 width_ratio=0.2 到 674 m，派生 pad=720 m。
+    # 也可写显式米数（须 ≥ 实际最大航段，否则请求期报 OD_TOO_LONG）。
+    max_od_length_m: city_diagonal
+    pad_extra_m: 30.0          # pp1 默认：走廊最坏窗口再留 30 m
+    pad_min_m: 100.0           # pp1 默认：pad 下限，且按格距公倍数对齐
+
+mission_waypoints:
+  nest_hover_agl_m: 15.0
+  task_clearance_agl_m: 10.0
+  # 任务点真高 = task_clearance + 余量。默认 0：真高带下界 10 m 就是作业面，
+  # 点位全精度落盘（不 round），不需要靠余量去躲浮点误差。
+  # 曾取 0.5 m，实测把端点抬进楼群窄缝后 RRT 连续无解（航程 +12%），已回撤。
+  task_agl_margin_m: 0.0
+  agl_range_m: [10.0, 120.0]
+  # 端点净空必须与求解侧同一个数：求解点用 clearance_m + 竖直量化容差（spacing_m 的 z
+  # 分量 2.0）判，即 6.0 + 2.0 = 8.0；豁免半径为 0（不设豁免圈）时端点也按这个数判。
+  # 曾经写 6.0：任务 207 落在 6.16 m 的窄缝里，产生侧放过、规划侧拒收 → 假 RRT_NO_PATH。
+  endpoint_clearance_m: 8.0
+  endpoint_exempt_radius_m: 0.0
+
+loop:
+  cycle_length_s: 1800.0     # 每周期 30 任务 / 6 机；周期长为配置值，超框如实报出
+  # 不预设周期数：跑到「30 个任务全部拿到真实航迹」为止。max_cycles 只作防死循环的安全阀：
+  # 若某周期既无航次也无回池，说明已有任务注定不可达，停在安全阀前也不会再有进展。
+  max_cycles: 12
+  overrun_tol_s: 1.0
+  prune_at_cycle_end: true
+  depart_stagger_s: 10.0     # 同周期同起点按机号升序 0/10/20/30 s；实验侧错峰
+  # 失败航次的承载任务在下层判死后重开回上层任务池（下一周期重投）。
+  # 不开这项时 rolled_back 只是账面上的数字，任务永远不会再派。
+  reopen_after_failure: true
+
+feedback:
+  enabled: true
+  # 估计器只做"航程够不够"的判据，方向上应当保守（宁大勿小）：这份估计整体
+  # 略高于几何真值，缩放 0.8 会把它压到真值以下，上层就会放过实际超航程的航次
+  # （下层 flight_budget 用真实 path_len 必然 RANGE_EXCEEDED，整条回池）。
+  # 1.0 = 用估计器原值判，超了就拆站；不要为了"多装任务"再往下调。
+  # 本段只提供**一次性初值**：估计倍率不再按实测在线更新（上层是排序用的尺子，
+  # 不是模拟器），rel/confirm/min/max 等在线校准参数已废弃，保留仅为配置兼容。
+  initial_estimate_scale: 1.0
+
+# ---- 周期内事实回灌（本实验唯一一档，不设对照）----
+# 触发条件只有一个：交付解里出现几何不可行的边
+# （severity=infeasible 且在 orchestration.feedback.INFEASIBLE_CODES 白名单）。
+# 该边写成 INFEASIBLE_COST=1e7，由上层内部航程检查判死；已飞航段的实测长度同时按
+# 同一权重口径写进该边代价。重解一次即止；跨周期不写、不缓存、不做倍率校准。
+resolve:
+  max_in_cycle: 1          # 同周期最多重解一次（只验证这一版，不接受别的次数）
+
+path:
+  e_geo_m: 0.5
+  corridor:
+    width_ratio: 0.20
+    half_width_min_m: 20.0
+    margin_m: 10.0
+  # PlanParams 全部字段显式写出；取值见各段注释，改动即改实验口径。
+  planning:
+    clearance_m: 6.0
+    alt_agl_min_m: 10.0
+    alt_agl_max_m: 120.0
+    grid_cell_m: 60.0
+    sdf_spacing_cells: [4, 4, 2]
+    bbox_margin_m: 5.0
+    rrt_step_m: 30.0
+    rrt_min_step_m: 10.0
+    rrt_sdf_step_scale: 0.5
+    rrt_max_iters: 3000
+    rrt_goal_sample_rate: 0.1
+    rrt_shortcut_iters: 200
+    rrt_initializations: 5
+    rrt_dedup_tol_m: 8.0
+    clearance_sample_step_m: 2.0
+    n_nodes: 120
+    dt_min_s: 0.05
+    dt_max_s: 20.0
+    max_iter: 400
+    solver_tol: 0.0001
+    clearance_samples_per_segment: 8
+    arc_subintervals: 8
+    gauss_points: 2
+    eps_a_m: 0.05
+    time_eps_s: 0.001
+    space_eps_m: 0.001
+    ellipsoid_semiaxes_m: [20.0, 20.0, 10.0]
+    cpa_dense_steps: 24
+    local_region_margin_m: 100.0
+    max_replan_rounds: 3
+    retreat_node_ladder: [40, 30]
+    solve_budget_multiplier: 3.0
+    detour_vertical_steps_m: [8.0, 16.0, 24.0]
+    detour_lateral_steps_m: [12.0, 24.0, 36.0]
+    local_replan_clearance_fix_m: 2.0
+    local_replan_guide_radius_m: 2.0
+    hover_weight: 1.0
+
+upper:
+  buildings_dir: building
+  dem_step_m: 100.0
+  dem_margin_m: 2000.0
+  cost:
+    min_clearance: 20.0
+    max_clearance: 300.0
+    climb_rate: 0.15
+    num_samples: 100
+
+tasks:
+  file: tasks.json
+  # 30 个任务全部在第一周期投放（experiment.cycles=1 即只生成一批）。
+  per_cycle: 30
+  generator_seed: 0
+  # 任务点在**场景数据域内均匀撒点**——与机巢位置、机队能力无关（真实环境里
+  # 需求出现在哪是外生的）；归属只按水平最近的巢标注，巢间负载由几何决定。
+  # 逐点只按算法入口的硬条件筛：场内、AGL 10–120、绝对高度带、全城 SDF 与
+  # 建筑棱柱净空 ≥ endpoint_clearance_m；水域与空地不排除（能进算法就允许）。
+  # 不合格重抽；抽满 candidates_per_task 次仍无合规点子就直接报错，不凑数。
+  jitter_m: 40.0
+  service_time_s: 15.0
+  reward: 1.0
+  candidates_per_task: 400
+
+# ---- 上层口径（task_allocation 侧；本实验显式声明，不靠 dataclass 默认）----
+# 阶段一选择规模 = min{cap(t), n_compute}（mode=single）：机数名额 ⌈max_ratio·K⌉
+# 不参与合成。cap(t) 随预算与粗代价变化（6 机 / 22.7 km² 全域任务时明显小于 30），
+# 所以 n_compute 只是并列闸门，不假定谁先截断；窗口放几个由两侧口径共同决定。
+# n_compute=32 > per_cycle=30：闸门不在门口截流，窗口瓶颈留给航次失败回池链
+# （少任务只能来自求解/执行失败，不能来自选择层砍单）。
+# 只放窗口、不动机队目标：是否多机出动仍由 λ·航程 决定；契约是
+# 「不允许有任务没完成、同时还有闲置机」（见 support/audit.py）。
+selection:
+  capability:
+    mode: single
+    n_compute: 32
+    budget_scale: 1.0
+    quantile: 0.5
+
+# ---- 上层求解器预算（显式声明，不靠 DMDEConfig 默认）----
+# 主口径 pop50 × gen200（ζ=3、GMR 原式、δ 不设门限）。漏写会落进库默认 1000 代：
+# 单周期 30 个任务 × 每机一次求解，实测把一期拖到半小时以上。
+# **seed 不写在这**：由 experiment.seed 注入（上层求解与下层规划同一颗种子），
+# 否则 DMDEConfig 默认 seed=None，同一 seed 两次跑不到同一批航次。
+solver:
+  pop_size: 50
+  max_generations: 200
+  zeta: 3
+  delta: null
+  alpha: 2.5
+  beta: 1.5
+
+audit:
+  # 真实规划失败（RRT_NO_PATH / OPT_FAILED）按失败码单列，是观测结果，不作通过条件；
+  # 审计只钉契约自洽、闭环账、真场/点位合规。完成率在 metrics 里如实报，不伪造 100%。
+  require_all_tickets_ok: false
+  require_gate_ok: true
+  # 重解不是通过条件：真几何不可行时下层本来就该报失败，重解只负责把它从交付解里
+  # 剔掉一次。次数/剔除条数/残留条数如实记在 loop_trace 与 metrics。
+  require_reassignment: false
+  require_full_completion: false
+  require_endpoint_compliant: true
+  # 用户契约：闲置本身合法（不要求全员上阵），但「有任务从未飞」与
+  # 「有机整场没起飞」不得同时成立——那是编排缺陷，不是能力不足。
+  require_no_idle_with_pending: true
+  # 失败航次必须带下层 detail：只留失败码等于把归因链切断
+  require_failure_detail: true

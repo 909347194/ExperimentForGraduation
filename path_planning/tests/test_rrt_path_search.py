@@ -163,35 +163,6 @@ class TestEndpointExemption(unittest.TestCase):
                 )
 
 
-class TestAglBand(unittest.TestCase):
-    def _flat_ground(self, xs, ys) -> np.ndarray:
-        return np.full(np.asarray(xs).shape, 10.0)
-
-    def test_band_violating_endpoint_rejected(self) -> None:
-        start, goal, field, window = _window_field([FAR_PILLAR])
-        # start z=10、地面 10 → 真高 0，低于带下沿 2
-        rrt = RRT3D(
-            field, window, ALT, _cfg(), ground_fn=self._flat_ground, agl_range_m=(2.0, 6.0)
-        )
-        self.assertIsNone(rrt.plan(start, goal))
-
-    def test_band_ok_passes(self) -> None:
-        start, goal = (0.0, 0.0, 14.0), (40.0, 0.0, 14.0)
-        window = corridor_window(
-            start, goal, CorridorRule(half_width_m=10.0, margin_m=2.0), SPACING, *ALT
-        )
-        occ = build_occupancy([FAR_PILLAR], window.grid)
-        field = SdfField(window.grid, build_sdf(occ, SPACING))
-        rrt = RRT3D(
-            field, window, ALT, _cfg(), ground_fn=self._flat_ground, agl_range_m=(2.0, 6.0)
-        )
-        res = rrt.plan(start, goal)
-        self.assertIsNotNone(res)
-        self.assertTrue(
-            bool(((res.path_enu[:, 2] >= 12.0) & (res.path_enu[:, 2] <= 16.0)).all())
-        )
-
-
 class TestRRTConfig(unittest.TestCase):
     def test_from_params(self) -> None:
         params = PlanParams()

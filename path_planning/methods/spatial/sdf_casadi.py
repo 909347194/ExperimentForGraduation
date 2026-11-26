@@ -24,7 +24,23 @@ import numpy as np
 
 from path_planning.methods.spatial.occupancy_sdf import SdfField
 
-__all__ = ["SdfOnGrid", "casadi_available"]
+__all__ = ["SdfOnGrid", "casadi_available", "sdf_cache_key"]
+
+
+def sdf_cache_key(field) -> tuple:
+    """缓存键：场对象身份 + 栅格契约（形状/原点/间距/朝向/偏置）。
+
+    缓存本身挂在 ``TourPlanningContext`` 上，生命周期与一次装配绑定；这里多带
+    栅格契约是为防止同一个 id 在长时间进程里被回收复用后命中旧插值器。场数据是
+    只读的（``WorldField`` / ``SdfField`` 都是 frozen dataclass），不把 685 MB 的
+    SDF 内容做哈希——那会把"省构建"变成"每次全量读一遍"。
+    """
+    g = field.grid
+    return (
+        id(field), tuple(int(v) for v in g.shape),
+        tuple(float(v) for v in g.origin), tuple(float(v) for v in g.spacing),
+        float(g.yaw_rad), float(getattr(field, "sample_bias_m", 0.0)),
+    )
 
 #: 同一进程多次求解时给插值器换名字，避免 Function 重名
 _INTERPOLANT_SEQ = itertools.count()

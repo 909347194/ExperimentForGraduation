@@ -22,6 +22,7 @@ from scipy.ndimage import map_coordinates
 
 from path_planning.common.grid_spec import GridSpec
 from path_planning.methods.spatial.field_contract import WindowOutsideField
+from path_planning.methods.spatial.occupancy_sdf import SdfField
 
 __all__ = ["WorldField"]
 
@@ -166,6 +167,55 @@ class WorldField:
         if self.sample_bias_m:
             out -= np.float32(self.sample_bias_m)
         return out
+
+    def window_for_points(
+        self, points: np.ndarray, margin_m: float = 0.0
+    ) -> SdfField:
+        """按点集外接盒取一张**与全域格点对齐**的窗口场。
+
+        用途：局部让路不再把 1.7 亿体素的全域场包成 CasADi 插值器，而是只取被重解
+        航迹覆盖的那一小块。对齐到全域格点（原点 = 全域原点 + 整数格距、间距相同）
+        是数值一致的硬前提：这样 ``window_sdf`` 在每个窗口节点上读到的就是原全域
+        格点值，``SdfField.at`` 与 ``WorldField.at`` 的三线性插值完全同口径。
+
+        点必须落在全域范围内；越界直接抛错，不静默裁边（与 ``check_coverage`` 同一
+        纪律）。z 方向沿用全域整带——高度层数只有百级，保留整带可避免竖直让路档
+        把节点推出窗口。
+        """
+        pts = np.atleast_2d(np.asarray(points, dtype=np.float64))
+        if pts.ndim != 2 or pts.shape[1] != 3 or not len(pts):
+            raise ValueError("points 应为非空 (n,3) ENU 坐标")
+        x0, y0, z0, x1, y1, z1 = self.axis_bounds
+        tol = np.array([0.5 * float(v) for v in self.grid.spacing])
+        if (
+            np.any(pts[:, :2].min(axis=0) < np.array([x0, y0]) - tol[:2])
+            or np.any(pts[:, :2].max(axis=0) > np.array([x1, y1]) + tol[:2])
+            or float(pts[:, 2].min()) < z0 - tol[2]
+            or float(pts[:, 2].max()) > z1 + tol[2]
+        ):
+            raise WindowOutsideField("待取窗口的点集超出全域场范围")
+
+        sx, sy, sz = (float(v) for v in self.grid.spacing)
+        nx, ny, nz = (int(v) for v in self.grid.shape)
+        gx0, gy0, gz0 = (float(v) for v in self.grid.origin)
+        pad = max(0.0, float(margin_m))
+        lo, hi = pts.min(axis=0) - pad, pts.max(axis=0) + pad
+
+        def span(v: float, origin: float, spacing: float, count: int) -> tuple[int, int]:
+            i0 = int(np.clip(np.floor((v[0] - origin) / spacing), 0, count - 2))
+            i1 = int(np.clip(np.ceil((v[1] - origin) / spacing), i0 + 1, count - 1))
+            return i0, i1
+
+        i0, i1 = span((lo[0], hi[0]), gx0, sx, nx)
+        j0, j1 = span((lo[1], hi[1]), gy0, sy, ny)
+        # z 用整带：既少一次裁剪判断，也让竖直让路档不必担心顶/底越界。
+        grid = GridSpec(
+            origin=(gx0 + i0 * sx, gy0 + j0 * sy, gz0),
+            spacing=(sx, sy, sz),
+            shape=(i1 - i0 + 1, j1 - j0 + 1, nz),
+            yaw_rad=0.0,
+        )
+        return SdfField(grid, self.window_sdf(grid))
 
     def at(self, points: np.ndarray) -> np.ndarray:
         """任意 ENU 点的插值 SDF（场外按边缘值，不外推）。"""

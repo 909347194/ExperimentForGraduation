@@ -14,7 +14,7 @@
       半截档已于 2026-11-13 清理，完整档见
       ../_archive/exp05_baselines__results_v3/；v1v2 见
       ../_archive/exp05_baselines__results_v1v2_2026-10-25/）
-    DATA_DIR/                场景数据注册表根（task_allocation/data/；
+    DATA_DIR/                场景数据注册表根（data/；
                              场景目录取 data/<scenario>/，解析走 scenario_data）
 """
 
@@ -27,9 +27,9 @@ from pathlib import Path
 EXP_DIR = Path(__file__).resolve().parent
 #: 仓库根目录
 ROOT = EXP_DIR.parents[2]
-#: 场景数据注册表根（task_allocation/data/）；场景文件用
+#: 场景数据注册表根（data/）；场景文件用
 #: task_allocation.common.scenario_data.resolve_file 解析
-DATA_DIR = ROOT / "task_allocation" / "data"
+DATA_DIR = ROOT / "data"
 
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))

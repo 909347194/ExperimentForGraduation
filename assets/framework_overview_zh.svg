@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="700" viewBox="0 0 1400 700" font-family="Microsoft YaHei, SimHei, sans-serif">
+<rect width="1400" height="700" fill="white"/>
+<marker id="mD" markerWidth="9" markerHeight="9" refX="7.5" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 z" fill="#4A4A4A"/></marker>
+<marker id="mR" markerWidth="9" markerHeight="9" refX="7.5" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 z" fill="#C0392B"/></marker>
+<marker id="mG" markerWidth="9" markerHeight="9" refX="7.5" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 z" fill="#666666"/></marker>
+<marker id="mO" markerWidth="9" markerHeight="9" refX="7.5" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L8,4 L0,8 z" fill="#C2582B"/></marker>
+<rect x="60" y="45" width="280" height="110" rx="10" fill="#EEF5EF" stroke="#3A7D44" stroke-width="1.6"/>
+<text x="72" y="69" font-size="13" fill="#1A1A1A" font-weight="bold">任务到达流</text>
+<text x="72" y="92" font-size="11.5" fill="#1A1A1A">· 计划到达（持续任务流）</text>
+<text x="72" y="114" font-size="11.5" fill="#1A1A1A">· 突发高优先级任务</text>
+<text x="72" y="136" font-size="11.5" fill="#1A1A1A">· 故障释放任务</text>
+<polyline points="340,100 378,100" fill="none" stroke="#4A4A4A" stroke-width="1.7" marker-end="url(#mD)"/>
+<rect x="380" y="45" width="280" height="110" rx="10" fill="#EEF5EF" stroke="#3A7D44" stroke-width="1.6"/>
+<text x="392" y="69" font-size="13" fill="#1A1A1A" font-weight="bold">动态任务池 T<tspan font-size="9" dy="3">t</tspan></text>
+<text x="392" y="92" font-size="11.5" fill="#1A1A1A">候选 → 进入本周期求解</text>
+<text x="392" y="114" font-size="11.5" fill="#1A1A1A">滞留：年龄补偿与防饥饿</text>
+<text x="392" y="136" font-size="11.5" fill="#1A1A1A">出池：几何永久不可达</text>
+<text x="505" y="176" font-size="10.5" fill="#555555" text-anchor="end">执行 / 暂缓本身是决策变量</text>
+<rect x="700" y="45" width="280" height="110" rx="10" fill="#F4F4F4" stroke="#595959" stroke-width="1.6"/>
+<text x="712" y="69" font-size="13" fill="#1A1A1A" font-weight="bold">机队状态 U<tspan font-size="9" dy="3">t</tspan></text>
+<text x="712" y="92" font-size="11.5" fill="#1A1A1A">位置 · 剩余航程 · 充电 / 故障</text>
+<text x="712" y="114" font-size="11.5" fill="#1A1A1A">异构：航程 / 速度 / 时长上限</text>
+<polyline points="520,155 520,188" fill="none" stroke="#4A4A4A" stroke-width="1.7" marker-end="url(#mD)"/>
+<polyline points="840,155 840,188" fill="none" stroke="#4A4A4A" stroke-width="1.7" marker-end="url(#mD)"/>
+<rect x="60" y="190" width="920" height="170" rx="10" fill="#EAF1FA" stroke="#2E5C8A" stroke-width="1.6"/>
+<text x="80" y="216" font-size="14" fill="#2E5C8A" font-weight="bold">任务分配层（Task Allocation）</text>
+<rect x="80" y="230" width="420" height="110" rx="8" fill="white" stroke="#2E5C8A" stroke-width="1.4"/>
+<text x="92" y="254" font-size="13.5" fill="#1F4E79" font-weight="bold">阶段一 · 任务选择（Selection）</text>
+<text x="92" y="280" font-size="12" fill="#1A1A1A">全池排序 Pᵢ → 规模闸门 nₛₑₗ = min{cap(t), n_compute}</text>
+<text x="92" y="304" font-size="12" fill="#1A1A1A">事件强制纳入：绕过排序窗口，可行性兜底</text>
+<polyline points="500,285 538,285" fill="none" stroke="#4A4A4A" stroke-width="1.7" marker-end="url(#mD)"/>
+<rect x="540" y="230" width="420" height="110" rx="8" fill="white" stroke="#2E5C8A" stroke-width="1.4"/>
+<text x="552" y="254" font-size="13.5" fill="#1F4E79" font-weight="bold">阶段二 · 机队指派与航次排序（MUAS）</text>
+<text x="552" y="280" font-size="12" fill="#1A1A1A">DMDE 差分进化搜索 → 解码与可行性修复链</text>
+<text x="552" y="304" font-size="12" fill="#1A1A1A">终点机巢最小费用流 → 交付后成本精修</text>
+<polyline points="480,360 480,398" fill="none" stroke="#4A4A4A" stroke-width="1.7" marker-end="url(#mD)"/>
+<polyline points="560,400 560,362" fill="none" stroke="#C0392B" stroke-width="1.7" stroke-dasharray="6,4" marker-end="url(#mR)"/>
+<text x="575" y="376" font-size="11" fill="#333333">↓ 航次计划：访问序 π · 终点巢 z · t₀ 冻结 · 估计代价 λ·C<tspan font-size="9" dy="3">path</tspan></text>
+<text x="575" y="394" font-size="11" fill="#C0392B" font-weight="bold">↑ 真实航程回填代价；不可飞航段代价置极大，重解自动绕开</text>
+<rect x="60" y="400" width="920" height="170" rx="10" fill="#FCF1E7" stroke="#C2582B" stroke-width="1.6"/>
+<text x="80" y="426" font-size="14" fill="#C2582B" font-weight="bold">航迹规划层（Trajectory Planning）</text>
+<rect x="80" y="440" width="420" height="110" rx="8" fill="white" stroke="#C2582B" stroke-width="1.4"/>
+<text x="92" y="464" font-size="13.5" fill="#8C3D1D" font-weight="bold">单机层 · 时空耦合</text>
+<text x="92" y="490" font-size="12" fill="#1A1A1A">走廊约束 + RRT 多初值</text>
+<text x="92" y="514" font-size="12" fill="#1A1A1A">联合优化 min ΣΔt：决策变量 (x, v, a, Δt)</text>
+<polyline points="500,475 538,475" fill="none" stroke="#4A4A4A" stroke-width="1.7" marker-end="url(#mD)"/>
+<polyline points="538,515 500,515" fill="none" stroke="#C2582B" stroke-width="1.7" stroke-dasharray="5,4" marker-end="url(#mO)"/>
+<rect x="540" y="440" width="420" height="110" rx="8" fill="white" stroke="#C2582B" stroke-width="1.4"/>
+<text x="552" y="464" font-size="13.5" fill="#8C3D1D" font-weight="bold">多机协调层 · 时空解耦</text>
+<text x="552" y="490" font-size="12" fill="#1A1A1A">CPA 冲突检测 → 局部几何让路（t₀ 冻结）</text>
+<text x="552" y="514" font-size="12" fill="#1A1A1A">改几何 ⇒ 重解时间（回到单机层）</text>
+<text x="960" y="562" font-size="11" fill="#8C3D1D" text-anchor="end">交付判据：全域净空复核</text>
+<polyline points="520,570 520,608" fill="none" stroke="#4A4A4A" stroke-width="1.7" marker-end="url(#mD)"/>
+<text x="532" y="594" font-size="11.5" fill="#333333">带时间航迹（几何 + 时间剖面）</text>
+<rect x="60" y="610" width="920" height="44" rx="8" fill="#EFEFEF" stroke="#8C8C8C" stroke-width="1.4"/>
+<text x="520" y="638" font-size="12.5" fill="#1A1A1A" text-anchor="middle">周期结算（t → t+1）：机时占用记账 · 超期判定 · 航迹清理</text>
+<rect x="1100" y="180" width="280" height="150" rx="8" fill="#F4F4F4" stroke="#595959" stroke-width="1.6"/>
+<text x="1112" y="204" font-size="13" fill="#1A1A1A" font-weight="bold">滚动时域：周期驱动 + 事件注入</text>
+<text x="1112" y="228" font-size="11.5" fill="#1A1A1A">周期边界统一决策与结算</text>
+<text x="1112" y="250" font-size="11.5" fill="#1A1A1A">事件边沿检测 · 对齐周期边界：</text>
+<text x="1112" y="272" font-size="11.5" fill="#1A1A1A">无人机故障 · 突发高优 · 机巢不可用</text>
+<text x="1112" y="294" font-size="11.5" fill="#1A1A1A">→ 回池 / 强制纳入 / 剔巢改降</text>
+<polyline points="1100,255 984,255" fill="none" stroke="#666666" stroke-width="1.7" stroke-dasharray="6,4" marker-end="url(#mG)"/>
+<polyline points="980,632 1030,632 1030,300 984,300" fill="none" stroke="#C0392B" stroke-width="1.7" stroke-dasharray="6,4" marker-end="url(#mR)"/>
+<text x="1000" y="676" font-size="11.5" fill="#C0392B" font-weight="bold">跨周期反馈：重解后仍不可飞航段与未交付任务回池（下一周期重投候选）</text>
+</svg>

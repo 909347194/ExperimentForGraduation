@@ -1,32 +1,37 @@
 # -*- coding: utf-8 -*-
-"""核心数据结构：航迹、航次请求、规划结果。
+"""对外契约的值对象：``PlanStop``（停留点）、``PlanRequest``（请求）、``PlanResult``（结果）。
 
-职责：定义跨层传递的值对象——``PlanStop``（停留点）、``HermiteSegment``
-      （一段三次 Hermite 轨迹）、``Trajectory``（带时间的完整航迹）、
-      ``PlanRequest``（一次规划请求）、``PlanResult``（规划结果）。
-边界：纯数据 + 数据自洽校验。**轨迹求值、弧长积分、速度检查属算法，
-      在 ``methods/timeline/splines.py``，不在此处。**
-相关：``common/vehicle_spec.py``（机体规格）、``common/budget.py``（预算）、
-      ``common/failure.py``（失败码）、``methods/trajectory_registry.py``（跨周期持有）。
+职责：定义上层与本库之间的输入/输出结构，以及"调用方填错"这一层的构造期校验。
+边界：纯数据 + 数据自洽校验。**轨迹求值、弧长积分、速度检查属算法，在
+      ``methods/timeline/splines.py``；段与航迹的定义在 ``segment.py`` /
+      ``trajectory.py``。**
+相关：``vec3.py``、``segment.py``、``trajectory.py``、``common/vehicle_spec.py``、
+      ``common/flight_budget.py``（预算）、``common/failure_codes.py``（失败码）、
+      ``methods/trajectory_registry.py``（跨周期持有）。
 
-为什么航迹用 Hermite 段而不是节点折线：
+本模块**再导出** ``Vec3`` / ``TimeSource`` / ``HermiteSegment`` / ``Trajectory``：
+分层上它们各自独立成文件，但对外仍是一个契约包，调用方的
+``from path_planning.common.plan_types import Trajectory`` 不必改。
 
-梯形积分下段内平均速度等于两端节点速度的均值，所以折线在节点处速度从
-``v_i`` 直接跳到 ``v_{i+1}``——物理上意味着无穷大加速度。取 Δt=3 s、
-a_max=3 时跳变可达 9 m/s。下游任何速度检查与冲突检测都会因此失效。
-Hermite 段（端点位置 + 端点速度）保证位置连续、速度连续（C¹），
-这也是冲突检测 0.365 s 弦长误差界成立的前提。
+失败码分层（本模块只负责第一层）：
+
+| 层 | 谁的问题 | 表现 | 处置 |
+| -- | -- | -- | -- |
+| 调用方填错 | 上层构造请求时写错 | 构造期 ``ValueError``，0 秒 | 修调用方 |
+| 这条航段飞不了 | 任务本身不可行 | ``PlanResult.failure`` 业务码 | 上层改任务 |
 """
 
 from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from enum import Enum
 from typing import Any, Mapping
 
-from .flight_budget import Budget, BudgetVerdict
 from .failure_codes import FAILURES, FailureCode, Severity
+from .flight_budget import Budget, BudgetVerdict
+from .segment import HermiteSegment
+from .trajectory import TimeSource, Trajectory
+from .vec3 import Vec3, check_vec3
 from .vehicle_spec import VehicleSpec
 
 __all__ = [
@@ -37,34 +42,8 @@ __all__ = [
     "Trajectory",
     "PlanRequest",
     "PlanResult",
+    "LegCostRecord",
 ]
-
-#: 三维点/向量。单位跟随上下文（位置为 m，速度为 m/s，加速度为 m/s²）。
-Vec3 = tuple[float, float, float]
-
-#: 自洽校验容差。位置用 1e-6 m、时间用 1e-6 s，足够吸收浮点累加误差。
-_TOL = 1e-6
-
-
-def _check_vec3(v: Any, name: str) -> None:
-    if len(v) != 3:
-        raise ValueError(f"{name} 必须是 3 维：{v}")
-    if not all(math.isfinite(float(c)) for c in v):
-        raise ValueError(f"{name} 含非有限值：{v}")
-
-
-class TimeSource(str, Enum):
-    """航迹时间的来源。**上层必须读这个字段再决定怎么用时间。**"""
-
-    #: 优化器解出的真实时间（可用于冲突检测、可作 busy_until）
-    TRAJECTORY = "trajectory"
-    #: 巡航速度估算（降级产物，精度差、不可参与冲突检测）
-    ESTIMATE = "estimate"
-
-
-# ---------------------------------------------------------------------------
-# 停留点
-# ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -72,7 +51,8 @@ class PlanStop:
     """航次中的一个停留点（任务点或机巢）。
 
     Attributes:
-        id:             任务 id（机巢用负 id 或按约定编码）
+        id:             停留点 id。任务与机巢共用整数编号（如任务 1..30、机巢 0/1/2），
+                        角色只看 ``kind``，不靠 id 数值猜
         position:       停留位置（m，绝对坐标）
         service_time_s: 在此服务/悬停的时长（s）。计入 ``t_end``，**上层不得再叠加**
                         ``default_service_time``——两边各加一次会把 30 s 算成 60 s。
@@ -85,176 +65,11 @@ class PlanStop:
     kind: str = "task"
 
     def __post_init__(self) -> None:
-        _check_vec3(self.position, "PlanStop.position")
+        check_vec3(self.position, "PlanStop.position")
         if self.service_time_s < 0.0:
             raise ValueError(f"service_time_s 不能为负：{self.service_time_s}")
         if self.kind not in ("task", "nest"):
             raise ValueError(f"kind 必须是 'task' 或 'nest'：{self.kind!r}")
-
-
-# ---------------------------------------------------------------------------
-# 轨迹段
-# ---------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class HermiteSegment:
-    """一段三次 Hermite 轨迹。
-
-    参数化：``p(s)``，``s ∈ [0,1]`` 映射到 ``t ∈ [t0, t1]``，
-
-        p(s) = h00(s)·p0 + h10(s)·Δt·v0 + h01(s)·p1 + h11(s)·Δt·v1
-
-    端点条件：``p(0)=p0``、``p(1)=p1``、``p'(0)=Δt·v0``、``p'(1)=Δt·v1``。
-
-    Attributes:
-        t0: 段起始绝对时刻
-        t1: 段结束绝对时刻（``t1 > t0``）
-        p0: 起点位置
-        p1: 终点位置
-        v0: 起点速度
-        v1: 终点速度
-        is_hover: 是否为悬停段（``p0==p1`` 且 ``v0==v1==0``，弧长为 0）
-    """
-
-    t0: float
-    t1: float
-    p0: Vec3
-    p1: Vec3
-    v0: Vec3
-    v1: Vec3
-    is_hover: bool = False
-
-    def __post_init__(self) -> None:
-        if not (math.isfinite(self.t0) and math.isfinite(self.t1)):
-            raise ValueError(f"段时刻必须有限：[{self.t0}, {self.t1}]")
-        if self.t1 <= self.t0:
-            raise ValueError(f"段时长必须为正：[{self.t0}, {self.t1}]")
-        _check_vec3(self.p0, "HermiteSegment.p0")
-        _check_vec3(self.p1, "HermiteSegment.p1")
-        _check_vec3(self.v0, "HermiteSegment.v0")
-        _check_vec3(self.v1, "HermiteSegment.v1")
-        if self.is_hover:
-            if any(abs(c) > _TOL for c in self.v0) or any(abs(c) > _TOL for c in self.v1):
-                raise ValueError("悬停段速度必须为 0")
-            if any(abs(a - b) > _TOL for a, b in zip(self.p0, self.p1)):
-                raise ValueError("悬停段起终点位置必须相同")
-
-    @property
-    def duration(self) -> float:
-        return self.t1 - self.t0
-
-    @property
-    def chord_m(self) -> float:
-        """弦长（直线距离）。**不是弧长**，恒小于等于弧长。"""
-        return math.dist(self.p0, self.p1)
-
-    def contains_time(self, t: float) -> bool:
-        """``t`` 是否落在 ``[t0, t1]``（含端点，段间共享端点）。"""
-        return self.t0 <= t <= self.t1
-
-
-# ---------------------------------------------------------------------------
-# 航迹
-# ---------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class Trajectory:
-    """一条完整航迹（带时间，可交付给上层与冲突检测）。
-
-    Attributes:
-        uav_id:       机号
-        segments:     Hermite 段序列（时间连续、位置连续）
-        path_len_m:   总弧长（**由 Gauss 重积分算出**，不是折线长）
-        time_source:  时间来源
-        hover_weight: 悬停加权系数实际取值（写进诊断，方向须诚实）
-        meta:         透传元数据（迭代数、初值来源、退让层级等）
-    """
-
-    uav_id: int
-    segments: tuple[HermiteSegment, ...]
-    path_len_m: float
-    time_source: TimeSource = TimeSource.TRAJECTORY
-    hover_weight: float = 1.0
-    meta: Mapping[str, Any] = field(default_factory=dict)
-
-    def __post_init__(self) -> None:
-        if not self.segments:
-            raise ValueError("航迹至少需要一段")
-        if self.path_len_m < 0.0:
-            raise ValueError(f"path_len_m 不能为负：{self.path_len_m}")
-        if self.hover_weight <= 0.0:
-            raise ValueError(f"hover_weight 必须为正：{self.hover_weight}")
-
-    # --- 时间量 ---------------------------------------------------------
-
-    @property
-    def t0(self) -> float:
-        return self.segments[0].t0
-
-    @property
-    def t_end(self) -> float:
-        """结束时刻。**含悬停段**——上层据此设 ``busy_until``，不再叠加服务时长。"""
-        return self.segments[-1].t1
-
-    @property
-    def duration(self) -> float:
-        return self.t_end - self.t0
-
-    @property
-    def hover_duration(self) -> float:
-        return sum(s.duration for s in self.segments if s.is_hover)
-
-    @property
-    def flight_duration(self) -> float:
-        return self.duration - self.hover_duration
-
-    @property
-    def weighted_duration(self) -> float:
-        """按 κ_h 加权后的时长（续航判据用）。"""
-        return self.flight_duration + self.hover_weight * self.hover_duration
-
-    @property
-    def start_position(self) -> Vec3:
-        return self.segments[0].p0
-
-    @property
-    def end_position(self) -> Vec3:
-        return self.segments[-1].p1
-
-    # --- 自洽校验 -------------------------------------------------------
-
-    def validate(self) -> None:
-        """航迹自洽性校验（时间连续、位置连续、悬停段合法）。
-
-        这是**内部一致性**检查，不是可行性检查：不通过说明构造代码有 bug，
-        应报 ``KINEMATIC_INCONSISTENT``（INTERNAL），**不得**当成航次不可行上报。
-        速度三项与弧长-时间相容性检查在 ``methods/timeline/feasibility.py``
-        （那里能拿到机体规格）。
-        """
-        errs: list[str] = []
-        for i, seg in enumerate(self.segments):
-            if i == 0:
-                continue
-            prev = self.segments[i - 1]
-            if abs(seg.t0 - prev.t1) > _TOL:
-                errs.append(
-                    f"段 {i-1}→{i} 时间不连续：prev.t1={prev.t1:.9f} "
-                    f"vs seg.t0={seg.t0:.9f}"
-                )
-            if any(abs(a - b) > _TOL for a, b in zip(prev.p1, seg.p0)):
-                errs.append(f"段 {i-1}→{i} 位置不连续：{prev.p1} vs {seg.p0}")
-        if errs:
-            raise ValueError(
-                f"航迹 uav={self.uav_id} 自洽校验失败（{len(errs)} 项）：\n  "
-                + "\n  ".join(errs)
-            )
-
-
-# ---------------------------------------------------------------------------
-# 规划请求
-# ---------------------------------------------------------------------------
 
 
 @dataclass(frozen=True)
@@ -270,6 +85,9 @@ class PlanRequest:
         stops:           停留点序列（首个通常是机巢出发后的任务点，末个是终点机巢）
         budget:          本轮预算
         meta:            透传（任务 id、优先级、上层 tour 标识等）
+        allow_estimate_fallback: 某段优化失败时是否允许降级为定速巡航剖面交付
+                         （``time_source=estimate``）。默认 False = 失败即整条不可交付；
+                         只有显式声明的航次才允许降级，降级航迹不得参与冲突检测。
     """
 
     uav_id: int
@@ -280,14 +98,20 @@ class PlanRequest:
     stops: tuple[PlanStop, ...]
     budget: Budget
     meta: Mapping[str, Any] = field(default_factory=dict)
+    allow_estimate_fallback: bool = False
 
     def __post_init__(self) -> None:
-        _check_vec3(self.start_position, "PlanRequest.start_position")
-        _check_vec3(self.start_velocity, "PlanRequest.start_velocity")
+        check_vec3(self.start_position, "PlanRequest.start_position")
+        check_vec3(self.start_velocity, "PlanRequest.start_velocity")
         if not math.isfinite(self.t0):
             raise ValueError(f"t0 必须有限：{self.t0}")
         if not self.stops:
             raise ValueError("stops 不能为空")
+        # 任务与机巢**共用整数编号**（exp01 里任务 1..30、机巢 0/1/2），
+        # 所以"任务 2"与"终点机巢 2"是合法的两个点，只有同角色同 id 才是重复/漏填。
+        keys = [(str(s.kind), int(s.id)) for s in self.stops]
+        if len(set(keys)) != len(keys):
+            raise ValueError(f"stops 的 (kind, id) 重复：{keys}（同角色同 id 才算同一点）")
 
     @property
     def has_task_stops(self) -> bool:
@@ -295,9 +119,62 @@ class PlanRequest:
         return any(s.kind == "task" for s in self.stops)
 
 
-# ---------------------------------------------------------------------------
-# 规划结果
-# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class LegCostRecord:
+    """一条已规划航段的**事实**账：从哪个点到哪个点、实测多长多久、失败与否。
+
+    这是跨包契约（编排层与上层都读它），所以字段只表达"下层看到了什么"：
+
+    - ``length_m`` / ``duration_s``：交付航段的实测值；失败段或几何没解出来时为
+      ``None``，**不得填估计值**（否则上层无法区分"实测"与"猜的"）。
+    - ``time_source``：``planned`` = 时空联合优化；``estimate`` = 定速降级剖面；
+      ``failed`` = 该段没有交付航迹。
+    - ``failure_code`` / ``severity``：失败码与 ``FailureCode`` 码表里的分级，
+      成对出现。``severity`` 由 ``common/failure_codes.py`` 唯一给出，禁止在此另设。
+
+    上层用它做边覆盖与硬禁边（``infeasible`` 才禁边），编排层用它算残差；
+    两侧都不许从 ``diagnostics["legs"]`` 的松散文档里反推这些事实。
+    """
+
+    from_id: int
+    to_id: int
+    length_m: float | None = None
+    duration_s: float | None = None
+    time_source: str = "planned"
+    failure_code: str | None = None
+    severity: str | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.from_id, int) or not isinstance(self.to_id, int):
+            raise ValueError(
+                f"LegCostRecord 的端点必须是整数 id：{self.from_id!r} → {self.to_id!r}"
+            )
+        if self.length_m is not None and self.length_m < 0.0:
+            raise ValueError(f"LegCostRecord.length_m 不能为负：{self.length_m}")
+        if self.duration_s is not None and self.duration_s < 0.0:
+            raise ValueError(f"LegCostRecord.duration_s 不能为负：{self.duration_s}")
+        if self.time_source not in ("planned", "estimate", "failed"):
+            raise ValueError(f"LegCostRecord.time_source 非法：{self.time_source!r}")
+        if (self.failure_code is None) != (self.severity is None):
+            raise ValueError(
+                f"失败码与严重性必须成对给出：code={self.failure_code!r} "
+                f"severity={self.severity!r}"
+            )
+
+    @property
+    def ok(self) -> bool:
+        return self.failure_code is None
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "from_id": int(self.from_id),
+            "to_id": int(self.to_id),
+            "length_m": None if self.length_m is None else float(self.length_m),
+            "duration_s": None if self.duration_s is None else float(self.duration_s),
+            "time_source": str(self.time_source),
+            "failure_code": None if self.failure_code is None else str(self.failure_code),
+            "severity": None if self.severity is None else str(self.severity),
+        }
 
 
 @dataclass(frozen=True)
@@ -315,7 +192,8 @@ class PlanResult:
     | ok | deliverable | failure | 含义 |
     | -- | -- | -- | -- |
     | T | T | None | 理想 |
-    | F | T | TIME_EXCEEDS_BUDGET | 交付的是估算轨迹（time_source=estimate） |
+    | F | T | ENDURANCE_EXCEEDED | 预算下界就判死，按定速剖面交付（estimate） |
+    | F | T | TIME_EXCEEDS_BUDGET | 求解预算超限，交付估算时间 |
     | F | F | RRT_NO_PATH | 真不可行，上层须改任务 |
     | F | F | KINEMATIC_INCONSISTENT | 内部 bug，**不是**任务不可行 |
     """
@@ -337,6 +215,25 @@ class PlanResult:
     @property
     def severity(self) -> Severity | None:
         return None if self.failure is None else FAILURES[self.failure].severity
+
+    @property
+    def failure_severity(self) -> str | None:
+        """失败分级字符串（``None`` = 无失败码）。契约层只透出，不做处置。"""
+        sev = self.severity
+        return None if sev is None else sev.value
+
+    @property
+    def leg_costs(self) -> tuple[LegCostRecord, ...]:
+        """逐段事实账（``diagnostics["leg_costs"]`` 的强类型视图）。
+
+        失败航次同样有：已解前缀各段是 ``planned``，断掉的那段是 ``failed``（带
+        失败码与分级，长度可能为 ``None``）。没有这个字段的老结果返回空元组——
+        调用方必须能容忍"下层没报"。
+        """
+        from .leg_cost_records import from_dicts  # 局部 import：避免契约层循环依赖
+
+        raw = self.diagnostics.get("leg_costs")
+        return from_dicts(raw if isinstance(raw, (list, tuple)) else None)
 
     def budget_verdict(self) -> BudgetVerdict | None:
         """从 diagnostics 里取回预算判定（若曾计算过）。"""
@@ -360,6 +257,7 @@ class PlanResult:
             "flight_s": None if traj is None else traj.flight_duration,
             "hover_s": None if traj is None else traj.hover_duration,
             "path_len_m": None if traj is None else traj.path_len_m,
+            "leg_costs": [r.as_dict() for r in self.leg_costs],
             "diagnostics": dict(self.diagnostics),
         }
 

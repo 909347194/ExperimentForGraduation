@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 """RRT 运行参数：结构 + 校验 + 从 ``PlanParams`` 派生，**不含独立默认值**。
 
-职责：定义 ``RRTConfig``（步长、采样预算、净空阈值、端点豁免），以及地面高程
-      查询协议 ``GroundHeightFn``。
+职责：定义 ``RRTConfig``（步长、采样预算、净空阈值、端点豁免）。
 边界：不做采样、不建场、不判碰撞（``rrt_path_search.py`` 用它跑树）。
 相关：``common/plan_params.py``（唯一参数来源）、``rrt_path_search.py``。
 
@@ -14,19 +13,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
-
-import numpy as np
 
 from path_planning.common.plan_params import PlanParams
 
-__all__ = ["GroundHeightFn", "RRTConfig"]
-
-
-class GroundHeightFn(Protocol):
-    """地面高程查询协议（``Scenario.ground_height`` 天然满足）。"""
-
-    def __call__(self, xs, ys) -> np.ndarray: ...
+__all__ = ["RRTConfig"]
 
 
 @dataclass(frozen=True)
@@ -47,7 +37,7 @@ class RRTConfig:
         sample_step_m:            段内净空采样间隔（米）
         shortcut_iters:           捷径化预算（软上限，见 ``rrt_path_search`` 模块说明第 3 条）
         endpoint_clearance_m:     端点豁免圈内的净空阈值；None = 不豁免
-        endpoint_exempt_radius_m: 豁免圈半径（米，0 = 不豁免）
+        endpoint_exempt_radius_m: 豁免圈半径（米，0 = 不设豁免圈，端点按全程净空判）
     """
 
     step_m: float

@@ -30,9 +30,9 @@ from path_planning.methods.spatial.corridor_window import (
     CorridorRule,
     CorridorWindow,
     corridor_window,
+    field_z_envelope,
     required_pad_m,
     window_area_m2,
-    z_envelope_from_ground,
 )
 from path_planning.methods.spatial.initial_paths import (
     PathCandidate,
@@ -48,7 +48,7 @@ __all__ = [
     "corridor_window",
     "required_pad_m",
     "window_area_m2",
-    "z_envelope_from_ground",
+    "field_z_envelope",
     "PathCandidate",
     "evaluate_candidate",
     "generate_initial_paths",

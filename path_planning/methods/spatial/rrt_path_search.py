@@ -27,14 +27,15 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 
 from path_planning.methods.spatial.corridor_window import CorridorWindow
 from path_planning.methods.spatial.occupancy_sdf import SdfField
-from path_planning.methods.spatial.rrt_config import GroundHeightFn, RRTConfig
+from path_planning.methods.spatial.rrt_config import RRTConfig
 
-__all__ = ["GroundHeightFn", "RRTConfig", "RRTResult", "RRT3D"]
+__all__ = ["RRTConfig", "RRTResult", "RRT3D"]
 
 #: 长度判零容差（米），只用于"两点是否重合"这类退化判断
 _EPS_M = 1e-9
@@ -53,12 +54,39 @@ class RRTResult:
     path_points_before_shortcut: int
 
 
+def _stats_template(seed: int) -> dict[str, Any]:
+    """一次 plan 的统计骨架：失败时这些数字就是排查凭据。"""
+    return {
+        "seed": int(seed),
+        "ok": False,
+        "start_free": None,
+        "goal_free": None,
+        "start": None,
+        "goal": None,
+        # 端点自检读数：实测 SDF 与所用端点阈值（判"不自由"时靠这三个数定位）
+        "start_sdf_m": None,
+        "goal_sdf_m": None,
+        "start_threshold_m": None,
+        "goal_threshold_m": None,
+        "endpoint_threshold_m": None,
+        "iters_done": 0,
+        "nodes": 0,
+        "closest_to_goal_m": None,
+        "direct_link": False,
+        # 采样被拒的成因计数：虚线门外/净空不足/步长贴地，三者处置方式完全不同
+        "reject_steer": 0,
+        "reject_clearance": 0,
+        "reject_window": 0,
+    }
+
+
+
 class RRT3D:
     """单次 ``plan`` = 一次 RRT；``plan_many`` = 多初值（不同种子各跑一次）。
 
-    ``alt_range_m`` 是**绝对** z 包络（窗口栅格能覆盖的范围）；给了 ``ground_fn``
-    + ``agl_range_m`` 时，采样与扩展还额外受真高带
-    ``[ground + agl_min, ground + agl_max]`` 约束，两者取交集。
+    采样只受**绝对** z 包络 ``alt_range_m`` 约束（低空口径：绝对高度 ≤ 上限）。
+    不再另设相对地面的真高带——地面在 SDF 中当实体，离地净空由
+    ``clearance_m`` 统一保证（比固定真高下界更严，且随地形自适应）。
     """
 
     def __init__(
@@ -67,18 +95,17 @@ class RRT3D:
         window: CorridorWindow,
         alt_range_m: tuple[float, float],
         cfg: RRTConfig,
-        ground_fn: GroundHeightFn | None = None,
-        agl_range_m: tuple[float, float] | None = None,
     ) -> None:
         self.field = field
         self.window = window
         self.alt_range = (float(alt_range_m[0]), float(alt_range_m[1]))
         self.cfg = cfg
-        self.ground_fn = ground_fn
-        self.agl = None if agl_range_m is None else (float(agl_range_m[0]), float(agl_range_m[1]))
         # 端点豁免需要知道当前 plan 的起终点；plan 内赋值、plan 外恒 None
         self._start_p: np.ndarray | None = None
         self._goal_p: np.ndarray | None = None
+        # 最后一次 / 全部尝试的统计（失败诊断用；成功路径不读它）
+        self.last_stats: dict[str, Any] = {}
+        self.last_stats_all: list[dict[str, Any]] = []
         # 索引空间均匀采样（模块说明第 1 条）
         self._last_idx_xy = np.asarray(window.grid.shape[:2], dtype=float) - 1.0
         sz = float(window.grid.spacing[2])
@@ -87,24 +114,20 @@ class RRT3D:
 
     # ---------- 基本判定 -------------------------------------------------
 
-    def _band_ok(self, pts: np.ndarray) -> np.ndarray:
-        """真高带判定；无地形信息时全通过（退化成纯绝对包络）。"""
-        pts = np.atleast_2d(pts)
-        n = len(pts)
-        if self.ground_fn is None or self.agl is None:
-            return np.ones(n, dtype=bool)
-        g = np.asarray(self.ground_fn(pts[:, 0], pts[:, 1]), dtype=np.float64)
-        if g.shape != (n,):
-            raise ValueError(f"ground_fn 应返回形状 ({n},)，得到 {g.shape}")
-        agl = pts[:, 2] - g
-        return (agl >= self.agl[0]) & (agl <= self.agl[1])
-
     def _thresholds(self, pts: np.ndarray) -> np.ndarray:
-        """逐点净空阈值：端点豁免圈内放宽（模块说明第 4 条）。"""
+        """逐点净空阈值：端点豁免圈内放宽，圈外按全程净空。
+
+        ``endpoint_exempt_radius_m = 0`` 表示**不设豁免圈**：端点也按
+        ``clearance_m``（= 交付净空 + SDF 竖直量化容差）判。此时产生侧选点必须用
+        同一个数，否则会选出"生成侧合格、规划侧拒收"的点（见 ``field.build_planner``
+        的入口断言）。
+        """
         pts = np.atleast_2d(pts)
         thr = np.full(len(pts), self.cfg.clearance_m, dtype=np.float64)
-        r = self.cfg.endpoint_exempt_radius_m
-        if r <= 0.0 or self._start_p is None or self._goal_p is None:
+        r = float(self.cfg.endpoint_exempt_radius_m)
+        if self.cfg.endpoint_clearance_m is None or r <= 0.0:
+            return thr
+        if self._start_p is None or self._goal_p is None:
             return thr
         near = np.minimum(
             np.linalg.norm(pts - self._start_p, axis=1),
@@ -127,8 +150,6 @@ class RRT3D:
         pts = a[None, :] + ts * (b - a)[None, :]
         if not self.window.inside_grid(pts).all():
             return False
-        if not self._band_ok(pts).all():
-            return False
         return bool((self.field.at(pts) >= self._thresholds(pts)).all())
 
     def _sample(self, rng: np.random.Generator) -> np.ndarray:
@@ -136,11 +157,6 @@ class RRT3D:
         idx_xy = rng.uniform(0.0, self._last_idx_xy)
         k = rng.uniform(*self._k_range)
         q = self.window.grid.index_to_enu(np.array([idx_xy[0], idx_xy[1], k]))[0]
-        if self.ground_fn is not None and self.agl is not None:
-            g = float(
-                np.asarray(self.ground_fn(np.array([q[0]]), np.array([q[1]]))).reshape(-1)[0]
-            )
-            q[2] = g + rng.uniform(*self.agl)
         q[2] = float(np.clip(q[2], self.alt_range[0], self.alt_range[1]))
         return q
 
@@ -160,8 +176,6 @@ class RRT3D:
         new = near + delta / dist * step
         if new[2] < self.alt_range[0] or new[2] > self.alt_range[1]:
             return None
-        if not self._band_ok(new[None, :])[0]:
-            return None
         return new
 
     # ---------- 主循环 ---------------------------------------------------
@@ -173,14 +187,34 @@ class RRT3D:
         *,
         seed: int | None = None,
     ) -> RRTResult | None:
-        """跑一次 RRT；``seed=None`` 用配置种子，多初值传 ``cfg.seed + i``。"""
+        """跑一次 RRT；``seed=None`` 用配置种子，多初值传 ``cfg.seed + i``。
+
+        无论成败，本次尝试的统计都写进 ``self.last_stats``（失败时 ``ok=False``）：
+        ``RRT_NO_PATH`` 只说明"没长到目标"，是窗太窄、端点不自由、还是净空阈值
+        卡死，得靠这些数字区分。
+        """
         rng = np.random.default_rng(self.cfg.seed if seed is None else int(seed))
         start_p = np.asarray(start, dtype=np.float64)
         goal_p = np.asarray(goal, dtype=np.float64)
         self._start_p, self._goal_p = start_p, goal_p
-        if not self._segment_free(start_p, start_p) or not self._segment_free(goal_p, goal_p):
+        stats = _stats_template(self.cfg.seed if seed is None else int(seed))
+        stats["start"] = [float(v) for v in start_p]
+        stats["goal"] = [float(v) for v in goal_p]
+        # 端点自检的四个数：实测 SDF + 实际所用阈值。端点被判"不自由"时，
+        # 只有这几个数能区分"点位太贴楼"与"阈值比产生侧严"（豁免半径 0 时
+        # 端点按全程阈值判，配置里的 endpoint_clearance_m 并不生效）。
+        stats["start_sdf_m"] = float(self.field.at(np.atleast_2d(start_p))[0])
+        stats["goal_sdf_m"] = float(self.field.at(np.atleast_2d(goal_p))[0])
+        stats["start_threshold_m"] = float(self._thresholds(np.atleast_2d(start_p))[0])
+        stats["goal_threshold_m"] = float(self._thresholds(np.atleast_2d(goal_p))[0])
+        stats["endpoint_threshold_m"] = float(self.cfg.effective_endpoint_clearance_m)
+        self.last_stats = stats
+        stats["start_free"] = self._segment_free(start_p, start_p)
+        stats["goal_free"] = self._segment_free(goal_p, goal_p)
+        if not stats["start_free"] or not stats["goal_free"]:
             return None
         if self._segment_free(start_p, goal_p):
+            stats.update(ok=True, direct_link=True, closest_to_goal_m=0.0, nodes=2)
             return RRTResult(
                 path_enu=np.vstack([start_p, goal_p]),
                 iterations=0,
@@ -190,20 +224,33 @@ class RRT3D:
 
         nodes = [start_p]
         parents = [-1]
+        closest = float(np.linalg.norm(start_p - goal_p))
         for it in range(1, self.cfg.max_iters + 1):
             q = goal_p if rng.random() < self.cfg.goal_sample_rate else self._sample(rng)
             arr = np.vstack(nodes)
             nearest = int(np.linalg.norm(arr - q, axis=1).argmin())
             new = self._steer(arr[nearest], q)
-            if new is None or not self._segment_free(arr[nearest], new):
+            if new is None:
+                stats["reject_steer"] += 1
+                continue
+            if not self.window.inside_grid(np.atleast_2d(new)).all():
+                stats["reject_window"] += 1
+                continue
+            if not self._segment_free(arr[nearest], new):
+                stats["reject_clearance"] += 1
                 continue
             nodes.append(new)
             parents.append(nearest)
+            closest = min(closest, float(np.linalg.norm(new - goal_p)))
+            stats["iters_done"] = it
+            stats["nodes"] = len(nodes)
+            stats["closest_to_goal_m"] = closest
             if self._segment_free(new, goal_p):
                 nodes.append(goal_p)
                 parents.append(len(nodes) - 2)
                 path = self._reconstruct(nodes, parents)
                 raw = len(path)
+                stats.update(ok=True, nodes=len(nodes), closest_to_goal_m=0.0)
                 return RRTResult(
                     path_enu=self._shortcut(path),
                     iterations=it,
@@ -222,11 +269,14 @@ class RRT3D:
         """跑 ``initializations`` 次独立 RRT（种子 ``cfg.seed + i``），返回全部成功候选。
 
         只负责生成候选，不评估、不去重、不选优——那是 ``initial_paths.py`` 的职责。
+        ``self.last_stats_all`` 保留每次尝试的统计（含失败），供失败诊断读取。
         """
         n = max(1, int(initializations))
         results: list[RRTResult] = []
+        self.last_stats_all = []
         for i in range(n):
             result = self.plan(start, goal, seed=self.cfg.seed + i)
+            self.last_stats_all.append(dict(self.last_stats))
             if result is not None:
                 results.append(result)
         return results

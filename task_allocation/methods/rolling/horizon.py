@@ -26,10 +26,8 @@ from task_allocation.methods.muas.constraints.nest_capacity import (
     CapacityReport,
     free_slots,
 )
-from task_allocation.methods.muas.cost.cost_matrix import (
-    build_pairwise_costs,
-)
 from task_allocation.methods.muas.cost.dem_terrain import DEMTerrain
+from task_allocation.methods.muas.cost.fact_cost_view import FactCostView
 from task_allocation.methods.muas.cost.lazy_pairwise import make_lazy_pairwise
 from task_allocation.methods.muas.cost.vertical_section import (
     VerticalSectionCostEstimator,
@@ -40,7 +38,11 @@ from task_allocation.methods.muas.solvers.dmde_solver import DMDEConfig
 from task_allocation.methods.muas.solvers.muas_stage import (
     MUASStageConfig,
     MUASStageResult,
-    run_selective_muas,
+)
+from task_allocation.methods.rolling.cycle_stages import (
+    CycleStages,
+    PreparedCycle,
+    SolvedCycle,
 )
 from task_allocation.methods.rolling.event_trigger import (
     EventTriggerConfig,
@@ -57,11 +59,11 @@ from task_allocation.methods.rolling.sequence_group import (
 )
 from task_allocation.methods.selection.pipeline import (
     AntiStarvationConfig,
+    SelectionConfig,
     run as run_selection,
 )
 from task_allocation.methods.selection.capability import (
     CapabilityScaleConfig,
-    merge_caps,
 )
 from task_allocation.methods.selection.feasibility import (
     FeasibilityConfig,
@@ -283,6 +285,9 @@ class CycleRecord:
     # 由实验编排写入 results/solution.json，供分配图 / 收敛图取用。
     tours: list[dict[str, Any]] = field(default_factory=list)
     cost_history: list[float] = field(default_factory=list)
+    # 周期内重解次数（0 = 只有首解）与最终版所用代价版本（``base`` / ``cycle:n``）
+    n_resolves: int = 0
+    cost_version: str = "base"
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -321,6 +326,8 @@ class CycleRecord:
             "stop_reason": self.stop_reason,
             "seq_group_rolled_back_ids": self.seq_group_rolled_back_ids,
             "n_seq_group_rolled_back": len(self.seq_group_rolled_back_ids),
+            "n_resolves": self.n_resolves,
+            "cost_version": self.cost_version,
         }
 
 
@@ -397,6 +404,16 @@ class RollingHorizon:
         # 在往返航程内」的周期数。达到 hcfg.service_patience 即判机队服务
         # 不可达出池（与静态几何不可达同等对待，单列归因 reason="service"）。
         self._service_stall: dict[int, int] = {}
+
+        # ---- 周期内事实回灌状态 -----------------------------------------------
+        # 本周期由下层事实写进代价的边（上层键空间）：实测长度与不可飞边；周期末清空。
+        self._cycle_facts: dict[tuple[int, int], float] = {}
+        self._cycle_infeasible: set[tuple[int, int]] = set()
+        self._cost_updates: int = 0
+        self._cost_version: str = "base"
+        self._prepared: PreparedCycle | None = None
+        self._solved: SolvedCycle | None = None
+        self._stages: CycleStages | None = None
 
     # ------------------------------------------------------------------
     # 单周期
@@ -609,295 +626,199 @@ class RollingHorizon:
         ]
         return sorted(drop)
 
+    # ------------------------------------------------------------------
+    # 周期三段式：prepare / solve / commit（实现体在 rolling/cycle_stages.py）
+    # ------------------------------------------------------------------
+
+    @property
+    def stages(self) -> CycleStages:
+        """三段式执行器（无状态，全部状态在本对象上）。"""
+        if self._stages is None:
+            self._stages = CycleStages(self)
+        return self._stages
+
+    def begin_cycle(
+        self, new_tasks: Sequence[Task] | None = None, *, advance: bool = True
+    ) -> CycleRecord:
+        """首解：冻结快照 → 求解一版（**不写**任务池/机队），返回预览记录。
+
+        预览记录已含 ``tours`` / ``executed_ids`` / ``selection`` / ``muas``，
+        编排层可据此规划航迹；真正回写要等 :meth:`commit`，因此同周期内后续
+        重解不会把任务判完成两次、也不会把机位挪回巢两次。
+        """
+        prep = self.stages.prepare(new_tasks, advance=advance)
+        solved = self.stages.solve(prep, attempt=0)
+        self._prepared, self._solved = prep, solved
+        return self._publish_preview(prep, solved)
+
+    def apply_cost_update(self, update: Any) -> None:
+        """接收编排层的事实回灌单：把实测长度与不可飞边**写成代价**。
+
+        口径（与 ``orchestration/protocol.CostUpdate`` 同源）：
+
+        - ``facts``：已飞航段的实测长度（上层节点键），按底表同一权重口径重定该边代价；
+        - ``infeasible``：几何不可飞的边，写入极大数值；含它的航次在内部航程检查里
+          必然超限、被判不可行，本层不再另设闸门。
+
+        不动任务池/机队、不动估计倍率；只活在本周期快照里，``commit`` 后清空。
+        ``update`` 里的边必须已经是**上层节点键**——翻译在适配器内完成。
+        """
+        if update is None:
+            return
+        facts = {
+            (int(a), int(b)): float(v) for (a, b), v in
+            dict(getattr(update, "facts", {}) or {}).items()
+        }
+        infeasible = {
+            (int(a), int(b)) for a, b in (getattr(update, "infeasible", ()) or ())
+        }
+        if not facts and not infeasible:
+            return
+        self._cycle_facts.update(facts)
+        self._cycle_infeasible |= infeasible
+        self._cost_updates += 1
+        self._cost_version = f"cycle:{self._cost_updates}"
+        if self._prepared is not None and self._prepared.view is not None:
+            self._prepared.view.apply_facts(facts, infeasible)
+            self._prepared.cost_version = self._cost_version
+
+    def resolve_with(self, update: Any = None) -> CycleRecord:
+        """在同一快照上重解（不推进时间、不写任务池/机队），返回预览记录。"""
+        if self._prepared is None:
+            raise RuntimeError("resolve_with() 之前需先 begin_cycle()")
+        self.apply_cost_update(update)
+        self._prepared.resolves += 1
+        solved = self.stages.solve(self._prepared, attempt=self._prepared.resolves)
+        self._solved = solved
+        return self._publish_preview(self._prepared, solved)
+
+    def commit(self) -> CycleRecord:
+        """把当前解一次性提交（任务池/机队只写一次），并清掉周期作用域覆盖。"""
+        if self._prepared is None or self._solved is None:
+            raise RuntimeError("commit() 之前需先 begin_cycle()")
+        record = self.stages.commit(self._prepared, self._solved)
+        self._reset_cycle_costs()
+        self._prepared, self._solved = None, None
+        return record
+
     def run_cycle(
         self,
         new_tasks: Sequence[Task] | None = None,
         *,
         advance: bool = True,
     ) -> CycleRecord:
-        """推进一个滚动周期。"""
-        cfg = self.hcfg
-        if advance:
-            self._time += float(cfg.cycle_length)
+        """推进一个滚动周期（一拍完成；重解由 ``resolve_with`` 显式驱动）。"""
+        self.begin_cycle(new_tasks, advance=advance)
+        return self.commit()
 
-        # 0) 服务休眠唤醒：条件恢复（出现可服务的可用机）
-        #    即唤醒回 PENDING，本周期即重新进入 T_t，年龄累计不中断。
-        woken_ids = self._wake_dormant()
+    # ------------------------------------------------------------------
+    # 周期内代价状态（三段式与审计共用）
+    # ------------------------------------------------------------------
 
-        # 1) 周期开始：T_t = remain ∪ new ∪ release
-        snap = self.pool.begin_cycle(new_tasks=new_tasks, current_time=self._time)
-        tasks = snap.tasks
+    def build_cost_view(
+        self, tasks: Sequence[Task], avail: Sequence[UAV]
+    ) -> FactCostView:
+        """本周期唯一一张代价视图：``base`` + 已写进代价的事实。
 
-        record = CycleRecord(
-            cycle=snap.cycle,
-            current_time=self._time,
-            pool_counts=dict(snap.counts),
-            overdue_ids=list(snap.overdue_ids),
-        )
-        record.woken_ids = list(woken_ids)
-
-        # 2) 静态物理不可达筛选（用户原则：任务不被完成
-        # 只有物理约束被违反）。任务/巢位固定 + 每周期满电 ⇒ 判定与周期
-        # 状态无关：所有机巢往返航程都超过满电可及范围的任务一次性出池
-        # （UNREACHABLE），不留在池里空转——否则它每周期进选择、被规划器
-        # 丢弃，把「过于偏远」误导记成能力不足（shortfall）。
-        unreachable = self._screen_unreachable(tasks)
-        if unreachable:
-            record.unreachable_ids = [t.id for t in unreachable]
-            dropped = {t.id for t in unreachable}
-            tasks = [t for t in tasks if t.id not in dropped]
-
-        # 3) 事件注入（实验时刻表）→ 检测 → 事件驱动重规划决策（论文 §6）
-        self._apply_nest_closures(snap.cycle)
-        events = detect_events(
-            self.fleet.all(),
-            self.pool.active_tasks(),
-            self.nests,
-            self.event_cfg,
-            current_time=self._time,
-            known_unavailable=self._known_unavailable,
-        )
-        self._known_unavailable = {n.id for n in self.nests if not n.available}
-        # 事件日志走边沿（补丁 F3）：UAV_FAULT 是持续态、URGENT_TASK 是静态属性，
-        # 电平上报会让同一事件每周期重复进日志、replan 计数虚高（P1-3）。
-        # 决策上下文 replan_ctx 仍取电平全集（强制纳入是持续语义）。
-        fresh_events = self._fresh_events(events)
-        record.events = [e.as_dict() for e in fresh_events]
-        # 机巢不可用 → 其**全部**归属 UAV 强制改降（含闲置机：合并修复可能
-        # 让参与机零任务停在原巢）——归属巢退出运行后不得再有 UAV 挂靠。
-        if self.hcfg.event_replan:
-            self._rehome_stranded_uavs()
-
-        # 把事件解析为本期重规划上下文；replan = 本周期发生**新**事件（边沿）
-        # 且机制启用——可直接计「重规划次数」（补丁 F3）。
-        replan_ctx = summarize_events(events, self.event_cfg)
-        replan = self.hcfg.event_replan and should_replan(fresh_events, self.event_cfg)
-        # 上下文里的 replan 标志需与本期真实决策一致（event_replan 关停时记为 False）
-        replan_ctx.replan = replan
-        record.replan = replan
-        record.replan_context = replan_ctx.as_dict()
-
-        avail = self.fleet.available()
-        record.selection = {
-            "n_tasks_in": len(tasks),
-            "n_uav_avail": len(avail),
-            "current_time": self._time,
-        }
-
-        # 4) 退化：无任务或无可用的 UAV → 全部任务保留至下一周期
-        if not tasks or not avail:
-            record.muas = {
-                "n_tasks": len(tasks),
-                "n_uav_avail": len(avail),
-                "reason": "no_tasks" if not tasks else "no_available_uav",
-                "n_executed": 0,
-                "n_deferred": len(tasks),
-            }
-            record.deferred_ids = [t.id for t in tasks]
-            self._fill_occupancy(record)
-            self.records.append(record)
-            return record
-
-        # 5) 第一阶段前的惰性代价表（延迟构建）：
-        # 旧流程在这里对**全量** T_t 建 O(n²) 三维矩阵，而第一阶段只触碰
-        # O(n·K + k²) 条边——exp02 实测 N=200 时全量建矩阵占端到端
-        # 85.6%（9752/11391 ms），Top-αK 省下的搜索时间被它吃光。
-        # 改为按需计算 + 缓存的活视图：值与全量 eager 建表逐位一致
-        # （同估算器/同坐标/同方向），一阶段用完再只对候选子集建矩阵。
-        lazy = make_lazy_pairwise(
+        ``base`` 是惰性 pairwise（用到才算），视图直接当 pairwise 表复用；
+        事实层（实测长度 / 不可飞边）的口径在 :class:`FactCostView` 里。
+        """
+        base = make_lazy_pairwise(
             tasks,
             self.fleet.all(),
             nests=self.nests,
             estimator=self.estimator,
             nest_offset=self.nest_offset,
         )
+        view = FactCostView(base)
+        if self._cycle_facts or self._cycle_infeasible:
+            view.apply_facts(dict(self._cycle_facts), self._cycle_infeasible)
+        return view
 
-        # 6) 第一阶段：动态任务选择 → T_t^sel
-        # 事件驱动（补丁 F1 闸门）：紧急任务 + 故障释放任务强制纳入（绕过 Top-αK
-        # 预筛）。强制纳入是「反应式调整」的组成部分，必须与 _rehome_stranded_uavs
-        # 同受 event_replan 开关控制——此前无条件生效，消融臂关停不干净（P0-1）。
-        forced_ids = set()
-        if self.hcfg.event_replan:
-            forced_ids = set(replan_ctx.urgent_task_ids) | set(self._pending_forced)
-        self._pending_forced.clear()
-        # 记账同步：二阶段②③吞吐上限（sortie_budget / max_participating_uavs）
-        # 会把可用机强行压地，其航程不得计入一阶段能力预算；两侧旋钮取交，
-        # 保证打开②③时 cap(t) 自动跟着收紧（γ 经济性是二阶段裁量，不计入）
-        cap_cfg = replace(
-            self.sel_cfg.capability,
-            sortie_budget=merge_caps(
-                self.sel_cfg.capability.sortie_budget, self.stage_cfg.sortie_budget
-            ),
-            max_participating_uavs=merge_caps(
-                self.sel_cfg.capability.max_participating_uavs,
-                self.stage_cfg.max_participating_uavs,
-            ),
-        )
-        sel_config = SelectionConfig(
-            priority=self.sel_cfg.priority,
-            feasibility=self.sel_cfg.feasibility,
-            marginal=self.sel_cfg.marginal,
-            capability=cap_cfg,
-            # 防饥饿透传：anti_starvation 必须随每周期重建透传——漏传则静默退回
-            # 默认的 enabled=False，yaml 里开了防饥饿也不生效（长程
-            # 实验发现：24 周期 n_forced_in 全为 0，老化任务直接饿死到超期）。
-            anti_starvation=self.sel_cfg.anti_starvation,
-            current_time=self._time,
-            forced_task_ids=forced_ids,
-        )
-        cost_hint = self._cost_hint(tasks, avail, lazy)
-        # 6.1) 机队服务不可达转休眠（异构化口径）：几何可达但
-        # 连续 service_patience 周期无可用机在往返航程内 → 休眠（不出池、
-        # 不进候选，擑 churn），条件恢复即唤醒、年龄累计不中断。必须在
-        # 选择前转休眠，否则它每周期进候选又被拒，空转 churn。
-        newly_dormant = self._update_service_stall(tasks)
-        if newly_dormant:
-            dorm_ids = {t.id for t in newly_dormant}
-            record.dormant_ids = [t.id for t in newly_dormant]
-            tasks = [t for t in tasks if t.id not in dorm_ids]
-        # 6.2) 顺序组准入闸门（口径约定 3「同周期完成，或同时暂缓」）：
-        # 组内成员不齐（部分休眠/在途）时，把已在 T_t 的成员一并撤下，整组
-        # 本周期不进选择层。只收窄**送进选择层的副本**，`tasks` 保持 6.1 后的
-        # 候选全集不变，使步骤 8 的 deferred_ids 记账天然包含被暂缓的组，
-        # 无需额外补账。无组时 has_groups() 为 False ⇒ 原列表原样返回。
-        tasks_for_selection, seq_deferred = self._seq_admission_gate(tasks)
-        sel = run_selection(
-            tasks_for_selection,
+    def cost_state(self) -> dict[str, Any]:
+        """代价层当前状态（回灌审计用；不含边明细）。"""
+        return {
+            "version": str(self._cost_version),
+            "n_facts": len(self._cycle_facts),
+            "n_infeasible": len(self._cycle_infeasible),
+        }
+
+    def _reset_cycle_costs(self) -> None:
+        self._cycle_facts.clear()
+        self._cycle_infeasible.clear()
+        self._cost_updates = 0
+        self._cost_version = "base"
+
+    def _publish_preview(
+        self, prep: PreparedCycle, solved: SolvedCycle
+    ) -> CycleRecord:
+        """把当前版解写进预览记录（不落 ``records``、不写状态机）。"""
+        record = prep.record
+        record.n_resolves = int(prep.resolves)
+        record.cost_version = str(self._cost_version)
+        if record.muas is not None:
+            record.muas["cost_version"] = str(self._cost_version)
+            record.muas["n_facts"] = len(self._cycle_facts)
+            record.muas["n_infeasible"] = len(self._cycle_infeasible)
+        return record
+
+    # ------------------------------------------------------------------
+    # 三段式的零件（cycle_stages 只调这些，不碰状态机细节）
+    # ------------------------------------------------------------------
+
+    def make_record(self, **kwargs: Any) -> CycleRecord:
+        return CycleRecord(**kwargs)
+
+    def select(
+        self,
+        tasks: Sequence[Task],
+        config: SelectionConfig,
+        *,
+        cost_hint: Mapping[int, float],
+        pairwise: Any,
+    ):
+        """第一阶段入口（**单点间接层**）。
+
+        为什么留这一层：``run_selection`` 必须在本模块命名空间里解析，测试才能
+        通过 ``monkeypatch.setattr(horizon_mod, "run_selection", ...)`` 替换选择层。
+        直接把调用写进 ``cycle_stages`` 会让那类补丁静默失效（选择层照跑真实现，
+        断言却在看假的计数器）——测试变绿只是因为没跑断言。
+        """
+        return run_selection(
+            tasks,
             self.fleet.all(),
-            config=sel_config,
+            config=config,
             cost_hint=cost_hint,
-            pairwise_cost=lazy,
-            # 统一距离口径：第一阶段用与代价矩阵/ETA 同一把 DEM 尺子
+            pairwise_cost=pairwise,
             distance_fn=self._distance_fn,
-            # 几何可达性判据（与 static_unreachable 同源）：让预筛把往返
-            # 超限分成「真几何不可达」与「当前无可用机」两类归因
             nests=self.nests,
             max_range=self._fleet_max_range(),
         )
-        record.selection = dict(sel.diagnostics)
-        record.selection["replan"] = replan
-        if seq_deferred:
-            # 准入门禁整组暂缓的 id：本周期未进选择层，仍留池 PENDING。
-            # 单列供审计：它们不在选择层 selected_ids 口径里；record 的
-            # deferred_ids 由步骤 8 统一记账（tasks − executed）、天然包含
-            # 它们（审查 L1：统一两处注释口径）。
-            record.selection["seq_group_admission_deferred"] = list(seq_deferred)
-        # S 成员无条件落盘（覆盖门禁）：一阶检验与三分账的 S 基准，
-        # 供「进过 S 没装」vs「从未进 S」归因；forced_ids 有即落（与 replan
-        # 解耦——边沿化后「有强制」与「有新事件」不再同周期出现）。
-        record.selection["selected_ids"] = sorted(sel.selected_ids)
-        if forced_ids:
-            record.selection["forced_task_ids"] = sorted(forced_ids)
 
-        selected = sel.selected
-        if not selected:
-            record.muas = {
-                "n_tasks": len(tasks),
-                "n_selected": 0,
-                "n_executed": 0,
-                "n_deferred": len(tasks),
-                "reason": "selection_empty",
-            }
-            record.deferred_ids = [t.id for t in tasks]
-            self._fill_occupancy(record)
-            self.records.append(record)
-            return record
+    def snapshot_of(self, tour: UAVTour) -> dict[str, Any]:
+        return tour_snapshot(tour)
 
-        self.pool.mark_selected(sel.selected_ids)
-
-        # 7) 第二阶段：选择性多机巢 MUAS → T_t^exec
-        # 只对候选子集建 4 个矩阵（pairwise 与一阶段共享同一张惰性表，
-        # 一阶段算过的边直接命中、不重复估算）；provider.pairwise 即活视图，
-        # 任何范围外查询按需解析，值与全量 eager 建表一致。
-        cb_sel = build_pairwise_costs(
-            selected,
-            self.fleet.all(),
-            nests=self.nests,
-            dem=self.dem,
-            estimator=self.estimator,
-            nest_offset=self.nest_offset,
-            distance_fn=self._distance_fn,
-            pairwise_source=lazy,
-        )
-        # 事件驱动（补丁 F1 闸门，同上）：不可用机巢（NEST_UNAVAILABLE）从
-        # 终点候选集剔除。反应式调整，event_replan 关停时不得生效（P0-1）。
-        excluded_nest_ids = (
-            set(replan_ctx.unavailable_nest_ids) if self.hcfg.event_replan else set()
-        )
-        stage_cfg = replace(self.stage_cfg, excluded_nest_ids=excluded_nest_ids)
-        stage: MUASStageResult = run_selective_muas(
-            selected,
-            self.fleet.all(),
-            self.nests,
-            cb_sel,
-            fleet_uavs=self.fleet.all(),
-            problem_config=replace(self.problem_cfg, current_time=self._time),
-            stage_config=stage_cfg,
-            solver_config=self.solver_cfg,
-            nest_offset=self.nest_offset,
-            current_time=self._time,
-            solver=(self.solver_factory() if self.solver_factory is not None else None),
-        )
-        solution = stage.solution
-        # 7.1) 顺序组交付闸门（口径约定 3）：MUAS 解里只装载了组的
-        # 一部分 ⇒ 把已装载成员一并撤下，整组批次 defer（留池 PENDING、下周期
-        # 整组重试）。必须在 record.tours / apply_solution / fleet.apply_solution
-        # 之前改 tour.task_ids，让任务池回写与机队绑定同步撤下，避免出现
-        # 「解里只有半个组、机队却已绑定」的不一致。无组时立即返回 []。
-        seq_drop = self._seq_delivery_gate(solution)
-        record.muas = dict(stage.diagnostics)
-        record.muas["model_type"] = stage.model_type
-        record.muas["solve_seconds"] = round(stage.elapsed_seconds, 4)
-        record.muas["n_evals"] = stage.n_evals
-        record.muas["n_selected"] = len(selected)
-        record.muas["replan"] = replan
-        if excluded_nest_ids:
-            record.muas["excluded_nest_ids"] = sorted(excluded_nest_ids)
-        feas = solution.meta.get("feasibility", {}) or {}
-        record.muas["violations"] = list(feas.get("violations", []))
-        record.muas["penalty"] = float(feas.get("penalty", 0.0))
-        # 交付闸门撤下的成员：同步求解期诊断（n_executed/n_deferred 是
-        # stage 求解时快照，撤下后会偏大），并单列被撤 id 供审计。
-        # 真正的交付记账仍以 apply_res.executing_ids / deferred_ids 为准。
-        if seq_drop:
-            record.muas["seq_group_deferred_ids"] = list(seq_drop)
-            record.muas["n_executed"] = len(solution.executed_task_ids)
-            record.muas["n_deferred"] = len(selected) - len(solution.executed_task_ids)
-
-        # 分配结构与 DMDE 收敛轨迹（只记有任务的航次）
-        record.tours = [tour_snapshot(t) for t in solution.tours if t.task_ids]
-        record.cost_history = [float(v) for v in stage.cost_history]
-
-        # 8) 回写：任务池 + 机队（含终点机巢 z_ub）
-        violations: list[CapacityReport] = []
-        apply_res = self.pool.apply_solution(solution)
-        try:
-            self.fleet.apply_solution(
-                solution,
-                self.nests,
-                strict_capacity=self.hcfg.strict_capacity,
-                on_violation=violations.append,
-            )
-        except Exception:
-            # 落地期拒绝：回滚任务池的执行中状态，任务保留至下一周期
-            self.pool.release(apply_res.executing_ids, reason="capacity_rejected")
-            raise
-
-        executed = set(apply_res.executing_ids)
-        record.executed_ids = [int(i) for i in apply_res.executing_ids]
-        record.deferred_ids = [t.id for t in tasks if t.id not in executed]
-        record.capacity_violations = [v.as_dict() for v in violations]
-
-        # 9) 执行中故障注入 → 未完成任务释放回任务池（T_t^release）
-        # 时机必须在本周期解回写之后、完成反馈之前：此时 UAV 才真正带着任务。
-        self._inject_faults(snap.cycle, record)
-
-        # 10) 执行推进：位置 / 航程 / 完成反馈
-        self._advance_execution(solution, record)
-
-        self._fill_occupancy(record)
-        self.records.append(record)
-        return record
+    def stage_diagnostics(
+        self,
+        stage: MUASStageResult,
+        *,
+        selected: Sequence[Task],
+        replan: bool,
+        excluded: Sequence[int] | set[int],
+    ) -> dict[str, Any]:
+        """二阶段诊断 → ``record.muas``（与旧 ``run_cycle`` 逐字段一致）。"""
+        diags = dict(stage.diagnostics)
+        diags["model_type"] = stage.model_type
+        diags["solve_seconds"] = round(stage.elapsed_seconds, 4)
+        diags["n_evals"] = stage.n_evals
+        diags["n_selected"] = len(selected)
+        diags["replan"] = replan
+        if excluded:
+            diags["excluded_nest_ids"] = sorted(int(i) for i in excluded)
+        feas = stage.solution.meta.get("feasibility", {}) or {}
+        diags["violations"] = list(feas.get("violations", []))
+        diags["penalty"] = float(feas.get("penalty", 0.0))
+        return diags
 
     # ------------------------------------------------------------------
     # 多周期
@@ -1375,6 +1296,23 @@ class RollingHorizon:
                 else int(cap_d["max_participating_uavs"])
             ),
             mode=str(cap_d.get("mode", "intersect")),
+            # 算力闸门（条/周期）：single 模式下 n_sel = min{cap(t), n_compute}。
+            # 此前漏接线 → yaml 写了 n_compute 也静默退回 None，single 退化成
+            # 纯 cap(t)（本次 P05 排查现场：yaml 12 不生效，日志里是 None）。
+            n_compute=(
+                None if cap_d.get("n_compute") is None else int(cap_d["n_compute"])
+            ),
+            # 候选窗口比例 / 候选池上限（single 下默认 None = 全池参选）
+            candidate_window_ratio=(
+                None
+                if cap_d.get("candidate_window_ratio") is None
+                else float(cap_d["candidate_window_ratio"])
+            ),
+            max_candidate_pool=(
+                None
+                if cap_d.get("max_candidate_pool") is None
+                else int(cap_d["max_candidate_pool"])
+            ),
             max_expand_factor=(
                 None
                 if cap_d.get("max_expand_factor") is None

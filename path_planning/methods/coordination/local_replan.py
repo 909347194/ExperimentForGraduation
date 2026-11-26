@@ -39,6 +39,13 @@ from path_planning.methods.coordination.detour_candidates import (
     DetourCandidate,
     generate_detours,
 )
+from path_planning.methods.coordination.leg_stitching import (
+    LegGeometry,
+    leg_blocks,
+    resolve_legs,
+    stitch_leg,
+    target_index,
+)
 from path_planning.methods.coordination.local_region import LocalRegion
 from path_planning.methods.spatial.occupancy_sdf import SdfField
 from path_planning.methods.spatial.prism_clearance import PrismClearance
@@ -61,21 +68,23 @@ class LocalReplanRequest:
     """一次局部重规划的输入（全部显式传入，便于复现）。
 
     Attributes:
-        path:            原几何折线（ENU，``(n,3)``）
         uav_id:          机号（写进轨迹）
         t0:              冻结的出发时刻
         nlp:             内层 NLP 配置（含 ``clearance_m`` 与走廊/时间上限）
-        limits:          独立复核限值（``expected_start/end`` 应与 ``path`` 两端一致）
+        limits:          独立复核限值
         region:          局部域
         params:          参数（取采样步长与让路档）
         vehicle:         机体（复核用）
         clearance_fix_m: 真几何不达标时的抬阈值量
+        path:            原几何折线（``(n,3)``）。**仅单航段口径用**；给 ``legs`` 时忽略。
         prisms:          真几何障碍（None = 跳过真几何闸，只在合成测试里这么用）
         others:          同批次其他航迹（给了 ``detection`` 时，候选必须先证"对它们无冲突"）
         detection:       冲突检测配置；``None`` = 不做对手侧验算（只做自身复核）
+        base:            原整条轨迹。给出时按航段重解并拼回（多航段航次的正路）
+        legs:            航段几何（``legs_of`` 产出）；None = 由 ``path`` 合成单段
+        target_time:     冲突时刻（CPA）。用来挑"该重解哪一段"；None = 取第一段
     """
 
-    path: np.ndarray
     uav_id: int
     t0: float
     nlp: NlpConfig
@@ -84,9 +93,13 @@ class LocalReplanRequest:
     params: PlanParams
     vehicle: VehicleSpec
     clearance_fix_m: float
+    path: np.ndarray | None = None
     prisms: PrismClearance | None = None
     others: tuple[Trajectory, ...] = ()
     detection: DetectionConfig | None = None
+    base: Trajectory | None = None
+    legs: tuple[LegGeometry, ...] | None = None
+    target_time: float | None = None
 
 
 @dataclass(frozen=True)
@@ -119,23 +132,30 @@ def replan_locally(
     warm: Trajectory | None = None,
     others: tuple[Trajectory, ...] | None = None,
     detection: DetectionConfig | None = None,
+    sdf_cache: dict | None = None,
 ) -> LocalReplanResult:
     """按候选次序尝试局部重规划，返回最短可行轨迹。
 
     Args:
         request: 输入（含原几何、冻结 t0、NLP 配置、复核限值、局部域）
         field:   SDF（内层净空约束用；与复核同一张场）。窗口 ``SdfField`` 与全域
-                 ``WorldField`` 都收——编排层给的是 ``context.field``（z-major 存储），
-                 布局差异由 ``SdfOnGrid`` 归一化，本函数不做切窗。
+                 ``WorldField`` 都收：传全域场时本函数先按折线外接盒取对齐窗口，
+                 再供候选与复核共用，避免把整张全域场送进 CasADi。
         warm:    热启动轨迹（通常是原轨迹；结构须与新几何节点数一致才有效，
                  不一致时求解器会退化为冷启动而非报错——这是 ``warm`` 的已知语义）
         others:  同批次其他航迹（覆盖 ``request.others``，编排层把"当前全集"传进来）
         detection: 冲突检测配置（覆盖 ``request.detection``）
+        sdf_cache: 插值器缓存；同一窗口场在候选间复用
     """
     others_use = tuple(request.others if others is None else others)
     detection_use = request.detection if detection is None else detection
+    legs = resolve_legs(request.legs, request.path, request.t0)
+    index = target_index(legs, request.target_time)
+    leg = legs[index]
+    blocks = leg_blocks(request.base) if request.base is not None else ()
+    field_use = _local_field(request, field, leg.path)
     candidates = generate_detours(
-        request.path,
+        leg.path,
         request.region,
         vertical_steps_m=tuple(float(v) for v in request.params.detour_vertical_steps_m),
         lateral_steps_m=tuple(float(v) for v in request.params.detour_lateral_steps_m),
@@ -147,8 +167,9 @@ def replan_locally(
         )
 
     trials: list[TrialRecord] = []
-    best: tuple[float, DetourCandidate, Trajectory] | None = None
+    best: tuple[float, DetourCandidate, Trajectory, Trajectory] | None = None
     guide = float(request.params.local_replan_guide_radius_m)
+    limits = _leg_limits(request.limits, leg)
     tried = 0
     for cand in candidates:
         fixes = (0.0,) if request.clearance_fix_m <= 0.0 else (
@@ -161,8 +182,9 @@ def replan_locally(
             )
             tried += 1
             res = optimize_trajectory(
-                np.asarray(cand.path, dtype=np.float64), field, cfg,
-                uav_id=request.uav_id, t0=request.t0, warm=warm,
+                np.asarray(cand.path, dtype=np.float64), field_use, cfg,
+                uav_id=request.uav_id, t0=leg.t0, warm=warm,
+                sdf_cache=sdf_cache,
             )
             traj = res.trajectory
             if traj is None:
@@ -170,7 +192,7 @@ def replan_locally(
                                           f"NLP 无解：{res.solver_status}"))
                 continue
             verdict = verify_trajectory(
-                traj, request.vehicle, field, request.limits, params=request.params
+                traj, request.vehicle, field_use, limits, params=request.params
             )
             if not verdict.ok:
                 trials.append(TrialRecord(
@@ -193,8 +215,12 @@ def replan_locally(
                         f"真几何净空 {clear:.2f} < {need:.2f}",
                     ))
                     continue
+            whole = (
+                stitch_leg(request.base, blocks, index, traj)
+                if request.base is not None else traj
+            )
             if detection_use is not None and others_use:
-                clash = _conflict_with_others(traj, others_use, detection_use)
+                clash = _conflict_with_others(whole, others_use, detection_use)
                 if clash is not None:
                     trials.append(TrialRecord(
                         cand.label, fix, False, traj.flight_duration,
@@ -202,7 +228,7 @@ def replan_locally(
                     ))
                     continue
             trials.append(TrialRecord(cand.label, fix, True, traj.flight_duration, "accepted"))
-            best = (traj.flight_duration, cand, traj)
+            best = (traj.flight_duration, cand, traj, whole)
             break
         if best is not None:
             # 首个通过即停（first-fit）：候选次序已按"先便宜后贵"排好，每档都要跑
@@ -216,9 +242,9 @@ def replan_locally(
             details={"candidates": len(candidates), "tried": tried,
                      "note": "全部候选复核或净空不达标"},
         )
-    duration, cand, traj = best
+    duration, cand, traj, whole = best
     return LocalReplanResult(
-        ok=True, trajectory=traj, label=cand.label, reason=None,
+        ok=True, trajectory=whole, label=cand.label, reason=None,
         trials=tuple(trials),
         details={
             "candidates": len(candidates),
@@ -226,8 +252,45 @@ def replan_locally(
             "accepted": sum(1 for t in trials if t.accepted),
             "duration_s": duration,
             "offset_m": cand.offset_m,
+            "legs": len(legs),
+            "leg_index": index,
+            "target_time": request.target_time,
         },
     )
+
+
+def _leg_limits(limits: VerificationLimits, leg: LegGeometry) -> VerificationLimits:
+    """复核限值换成本段的端点（起终点必须与候选几何两端一致）。"""
+    return replace(
+        limits,
+        expected_start=tuple(float(v) for v in leg.path[0]),
+        expected_end=tuple(float(v) for v in leg.path[-1]),
+    )
+
+
+def _local_field(
+    request: LocalReplanRequest, field: SdfField | WorldField, path: np.ndarray
+) -> SdfField | WorldField:
+    """给全域场包一张覆盖整条待重解折线的局部窗口场（与全域格点对齐）。
+
+    不是"只改冲突附近"：当前 NLP 仍在整条折线的 120 个节点上求解，端点与域外
+    几何仍是同一条约束链。窗口只是**取样范围**——按折线外接盒外扩到足以容纳所有
+    让路档与引导管，因此对优化问题本身没有口径变化；但插值器从 1.7 亿体素降到
+    几十万体素。窗口节点与全域格点重合（见 ``WorldField.window_for_points``），
+    SDF 数值与原来的全域场一致。
+    """
+    if not isinstance(field, WorldField):
+        return field
+    reach = (
+        max(
+            max(float(v) for v in request.params.detour_vertical_steps_m),
+            max(float(v) for v in request.params.detour_lateral_steps_m),
+        )
+        + float(request.params.local_replan_guide_radius_m)
+        + 2.0 * max(float(v) for v in field.grid.spacing)
+    )
+    margin = max(float(request.params.local_region_margin_m), reach)
+    return field.window_for_points(path, margin)
 
 
 def _conflict_with_others(
@@ -256,3 +319,5 @@ def _sample_positions(traj: Trajectory, step_m: float) -> np.ndarray:
         n = max(2, int(np.ceil(seg.chord_m / step)) + 1)
         out.append(segment_position(seg, np.linspace(0.0, 1.0, n)))
     return np.vstack(out) if out else np.zeros((0, 3))
+
+

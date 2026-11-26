@@ -1,20 +1,19 @@
 # -*- coding: utf-8 -*-
-"""实验主流程：两轮多机 tour 规划 + 跨轮既有航迹协调 → 指标 → 落盘（本实验私有）。
+"""实验主流程：两周期多机 tour 规划 + 跨周期既有航迹协调 → 指标 → 落盘（本实验私有）。
 
-职责：
-1. 轮1：同批多机 ``plan_fleet``（新-新冲突协调），交付航迹注册进 ``TrajectoryRegistry``；
-2. 轮2：新机 ``plan``（register=False）→ 与 Registry 里的**既有航迹**一起检测
-   （新-旧）→ ``coordinate`` 消解（旧侧机号小故冻结、新侧让路）→ 注册新航迹；
-3. 逐轮指标 + 跨轮证据（触发的冲突对、旧侧冻结、时间重叠、busy_until/prune 账）落盘。
+职责：每个周期都走生产门面 ``plan_fleet``（本实验不再自己拼冲突检测输入）：
+1. 周期1：同批多机规划 + 新—新协调，交付航迹注册进 ``TrajectoryRegistry``；
+2. 周期2：先 ``prune`` 落地航迹，再由 ``plan_fleet`` 自动取 Registry 中仍在飞的
+   旧航迹作为冻结障碍（``movable_ids`` 只含本批新机）→ 新—旧冲突消解 → 回写；
+3. 逐周期指标 + 跨周期证据（触发的冲突对、旧侧冻结、时间重叠、busy_until/prune 账）落盘。
+
+这一条正是本实验要检验的设计：门面自己完成"新—旧"接线，旧侧冻结靠显式白名单，
+**不靠机号大小**（本实验故意让旧机机号 5/6 大于新机 3/4）。
 
 边界：不装配运行时（``runtime.py``）、不审计（``audit_checks.py`` / ``audit.py``）、
       不画图。点位预检在 ``run.py``（跑之前把选址口径守住）。
 相关：``path_planning/api.py``、``methods/trajectory_registry.py``、
       ``support/flight_metrics.py``、``support/result_store.py``。
-
-**为什么轮2 不能走 ``plan_fleet``**：``plan_fleet`` 只协调批内航迹，看不见 Registry 里的
-既有航迹——"第二轮在 DEM、建筑上增加已有轨迹"正是要在协调输入里把旧航迹带上，
-且旧侧必须冻结（协调层"机号大的让路"，本实验轮2 机号严格大于轮1）。
 """
 
 from __future__ import annotations
@@ -26,133 +25,97 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from path_planning.common.plan_types import Trajectory
-from path_planning.methods.conflict.conflict_detector import (
-    DetectionConfig,
-    DetectionReport,
-    detect_conflicts,
-)
+from path_planning.methods.conflict.conflict_detector import DetectionReport
 from .flight_metrics import fleet_metrics
 from .result_store import dump_json, plan_result_to_dict, trajectory_to_dict
 from .runtime import Runtime
 
-__all__ = ["RoundRun", "print_summary", "run_rounds_experiment"]
+__all__ = ["CycleRun", "print_summary", "run_cycles_experiment"]
 
 
 @dataclass(frozen=True)
-class RoundRun:
-    """一轮的运行结果（给 ``run.py`` 打印/落盘用）。"""
+class CycleRun:
+    """一周期的运行结果（给 ``run.py`` 打印/落盘用）。"""
 
     index: int
     results: Mapping[int, Any]                 # uid → PlanResult
     delivered: Mapping[int, Trajectory]        # uid → 最终交付航迹
     changed: Mapping[int, Trajectory]          # 被让路改写过的机号
     outcome: Any                               # CoordinationOutcome | None
-    pre_report: DetectionReport | None         # 轮2+：协调前检测（触发证据）
-    existing_before: tuple[Trajectory, ...]    # 轮2+：Registry 快调（旧侧）
+    pre_report: DetectionReport | None         # 周期2+：协调前检测（触发证据）
+    existing_before: tuple[Trajectory, ...]    # 周期2+：Registry 快调（旧侧）
     old_changed: tuple[int, ...]               # 旧侧被改动的机号（应恒为空）
-    pruned: tuple[int, ...]                    # 本轮开始前落地结算的机号
+    pruned: tuple[int, ...]                    # 本周期开始前落地结算的机号
+    frozen_ids: tuple[int, ...] = ()           # 门面显式冻结的旧侧机号
 
 
-def run_rounds_experiment(
+def run_cycles_experiment(
     runtime: Runtime,
     fleet,
     out_dir: str | Path,
     *,
     meta_extra: Mapping[str, Any] | None = None,
-) -> tuple[dict[int, RoundRun], dict[str, Any], dict[str, str]]:
-    """跑全部轮次并落盘；返回 ``(逐轮结果, metrics, 文件路径)``。"""
+) -> tuple[dict[int, CycleRun], dict[str, Any], dict[str, str]]:
+    """跑全部周期并落盘；返回 ``(逐周期结果, metrics, 文件路径)``。"""
     out_dir = Path(out_dir)
     t_start = time.time()
     planner = runtime.planner
     cycle = float(fleet.cycle_length_s)
 
-    runs: dict[int, RoundRun] = {}
+    runs: dict[int, CycleRun] = {}
     traj_dicts: dict[str, Any] = {}
-    trace_rounds: list[dict[str, Any]] = []
-    metrics_rounds: dict[str, Any] = {}
+    trace_cycles: list[dict[str, Any]] = []
+    metrics_cycles: dict[str, Any] = {}
     cross: dict[str, Any] = {
         "cycle_length_s": cycle,
         "pruned": {},
         "existing_before": {},
         "pre_conflicts": {},
         "old_frozen": {},
+        "frozen_ids": {},
         "overlap_s": {},
         "busy_until_after": {},
     }
 
-    for r_idx in sorted(fleet.rounds):
-        reqs = fleet.rounds[r_idx]
+    for r_idx in sorted(fleet.cycles):
+        reqs = fleet.cycles[r_idx]
         now = (r_idx - 1) * cycle
         pruned = planner.prune(now)
         cross["pruned"][str(r_idx)] = list(pruned)
 
-        if r_idx == 1:
-            plan = planner.plan_fleet(reqs)
-            results = plan.results
-            delivered = {
-                uid: traj for uid in plan.results
-                if (traj := plan.trajectory_of(uid)) is not None
-            }
-            changed = dict(plan.changed)
-            outcome = plan.outcome
-            pre_report = None
-            existing_before: tuple[Trajectory, ...] = ()
-            old_changed: tuple[int, ...] = ()
-        else:
-            existing_before = planner.registry.trajectories()
-            results = {}
-            for req in reqs:
-                results[req.uav_id] = planner.plan(req, register=False)
-            new_trajs = tuple(
-                res.trajectory for res in results.values() if res.trajectory is not None
+        # 生产门面自己取 Registry 旧航迹、自己冻结旧侧；实验只记录证据。
+        plan = planner.plan_fleet(reqs)
+        results = plan.results
+        delivered = {
+            uid: traj for uid in plan.results
+            if (traj := plan.trajectory_of(uid)) is not None
+        }
+        changed = dict(plan.changed)
+        outcome = plan.outcome
+        pre_report = plan.pre_report
+        existing_before = plan.existing
+        # 旧侧机号可比新侧更大；只要被改就是编排出了问题，如实记录（audit 判失败）。
+        old_changed = tuple(
+            sorted(
+                int(t.uav_id) for t in existing_before
+                if outcome is not None
+                and outcome.trajectories.get(int(t.uav_id)) is not t
             )
-            det = _detection(runtime, fleet, tuple(new_trajs) + existing_before)
-            pre_report = (
-                detect_conflicts(tuple(new_trajs) + existing_before, det)
-                if new_trajs else None
-            )
-            outcome = (
-                planner.coordinate(
-                    list(new_trajs) + list(existing_before),
-                    vehicles=fleet.vehicles,
-                    detection=det,
-                )
-                if new_trajs else None
-            )
-            delivered = {}
-            for uid, res in results.items():
-                traj = (None if outcome is None else outcome.trajectories.get(uid)) or res.trajectory
-                if traj is not None:
-                    delivered[uid] = traj
-            changed = {
-                uid: traj for uid, traj in delivered.items()
-                if traj is not results[uid].trajectory
-            }
-            # 协调后把新航迹登记为"已发布时空障碍"；旧侧机号小、不参与让路，
-            # 若仍被改动就是编排出了问题——如实记录（audit 会判失败）。
-            for uid, traj in delivered.items():
-                planner.registry.replace(traj, source="planned")
-            old_ids = {t.uav_id for t in existing_before}
-            old_changed = tuple(
-                sorted(
-                    uid for uid in old_ids
-                    if outcome is not None
-                    and outcome.trajectories.get(uid) is not _by_id(existing_before, uid)
-                )
-            )
+        )
 
-        runs[r_idx] = RoundRun(
+        runs[r_idx] = CycleRun(
             index=r_idx, results=results, delivered=delivered, changed=changed,
             outcome=outcome, pre_report=pre_report, existing_before=existing_before,
             old_changed=old_changed, pruned=pruned,
+            frozen_ids=tuple(plan.frozen_ids),
         )
 
         # ---- 落盘素材 ----
         for uid, traj in sorted(delivered.items()):
             traj_dicts[f"{r_idx}:{uid}"] = trajectory_to_dict(traj)
 
-        trace_rounds.append(_trace_payload(r_idx, reqs, runs[r_idx], cycle))
-        metrics_rounds[str(r_idx)] = fleet_metrics(
+        trace_cycles.append(_trace_payload(r_idx, reqs, runs[r_idx], cycle))
+        metrics_cycles[str(r_idx)] = fleet_metrics(
             delivered,
             vehicles=fleet.vehicles,
             requests=reqs,
@@ -168,23 +131,24 @@ def run_rounds_experiment(
         cross["old_frozen"][str(r_idx)] = {
             "changed": list(old_changed), "ok": not old_changed,
         }
+        cross["frozen_ids"][str(r_idx)] = list(plan.frozen_ids)
         cross["overlap_s"][str(r_idx)] = _overlaps(delivered, existing_before)
         cross["busy_until_after"][str(r_idx)] = {
             str(uid): planner.busy_until(uid) for uid in sorted(delivered)
         }
 
     elapsed = time.time() - t_start
-    metrics = {"rounds": metrics_rounds, "cross_round": cross}
+    metrics = {"cycles": metrics_cycles, "cross_cycle": cross}
     solution = {
         "experiment": runtime.config.name,
         "cycle_length_s": cycle,
-        "rounds": {
+        "cycles": {
             str(r.index): {
                 "t0": (r.index - 1) * cycle,
                 "results": {
                     str(uid): plan_result_to_dict(
                         # 落盘必须是最终交付几何（协调层换了让路几何后 PlanResult
-                        # 里仍挂首轮原航迹，照原对象写出去审计就会读到会撞的线）
+                        # 里仍挂首周期原航迹，照原对象写出去审计就会读到会撞的线）
                         dataclasses.replace(res, trajectory=r.delivered.get(uid, res.trajectory))
                     )
                     for uid, res in r.results.items()
@@ -192,6 +156,7 @@ def run_rounds_experiment(
                 "changed": sorted(int(k) for k in r.changed),
                 "existing_before": [t.uav_id for t in r.existing_before],
                 "old_changed": list(r.old_changed),
+                "frozen_ids": list(r.frozen_ids),
                 "pruned": list(r.pruned),
                 "registry_busy_until": cross["busy_until_after"][str(r.index)],
                 "coordination": _coordination(r.outcome),
@@ -203,25 +168,25 @@ def run_rounds_experiment(
         "experiment": runtime.config.name,
         "seed": int(runtime.ctx.seed),
         "cycle_length_s": cycle,
-        "rounds": [
+        "cycles": [
             {
                 "index": r_idx,
                 "t0": (r_idx - 1) * cycle,
-                "uavs": [req.uav_id for req in fleet.rounds[r_idx]],
+                "uavs": [req.uav_id for req in fleet.cycles[r_idx]],
                 "stops": [
                     {"uav_id": req.uav_id,
                      "stops": [{"id": s.id, "kind": s.kind,
                                 "position": list(s.position),
                                 "service_time_s": s.service_time_s}
                                for s in req.stops]}
-                    for req in fleet.rounds[r_idx]
+                    for req in fleet.cycles[r_idx]
                 ],
             }
-            for r_idx in sorted(fleet.rounds)
+            for r_idx in sorted(fleet.cycles)
         ],
         "field": runtime.field_info,
         "field_summary": runtime.field.summary(),
-        "timings_s": {**runtime.timings_s, "rounds_s": round(elapsed, 3)},
+        "timings_s": {**runtime.timings_s, "cycles_s": round(elapsed, 3)},
         **({} if meta_extra is None else dict(meta_extra)),
     }
 
@@ -231,7 +196,7 @@ def run_rounds_experiment(
         solution=solution,
         metrics=metrics,
         run_meta=run_meta,
-        trace={"rounds": trace_rounds, "elapsed_s": round(elapsed, 3)},
+        trace={"cycles": trace_cycles, "elapsed_s": round(elapsed, 3)},
         trajectories=traj_dicts,
     )
     return runs, metrics, files
@@ -247,20 +212,20 @@ def write_outputs(
     trace: Mapping[str, Any],
     trajectories: Mapping[str, Any],
 ) -> dict[str, str]:
-    """六份 JSON 落盘（含多轮专属的 round_trace / round_trajectories）。"""
+    """六份 JSON 落盘（含多周期专属的 cycle_trace / cycle_trajectories）。"""
     out_dir.mkdir(parents=True, exist_ok=True)
     paths = {
         "solution": out_dir / "solution.json",
         "metrics": out_dir / "metrics.json",
-        "round_trace": out_dir / "round_trace.json",
-        "round_trajectories": out_dir / "round_trajectories.json",
+        "cycle_trace": out_dir / "cycle_trace.json",
+        "cycle_trajectories": out_dir / "cycle_trajectories.json",
         "run_meta": out_dir / "run_meta.json",
         "effective_config": out_dir / "effective_config.json",
     }
     dump_json(paths["solution"], solution)
     dump_json(paths["metrics"], metrics)
-    dump_json(paths["round_trace"], trace)
-    dump_json(paths["round_trajectories"], trajectories)
+    dump_json(paths["cycle_trace"], trace)
+    dump_json(paths["cycle_trajectories"], trajectories)
     dump_json(paths["run_meta"], run_meta)
     dump_json(paths["effective_config"], _effective_config(runtime))
     return {k: str(v) for k, v in paths.items()}
@@ -275,9 +240,7 @@ def _effective_config(runtime: Runtime) -> dict[str, Any]:
         "scenario": str(cfg.scenario.data_dir),
         "field": {
             "spacing_m": list(cfg.field.spacing_m),
-            "agl_range_m": list(cfg.agl_range_m),
-            "agl_min_m": cfg.field.agl_min_m,
-            "agl_max_m": cfg.field.agl_max_m,
+            "alt_max_m": cfg.field.alt_max_m,
             "pad_m": cfg.field.pad_m,
             "include_static_nofly": cfg.field.include_static_nofly,
             "sample_bias_m": cfg.field.sample_bias_m,
@@ -285,7 +248,12 @@ def _effective_config(runtime: Runtime) -> dict[str, Any]:
         "corridor": {
             "half_width_m": cfg.corridor.half_width_m,
             "width_ratio": cfg.corridor.width_ratio,
+            "half_width_min_m": cfg.corridor.half_width_min_m,
             "margin_m": cfg.corridor.margin_m,
+        },
+        "mission_waypoints": {
+            "nest_hover_agl_m": cfg.mission_waypoints.nest_hover_agl_m,
+            "task_clearance_agl_m": cfg.mission_waypoints.task_clearance_agl_m,
         },
         "resolved": {
             "field_grid": {
@@ -301,6 +269,7 @@ def _effective_config(runtime: Runtime) -> dict[str, Any]:
             "endpoint_clearance_m": cfg.endpoint_clearance_m,
             "endpoint_exempt_radius_m": cfg.endpoint_exempt_radius_m,
             "cycle_length_s": cfg.cycle_length_s,
+            "depart_stagger_s": cfg.depart_stagger_s,
         },
     }
 
@@ -308,23 +277,6 @@ def _effective_config(runtime: Runtime) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # 报告片段
 # ---------------------------------------------------------------------------
-
-
-def _by_id(trajs: tuple[Trajectory, ...], uid: int) -> Trajectory | None:
-    return next((t for t in trajs if t.uav_id == uid), None)
-
-
-def _detection(runtime: Runtime, fleet, trajs) -> DetectionConfig:
-    """同批最保守机型建检测配置（异构混合时取小 a_max 者）。"""
-    if not trajs:
-        raise ValueError("没有航迹可建检测配置")
-    vehicle = min(
-        (fleet.vehicles[t.uav_id] for t in trajs),
-        key=lambda v: v.a_max_mps2,
-    )
-    return DetectionConfig.from_params(
-        runtime.config.params, vehicle, e_geo_m=runtime.config.e_geo_m
-    )
 
 
 def _pre_conflicts(
@@ -368,9 +320,9 @@ def _coordination(outcome: Any) -> dict[str, Any] | None:
     return {
         "ok": bool(outcome.ok),
         "reason": None if outcome.reason is None else outcome.reason.value,
-        "rounds": [
+        "iterations": [
             {
-                "round": int(r.round_index),
+                "iteration": int(r.round_index),
                 "conflicts_before": int(r.conflicts_before),
                 "conflicts_after": int(r.conflicts_after),
                 "replanned": list(r.replanned),
@@ -385,8 +337,8 @@ def _coordination(outcome: Any) -> dict[str, Any] | None:
     }
 
 
-def _trace_payload(r_idx: int, reqs, run: RoundRun, cycle: float) -> dict[str, Any]:
-    """round_trace.json 的一轮：逐机票 + 协调 + 触发证据。"""
+def _trace_payload(r_idx: int, reqs, run: CycleRun, cycle: float) -> dict[str, Any]:
+    """cycle_trace.json 的一周期：逐机航次 + 协调 + 触发证据。"""
     tickets = []
     for req in reqs:
         res = run.results[req.uav_id]
@@ -395,6 +347,9 @@ def _trace_payload(r_idx: int, reqs, run: RoundRun, cycle: float) -> dict[str, A
         tickets.append({
             "uav_id": req.uav_id,
             "t0": round(float(req.t0), 6),
+            # 周期基准与离巢错峰分开记：航次的 t0 = 基准 + 偏移（见 PIPELINE「离巢错峰」）
+            "t0_base_s": round(float(req.meta.get("t0_base_s", req.t0)), 6),
+            "depart_offset_s": round(float(req.meta.get("depart_offset_s", 0.0)), 6),
             "start_position": [round(float(v), 6) for v in req.start_position],
             "stops": [{"id": s.id, "kind": s.kind, "position": list(s.position),
                        "service_time_s": s.service_time_s} for s in req.stops],
@@ -412,13 +367,14 @@ def _trace_payload(r_idx: int, reqs, run: RoundRun, cycle: float) -> dict[str, A
             },
         })
     return {
-        "round": r_idx,
+        "cycle": r_idx,
         "t0": (r_idx - 1) * cycle,
         "tickets": tickets,
         "pruned": list(run.pruned),
         "existing_before": [t.uav_id for t in run.existing_before],
         "pre_conflicts": _pre_conflicts(run.pre_report, run.existing_before),
         "old_changed": list(run.old_changed),
+        "frozen_ids": list(run.frozen_ids),
         "coordination": _coordination(run.outcome),
     }
 
@@ -428,14 +384,14 @@ def _trace_payload(r_idx: int, reqs, run: RoundRun, cycle: float) -> dict[str, A
 # ---------------------------------------------------------------------------
 
 
-def print_summary(runtime: Runtime, fleet, runs: Mapping[int, RoundRun],
+def print_summary(runtime: Runtime, fleet, runs: Mapping[int, CycleRun],
                   metrics: Mapping[str, Any], out_dir: str | Path) -> None:
-    """控制台摘要：逐轮逐机 + 协调 + 跨轮证据。"""
+    """控制台摘要：逐周期逐机 + 协调 + 跨周期证据。"""
     print(f"[{runtime.config.name}] 场景 {runtime.config.scenario.data_dir.name}  "
           f"场 {runtime.field_info['source']}  周期 {fleet.cycle_length_s:g} s")
     for r_idx in sorted(runs):
         run = runs[r_idx]
-        print(f"  轮{r_idx}（t0={(r_idx-1)*fleet.cycle_length_s:g}）："
+        print(f"  周期{r_idx}（t0={(r_idx-1)*fleet.cycle_length_s:g}）："
               f"prune 摘除 {list(run.pruned)}"
               + (f"，既有航迹 {[t.uav_id for t in run.existing_before]}"
                  if run.existing_before else ""))
@@ -447,23 +403,26 @@ def print_summary(runtime: Runtime, fleet, runs: Mapping[int, RoundRun],
                 f"时长={0.0 if traj is None else round(traj.duration, 2)}s "
                 f"弧长={0.0 if traj is None else round(traj.path_len_m, 1)}m "
                 f"让路={'是' if uid in run.changed else '否'}"
+                + ("  [降级交付 time_source=estimate]"
+                   if traj is not None and traj.time_source.value == "estimate" else "")
             )
-        for uid, m in metrics["rounds"][str(r_idx)]["per_uav"].items():
+        for uid, m in metrics["cycles"][str(r_idx)]["per_uav"].items():
             print(
                 f"    指标 机{uid}: SDF净空={m['sdf_min_m']:.2f}m "
                 f"真几何={m['prism_min_m']:.2f}m 复核={m['verified']} "
                 f"均速={m['mean_speed_mps']:.2f}m/s"
             )
         if run.pre_report is not None:
-            pcs = metrics["cross_round"]["pre_conflicts"][str(r_idx)]
+            pcs = metrics["cross_cycle"]["pre_conflicts"][str(r_idx)]
             print(f"    协调前冲突 {len(pcs)} 对（新-旧 "
                   f"{sum(1 for p in pcs if p['kind'] == 'new_old')}）")
-        coord = metrics["rounds"][str(r_idx)]["coordination"]
-        print(f"    协调: ok={coord['ok']} 轮次={len(coord['rounds'])} "
+        coord = metrics["cycles"][str(r_idx)]["coordination"]
+        print(f"    协调: ok={coord['ok']} 协调迭代={len(coord['iterations'])} "
               f"遗留冲突={coord['remaining_conflicts']} 让路机={coord['changed']} "
               f"旧侧改动={list(run.old_changed)}")
-        for rec in coord["rounds"]:
-            print(f"      轮 {rec['round']}: 前 {rec['conflicts_before']} → "
+        for rec in coord["iterations"]:
+            print(f"      迭代 {rec['iteration']}: 前 {rec['conflicts_before']} → "
                   f"后 {rec['conflicts_after']} 重规划 {rec['replanned']} "
                   f"失败 {rec['failed']}")
     print(f"[{runtime.config.name}] 结果：{out_dir}")
+

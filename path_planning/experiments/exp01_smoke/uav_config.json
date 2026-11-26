@@ -1,8 +1,8 @@
 {
-  "_note": "exp01_smoke 机队清单（多机多轮、无巢口径）：起点/途经点/终点全是 ENU 绝对坐标，起始点由本实验设计并在 [4,4,2] 局部场上实测（SDF/棱柱 ≥ 8 m、agl ∈ [3,100]），选址依据见 PIPELINE.md。round=轮次（周期决策节拍），t0 必须等于 (round-1)×cycle_length_s。终点 = end，途经 = via（service_time_s=0 的途经点不产生悬停段，结构上并入相邻 leg）。",
+  "_note": "exp01_smoke 机队清单（多机多周期、无巢口径）。点位只写平面 xy 与语义类型 point_type：nest = 巢址正上方悬停点（默认不建模起降），task = 任务作业点（有建筑取屋顶上方，无建筑取地面上方）；高度统一由 path_planning/experiments/exp01_smoke/support/waypoint_policy.py 按 config.yaml 的 mission_waypoints 解析，清单里不再写 z。cycle=周期号（上层决策周期），t0 必须等于 (cycle-1)×cycle_length_s。必撞设计按“同一高度层穿越”：机5 在 H=(-605.2,-223.5) 悬停 500 s（task，解出 20.3 m），机6 的第二航段（202→203，31.7→24.3 m）与机3 的第二航段（302→301，20.1→40.8 m）都从 H 处穿过。302 从 (-660,-250) 挪到 (-626,-244)：原位置被邻楼把基线抬到 38.3 m，穿越 H 时竖直差 18 m，必撞会静默失效（高度由几何派生后的直接后果）。旧固定 z=60 已作废。多航段设计：机6 的 202 悬停 20 s、机3 的 302 悬停 15 s——协调层必须只重解含冲突时刻的那一段再拼接。降级设计：机7 与机4 同一条走廊，但剩余续航只给 6 s（航程 300 m）：优化必无解 → 声明 allow_estimate_fallback 后按定速剖面交付，随后预算必然超限 → failed + TIME_EXCEEDS_BUDGET + 交付估算轨迹；它不进协调、不写 Registry。旧机号（5/6）大于新机号（3/4），判据只认冻结集与请求机号不相交，与机号大小无关。",
   "uavs": [
     {
-      "id": 1,
+      "id": 5,
       "model": "M30T",
       "mass_kg": 9.5,
       "v_max_mps": 15.0,
@@ -16,7 +16,7 @@
       "budget": {"endurance_remaining_s": 900.0, "range_remaining_m": 4000.0}
     },
     {
-      "id": 2,
+      "id": 6,
       "model": "M30T",
       "mass_kg": 9.5,
       "v_max_mps": 15.0,
@@ -56,45 +56,69 @@
       "max_range_m": 20000.0,
       "max_time_s": 1200.0,
       "budget": {"endurance_remaining_s": 500.0, "range_remaining_m": 3000.0}
+    },
+    {
+      "id": 7,
+      "model": "M30T",
+      "mass_kg": 9.5,
+      "v_max_mps": 15.0,
+      "v_up_mps": 6.0,
+      "v_dn_mps": 3.0,
+      "a_max_mps2": 3.0,
+      "f_max_n": 200.0,
+      "f_min_n": 78.0,
+      "max_range_m": 20000.0,
+      "max_time_s": 1200.0,
+      "budget": {"endurance_remaining_s": 6.0, "range_remaining_m": 300.0}
     }
   ],
   "tours": [
     {
-      "uav_id": 1,
-      "round": 1,
+      "uav_id": 5,
+      "cycle": 1,
       "t0": 0.0,
-      "start": {"enu": [-699.2, -268.4, 60.0]},
+      "start": {"xy": [-605.2, -193.5], "point_type": "nest"},
       "via": [
-        {"id": 101, "at": {"enu": [-655.8, -514.6, 60.0]}, "service_time_s": 60.0}
+        {"id": 101, "at": {"xy": [-605.2, -223.5], "point_type": "task"}, "service_time_s": 500.0}
       ],
-      "end": {"id": 102, "at": {"enu": [-587.8, -756.5, 60.0]}, "service_time_s": 500.0}
+      "end": {"id": 102, "at": {"xy": [-560.0, -160.0], "point_type": "nest"}, "service_time_s": 0.0}
     },
     {
-      "uav_id": 2,
-      "round": 1,
+      "uav_id": 6,
+      "cycle": 1,
       "t0": 0.0,
-      "start": {"enu": [-601.4, -149.6, 60.0]},
+      "start": {"xy": [-560.3, -1056.3], "point_type": "nest"},
       "via": [
-        {"id": 201, "at": {"enu": [-575.3, -297.4, 60.0]}, "service_time_s": 120.0},
-        {"id": 202, "at": {"enu": [-638.5, -613.1, 60.0]}, "service_time_s": 0.0}
+        {"id": 202, "at": {"xy": [-620.0, -510.0], "point_type": "task"}, "service_time_s": 20.0}
       ],
-      "end": {"id": 203, "at": {"enu": [-560.3, -1056.3, 60.0]}, "service_time_s": 0.0}
+      "end": {"id": 203, "at": {"xy": [-601.4, -149.6], "point_type": "nest"}, "service_time_s": 0.0}
+    },
+    {
+      "uav_id": 7,
+      "cycle": 1,
+      "t0": 0.0,
+      "start": {"xy": [-650.0, -259.8], "point_type": "nest"},
+      "via": [],
+      "end": {"id": 701, "at": {"xy": [-606.6, -506.0], "point_type": "nest"}, "service_time_s": 0.0},
+      "allow_estimate_fallback": true
     },
     {
       "uav_id": 3,
-      "round": 2,
+      "cycle": 2,
       "t0": 240.0,
-      "start": {"enu": [-699.2, -268.4, 60.0]},
-      "via": [],
-      "end": {"id": 301, "at": {"enu": [-560.3, -1056.3, 60.0]}, "service_time_s": 0.0}
+      "start": {"xy": [-699.2, -268.4], "point_type": "nest"},
+      "via": [
+        {"id": 302, "at": {"xy": [-626.0, -244.0], "point_type": "task"}, "service_time_s": 15.0}
+      ],
+      "end": {"id": 301, "at": {"xy": [-520.0, -180.0], "point_type": "nest"}, "service_time_s": 0.0}
     },
     {
       "uav_id": 4,
-      "round": 2,
+      "cycle": 2,
       "t0": 240.0,
-      "start": {"enu": [-650.0, -259.8, 60.0]},
+      "start": {"xy": [-650.0, -259.8], "point_type": "nest"},
       "via": [],
-      "end": {"id": 401, "at": {"enu": [-606.6, -506.0, 60.0]}, "service_time_s": 30.0}
+      "end": {"id": 401, "at": {"xy": [-606.6, -506.0], "point_type": "task"}, "service_time_s": 30.0}
     }
   ]
 }

@@ -35,19 +35,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-try:
-    import yaml
-except ImportError:  # pragma: no cover
-    yaml = None
-
 EXP_DIR = Path(__file__).resolve().parent
 ROOT = EXP_DIR.parents[2]
-DATA_DIR = ROOT / "task_allocation" / "data"  # 场景注册表根；文件解析走 scenario_data
+DATA_DIR = ROOT / "data"  # 场景注册表根；文件解析走 scenario_data
 
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 if str(EXP_DIR) not in sys.path:
     sys.path.insert(0, str(EXP_DIR))
+
+from task_allocation.common.config_io import load_config_mapping  # noqa: E402
 
 from accounting import accounting_from, assert_no_quality_claims, summarize  # noqa: E402
 from task_allocation.common import scenario_data  # noqa: E402
@@ -175,10 +172,8 @@ def _write_ckpt(
 
 
 def load_config(path: Path) -> dict:
-    if yaml is None:
-        raise RuntimeError("需要 PyYAML")
-    with path.open(encoding="utf-8") as f:
-        return yaml.safe_load(f)
+    """读配置（YAML/JSON/JSONC），返回顶层映射。"""
+    return load_config_mapping(path)
 
 
 def selection_config_from(

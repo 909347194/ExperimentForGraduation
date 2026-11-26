@@ -387,6 +387,31 @@ class TaskPool:
             done.append(task)
         return done
 
+    def reopen(self, task_ids: Iterable[int], *, reason: str = "post_infeasible") -> list[Task]:
+        """把已完成（DONE）但事后被判不可交付的任务重开回池。
+
+        口径：上层"周期末即完成"是简化模型；闭环在下层排完航迹后才知道这条
+        航次真飞不了。此时任务已被 ``complete`` 移出池，必须显式重开，否则
+        "回池"只是账面上的数字，下一拍永远不会再派它。
+
+        重开后任务回到 ``PENDING``，并在下一次 ``begin_cycle`` 标为 ``RELEASE``
+        （与 :meth:`release` 同一条候选链路），保证重投走的是正式入口。
+        """
+        reopened: list[Task] = []
+        for task_id in task_ids:
+            task = self._finished.pop(int(task_id), None)
+            if task is None:
+                # 未完成（还在池里）的任务由 ``release`` 负责，重开只处理已完成的。
+                raise KeyError(f"任务 {task_id} 不在已完成集合：无法重开")
+            task.status = TaskStatus.PENDING
+            task.meta["reopen_reason"] = reason
+            task.meta["reopen_time"] = self._current_time
+            self._tasks[task.id] = task
+            self._release_pending.add(task.id)
+            self._source[task.id] = TaskSource.RELEASE
+            reopened.append(task)
+        return reopened
+
     def release(self, task_ids: Iterable[int], reason: str = "released") -> list[Task]:
         """把未完成任务释放回任务池（论文 T_t^release）。
 

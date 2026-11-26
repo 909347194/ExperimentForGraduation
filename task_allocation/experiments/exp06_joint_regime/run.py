@@ -40,9 +40,12 @@ SEP = "=" * 72
 
 
 def _load_cfg() -> dict:
-    import yaml
+    root = HERE.parents[2]
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
+    from task_allocation.common.config_io import load_config_mapping
 
-    return yaml.safe_load((HERE / "config.yaml").read_text(encoding="utf-8"))
+    return load_config_mapping(HERE / "config.yaml")
 
 
 def _tag(K: int, lam: float, lc: float, seed: int) -> str:

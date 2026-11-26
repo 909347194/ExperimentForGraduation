@@ -19,9 +19,9 @@ import numpy as np
 from path_planning.methods.spatial.corridor_window import (
     CorridorRule,
     corridor_window,
+    field_z_envelope,
     required_pad_m,
     window_area_m2,
-    z_envelope_from_ground,
 )
 
 
@@ -59,6 +59,16 @@ class TestCorridorWindowGeometry(unittest.TestCase):
     def test_explicit_half_width_wins(self) -> None:
         rule = CorridorRule(width_ratio=0.2, half_width_m=25.0)
         self.assertAlmostEqual(rule.half_width_for(100.0), 25.0, places=12)
+
+    def test_half_width_lower_bound_beats_ratio(self) -> None:
+        """绝对下限只在短航段生效；长航段仍按比例（纯比例在 30 m 航段只剩 3 m）。"""
+        rule = CorridorRule(width_ratio=0.2, half_width_min_m=20.0)
+        self.assertAlmostEqual(rule.half_width_for(30.0), 20.0, places=12)  # 0.5·0.2·30 = 3
+        self.assertAlmostEqual(rule.half_width_for(250.0), 25.0, places=12)
+        self.assertAlmostEqual(rule.half_width_for(550.0), 55.0, places=12)
+        # 显式半宽优先级最高，连下限也盖过
+        self.assertAlmostEqual(
+            CorridorRule(half_width_m=8.0, half_width_min_m=20.0).half_width_for(30.0), 8.0, places=12)
 
     def test_lateral_includes_margin(self) -> None:
         rule = CorridorRule(half_width_m=10.0, margin_m=5.0)
@@ -129,9 +139,10 @@ class TestRequiredPad(unittest.TestCase):
 
 class TestZEnvelope(unittest.TestCase):
     def test_envelope(self) -> None:
-        lo, hi = z_envelope_from_ground(12.0, 5.0, 120.0)
-        self.assertAlmostEqual(lo, 17.0)
-        self.assertAlmostEqual(hi, 132.0)
+        # 绝对口径：下界取最低地面，上界取飞行绝对高度上限，不再按地面叠加
+        lo, hi = field_z_envelope(12.0, 120.0)
+        self.assertAlmostEqual(lo, 12.0)
+        self.assertAlmostEqual(hi, 120.0)
 
 
 if __name__ == "__main__":

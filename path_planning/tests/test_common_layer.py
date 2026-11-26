@@ -314,10 +314,22 @@ class TestPlanParams(unittest.TestCase):
         self.assertGreater(p.detection_step_s(2.6), step)
         self.assertLess(p.detection_step_s(4.0), step)
 
-    def test_corridor_must_fit_clearance(self) -> None:
+    def test_alt_band_must_be_ordered(self) -> None:
+        # 真高带是库层唯一的高度口径：min 必须 > 0 且 < max（端点准入与派生绝对 z 带都依赖它）
         with self.assertRaises(ValueError) as ctx:
-            replace(PlanParams(), clearance_m=25.0).validate()
-        self.assertIn("容不下净空", str(ctx.exception))
+            replace(PlanParams(), alt_agl_min_m=130.0).validate()
+        self.assertIn("真高带非法", str(ctx.exception))
+        with self.assertRaises(ValueError):
+            replace(PlanParams(), alt_agl_min_m=0.0).validate()
+        # 默认必须就是 10–120（低空口径的行业惯例 + 真高天花板）
+        p = PlanParams()
+        self.assertEqual((p.alt_agl_min_m, p.alt_agl_max_m), (10.0, 120.0))
+
+    def test_clearance_not_coupled_to_corridor_width(self) -> None:
+        # 走廊"半宽装不下净空"不再由参数自洽校验兜底（库不知道具体航段长度），
+        # 改由 leg_planner 早退 CORRIDOR_TOO_NARROW——参数层只保证净空本身合法
+        p = replace(PlanParams(), clearance_m=25.0)
+        self.assertEqual(p.clearance_m, 25.0)
 
     def test_degenerate_dt_interval_rejected(self) -> None:
         with self.assertRaises(ValueError):

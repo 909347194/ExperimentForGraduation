@@ -13,7 +13,8 @@
 ``api`` 又要被上层 horizon 调用；若 path_planning 反向 import task_allocation，
 两个包就无法独立运行（先 import 谁都能触发对方初始化）。复制的代价是 4 个
 文件重复，风险是口径漂移——因此 **必须配逐点对拍测试**
-（``tests/test_geometry_parity.py``），复制后任何数值差异都要在对拍里报出来。
+（仓库根 ``tests/test_geometry_parity.py``，按"包内不 import 对方"的规则，它放在
+两包之外），复制后任何数值差异都要在对拍里报出来。
 
 已知两处与上游一致的口径，复制时不得"顺手修好"：
 

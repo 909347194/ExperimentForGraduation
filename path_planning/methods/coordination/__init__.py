@@ -10,8 +10,9 @@
 
 * ``local_region.py``       局部域（水平圆域 + 过渡权重 + CPA 时刻）
 * ``detour_candidates.py``  让路候选几何（垂直优先、端点冻结、余弦钟形衰减）
+* ``leg_stitching.py``      按航段切分与拼回（重解一段、后段顺移、悬停保留）
 * ``local_replan.py``       候选逐一重解时间 → 独立复核 → 真几何净空 → 对手证书
-* ``global_recheck.py``     检测-聚类-让路-复检的轮次编排（机号大者让路）
+* ``global_recheck.py``     检测-聚类-让路-复检的轮次编排（默认机号大者让路；跨周期由 ``movable_ids`` 显式冻结旧侧）
 """
 
 from path_planning.methods.coordination.detour_candidates import (
@@ -23,6 +24,11 @@ from path_planning.methods.coordination.global_recheck import (
     CoordinationOutcome,
     RoundRecord,
     coordinate_conflicts,
+)
+from path_planning.methods.coordination.leg_stitching import (
+    LegGeometry,
+    legs_of,
+    stitch_leg,
 )
 from path_planning.methods.coordination.local_region import (
     LocalRegion,
@@ -43,6 +49,9 @@ __all__ = [
     "CoordinationOutcome",
     "RoundRecord",
     "coordinate_conflicts",
+    "LegGeometry",
+    "legs_of",
+    "stitch_leg",
     "LocalRegion",
     "region_from_conflict",
     "transition_weight",

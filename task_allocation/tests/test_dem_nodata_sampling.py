@@ -180,7 +180,7 @@ def test_metric_terrain_no_fake_finite_from_nodata():
 
 
 # 真实数据：数据环境齐备时才跑，避免无数据环境误报
-_REAL_DATA = REPO / "task_allocation" / "data" / "guangzhou"
+_REAL_DATA = REPO / "data" / "guangzhou"
 
 
 @pytest.fixture(scope="module")

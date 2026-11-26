@@ -18,10 +18,7 @@ from typing import Any, Mapping
 
 import paths  # noqa: F401  # sys.path 引导：挂载仓库根，供 task_allocation.* 导入
 
-try:
-    import yaml
-except ImportError:  # pragma: no cover
-    yaml = None
+from task_allocation.common.config_io import load_config_mapping
 
 from task_allocation.methods.muas.problem import (
     ConstraintConfig,
@@ -42,14 +39,8 @@ __all__ = ["ConfigBundle", "load_config", "build_config_bundle"]
 
 
 def load_config(path: Path) -> dict[str, Any]:
-    """读取实验 yaml；PyYAML 缺失时给出可操作的报错而不是 ImportError。"""
-    if yaml is None:
-        raise RuntimeError("需要 PyYAML：请在 pyproject.toml 中加入 pyyaml 依赖后安装")
-    with Path(path).open(encoding="utf-8") as f:
-        data = yaml.safe_load(f)
-    if not isinstance(data, dict):
-        raise ValueError(f"config.yaml 顶层必须是映射：{path}")
-    return data
+    """读配置（YAML/JSON/JSONC），返回顶层映射。"""
+    return load_config_mapping(path)
 
 
 def _section(raw: Mapping[str, Any], name: str) -> dict[str, Any]:

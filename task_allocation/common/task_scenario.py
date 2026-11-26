@@ -131,7 +131,7 @@ class SyntheticTaskConfig:
     sequence_chain_ratio: float = 0.0
     sequence_chain_len: int = 2
     # 任务区域门禁（城关区口径）：给出区域多边形 geojson（如
-    # ``Chengguan_district.geojson``，相对 task_allocation/data/<scenario>/ 或绝对路径），
+    # ``Chengguan_district.geojson``，相对 data/<scenario>/ 或绝对路径），
     # 任务点必须落在多边形内；落点出区则拒绝采样、在区域包络内重采，超时
     # 残留点回退到机巢位置（机巢恒在区域内）。None = 不做区域限制。
     # 该门禁与 ``domain`` 正交：无论 nest_anchored 还是 dem_extent，最终

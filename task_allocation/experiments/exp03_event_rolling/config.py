@@ -10,10 +10,7 @@ from typing import Any, Mapping
 
 import paths  # noqa: F401
 
-try:
-    import yaml
-except ImportError:
-    yaml = None
+from task_allocation.common.config_io import load_config_mapping
 
 from task_allocation.methods.muas.problem import ConstraintConfig, MUASProblemConfig
 from task_allocation.methods.muas.solvers.dmde_solver import DMDEConfig
@@ -26,13 +23,8 @@ __all__ = ["ConfigBundle", "load_config", "build_config_bundle", "apply_factor"]
 
 
 def load_config(path: Path) -> dict[str, Any]:
-    if yaml is None:
-        raise RuntimeError("需要 PyYAML")
-    with Path(path).open(encoding="utf-8") as f:
-        data = yaml.safe_load(f)
-    if not isinstance(data, dict):
-        raise ValueError(f"config.yaml 顶层必须是映射：{path}")
-    return data
+    """读配置（YAML/JSON/JSONC），返回顶层映射。"""
+    return load_config_mapping(path)
 
 
 def _section(raw: Mapping[str, Any], name: str) -> dict[str, Any]:

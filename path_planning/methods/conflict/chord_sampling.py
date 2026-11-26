@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Hermite → 匀速弦的弦化：给出**实测**最大偏差，供膨胀与判定使用。
+r"""Hermite → 匀速弦的弦化：给出**实测**最大偏差，供膨胀与判定使用。
 
 职责：把 ``Trajectory`` 的 Hermite 段递归二等分成匀速直线弦（``MotionChord``），
       逐弦记录"弦与真曲线"的实测最大偏差 ``error_m``。
@@ -87,7 +87,7 @@ class MotionChord:
 
 
 def max_initial_chord_s(eps_a_m: float, a_max_mps2: float) -> float:
-    """初始弦长硬上限 \(2\sqrt{8\epsilon_a/a_{max}}\)（§9.3）。
+    r"""初始弦长硬上限 \(2\sqrt{8\epsilon_a/a_{max}}\)（§9.3）。
 
     取固定步长的 2 倍：既享受粗弦的低成本，又保证"每根弦都不会长得离谱"。
     """

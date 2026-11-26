@@ -13,8 +13,13 @@
 1. **Δt 逐节点**：决策 ``p_i,v_i,a_i∈R³ + Δt_i``，共 ``10N=600``（N=60）。
    动力学用前 N−1 个 Δt；``Δt[N-1]`` 镜像 ``Δt[N-2]``（避免死变量，保持 10N 布局）。
    目标 ``min Σ_{i<N-1} Δt_i``。参考实现是单一标量 Δt，本项目不是。
-2. **速度三条联立（口径 B）**：``‖v_xy‖≤v_max_plan``、``-v_dn≤v_z≤v_up``、
-   ``‖v‖≤v_max`` 分别作为约束交给求解器——**不写 min**（折点不可微，IPOPT 会失败）。
+2. **速度口径 B（两条，不写 min）**：``‖v‖≤v_max_plan`` 与 ``-v_dn≤v_z≤v_up``。
+   合速上限取**规划口径**（＝机体上限留 ``PLAN_SPEED_RATIO`` 裕量），不是机体上限
+   本身：裕量必须作用于整个速度矢量，否则"水平封顶、竖直单开一份预算"，抬升
+   不挤占水平速度、变成零成本自由度（实测：上限写成 ``v_max`` 时合速峰值只到
+   14.2/15，竖直方向白用 4–6 m/s，拱形漂移即由此产生）。取规划口径后水平上限
+   ``‖v_xy‖≤v_max_plan`` 被合速上限蕴含，不再单列；``feasibility.py`` 仍按物理
+   口径三条独立复核。
 3. **端点净空豁免**：机巢处实测 SDF 仅 +1.6/−0.6，首末爬升段若按全程净空判恒不可行。
    豁免首末 ``endpoint_exempt_segments`` 段及其节点；``feasibility.py`` 必须用同一豁免。
 
@@ -35,19 +40,21 @@ except ImportError:  # pragma: no cover
 
 import numpy as np
 
-from path_planning.common.plan_types import HermiteSegment, Trajectory
+from path_planning.common.trajectory import Trajectory
 from path_planning.common.vehicle_spec import VehicleSpec
 from path_planning.methods.spatial.occupancy_sdf import SdfField
-from path_planning.methods.spatial.sdf_casadi import SdfOnGrid
+from path_planning.methods.spatial.sdf_casadi import SdfOnGrid, sdf_cache_key
 from path_planning.methods.spatial.world_field import WorldField
 from path_planning.methods.timeline.initial_guess import (
     initial_guess_from_limits,
     resample_path,
 )
+from path_planning.methods.timeline.dt_floor import adaptive_dt_min_s
 from path_planning.methods.timeline.nlp_config import NlpConfig
-from path_planning.methods.timeline.splines import trajectory_arc_length, trajectory_nodes
+from path_planning.methods.timeline.splines import trajectory_nodes
+from path_planning.methods.timeline.trajectory_assembly import build_trajectory
 
-__all__ = ["NlpConfig", "NlpResult", "optimize_trajectory"]
+__all__ = ["NlpConfig", "NlpResult", "adaptive_dt_min_s", "optimize_trajectory"]
 
 _MAX_ITER_STATUS = "Maximum_Iterations_Exceeded"
 
@@ -71,6 +78,7 @@ def optimize_trajectory(
     uav_id: int = 0,
     t0: float = 0.0,
     warm: Trajectory | None = None,
+    sdf_cache: dict | None = None,
 ) -> NlpResult:
     """在走廊内解最短时间轨迹；三级退让后仍失败返回 ``trajectory=None``。
 
@@ -78,12 +86,27 @@ def optimize_trajectory(
     直接给全域 ``WorldField``（**z-major** ``(nz,nx,ny)``）。存储布局由
     ``SdfOnGrid`` 归一化——这里不再要求调用方先切窗口。
 
+    ``sdf_cache`` 由 ``TourPlanningContext`` 持有：同一场对象（同一走廊窗口的多个
+    候选，或同一次让路的多个候选）共用一张 CasADi 插值器，避免重建上亿体素。
+
     "几何可飞、时间剖面没解出来 ≠ 航段不可行"：前者报 ``OPT_FAILED`` 可降级，
     后者才报不可行。本函数只负责产出/不产出，失败码由编排层定。
     """
     if ca is None:
         return NlpResult(None, "casadi_missing", None, 0.0, "未安装 casadi")
-    sdf = SdfOnGrid(field)
+    # 时长地板自适应：短航段收缩 dt_min，避免 (n−1)·dt_min 顶住 min ΣΔt 使形状失真。
+    # 只降不升，km 级航段仍用配置值；初值也随之重算，不会违反新下界。
+    dt_eff = adaptive_dt_min_s(path_enu, cfg)
+    if dt_eff < cfg.dt_min_s:
+        cfg = replace(cfg, dt_min_s=dt_eff)
+    if sdf_cache is None:
+        sdf = SdfOnGrid(field)
+    else:
+        key = sdf_cache_key(field)
+        sdf = sdf_cache.get(key)
+        if sdf is None:
+            sdf = SdfOnGrid(field)
+            sdf_cache[key] = sdf
     n0 = int(cfg.n_nodes)
     elapsed = 0.0
     base = resample_path(path_enu, n0)
@@ -156,11 +179,12 @@ def _solve_once(
     if cfg.max_time_s is not None:
         opti.subject_to(ca.sum1(dt[: n - 1]) <= cfg.max_time_s)
 
-    # --- 速度三条联立（口径 B，分别约束，不写 min）---
-    vh2 = v[0, :] ** 2 + v[1, :] ** 2
-    opti.subject_to(vh2 <= cfg.v_max_plan_mps ** 2)
+    # --- 速度口径 B（分别约束，不写 min：折点不可微，IPOPT 会在边界反复失败）---
+    # 合速上限 = **规划口径** v_max_plan：竖直速度只能从水平额度里扣。
+    # 若写成机体的 v_max，则 sqrt(v_max²−v_up²)=13.75 ≥ v_max_plan=13.5，
+    # 水平上限恒先绑、合速约束全域不激活，竖直方向等于白得 4–6 m/s。
+    opti.subject_to(ca.sum1(v ** 2) <= cfg.v_max_plan_mps ** 2)
     opti.subject_to(opti.bounded(-cfg.v_dn_mps, v[2, :], cfg.v_up_mps))
-    opti.subject_to(ca.sum1(v ** 2) <= cfg.v_max_mps ** 2)
 
     # --- 加速度 + 推力（托住重力之后再谈加速度）---
     opti.subject_to(ca.sum1(a ** 2) <= cfg.a_max_mps2 ** 2)
@@ -176,20 +200,15 @@ def _solve_once(
         lateral = cn_x * (x[0, :] - cp_x) + cn_y * (x[1, :] - cp_y)
         opti.subject_to(opti.bounded(-cfg.half_width_m, lateral, cfg.half_width_m))
 
-    # --- 绝对 z 飞行带（NLP 节点是自由变量，不钉住会爬高越过障碍）---
-    # 只钉节点不够：交付的是 Hermite 段（端点 z 与 z 速度），节点处 v_z≠0 时段中点会
-    # 拱出节点框外——实测节点全在 103.30 以内，曲线却到 110.42（dt≈5 s、v_z≈6 m/s 时
-    # 中点偏移 = dt·(v_z0−v_z1)/8）。故按交付曲线本身的 z 采样一起约束。
+    # --- 绝对 z 飞行带 ---
+    # 只约束**节点**：交付口径是节点折线（``x_i``），Hermite 曲线只是由节点派生的
+    # 展示几何，不参与判据。段内曲线在 dt 大时会拱出节点框外（dt≈5 s、v_z≈6 m/s
+    # 时中点偏移 = dt·(v_z0−v_z1)/8），这是派生层的表示误差，交给交付闸的余量吸收，
+    # 不再用"按曲线取样"把判据偷偷升到曲线口径——那会让判据与交付物不是同一条线。
     if cfg.alt_min_m is not None and cfg.alt_max_m is not None:
         lo = float(cfg.alt_min_m)
         hi = float(cfg.alt_max_m)
         opti.subject_to(opti.bounded(lo, x[2, :], hi))
-        for seg_i in range(n - 1):
-            for s in _Z_BAND_SAMPLES:
-                z = _hermite_axis(
-                    x[2, seg_i], v[2, seg_i], x[2, seg_i + 1], v[2, seg_i + 1], dt[seg_i], s
-                )
-                opti.subject_to(opti.bounded(lo, z, hi))
 
     # --- 梯形动力学（逐节点 Δt）---
     for i in range(n - 1):
@@ -226,10 +245,17 @@ def _solve_once(
     for seg_i in range(n - 1):
         if seg_i < k or seg_i >= n - 1 - k:
             continue  # 首末爬升段豁免
+        # 段内净空按**节点折线**取点（``(1−α)x_i + α x_{i+1}``），与交付物同源：
+        # 交付的是节点序列，判据就只看节点折线。参考实现
+        # （GeoWind2Plan / pp1 的 trajectory_optimization）都是这个口径。
+        # 曲线与折线的偏差（a·dt²/8 量级）不在这里判——那是派生层的表示误差，
+        # 由交付闸的真几何复核（prisms，按曲线采样）负责兜底。
         for j in range(1, cfg.segment_samples + 1):
             alpha = float(j) / float(cfg.segment_samples + 1)
-            xm = (1.0 - alpha) * x[:, seg_i] + alpha * x[:, seg_i + 1]
-            opti.subject_to(sdf.at(xm) >= cfg.clearance_m)
+            xm = (1.0 - alpha) * x[0, seg_i] + alpha * x[0, seg_i + 1]
+            ym = (1.0 - alpha) * x[1, seg_i] + alpha * x[1, seg_i + 1]
+            zm = (1.0 - alpha) * x[2, seg_i] + alpha * x[2, seg_i + 1]
+            opti.subject_to(sdf.at(ca.vertcat(xm, ym, zm)) >= cfg.clearance_m)
 
     opti.minimize(ca.sum1(dt[: n - 1]))
 
@@ -247,7 +273,7 @@ def _solve_once(
         ig_v, ig_a, ig_dt = initial_guess_from_limits(
             path,
             v_cruise_mps=cfg.v_max_plan_mps,
-            v_max_mps=cfg.v_max_mps,
+            v_max_mps=cfg.v_max_plan_mps,  # 合速也按规划口径判，与模型同源
             v_up_mps=cfg.v_up_mps,
             v_dn_mps=cfg.v_dn_mps,
             a_max_mps2=cfg.a_max_mps2,
@@ -277,7 +303,7 @@ def _solve_once(
                          f"{type(exc).__name__}: {str(exc).splitlines()[0]}")
 
     stats = opti.stats()
-    traj = _build_trajectory(opti, x, v, dt, n, uav_id, t0, stats)
+    traj = build_trajectory(opti, x, v, a, dt, n, uav_id, t0, stats)
     return NlpResult(
         traj,
         str(stats.get("return_status", "Solve_Succeeded")),
@@ -286,44 +312,4 @@ def _solve_once(
     )
 
 
-def _build_trajectory(opti, x, v, dt, n, uav_id, t0, stats) -> Trajectory:
-    """把节点解装配成 Hermite 段序列（弧长由 Gauss 重积分算出）。"""
-    pv = np.asarray(opti.value(x), dtype=float).T
-    vv = np.asarray(opti.value(v), dtype=float).T
-    dtv = np.asarray(opti.value(dt), dtype=float).ravel()
-    times = t0 + np.concatenate([[0.0], np.cumsum(dtv[: n - 1])])
-    segs = tuple(
-        HermiteSegment(
-            float(times[i]), float(times[i + 1]),
-            tuple(pv[i]), tuple(pv[i + 1]), tuple(vv[i]), tuple(vv[i + 1]),
-        )
-        for i in range(n - 1)
-    )
-    return Trajectory(
-        uav_id=uav_id,
-        segments=segs,
-        path_len_m=trajectory_arc_length(segs),
-        meta={
-            "solver_status": str(stats.get("return_status", "Solve_Succeeded")),
-            "iterations": int(stats.get("iter_count", 0) or 0),
-            "n_nodes": n,
-        },
-    )
-
-
-#: z 飞行带在**交付曲线**上的采样位置（段内归一化参数）。中点 0.5 正是
-#: "两端 z 相等、两个 z 速度反向"时 Hermite 拱顶的位置；0.2/0.4/0.6/0.8 兜住
-#: 非对称情形（节点框内但曲线外凸）。
-_Z_BAND_SAMPLES: tuple[float, ...] = (0.2, 0.4, 0.6, 0.8)
-
-
-def _hermite_axis(p0, v0, p1, v1, dt, s: float):
-    """单轴 Hermite 在段内参数 ``s`` 处的取值（与 ``HermiteSegment`` 同一基函数）。"""
-    s2 = s * s
-    s3 = s2 * s
-    h00 = 2.0 * s3 - 3.0 * s2 + 1.0
-    h10 = s3 - 2.0 * s2 + s
-    h01 = -2.0 * s3 + 3.0 * s2
-    h11 = s3 - s2
-    return h00 * p0 + h10 * dt * v0 + h01 * p1 + h11 * dt * v1
 

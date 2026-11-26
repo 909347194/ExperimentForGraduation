@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""实验指标：逐机航迹质量 + 协调轮次记录。
+"""实验指标：逐机航迹质量 + 协调周期记录。
 
 职责：把"跑完了"变成可入表的数——时长/飞行时长/弧长/最小净空（SDF 与真几何两套）/
-      复核结论/预算占用，以及冲突消解的轮次与遗留冲突。
+      复核结论/预算占用，以及冲突消解的周期与遗留冲突。
 边界：不改航迹、不规划、不做统计显著性（那是 ``metrics.py`` 上层的事）。
 相关：``methods/timeline/feasibility.py``、``methods/spatial/prism_clearance.py``、
       ``methods/planning/leg_segments.py``。
@@ -98,7 +98,7 @@ def fleet_metrics(
     changed_ids: Iterable[int] = (),
     alt_range_m: tuple[float, float] | None = None,
 ) -> dict[str, Any]:
-    """机队级指标：逐机质量 + 协调轮次 + 遗留冲突。"""
+    """机队级指标：逐机质量 + 协调周期 + 遗留冲突。"""
     per_uav: dict[str, Any] = {}
     for uid, traj in sorted(trajectories.items()):
         per_uav[str(uid)] = trajectory_metrics(
@@ -107,11 +107,11 @@ def fleet_metrics(
         )
 
     req_list = list(requests)
-    rounds = []
+    iterations = []
     if outcome is not None:
-        rounds = [
+        iterations = [
             {
-                "round": int(r.round_index),
+                "iteration": int(r.round_index),
                 "conflicts_before": int(r.conflicts_before),
                 "conflicts_after": int(r.conflicts_after),
                 "replanned": list(r.replanned),
@@ -130,9 +130,9 @@ def fleet_metrics(
         },
         "coordination": {
             "ok": None if outcome is None else bool(outcome.ok),
-            "rounds": rounds,
+            "iterations": iterations,
             # 让路留痕：``{"2": "vertical_up_16m"}``。只记标签，不记 trial 全文——
-            # 复现失败时要的是"哪一档被接受"与"轮次/耗时"，全量 trials 进结果目录反而
+            # 复现失败时要的是"哪一档被接受"与"周期/耗时"，全量 trials 进结果目录反而
             # 让 metrics 变成日志。失败的逐条理由仍在 ``LocalReplanResult.trials``。
             "moves": {} if outcome is None else dict(outcome.detail.get("moves", {})),
             "remaining_conflicts": 0 if report is None else len(report.conflicts),

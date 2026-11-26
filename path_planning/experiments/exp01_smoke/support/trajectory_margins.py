@@ -21,6 +21,7 @@ from path_planning.common.plan_types import Trajectory
 from path_planning.common.vehicle_spec import GRAVITY_MPS2, VehicleSpec
 from path_planning.methods.timeline.splines import (
     segment_acceleration,
+    segment_command_acceleration,
     segment_arc_length,
     segment_velocity,
 )
@@ -125,7 +126,7 @@ def kinematic_margins(traj: Trajectory, vehicle: VehicleSpec) -> dict[str, float
     for seg in traj.segments:
         ss = np.linspace(0.0, 1.0, _SAMPLES_PER_SEGMENT)
         vel = np.atleast_2d(segment_velocity(seg, ss))
-        acc = np.atleast_2d(segment_acceleration(seg, ss))
+        acc = np.atleast_2d(segment_command_acceleration(seg, ss))
         peak["v_h"] = max(peak["v_h"], float(np.linalg.norm(vel[:, :2], axis=1).max()))
         peak["v_up"] = max(peak["v_up"], float(vel[:, 2].max()))
         peak["v_dn"] = max(peak["v_dn"], float(-vel[:, 2].min()))

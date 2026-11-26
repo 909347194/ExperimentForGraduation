@@ -88,6 +88,7 @@ def load_scenario(
     frame: LocalFrame | None = None,
     terrain_step_m: float = 30.0,
     fill_holes: bool = True,
+    water_level_m: float | None = None,
     load_buildings: bool = True,
     load_nofly: bool = True,
     bbox_margin_m: float = 5.0,
@@ -102,8 +103,12 @@ def load_scenario(
         capacity: 单机巢容量
         frame:    指定平面原点；缺省取选中机巢的经纬度中心
         terrain_step_m: 米制地形网格间距
-        fill_holes: 是否对地形 NaN 空洞做最近邻填充（**不要关**，见
+        fill_holes: 是否对地形 NaN 空洞做填充（**不要关**，见
                     ``terrain_hole_filling`` 的说明）
+        water_level_m: 地形空洞的水面高程（米，绝对 ENU z）。给定则所有空洞统一
+                    填该值——用于"DEM 的 nodata 就是水域"的场景（广州即如此）。
+                    ``None`` 退回最近邻扩散。**只有调用方知道空洞是水还是缺测**，
+                    所以不设共享默认值，由各实验在配置里显式声明
         load_buildings / load_nofly: 是否加载建筑 / 禁飞区
         bbox_margin_m: 可规划范围相对有数据区的外扩量
 
@@ -141,7 +146,7 @@ def load_scenario(
     )
     fill_stats: dict[str, Any] | None = None
     if terrain is not None and fill_holes:
-        terrain, fill_stats = fill_terrain_holes(terrain)
+        terrain, fill_stats = fill_terrain_holes(terrain, water_level_m=water_level_m)
 
     nests: list[NestSite] = []
     for k, (lat, lon) in enumerate(coords):

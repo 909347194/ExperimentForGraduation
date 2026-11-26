@@ -1,25 +1,19 @@
 # -*- coding: utf-8 -*-
-"""规划参数：结构统一、**值不在此处**、派生量由参数推出。
+"""规划参数：**库层默认值的唯一源** + 结构校验；实验配置只能显式覆盖。
 
-职责：定义 ``PlanParams``——本模块全部算法参数的结构与校验。只描述"有哪些
-      参数、什么取值范围、互相怎么约束"，**不写具体数值**；具体取值在
-      ``experiments/<exp>/config.yaml``（一个实验一份，不继承不覆盖）。
-边界：不含机体能力（逐机，见 ``common/vehicle_spec.py``），不含场景数据
-      （见 ``common/scenario.py``），不含预算（见 ``common/budget.py``）。
-相关：``common/vehicle_spec.py``、``methods/timeline/feasibility.py``、
-      ``docs/time_mapping.md``（§2 速度口径、§4 弧长积分、§8 两个步长）。
+边界：不含机体能力（逐机，见 ``common/vehicle_spec.py``）、场景数据（见
+``common/scenario.py``）、预算（见 ``common/budget.py``）、走廊几何（属场景侧，
+见实验配置的 ``corridor`` 段）。实验 YAML 的 ``planning`` 段键集必须等于本类字段集，
+偏离项须在 ``tests/test_defaults_single_source.py`` 申报。
 
 为什么"结构统一、值独立"：论文里任何一个数字跑出来都必须能追溯到它自己那份
 配置。层叠覆盖（default.yaml + 实验 yaml 合并）在这种要求下不可接受——事后没人
 说得清某个参数最终取自哪一层。
 
-命名纪律（贯穿全模块，禁止混用）：
-
-- ``dt_min_s`` / ``dt_max_s``：NLP 决策步长区间（0.3~20 s 量级）
-- ``detection_step_s(...)``：冲突检测的弦长（≈0.365 s），由 ``eps_a_m`` 与
-  该机 ``a_max`` 反解得出，**逐机**，不是全局常数
-
-两者数值接近（0.3 vs 0.365），早期一律叫 ``dt`` 是最大的命名陷阱。
+命名纪律（贯穿全模块，禁止混用）：``dt_min_s``/``dt_max_s`` 是 NLP 决策步长区间
+（下限只作数值护栏，不得构成 ``(n_nodes−1)·dt_min`` 那样的时长地板）；
+``detection_step_s(...)`` 是冲突检测的弦长（≈0.365 s），由 ``eps_a_m`` 与该机
+``a_max`` 反解、**逐机**给出。两者都可能落在 0.01~0.4 s 一带，改一个不会动另一个。
 """
 
 from __future__ import annotations
@@ -42,8 +36,9 @@ class PlanParams:
     分八组，组内语义独立、组间有依赖的几条在 ``validate`` 里显式表达。
 
     Attributes（空间组 REST）:
-        clearance_m:              轨迹与建筑/地面之间的最小净空（m）
-        corridor_half_width_m:    走廊半宽（m），**必须严格大于 clearance_m**
+        clearance_m:              轨迹与建筑/地面之间的最小净空（m，交付口径）
+        alt_agl_min_m/alt_agl_max_m: 飞行带真高区间（m，AGL）；绝对 z 带由"全城最低
+                                  地面 + 本区间"派生（与参考实现 pp1 同口径）
         grid_cell_m:              场景粗栅格尺寸（m），用于快速剔除
         sdf_spacing_cells:        SDF 精栅格 (dx, dy, dz) 像元
         bbox_margin_m:            搜索域相对起终点的外扩（m）
@@ -63,7 +58,9 @@ class PlanParams:
         dt_min_s / dt_max_s:      决策步长下/上界（s）
         max_iter:                 IPOPT 最大迭代
         solver_tol:               IPOPT 容差
-        clearance_samples_per_segment: 净空校验在段内的内插采样点数
+        clearance_samples_per_segment: 净空校验在段内的内插采样点数。**不得低于判据步长**
+                                     ``clearance_sample_step_m`` 的密度：段长由逐段 Δt 决定、
+                                     可比初始弦长十数倍，条数少了会漏掉曲线谷底
         arc_subintervals:         弧长 Gauss 积分的子区间数 M
         gauss_points:             每个子区间的 Gauss 点数
 
@@ -86,7 +83,10 @@ class PlanParams:
 
     # --- 空间组 ---------------------------------------------------------
     clearance_m: float = 6.0
-    corridor_half_width_m: float = 20.0
+    #: 飞行带真高区间（AGL，米）：下限 10 m 是"不贴地飞"的行业惯例，上限 120 m 是
+    #: 低空作业的绝对天花板。端点真高由 ``plan_tour`` 用局部地面逐点准入。
+    alt_agl_min_m: float = 10.0
+    alt_agl_max_m: float = 120.0
     grid_cell_m: float = 60.0
     sdf_spacing_cells: tuple[int, int, int] = (4, 4, 2)
     bbox_margin_m: float = 5.0
@@ -104,11 +104,18 @@ class PlanParams:
 
     # --- 时间组 ---------------------------------------------------------
     n_nodes: int = 60
-    dt_min_s: float = 0.3
+    # dt 下限必须远低于"物理上真需要的步长"，否则它是**时长地板**而不是数值护栏：
+    # (n_nodes−1)×dt_min 会变成航段时长的硬下界，短航段的盈余时间被求解器花成竖直漂移
+    # （exp01_smoke 实测 120 节点 × 0.3 s = 35.7 s：30 m 航段交付 35.701 s、拱到 85.9 m；
+    # 同一航段只把下限降到 0.05 s 即回到 16.6 s、z 60.0–60.3 m；交付曲线的 C¹ 端点 p''
+    # 从此不再随步长放大到离谱（0.01 s 时 3.061 → 0.05 s 时 3.016，仍超 a_max 约 0.5%）。
+    # 固定 n 下短航段仍可能顶到地板；求解入口按航段长度自适应收缩该值（只降不升，
+    # 长航段零变化），见 methods/timeline/dt_floor.py。
+    dt_min_s: float = 0.05
     dt_max_s: float = 20.0
     max_iter: int = 200
     solver_tol: float = 1e-4
-    clearance_samples_per_segment: int = 3
+    clearance_samples_per_segment: int = 8
     arc_subintervals: int = 8
     gauss_points: int = 2
 
@@ -116,7 +123,7 @@ class PlanParams:
     eps_a_m: float = 0.05
     time_eps_s: float = 1e-3
     space_eps_m: float = 1e-3
-    ellipsoid_semiaxes_m: tuple[float, float, float] = (30.0, 30.0, 15.0)
+    ellipsoid_semiaxes_m: tuple[float, float, float] = (20.0, 20.0, 10.0)
     cpa_dense_steps: int = 24
 
     # --- 协调组 ---------------------------------------------------------
@@ -194,8 +201,8 @@ class PlanParams:
 
         # --- 正定性 -----------------------------------------------------
         chk(self.clearance_m > 0.0, f"clearance_m 必须为正：{self.clearance_m}")
-        chk(self.corridor_half_width_m > 0.0,
-            f"corridor_half_width_m 必须为正：{self.corridor_half_width_m}")
+        chk(0.0 < self.alt_agl_min_m < self.alt_agl_max_m,
+            f"真高带非法（须 0 < min < max）：[{self.alt_agl_min_m}, {self.alt_agl_max_m}]")
         chk(self.grid_cell_m > 0.0, f"grid_cell_m 必须为正：{self.grid_cell_m}")
         chk(self.bbox_margin_m >= 0.0, f"bbox_margin_m 不能为负：{self.bbox_margin_m}")
         chk(self.n_nodes >= 10, f"n_nodes 至少 10（给 RRT 与积分留余量）：{self.n_nodes}")
@@ -233,17 +240,7 @@ class PlanParams:
         if errs:
             raise ValueError(f"PlanParams 非法（{len(errs)} 项）：\n  " + "\n  ".join(errs))
 
-        # --- ④ 走廊必须容得下净空 -------------------------------------
-        # 半宽 <= 净空的走廊在几何上是空集：走廊内任一点到走廊边界都少于
-        # clearance，解必然违反净空约束，表现为 OPT_FAILED 而非 CORRIDOR_TOO_NARROW。
-        # 提前拦住，报出来的原因才准确。
-        chk(
-            self.clearance_m < self.corridor_half_width_m,
-            f"clearance_m={self.clearance_m} 不小于 "
-            f"corridor_half_width_m={self.corridor_half_width_m}：走廊容不下净空",
-        )
-
-        # --- ⑤ 椭球竖直半轴要能吸收弦化误差 ---------------------------
+        # --- ④ 椭球竖直半轴要能吸收弦化误差 ---------------------------
         # 椭球是保守膨胀后的判定体；竖直半轴若小到 2ε_a 以内，膨胀量会盖住
         # 竖直维的物理差异，等于把"不同高度层"判成同一层。
         chk(
@@ -256,7 +253,7 @@ class PlanParams:
             f"椭球半轴必须全为正：{self.ellipsoid_semiaxes_m}",
         )
 
-        # --- ⑥ 决策步长区间非退化 -------------------------------------
+        # --- ⑤ 决策步长区间非退化 -------------------------------------
         # dt_min >= dt_max 会让 NLP 的步长变量无可行区间，IPOPT 直接判不可行；
         # 报出来应是参数错误而不是 OPT_FAILED。
         chk(

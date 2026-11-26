@@ -55,7 +55,7 @@ class RegisteredTrajectory:
 
 
 class TrajectoryRegistry:
-    """按机号索引的航迹表（可原地更新，生命周期由 ``closed_loop`` 驱动）。"""
+    """按机号索引的航迹表（可原地更新，生命周期由 ``orchestration`` 驱动）。"""
 
     def __init__(self) -> None:
         self._items: dict[int, RegisteredTrajectory] = {}

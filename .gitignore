@@ -1,8 +1,9 @@
-# path_planning 原始建筑数据：大二进制，不入库
+# 场景数据统一放仓库根 data/（task_allocation 与 path_planning 共用同一份）
+# 原始建筑数据：大二进制，不入库
 # 本机数据源：D:\SchoolAffairs\Risk-Path\methods\spatiotemporal_heterogeneity\data\01_raw\building\
 # （场景目录 data/raw/<scenario_id>/ 下的 nofly_*.geojson / region.geojson 为小文本，照常入库）
-path_planning/data/raw/**/building/
-path_planning/data/processed/
+data/raw/**/building/
+data/processed/
 
 # 实验运行日志
 logs/
@@ -20,8 +21,8 @@ task_allocation/experiments/report_*/
 /smoke*/
 /abom_smoke/
 task_allocation/experiments/exp01_smoke/report.pdf
-task_allocation/data/Chengguan_shp/
-task_allocation/data/shp/
+data/Chengguan_shp/
+data/shp/
 
 # LaTeX 编译中间文件
 *.aux
@@ -65,10 +66,17 @@ paper/reference/**/*.pdf
 # 建筑矢量数据（.dbf/.shp）+ DEM（与 path_planning 约定一致：原始数据走外部源，不入库）
 # 注：忽略后全新 clone 需从外部数据源补全 building/ 与 DEM，代码方能跑
 
-task_allocation/data/lasa_chengguan/**/*.tif
+data/lasa_chengguan/**/*.tif
 
 # 其他实验产物（动画等）
 path_planning/experiments/**/*.gif
 
 # Python 虚拟环境（本机 uv/venv）
 .venv/
+
+# 编排层实验产物（与 task_allocation/path_planning 同口径：可由代码重跑生成）
+orchestration/experiments/**/results*/
+
+# GIS 侧车文件（GDAL/ArcGIS 打开栅格时自动生成，无保留价值）
+data/**/*.tif.aux.xml
+data/**/*.tif.xml

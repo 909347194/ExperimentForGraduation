@@ -18,7 +18,7 @@ from path_planning.common.plan_types import HermiteSegment, Trajectory, TimeSour
 from path_planning.common.vehicle_spec import VehicleSpec
 from path_planning.methods.timeline.splines import segment_position
 
-__all__ = ["vertical_leg", "hover_segment", "sampled_positions"]
+__all__ = ["vertical_leg", "hover_segment", "sampled_positions", "polyline_positions"]
 
 #: 竖向退化段的时长下限（秒），避免除零
 _MIN_VERTICAL_S = 0.5
@@ -65,15 +65,40 @@ def hover_segment(
 
 
 def sampled_positions(traj: Trajectory, step_m: float) -> np.ndarray:
-    """沿每段按弧长步长采点（真几何闸用）。
+    """沿每段按弧长采点（真几何闸用）。
 
     不能只取节点：``n_nodes=60`` 时 5 km 航段的节点间距近 80 m，节点间直接连线会
     "穿过"曲线本该绕开的棱柱，真几何闸反而变成漏检。与 ``PrismClearance`` 内部的
     再插值同一口径。
+
+    **注意口径**：本函数取的是 **Hermite 曲线**上的点，属于派生层几何。判据侧
+    （净空、z 带、真几何交付闸）一律改用 :func:`polyline_positions`——交付物是
+    节点序列，判据就必须在节点折线上；曲线只用于渲染与"曲线净空"参考记账。
     """
     step = max(float(step_m), 1e-6)
     chunks: list[np.ndarray] = []
     for seg in traj.segments:
         n = max(2, int(np.ceil(seg.chord_m / step)) + 1)
         chunks.append(segment_position(seg, np.linspace(0.0, 1.0, n)))
+    return np.vstack(chunks) if chunks else np.zeros((0, 3))
+
+
+def polyline_positions(traj: Trajectory, step_m: float) -> np.ndarray:
+    """沿**交付节点折线**按步长采点（判据侧的唯一几何口径）。
+
+    交付物是节点序列 ``x_i``：段内即 ``(1−α)p0 + α p1`` 的直线。Hermite 曲线
+    的拱高（``a·dt²/8``，dt≈6 s 时可达 10 m 量级）是派生层的表示误差，不参与
+    任何"合规/违规"判定——否则判据与交付物不是同一条线。
+    """
+    step = max(float(step_m), 1e-6)
+    chunks: list[np.ndarray] = []
+    for seg in traj.segments:
+        if seg.is_hover:
+            continue  # 悬停段位置不变，重复点只会拖慢闸门
+        p0 = np.asarray(seg.p0, dtype=np.float64)
+        p1 = np.asarray(seg.p1, dtype=np.float64)
+        chord = float(np.linalg.norm(p1 - p0))
+        n = max(2, int(np.ceil(chord / step)) + 1)
+        a = np.linspace(0.0, 1.0, n)[:, None]
+        chunks.append((1.0 - a) * p0 + a * p1)
     return np.vstack(chunks) if chunks else np.zeros((0, 3))

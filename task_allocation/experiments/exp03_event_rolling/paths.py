@@ -8,7 +8,7 @@ from pathlib import Path
 
 EXP_DIR = Path(__file__).resolve().parent
 ROOT = EXP_DIR.parents[2]
-DATA_DIR = ROOT / "task_allocation" / "data"
+DATA_DIR = ROOT / "data"
 
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))

@@ -56,8 +56,7 @@ def load_or_build_field(cfg: ExperimentConfig, scenario) -> tuple[WorldField, di
     field = build_world_field(
         scenario,
         spacing=tuple(float(v) for v in cfg.field.spacing_m),
-        agl_min_m=float(cfg.field.agl_min_m),
-        agl_max_m=float(cfg.field.agl_max_m),
+        alt_max_m=float(cfg.field.alt_max_m),
         pad_m=float(cfg.field.pad_m),
         include_static_nofly=bool(cfg.field.include_static_nofly),
         keep_occupancy=False,
@@ -88,11 +87,15 @@ def prisms_of(scenario, field: WorldField, *, include_static_nofly: bool) -> Pri
 
 
 def _scenario_meta(scenario) -> dict[str, Any]:
+    # 地形填充口径必须进键：它决定地面高程 → 决定整张 SDF。漏掉会让"改了填充"
+    # 静默命中旧场，数字错得看不出来。
+    fill = (getattr(scenario, "meta", None) or {}).get("terrain_fill") or {}
     return {
         "data_bounds_xy": [round(float(v), 3) for v in scenario.data_bounds_xy],
         "building_count": 0 if scenario.buildings is None else int(scenario.buildings.count),
         "nofly_count": len(tuple(scenario.nofly)),
         "nest_ids": list(scenario.nest_ids),
+        "terrain_fill": [fill.get("method"), fill.get("water_level_m")],
     }
 
 

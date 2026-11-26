@@ -12,22 +12,15 @@ import copy
 from pathlib import Path
 from typing import Any
 
-try:
-    import yaml
-except ImportError:  # pragma: no cover
-    yaml = None
+from paths import EXP_DIR  # sys.path 引导；必须先于 task_allocation.* 导入
 
-from paths import EXP_DIR
+from task_allocation.common.config_io import load_config_mapping
 
 
 def load_config(path: Path | None = None) -> dict[str, Any]:
+    """读配置（YAML/JSON/JSONC），返回顶层映射。"""
     p = Path(path) if path else (EXP_DIR / "config.yaml")
-    if yaml is None:
-        raise RuntimeError("PyYAML 未安装，无法读取配置")
-    cfg = yaml.safe_load(p.read_text(encoding="utf-8"))
-    if not isinstance(cfg, dict):
-        raise ValueError(f"配置文件不是映射：{p}")
-    return cfg
+    return load_config_mapping(p)
 
 
 def _coerce(v: str):

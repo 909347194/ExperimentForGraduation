@@ -53,6 +53,7 @@ def trajectory_quality(
     clearance_m: float,
     cfg_step_m: float,
     time_source: str | None = None,
+    failure_code: str | None = None,
     stops: list[tuple[tuple[float, float, float], float]] | None = None,
     endpoint_exempt_radius_m: float = 0.0,
     endpoint_clearance_m: float | None = None,
@@ -68,30 +69,45 @@ def trajectory_quality(
     +1.47，按 6 m 判会死在端点上（见 ``docs/architecture.md`` §4）。豁免区内的点
     单独按 ``endpoint_clearance_m`` 判，**不**混进"本体净空"的最小值里——否则
     一条只在起飞处贴地的航迹会被报成"全程 1.6 m"，把真正的中段风险盖掉。
+
+    ``failure_code``：规划阶段返回的失败码。只有它非空时 ``estimate`` 才被接受为
+    **降级但可解释**的交付（见 ``PlanResult`` 的状态矩阵）：时间不可信 → 不判运动
+    学、不判预算，但净空与分段结构照判（几何仍须安全）。
     """
     source = str(time_source or traj.time_source.value)
+    degraded = source == "estimate" and failure_code is not None
     checks: list[Check] = []
     lines: list[str] = []
 
     checks.append(Check(
-        f"时间来源/机{uid}", source in ("trajectory", "planned"),
-        f"time_source={source}（必须是 trajectory；estimate/fallback 属降级交付）",
+        f"时间来源/机{uid}",
+        source in ("trajectory", "planned") or degraded,
+        f"time_source={source}"
+        + (f"，降级交付（失败码 {failure_code}）——时间不可用于冲突判定，只保证几何安全"
+           if degraded else ""),
     ))
+    if degraded:
+        checks.append(Check(
+            f"降级剖面/机{uid}", traj.meta.get("fallback_profile") == "cruise_profile",
+            f"剖面 {traj.meta.get('fallback_profile')}（定速 v_max/1.2，保守；"
+            "段端点速度沿边、C1 不连续是这一路的已知近似）",
+        ))
 
     legs = split_legs(traj)
     if stops:
         checks.append(_boundary_check(uid, legs, stops))
 
-    kin = kinematic_margins(traj, vehicle)
-    used = max(kin["util_v_h"], kin["util_v_up"], kin["util_v_dn"],
-               kin["util_v_norm"], kin["util_acc"], kin["util_thrust"])
-    checks.append(Check(
-        f"运动学裕度/机{uid}", used <= 1.0 + _UTIL_TOL,
-        f"水平 {kin['util_v_h']:.6f} / 爬升 {kin['util_v_up']:.6f} / "
-        f"下降 {kin['util_v_dn']:.6f} / 合速 {kin['util_v_norm']:.6f} / "
-        f"加速度 {kin['util_acc']:.6f} / 推力 {kin['util_thrust']:.6f}"
-        f"（1.0 = 贴边）；竖直加速度余量 {kin['az_headroom_mps2']:.3f} m/s²",
-    ))
+    if not degraded:
+        kin = kinematic_margins(traj, vehicle)
+        used = max(kin["util_v_h"], kin["util_v_up"], kin["util_v_dn"],
+                   kin["util_v_norm"], kin["util_acc"], kin["util_thrust"])
+        checks.append(Check(
+            f"运动学裕度/机{uid}", used <= 1.0 + _UTIL_TOL,
+            f"水平 {kin['util_v_h']:.6f} / 爬升 {kin['util_v_up']:.6f} / "
+            f"下降 {kin['util_v_dn']:.6f} / 合速 {kin['util_v_norm']:.6f} / "
+            f"加速度 {kin['util_acc']:.6f} / 推力 {kin['util_thrust']:.6f}"
+            f"（1.0 = 贴边）；竖直加速度余量 {kin['az_headroom_mps2']:.3f} m/s²",
+        ))
 
     dense_pts = sampled_positions(traj, dense_step_m)
     cfg_pts = sampled_positions(traj, cfg_step_m)

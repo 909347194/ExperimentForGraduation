@@ -1,0 +1,25 @@
+# 项目 -> ArcGIS Pro 中转站配置
+#
+# 职责：只读实验落盘结果，转成 ArcGIS Pro 可消费的 GeoJSON；不重跑规划、不改实验结果。
+# 两个环境：
+#   export.py       在项目 .venv 跑（有 numpy / path_planning）
+#   to_features.py  在 ArcGIS Pro 自带 Python 跑（有 arcpy，项目 .venv 没有）
+
+source:
+  # 源实验配置文件（本中转站从中读 data 段重建 ENU frame，保证坐标口径与实验一致）
+  config_file: orchestration/experiments/exp01_smoke/config.yaml
+  # 结果目录（相对仓库根），里面要有 trajectories.json / run_meta.json
+  results_dir: orchestration/experiments/exp01_smoke/results/seed_0
+
+time:
+  # 相对秒 t=0 对应的真实时刻。轨迹里 t 是相对秒（周期1从0起），
+  # ArcGIS 的时间字段要完整日期时间，故需一个基准日期把相对秒拼成绝对时刻。
+  # 只影响显示时间戳，不影响任何几何/坐标。
+  base_iso: "2026-11-24T00:00:00"
+
+output:
+  # GeoJSON 输出目录（相对仓库根）
+  geojson_dir: visualization/visualize_for_arcgis_pro/geojson
+  # 坐标小数位：经纬度 7 位约 1 cm，高程 3 位约 1 mm
+  xy_ndigits: 7
+  z_ndigits: 3

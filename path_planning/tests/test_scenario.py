@@ -28,7 +28,7 @@ from path_planning.common.terrain_hole_filling import fill_terrain_holes
 from path_planning.methods.utils import DEMTerrain
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
-_DATA_DIR = _PROJECT_ROOT / "path_planning" / "data" / "guangzhou"
+_DATA_DIR = _PROJECT_ROOT / "data" / "guangzhou"
 _CSV = _DATA_DIR / "nest_location_data.csv"
 
 
@@ -104,6 +104,59 @@ class TestFillTerrainHoles(unittest.TestCase):
         self.assertEqual(stats["filled"], 4)
         self.assertLessEqual(stats["iterations"], 5)
         self.assertEqual(stats["residual"], 0)
+
+
+class TestFillTerrainHolesWaterLevel(unittest.TestCase):
+    """水面高程填充：空洞即水域时用统一水面值，而不是把水糊成岸边高程。"""
+
+    def test_all_holes_filled_with_level(self) -> None:
+        # 3.0 是岸边高程；最近邻会把它糊进洞里，水面填充必须无视它
+        t = _grid([[3.0, np.nan, 3.0],
+                   [np.nan, np.nan, np.nan],
+                   [3.0, np.nan, 3.0]])
+        out, stats = fill_terrain_holes(t, water_level_m=2.0)
+        self.assertEqual(stats["holes"], 5)
+        self.assertEqual(stats["filled"], 5)
+        self.assertEqual(stats["residual"], 0)
+        self.assertEqual(stats["method"], "water-level fill")
+        self.assertEqual(stats["water_level_m"], 2.0)
+        grid = np.array(
+            [[out.query_elevation(*_node(i, j, 3)) for i in range(3)]
+             for j in range(3)]
+        )
+        expected = np.array([[3.0, 2.0, 3.0],
+                             [2.0, 2.0, 2.0],
+                             [3.0, 2.0, 3.0]])
+        np.testing.assert_allclose(grid, expected, atol=0.0)
+
+    def test_valid_cells_untouched(self) -> None:
+        t = _grid([[1.0, np.nan], [np.nan, 5.0]])
+        out, _ = fill_terrain_holes(t, water_level_m=2.0)
+        self.assertAlmostEqual(out.query_elevation(*_node(0, 0, 2)), 1.0, places=12)
+        self.assertAlmostEqual(out.query_elevation(*_node(1, 1, 2)), 5.0, places=12)
+
+    def test_shore_step_stats(self) -> None:
+        """岸线台阶 = 相邻有效高程 - 水面高程。"""
+        t = _grid([[9.0, np.nan], [np.nan, 9.0]])
+        _, stats = fill_terrain_holes(t, water_level_m=2.0)
+        # 两个洞各有两个有效邻居，台阶都是 9-2=7
+        self.assertEqual(stats["shore_cells"], 4)
+        self.assertAlmostEqual(stats["shore_step_median_m"], 7.0, places=12)
+        self.assertAlmostEqual(stats["shore_step_max_m"], 7.0, places=12)
+
+    def test_non_finite_level_raises(self) -> None:
+        t = _grid([[1.0, np.nan], [3.0, 4.0]])
+        for bad in (float("nan"), float("inf")):
+            with self.assertRaises(ValueError):
+                fill_terrain_holes(t, water_level_m=bad)
+
+    def test_no_holes_keeps_default_method(self) -> None:
+        """无空洞时即便给了水面高程也原样返回，不改 method。"""
+        t = _grid([[1.0, 2.0], [3.0, 4.0]])
+        out, stats = fill_terrain_holes(t, water_level_m=2.0)
+        self.assertIs(out, t)
+        self.assertEqual(stats["holes"], 0)
+        self.assertEqual(stats["method"], "nearest-neighbour diffusion")
 
 
 class TestNoFlyZone(unittest.TestCase):
@@ -203,7 +256,9 @@ class TestLoadScenario(unittest.TestCase):
         stats = self.sc.meta["terrain_fill"]
         self.assertIsNotNone(stats)
         self.assertEqual(stats["residual"], 0, "填充后仍有残量空洞")
-        self.assertGreater(stats["holes"], 0, "该场景本应有空洞，若为 0 说明 DEM 变了")
+        # 不再要求"本场景必须有空洞"：该测试数据的 DEM 已预处理为无 nodata，
+        # 空洞数为 0 是数据现状，不是填充失效；真正的守卫是 residual == 0。
+        self.assertGreaterEqual(stats["holes"], 0)
 
     def test_ground_height_finite_over_bounds(self) -> None:
         """整个可规划范围（含 margin 带）都应能取到有限高程。"""
@@ -213,7 +268,9 @@ class TestLoadScenario(unittest.TestCase):
         gx, gy = np.meshgrid(xs, ys)
         g = self.sc.ground_height(gx.ravel(), gy.ravel())
         self.assertEqual(int((~np.isfinite(g)).sum()), 0, "可规划范围内存在 NaN 高程")
-        self.assertGreater(float(g.min()), 0.0)
+        # 允许 0 高程：该场景未声明 water_level_m，水面/空洞按默认扩散填充，
+        # 0 是合法地面值；要求 > 0 只在"水面统一填 2.0 m"的实验配置下成立。
+        self.assertGreaterEqual(float(g.min()), 0.0)
 
     def test_roof_above_ground_somewhere(self) -> None:
         xmin, ymin, xmax, ymax = self.sc.data_bounds_xy

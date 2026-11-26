@@ -96,7 +96,7 @@ from config import load_config
 from task_allocation.methods.muas.cost.vertical_section import make_distance_fn
 
 EXP_DIR = Path(__file__).resolve().parent
-DATA_DIR = paths.ROOT / "task_allocation" / "data"  # 场景注册表根（场景目录取 data/<scenario>/）
+DATA_DIR = paths.ROOT / "data"  # 场景注册表根（场景目录取 data/<scenario>/）
 
 # 场景（DEM 地形 + 代价估算器）重建代价高，逐 seed 审计时复用一次
 _SCENE_CACHE: dict[str, Any] = {}
